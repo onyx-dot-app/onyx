@@ -4,19 +4,11 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_kg_search_close_step_answer,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_answer_explicit,
-)
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResultsDataUpdate
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import SubQueryPiece
 from onyx.db.document import get_base_llm_doc_information
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
@@ -66,20 +58,6 @@ def process_kg_only_answers(
     query_results = state.sql_query_results
     source_document_results = state.source_document_results
 
-    # we use this stream write explicitly
-
-    if state.individual_flow:
-        write_custom_event(
-            "subqueries",
-            SubQueryPiece(
-                sub_query="Formatted References",
-                level=0,
-                level_question_num=_KG_STEP_NR,
-                query_id=1,
-            ),
-            writer,
-        )
-
     if query_results:
         query_results_data_str = "\n".join(
             str(query_result).replace("::", ":: ").capitalize()
@@ -98,13 +76,6 @@ def process_kg_only_answers(
     step_answer = (
         "No further research is needed, the answer is derived from the knowledge graph."
     )
-
-    if state.individual_flow:
-        stream_write_kg_search_answer_explicit(
-            writer, step_nr=_KG_STEP_NR, answer=step_answer
-        )
-
-        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return ResultsDataUpdate(
         query_results_data_str=query_results_data_str,

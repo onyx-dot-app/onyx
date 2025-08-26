@@ -63,6 +63,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-index-attempt-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "check-for-connector-deletion",
         "task": OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
         "schedule": timedelta(seconds=20),

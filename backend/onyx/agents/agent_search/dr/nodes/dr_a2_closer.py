@@ -16,6 +16,9 @@ from onyx.agents.agent_search.dr.models import TestInfoCompleteResponse
 from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
+from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+    GeneratedImageFullResult,
+)
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
@@ -43,7 +46,6 @@ from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -56,8 +58,6 @@ def extract_citation_numbers(text: str) -> list[int]:
     Extract all citation numbers from text in the format [[<number>]] or [[<number_1>, <number_2>, ...]].
     Returns a list of all unique citation numbers found.
     """
-    import re
-
     # Pattern to match [[number]] or [[number1, number2, ...]]
     pattern = r"\[\[(\d+(?:,\s*\d+)*)\]\]"
     matches = re.findall(pattern, text)
@@ -137,38 +137,8 @@ def save_iteration(
     )
 
     # lastly, insert the citations
-
+    citation_dict: dict[int, int] = {}
     cited_doc_nrs = extract_citation_numbers(final_answer)
-
-    citation_dict = {}
-
-    for cited_doc_nr in cited_doc_nrs:
-        citation_dict[cited_doc_nr] = search_docs[cited_doc_nr - 1].id
-
-    # first, insert the search_docs
-    search_docs = [
-        create_search_doc_from_inference_section(
-            inference_section=inference_section,
-            is_internet=is_internet_marker_dict.get(
-                inference_section.center_chunk.document_id, False
-            ),  # TODO: revisit
-            db_session=db_session,
-            commit=False,
-        )
-        for inference_section in all_cited_documents
-    ]
-
-    # then, map_search_docs to message
-    insert_chat_message_search_doc_pair(
-        message_id, [search_doc.id for search_doc in search_docs], db_session
-    )
-
-    # lastly, insert the citations
-
-    cited_doc_nrs = extract_citation_numbers(final_answer)
-
-    citation_dict: dict[str | int, int] = {}
-
     for cited_doc_nr in cited_doc_nrs:
         citation_dict[cited_doc_nr] = search_docs[cited_doc_nr - 1].id
 
@@ -197,7 +167,6 @@ def save_iteration(
             reasoning=iteration_preparation.reasoning,
             purpose=iteration_preparation.purpose,
             iteration_nr=iteration_preparation.iteration_nr,
-            created_at=datetime.now(),
         )
         db_session.add(research_agent_iteration_step)
 
@@ -221,8 +190,12 @@ def save_iteration(
             reasoning=iteration_answer.reasoning,
             claims=iteration_answer.claims,
             cited_doc_results=serialized_search_docs,
+            generated_images=(
+                GeneratedImageFullResult(images=iteration_answer.generated_images)
+                if iteration_answer.generated_images
+                else None
+            ),
             additional_data=iteration_answer.additional_data,
-            created_at=datetime.now(),
         )
         db_session.add(research_agent_iteration_sub_step)
 
@@ -253,7 +226,7 @@ def closer(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
 
-    uploaded_context = state.uploaded_context or ""
+    uploaded_context = state.uploaded_test_context or ""
 
     clarification = state.clarification
     prompt_question = get_prompt_question(base_question, clarification)
@@ -273,7 +246,7 @@ def closer(
     iteration_responses_string = aggregated_context.context
     all_cited_documents = aggregated_context.cited_documents
 
-    is_internet_marker_dict = aggregated_context.is_internet_marker_dict
+    aggregated_context.is_internet_marker_dict
 
     num_closer_suggestions = state.num_closer_suggestions
 
@@ -387,17 +360,16 @@ def closer(
     write_custom_event(current_step_nr, SectionEnd(), writer)
 
     current_step_nr += 1
-    write_custom_event(current_step_nr, OverallStop(), writer)
 
     # Log the research agent steps
-    save_iteration(
-        state,
-        graph_config,
-        aggregated_context,
-        final_answer,
-        all_cited_documents,
-        is_internet_marker_dict,
-    )
+    # save_iteration(
+    #     state,
+    #     graph_config,
+    #     aggregated_context,
+    #     final_answer,
+    #     all_cited_documents,
+    #     is_internet_marker_dict,
+    # )
 
     return FinalUpdate(
         final_answer=final_answer,

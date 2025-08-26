@@ -251,11 +251,11 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label="Agent Search"
-        sublabel="If set, users will be able to use Agent Search."
-        checked={settings.pro_search_enabled ?? true}
+        label="Deep Research"
+        sublabel="If set, users will be able to use Deep Research."
+        checked={settings.deep_research_enabled ?? false}
         onChange={(e) =>
-          handleToggleSettingsField("pro_search_enabled", e.target.checked)
+          handleToggleSettingsField("deep_research_enabled", e.target.checked)
         }
       />
 

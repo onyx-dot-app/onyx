@@ -1,4 +1,5 @@
 from typing import Any
+from typing import cast
 
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
@@ -31,9 +32,23 @@ def create_citation_format_list(
 
 
 def create_question_prompt(
-    system_prompt: str | None, human_prompt: str
+    system_prompt: str | None,
+    human_prompt: str,
+    uploaded_image_context: list[dict[str, Any]] | None = None,
 ) -> list[BaseMessage]:
-    return [
-        SystemMessage(content=system_prompt or ""),
-        HumanMessage(content=human_prompt),
-    ]
+
+    if uploaded_image_context:
+        return [
+            SystemMessage(content=system_prompt or ""),
+            HumanMessage(
+                content=cast(
+                    list[str | dict[str, Any]],
+                    [{"type": "text", "text": human_prompt}] + uploaded_image_context,
+                )
+            ),
+        ]
+    else:
+        return [
+            SystemMessage(content=system_prompt or ""),
+            HumanMessage(content=human_prompt),
+        ]

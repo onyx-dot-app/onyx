@@ -43,6 +43,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   packets,
   onComplete,
   renderType,
+  children,
 }) => {
   const { toolName, responseType, data, fileIds, isRunning, isComplete } =
     constructCustomToolState(packets);
@@ -66,7 +67,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const icon = FiTool;
 
   if (renderType === RenderType.HIGHLIGHT) {
-    return {
+    return children({
       icon,
       status: status,
       content: (
@@ -75,10 +76,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           {isComplete && `${toolName} completed`}
         </div>
       ),
-    };
+    });
   }
 
-  return {
+  return children({
     icon,
     status,
     content: (
@@ -124,7 +125,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         )}
       </div>
     ),
-  };
+  });
 };
 
 export default CustomToolRenderer;

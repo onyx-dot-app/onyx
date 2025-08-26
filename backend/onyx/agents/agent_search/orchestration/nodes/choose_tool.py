@@ -7,7 +7,7 @@ from langchain_core.messages import ToolCall
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.basic.utils import process_llm_stream
+from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
 from onyx.agents.agent_search.orchestration.states import ToolChoiceState
@@ -271,6 +271,7 @@ def choose_tool(
         should_stream_answer
         and not agent_config.behavior.skip_gen_ai_answer_generation,
         writer,
+        ind=0,
     ).ai_message_chunk
 
     if tool_message is None:

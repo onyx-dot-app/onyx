@@ -74,7 +74,7 @@ def stream_llm_answer(
             context_docs=context_docs,
         )
     else:
-        replace_citations = False
+        citation_processor = None
 
     for message in llm.stream(
         prompt,
@@ -95,7 +95,7 @@ def stream_llm_answer(
             if ind is None:
                 raise ValueError("index is required when answer_piece is message_delta")
 
-            if replace_citations:
+            if citation_processor:
                 processed_token = citation_processor.process_token(content)
 
                 if isinstance(processed_token, tuple):

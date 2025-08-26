@@ -29,12 +29,14 @@ import { MessageSwitcher } from "../MessageSwitcher";
 import { BlinkingDot } from "../BlinkingDot";
 import {
   getTextContent,
+  isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
 } from "../../services/packetUtils";
 import { useMessageSwitching } from "./hooks/useMessageSwitching";
-import MultiToolRenderer, { RendererComponent } from "./MultiToolRenderer";
+import MultiToolRenderer from "./MultiToolRenderer";
+import { RendererComponent } from "./renderMessageComponent";
 
 export function AIMessage({
   rawPackets,
@@ -53,13 +55,29 @@ export function AIMessage({
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
-  const [allToolsFullyDisplayed, setAllToolsFullyDisplayed] = useState(
+  const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
   );
+  const setFinalAnswerComing = (value: boolean) => {
+    _setFinalAnswerComing(value);
+    finalAnswerComingRef.current = value;
+  };
 
-  const [displayComplete, setDisplayComplete] = useState(
+  const [displayComplete, _setDisplayComplete] = useState(
     isStreamingComplete(rawPackets)
   );
+  const setDisplayComplete = (value: boolean) => {
+    _setDisplayComplete(value);
+    displayCompleteRef.current = value;
+  };
+
+  const [stopPacketSeen, _setStopPacketSeen] = useState(
+    isStreamingComplete(rawPackets)
+  );
+  const setStopPacketSeen = (value: boolean) => {
+    _setStopPacketSeen(value);
+    stopPacketSeenRef.current = value;
+  };
 
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
@@ -69,9 +87,11 @@ export function AIMessage({
   const groupedPacketsMapRef = useRef<Map<number, Packet[]>>(new Map());
   const groupedPacketsRef = useRef<{ ind: number; packets: Packet[] }[]>([]);
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
+  const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
+  const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
 
   // Reset incremental state when switching messages or when stream resets
-  useEffect(() => {
+  const resetState = () => {
     lastProcessedIndexRef.current = 0;
     citationsRef.current = [];
     seenCitationDocIdsRef.current = new Set();
@@ -79,16 +99,16 @@ export function AIMessage({
     groupedPacketsMapRef.current = new Map();
     groupedPacketsRef.current = [];
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
+    displayCompleteRef.current = isStreamingComplete(rawPackets);
+    stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+  };
+  useEffect(() => {
+    resetState();
   }, [messageId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
   if (lastProcessedIndexRef.current > rawPackets.length) {
-    lastProcessedIndexRef.current = 0;
-    citationsRef.current = [];
-    seenCitationDocIdsRef.current = new Set();
-    documentMapRef.current = new Map();
-    groupedPacketsMapRef.current = new Map();
-    groupedPacketsRef.current = [];
+    resetState();
   }
 
   // Process only the new packets synchronously for this render
@@ -119,13 +139,8 @@ export function AIMessage({
       }
 
       // Documents from tool deltas
-      if (
-        packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
-        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
-      ) {
-        const toolDelta = packet.obj as
-          | SearchToolDelta
-          | ImageGenerationToolDelta;
+      if (packet.obj.type === PacketType.SEARCH_TOOL_DELTA) {
+        const toolDelta = packet.obj as SearchToolDelta;
         if ("documents" in toolDelta && toolDelta.documents) {
           for (const doc of toolDelta.documents) {
             if (doc.document_id) {
@@ -138,9 +153,26 @@ export function AIMessage({
       // check if final answer is coming
       if (
         packet.obj.type === PacketType.MESSAGE_START ||
-        packet.obj.type === PacketType.MESSAGE_DELTA
+        packet.obj.type === PacketType.MESSAGE_DELTA ||
+        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
       ) {
         finalAnswerComingRef.current = true;
+      }
+
+      if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
+        setStopPacketSeen(true);
+      }
+
+      // handles case where we get a Message packet from Claude, and then tool
+      // calling packets
+      if (
+        finalAnswerComingRef.current &&
+        !stopPacketSeenRef.current &&
+        isToolPacket(packet, false)
+      ) {
+        setFinalAnswerComing(false);
+        setDisplayComplete(false);
       }
     }
 
@@ -213,7 +245,7 @@ export function AIMessage({
                   <div className="max-w-message-max break-words">
                     <div
                       ref={markdownRef}
-                      className="overflow-x-visible max-w-content-max focus:outline-none cursor-text select-text"
+                      className="overflow-x-visible max-w-content-max focus:outline-none select-text"
                       onCopy={(e) => handleCopy(e, markdownRef)}
                     >
                       {groupedPackets.length === 0 ? (
@@ -221,54 +253,65 @@ export function AIMessage({
                         <BlinkingDot />
                       ) : (
                         (() => {
-                          // Separate tool groups from final answer groups
+                          // Simple split: tools vs non-tools
                           const toolGroups = groupedPackets.filter(
                             (group) =>
                               group.packets[0] && isToolPacket(group.packets[0])
                           ) as { ind: number; packets: Packet[] }[];
-                          // display final answer only if all tools are fully displayed
-                          // OR if there are no tools at all (in which case show immediately)
-                          const finalAnswerGroups =
-                            allToolsFullyDisplayed || toolGroups.length === 0
+
+                          // Non-tools include messages AND image generation
+                          const displayGroups =
+                            finalAnswerComing || toolGroups.length === 0
                               ? groupedPackets.filter(
                                   (group) =>
                                     group.packets[0] &&
-                                    !isToolPacket(group.packets[0])
+                                    isDisplayPacket(group.packets[0])
                                 )
                               : [];
 
+                          const lastDisplayGroup =
+                            displayGroups.length > 0
+                              ? displayGroups[displayGroups.length - 1]
+                              : null;
+
                           return (
                             <>
-                              {/* Render all tool groups together using MultiToolRenderer */}
+                              {/* Render tool groups in multi-tool renderer */}
                               {toolGroups.length > 0 && (
                                 <MultiToolRenderer
                                   packetGroups={toolGroups}
                                   chatState={chatState}
-                                  isComplete={allToolsFullyDisplayed}
+                                  isComplete={finalAnswerComing}
                                   isFinalAnswerComing={
                                     finalAnswerComingRef.current
                                   }
+                                  stopPacketSeen={stopPacketSeen}
                                   onAllToolsDisplayed={() =>
-                                    setAllToolsFullyDisplayed(true)
+                                    setFinalAnswerComing(true)
                                   }
                                 />
                               )}
 
-                              {/* Render final answer groups directly using renderMessageComponent */}
-                              {finalAnswerGroups.map((group) => (
+                              {/* Render non-tool groups (messages + image generation) in main area */}
+                              {lastDisplayGroup && (
                                 <RendererComponent
-                                  key={group.ind}
-                                  packets={group.packets}
+                                  key={lastDisplayGroup.ind}
+                                  packets={lastDisplayGroup.packets}
                                   chatState={chatState}
                                   onComplete={() => {
-                                    // Final answer completed
-                                    setDisplayComplete(true);
+                                    // if we've reverted to final answer not coming, don't set display complete
+                                    // this happens when using claude and a tool calling packet comes after
+                                    // some message packets
+                                    if (finalAnswerComingRef.current) {
+                                      setDisplayComplete(true);
+                                    }
                                   }}
                                   animate={false}
+                                  stopPacketSeen={stopPacketSeen}
                                 >
                                   {({ content }) => <div>{content}</div>}
                                 </RendererComponent>
-                              ))}
+                              )}
                             </>
                           );
                         })()
@@ -277,126 +320,136 @@ export function AIMessage({
                   </div>
 
                   {/* Feedback buttons - only show when streaming is complete */}
-                  {chatState.handleFeedback && displayComplete && (
-                    <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
-                      <TooltipGroup>
-                        <div className="flex items-center gap-x-0.5">
-                          {includeMessageSwitcher && (
-                            <div className="-mx-1">
-                              <MessageSwitcher
-                                currentPage={(currentMessageInd ?? 0) + 1}
-                                totalPages={
-                                  otherMessagesCanSwitchTo?.length || 0
-                                }
-                                handlePrevious={() => {
-                                  const prevMessage = getPreviousMessage();
-                                  if (
-                                    prevMessage !== undefined &&
-                                    onMessageSelection
-                                  ) {
-                                    onMessageSelection(prevMessage);
+                  {chatState.handleFeedback &&
+                    stopPacketSeen &&
+                    displayComplete && (
+                      <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
+                        <TooltipGroup>
+                          <div className="flex items-center gap-x-0.5">
+                            {includeMessageSwitcher && (
+                              <div className="-mx-1">
+                                <MessageSwitcher
+                                  currentPage={(currentMessageInd ?? 0) + 1}
+                                  totalPages={
+                                    otherMessagesCanSwitchTo?.length || 0
                                   }
-                                }}
-                                handleNext={() => {
-                                  const nextMessage = getNextMessage();
-                                  if (
-                                    nextMessage !== undefined &&
-                                    onMessageSelection
-                                  ) {
-                                    onMessageSelection(nextMessage);
-                                  }
-                                }}
-                              />
-                            </div>
-                          )}
+                                  handlePrevious={() => {
+                                    const prevMessage = getPreviousMessage();
+                                    if (
+                                      prevMessage !== undefined &&
+                                      onMessageSelection
+                                    ) {
+                                      onMessageSelection(prevMessage);
+                                    }
+                                  }}
+                                  handleNext={() => {
+                                    const nextMessage = getNextMessage();
+                                    if (
+                                      nextMessage !== undefined &&
+                                      onMessageSelection
+                                    ) {
+                                      onMessageSelection(nextMessage);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
 
-                          <CustomTooltip showTick line content="Copy">
-                            <CopyButton
-                              copyAllFn={() =>
-                                copyAll(getTextContent(rawPackets), markdownRef)
-                              }
-                            />
-                          </CustomTooltip>
-
-                          <CustomTooltip showTick line content="Good response">
-                            <HoverableIcon
-                              icon={<LikeFeedback size={16} />}
-                              onClick={() => chatState.handleFeedback("like")}
-                            />
-                          </CustomTooltip>
-
-                          <CustomTooltip showTick line content="Bad response">
-                            <HoverableIcon
-                              icon={<DislikeFeedback size={16} />}
-                              onClick={() =>
-                                chatState.handleFeedback("dislike")
-                              }
-                            />
-                          </CustomTooltip>
-
-                          {chatState.regenerate && (
-                            <CustomTooltip
-                              disabled={isRegenerateDropdownVisible}
-                              showTick
-                              line
-                              content="Regenerate"
-                            >
-                              <RegenerateOption
-                                onDropdownVisibleChange={
-                                  setIsRegenerateDropdownVisible
+                            <CustomTooltip showTick line content="Copy">
+                              <CopyButton
+                                copyAllFn={() =>
+                                  copyAll(
+                                    getTextContent(rawPackets),
+                                    markdownRef
+                                  )
                                 }
-                                selectedAssistant={chatState.assistant}
-                                regenerate={chatState.regenerate}
-                                overriddenModel={chatState.overriddenModel}
                               />
                             </CustomTooltip>
-                          )}
 
-                          {messageId &&
-                            (citations.length > 0 || documentMap.size > 0) && (
-                              <>
-                                {chatState.regenerate && (
-                                  <div className="h-4 w-px bg-border mx-2" />
-                                )}
-                                <CustomTooltip
-                                  showTick
-                                  line
-                                  content={`${uniqueSourceCount} Sources`}
-                                >
-                                  <CitedSourcesToggle
-                                    citations={citations}
-                                    documentMap={documentMap}
-                                    messageId={messageId}
-                                    onToggle={(messageId) => {
-                                      // Toggle sidebar if clicking on the same message
-                                      if (
-                                        selectedMessageForDocDisplay ===
-                                          messageId &&
-                                        documentSidebarVisible
-                                      ) {
-                                        updateCurrentDocumentSidebarVisible(
-                                          false
-                                        );
-                                        updateCurrentSelectedMessageForDocDisplay(
-                                          null
-                                        );
-                                      } else {
-                                        updateCurrentSelectedMessageForDocDisplay(
-                                          messageId
-                                        );
-                                        updateCurrentDocumentSidebarVisible(
-                                          true
-                                        );
-                                      }
-                                    }}
-                                  />
-                                </CustomTooltip>
-                              </>
+                            <CustomTooltip
+                              showTick
+                              line
+                              content="Good response"
+                            >
+                              <HoverableIcon
+                                icon={<LikeFeedback size={16} />}
+                                onClick={() => chatState.handleFeedback("like")}
+                              />
+                            </CustomTooltip>
+
+                            <CustomTooltip showTick line content="Bad response">
+                              <HoverableIcon
+                                icon={<DislikeFeedback size={16} />}
+                                onClick={() =>
+                                  chatState.handleFeedback("dislike")
+                                }
+                              />
+                            </CustomTooltip>
+
+                            {chatState.regenerate && (
+                              <CustomTooltip
+                                disabled={isRegenerateDropdownVisible}
+                                showTick
+                                line
+                                content="Regenerate"
+                              >
+                                <RegenerateOption
+                                  onDropdownVisibleChange={
+                                    setIsRegenerateDropdownVisible
+                                  }
+                                  selectedAssistant={chatState.assistant}
+                                  regenerate={chatState.regenerate}
+                                  overriddenModel={chatState.overriddenModel}
+                                />
+                              </CustomTooltip>
                             )}
-                        </div>
-                      </TooltipGroup>
-                    </div>
-                  )}
+
+                            {messageId &&
+                              (citations.length > 0 ||
+                                documentMap.size > 0) && (
+                                <>
+                                  {chatState.regenerate && (
+                                    <div className="h-4 w-px bg-border mx-2" />
+                                  )}
+                                  <CustomTooltip
+                                    showTick
+                                    line
+                                    content={`${uniqueSourceCount} Sources`}
+                                  >
+                                    <CitedSourcesToggle
+                                      citations={citations}
+                                      documentMap={documentMap}
+                                      messageId={messageId}
+                                      onToggle={(messageId) => {
+                                        // Toggle sidebar if clicking on the same message
+                                        if (
+                                          selectedMessageForDocDisplay ===
+                                            messageId &&
+                                          documentSidebarVisible
+                                        ) {
+                                          updateCurrentDocumentSidebarVisible(
+                                            false
+                                          );
+                                          updateCurrentSelectedMessageForDocDisplay(
+                                            null
+                                          );
+                                        } else {
+                                          updateCurrentSelectedMessageForDocDisplay(
+                                            messageId
+                                          );
+                                          updateCurrentDocumentSidebarVisible(
+                                            true
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </CustomTooltip>
+                                </>
+                              )}
+                          </div>
+                        </TooltipGroup>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

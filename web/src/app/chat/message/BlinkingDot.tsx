@@ -1,9 +1,11 @@
 import React from "react";
 
-export function BlinkingDot() {
+export function BlinkingDot({ addMargin = false }: { addMargin?: boolean }) {
   return (
-    <span className="inline-flex items-center">
-      <span className="animate-pulse text-text-600 dark:text-text-400">●</span>
-    </span>
+    <div
+      className={`animate-pulse flex-none bg-background-800 inline-block rounded-full h-3 w-3 ${
+        addMargin ? "ml-2" : ""
+      }`}
+    />
   );
 }

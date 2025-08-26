@@ -23,6 +23,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.kg_config import get_kg_config_settings
@@ -32,7 +33,6 @@ from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
 from onyx.db.models import Prompt
-from onyx.db.models import SearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.prompts import get_prompts_by_ids

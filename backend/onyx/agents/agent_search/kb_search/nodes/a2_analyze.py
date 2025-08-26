@@ -9,15 +9,6 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
     create_minimal_connected_query_graph,
 )
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_kg_search_close_step_answer,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_activities,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_answer_explicit,
-)
 from onyx.agents.agent_search.kb_search.models import KGAnswerApproach
 from onyx.agents.agent_search.kb_search.states import AnalysisUpdate
 from onyx.agents.agent_search.kb_search.states import KGAnswerFormat
@@ -154,9 +145,6 @@ def analyze(
 
     ## STEP 2 - stream out goals
 
-    if state.individual_flow:
-        stream_write_kg_search_activities(writer, _KG_STEP_NR)
-
     # Continue with node
 
     normalized_entities = normalize_entities(
@@ -281,13 +269,6 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
             )
     else:
         query_type = KGRelationshipDetection.NO_RELATIONSHIPS.value
-
-    if state.individual_flow:
-        stream_write_kg_search_answer_explicit(
-            writer, step_nr=_KG_STEP_NR, answer=step_answer
-        )
-
-        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     # End node
 

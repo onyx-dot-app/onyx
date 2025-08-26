@@ -3,6 +3,9 @@ from enum import Enum
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.dr.enums import DRPath
+from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+    GeneratedImage,
+)
 from onyx.context.search.models import InferenceSection
 from onyx.tools.tool import Tool
 
@@ -25,6 +28,11 @@ class OrchestrationPlan(BaseModel):
 class ClarificationGenerationResponse(BaseModel):
     clarification_needed: bool
     clarification_question: str
+
+
+class DecisionResponse(BaseModel):
+    reasoning: str
+    decision: str
 
 
 class QueryEvaluationResponse(BaseModel):
@@ -90,6 +98,12 @@ class IterationAnswer(BaseModel):
     claims: list[str] | None = None
     additional_data: dict[str, str] | None = None
     urls_to_open: list[str] | None = None
+    response_type: str | None = None
+    data: dict | list | str | int | float | bool | None = None
+    file_ids: list[str] | None = None
+
+    # for image generation step-types
+    generated_images: list[GeneratedImage] | None = None
 
 
 class AggregatedDRContext(BaseModel):

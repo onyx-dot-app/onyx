@@ -1,3 +1,4 @@
+import React from "react";
 import {
   ChatPacket,
   Packet,
@@ -70,31 +71,41 @@ export function findRenderer(
   return null;
 }
 
-export function renderMessageComponent(
-  groupedPackets: GroupedPackets,
-  fullChatState: FullChatState,
-  onComplete: () => void,
-  animate: boolean,
-  useShortRenderer: boolean = false
-): RendererResult {
-  if (!groupedPackets.packets || !groupedPackets.packets[0]) {
-    return { icon: null, status: null, content: <></> };
+// React component wrapper that directly uses renderer components
+export function RendererComponent({
+  packets,
+  chatState,
+  onComplete,
+  animate,
+  stopPacketSeen,
+  useShortRenderer = false,
+  children,
+}: {
+  packets: Packet[];
+  chatState: FullChatState;
+  onComplete: () => void;
+  animate: boolean;
+  stopPacketSeen: boolean;
+  useShortRenderer?: boolean;
+  children: (result: RendererResult) => JSX.Element;
+}) {
+  const RendererFn = findRenderer({ packets });
+  const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
+
+  if (!RendererFn) {
+    return children({ icon: null, status: null, content: <></> });
   }
 
-  const Renderer = findRenderer(groupedPackets);
-  if (Renderer) {
-    const renderType = useShortRenderer
-      ? RenderType.HIGHLIGHT
-      : RenderType.FULL;
-
-    return Renderer({
-      packets: groupedPackets.packets,
-      state: fullChatState,
-      onComplete,
-      renderType,
-      animate,
-    });
-  }
-
-  return { icon: null, status: null, content: <></> };
+  return (
+    <RendererFn
+      packets={packets as any}
+      state={chatState}
+      onComplete={onComplete}
+      animate={animate}
+      renderType={renderType}
+      stopPacketSeen={stopPacketSeen}
+    >
+      {children}
+    </RendererFn>
+  );
 }

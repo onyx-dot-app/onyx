@@ -95,7 +95,7 @@ export function Citation({
             <span
               className="flex items-center justify-center px-1 h-4 text-[10px] 
                          font-medium text-text-700 bg-background-150 rounded-md 
-                         hover:bg-background-900 hover:text-text-100 shadow-sm mr-0.5"
+                         hover:bg-background-900 hover:text-text-100 shadow-sm mr-0.5 ml-0.5"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
               {citationText}

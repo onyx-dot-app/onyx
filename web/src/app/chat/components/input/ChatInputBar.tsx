@@ -688,12 +688,13 @@ export function ChatInputBar({
                   />
                 )}
 
-                {retrievalEnabled && settings?.settings.pro_search_enabled && (
-                  <DeepResearchToggle
-                    deepResearchEnabled={deepResearchEnabled}
-                    setDeepResearchEnabled={setDeepResearchEnabled}
-                  />
-                )}
+                {retrievalEnabled &&
+                  settings?.settings.deep_research_enabled && (
+                    <DeepResearchToggle
+                      deepResearchEnabled={deepResearchEnabled}
+                      setDeepResearchEnabled={setDeepResearchEnabled}
+                    />
+                  )}
               </div>
               <div className="flex items-center my-auto gap-x-2">
                 <LLMPopover

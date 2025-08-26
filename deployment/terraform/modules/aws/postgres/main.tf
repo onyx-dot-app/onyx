@@ -36,6 +36,9 @@ resource "aws_db_instance" "this" {
   username          = var.username
   password          = var.password
 
+  # Enable IAM authentication for the RDS instance
+  iam_database_authentication_enabled = var.enable_rds_iam_auth
+
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.this.id]
   publicly_accessible    = false

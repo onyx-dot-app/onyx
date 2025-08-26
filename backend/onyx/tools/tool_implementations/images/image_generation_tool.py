@@ -93,7 +93,7 @@ class ImageGenerationTool(Tool[None]):
         api_version: str | None,
         tool_id: int,
         model: str = IMAGE_MODEL_NAME,
-        num_imgs: int = 2,
+        num_imgs: int = 1,
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:

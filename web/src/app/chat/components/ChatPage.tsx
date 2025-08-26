@@ -41,7 +41,7 @@ import { useSidebarVisibility } from "@/components/chat/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
+import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import BlurBackground from "../../../components/chat/BlurBackground";
@@ -610,9 +610,7 @@ export function ChatPage({
   const retrievalEnabled = useMemo(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID ||
-          tool.in_code_tool_id === INTERNET_SEARCH_TOOL_ID
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
       );
     }
     return false;
@@ -762,7 +760,7 @@ export function ChatPage({
       {(settingsToggled || userSettingsToggled) && (
         <UserSettingsModal
           setPopup={setPopup}
-          setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
+          updateCurrentLlm={llmManager.updateCurrentLlm}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
           onClose={() => {

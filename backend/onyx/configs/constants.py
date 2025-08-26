@@ -51,9 +51,7 @@ DEFAULT_PERSONA_ID = 0
 
 DEFAULT_CC_PAIR_ID = 1
 
-# subquestion level and question number for basic flow
-BASIC_KEY = (-1, -1)
-AGENT_SEARCH_INITIAL_KEY = (0, 0)
+
 CANCEL_CHECK_INTERVAL = 20
 DISPATCH_SEP_CHAR = "\n"
 FORMAT_DOCS_SEPARATOR = "\n\n"
@@ -329,7 +327,7 @@ class OnyxCeleryQueues:
     CONNECTOR_DELETION = "connector_deletion"
     LLM_MODEL_UPDATE = "llm_model_update"
     CHECKPOINT_CLEANUP = "checkpoint_cleanup"
-
+    INDEX_ATTEMPT_CLEANUP = "index_attempt_cleanup"
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
     CONNECTOR_DOC_PERMISSIONS_SYNC = "connector_doc_permissions_sync"
@@ -357,6 +355,7 @@ class OnyxRedisLocks:
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
+    CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )
@@ -458,6 +457,10 @@ class OnyxCeleryTask:
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"
 
+    # Connector index attempt cleanup
+    CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
+    CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
+
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
@@ -517,16 +520,20 @@ class OnyxCallTypes(str, Enum):
     GONG = "GONG"
 
 
+NUM_DAYS_TO_KEEP_CHECKPOINTS = 7
+# checkpoints are queried based on index attempts, so we need to keep index attempts for one more day
+NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1
+
 # TODO: this should be stored likely in database
 DocumentSourceDescription: dict[DocumentSource, str] = {
     # Special case, document passed in via Onyx APIs without specifying a source type
     DocumentSource.INGESTION_API: "ingestion_api",
-    DocumentSource.SLACK: "slack channels",
-    DocumentSource.WEB: "web pages",
+    DocumentSource.SLACK: "slack channels for discussions and collaboration",
+    DocumentSource.WEB: "indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
     DocumentSource.GMAIL: "email messages",
     DocumentSource.REQUESTTRACKER: "requesttracker",
-    DocumentSource.GITHUB: "github data",
+    DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
     DocumentSource.GURU: "guru data",

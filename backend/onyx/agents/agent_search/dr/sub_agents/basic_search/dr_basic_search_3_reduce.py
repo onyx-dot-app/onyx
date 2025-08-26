@@ -11,8 +11,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.context.search.models import SavedSearchDoc
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
 
@@ -39,7 +37,7 @@ def is_reducer(
         update for update in branch_updates if update.iteration_nr == current_iteration
     ]
 
-    queries = [update.question for update in new_updates]
+    [update.question for update in new_updates]
     doc_lists = [list(update.cited_documents.values()) for update in new_updates]
 
     doc_list = []
@@ -57,24 +55,6 @@ def is_reducer(
 
     for retrieved_saved_search_doc in retrieved_saved_search_docs:
         retrieved_saved_search_doc.is_internet = False
-
-    # Write the results to the stream
-    write_custom_event(
-        current_step_nr,
-        SearchToolStart(
-            is_internet_search=False,
-        ),
-        writer,
-    )
-
-    write_custom_event(
-        current_step_nr,
-        SearchToolDelta(
-            queries=queries,
-            documents=retrieved_saved_search_docs,
-        ),
-        writer,
-    )
 
     write_custom_event(
         current_step_nr,

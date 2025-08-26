@@ -32,6 +32,8 @@ from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
+from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
+from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
@@ -109,6 +111,7 @@ DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -983,6 +986,95 @@ def cleanup_checkpoint_task(
         task_logger.info(
             f"cleanup_checkpoint_task completed: tenant_id={tenant_id} "
             f"index_attempt_id={index_attempt_id} "
+            f"elapsed={elapsed:.2f}"
+        )
+
+
+# primary
+@shared_task(
+    name=OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
+    soft_time_limit=300,
+    bind=True,
+)
+def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
+    """Clean up old index attempts that are older than 7 days."""
+    locked = False
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+
+    # these tasks should never overlap
+    if not lock.acquire(blocking=False):
+        task_logger.info(
+            f"check_for_index_attempt_cleanup - Lock not acquired: tenant={tenant_id}"
+        )
+        return None
+
+    try:
+        locked = True
+        batch_size = INDEX_ATTEMPT_BATCH_SIZE
+        with get_session_with_current_tenant() as db_session:
+            old_attempts = get_old_index_attempts(db_session)
+            # We need to batch this because during the initial run, the system might have a large number
+            # of index attempts since they were never deleted. After that, the number will be
+            # significantly lower.
+            if len(old_attempts) == 0:
+                task_logger.info(
+                    "check_for_index_attempt_cleanup - No index attempts to cleanup"
+                )
+                return
+
+            for i in range(0, len(old_attempts), batch_size):
+                batch = old_attempts[i : i + batch_size]
+                task_logger.info(
+                    f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
+                )
+                self.app.send_task(
+                    OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
+                    kwargs={
+                        "index_attempt_ids": [attempt.id for attempt in batch],
+                        "tenant_id": tenant_id,
+                    },
+                    queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+                    priority=OnyxCeleryPriority.MEDIUM,
+                )
+    except Exception:
+        task_logger.exception("Unexpected exception during index attempt cleanup check")
+        return None
+    finally:
+        if locked:
+            if lock.owned():
+                lock.release()
+            else:
+                task_logger.error(
+                    "check_for_index_attempt_cleanup - Lock not owned on completion: "
+                    f"tenant={tenant_id}"
+                )
+
+
+# light worker
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
+    bind=True,
+)
+def cleanup_index_attempt_task(
+    self: Task, *, index_attempt_ids: list[int], tenant_id: str
+) -> None:
+    """Clean up an index attempt"""
+    start = time.monotonic()
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cleanup_index_attempts(db_session, index_attempt_ids)
+
+    finally:
+        elapsed = time.monotonic() - start
+
+        task_logger.info(
+            f"cleanup_index_attempt_task completed: tenant_id={tenant_id} "
+            f"index_attempt_ids={index_attempt_ids} "
             f"elapsed={elapsed:.2f}"
         )
 

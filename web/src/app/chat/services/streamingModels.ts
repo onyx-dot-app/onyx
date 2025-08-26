@@ -72,13 +72,19 @@ export interface SearchToolDelta extends BaseObj {
   documents: OnyxDocument[] | null;
 }
 
+interface GeneratedImage {
+  file_id: string;
+  url: string;
+  revised_prompt: string;
+}
+
 export interface ImageGenerationToolStart extends BaseObj {
   type: "image_generation_tool_start";
 }
 
 export interface ImageGenerationToolDelta extends BaseObj {
   type: "image_generation_tool_delta";
-  images: Array<{ [key: string]: string }> | null;
+  images: GeneratedImage[];
 }
 
 // Custom Tool Packets

@@ -8,17 +8,28 @@ import {
 } from "./streamingModels";
 import { Packet } from "@/app/chat/services/streamingModels";
 
-export function isToolPacket(packet: Packet) {
+export function isToolPacket(
+  packet: Packet,
+  includeSectionEnd: boolean = true
+) {
+  let toolPacketTypes = [
+    PacketType.SEARCH_TOOL_START,
+    PacketType.SEARCH_TOOL_DELTA,
+    PacketType.CUSTOM_TOOL_START,
+    PacketType.CUSTOM_TOOL_DELTA,
+    PacketType.REASONING_START,
+    PacketType.REASONING_DELTA,
+  ];
+  if (includeSectionEnd) {
+    toolPacketTypes.push(PacketType.SECTION_END);
+  }
+  return toolPacketTypes.includes(packet.obj.type as PacketType);
+}
+
+export function isDisplayPacket(packet: Packet) {
   return (
-    packet.obj.type === PacketType.SEARCH_TOOL_START ||
-    packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA ||
-    packet.obj.type === PacketType.CUSTOM_TOOL_START ||
-    packet.obj.type === PacketType.CUSTOM_TOOL_DELTA ||
-    packet.obj.type === PacketType.REASONING_START ||
-    packet.obj.type === PacketType.REASONING_DELTA ||
-    packet.obj.type === PacketType.SECTION_END
+    packet.obj.type === PacketType.MESSAGE_START ||
+    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 }
 
@@ -27,13 +38,19 @@ export function isStreamingComplete(packets: Packet[]) {
 }
 
 export function isFinalAnswerComing(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
+  return packets.some(
+    (packet) =>
+      packet.obj.type === PacketType.MESSAGE_START ||
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+  );
 }
 
 export function isFinalAnswerComplete(packets: Packet[]) {
   // Find the first MESSAGE_START packet and get its index
   const messageStartPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.MESSAGE_START
+    (packet) =>
+      packet.obj.type === PacketType.MESSAGE_START ||
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 
   if (!messageStartPacket) {

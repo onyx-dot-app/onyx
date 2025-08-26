@@ -510,7 +510,7 @@ textarea {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmerTransition 1.5s ease-out infinite;
+  animation: shimmerTransition 2.5s ease-out infinite;
 }
 
 .dark .loading-text {

@@ -102,6 +102,9 @@ def custom_tool_act(
         raise ValueError("Custom tool did not return a valid response summary")
 
     # summarise tool result
+    if not response_summary.response_type:
+        raise ValueError("Response type is not returned.")
+
     if response_summary.response_type == "json":
         tool_result_str = json.dumps(response_summary.tool_result, ensure_ascii=False)
     elif response_summary.response_type in {"image", "csv"}:
@@ -124,6 +127,13 @@ def custom_tool_act(
         ).content
     ).strip()
 
+    # get file_ids:
+    file_ids = None
+    if response_summary.response_type in {"image", "csv"} and hasattr(
+        response_summary.tool_result, "file_ids"
+    ):
+        file_ids = response_summary.tool_result.file_ids
+
     logger.debug(
         f"Tool call end for {custom_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
@@ -141,6 +151,9 @@ def custom_tool_act(
                 cited_documents={},
                 reasoning="",
                 additional_data=None,
+                response_type=response_summary.response_type,
+                data=response_summary.tool_result,
+                file_ids=file_ids,
             )
         ],
         log_messages=[

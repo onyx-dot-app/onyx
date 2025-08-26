@@ -1,53 +1,29 @@
 "use client";
 
-import { v4 as uuidv4 } from "uuid";
-
 import {
   buildChatUrl,
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "../services/lib";
 
-import {
-  AgentAnswerPiece,
-  DocumentInfoPacket,
-  RefinedAnswerImprovement,
-  StreamStopInfo,
-  SubQueryPiece,
-  SubQuestionPiece,
-} from "@/lib/search/interfaces";
-
-import { AnswerPiecePacket } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
   MessageTreeState,
-  removeMessage,
-  setMessageAsLatest,
   upsertMessages,
 } from "../services/messageTree";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
-import {
-  SEARCH_PARAM_NAMES,
-  shouldSubmitOnLoad,
-} from "../services/searchParams";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { SEARCH_TOOL_NAME } from "../components/tools/constants";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
-  AgenticMessageResponseIDInfo,
-  BackendChatSession,
   BackendMessage,
   ChatFileType,
   ChatSessionSharedStatus,
-  ChatState,
   CitationMap,
-  DocumentsResponse,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -72,7 +48,6 @@ import {
 } from "../services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { constructSubQuestions } from "../services/constructSubQuestions";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -94,11 +69,9 @@ import {
 } from "../stores/useChatSessionStore";
 import {
   Packet,
-  SearchToolDelta,
-  ImageGenerationToolDelta,
   CitationDelta,
-  StreamingCitation,
   MessageStart,
+  PacketType,
 } from "../services/streamingModels";
 
 const TEMP_USER_MESSAGE_ID = -1;
@@ -309,6 +282,30 @@ export function useChatController({
       updateSessionMessageTree(currentSession, newMessageTree);
     }
 
+    // Ensure UI reflects a STOP event by appending a STOP packet to the
+    // currently streaming assistant message if one exists and doesn't already
+    // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
+    if (lastMessage && lastMessage.type === "assistant") {
+      const packets = lastMessage.packets || [];
+      const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
+      if (!hasStop) {
+        const maxInd =
+          packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
+        const stopPacket: Packet = {
+          ind: maxInd + 1,
+          obj: { type: PacketType.STOP },
+        } as Packet;
+
+        const newMessageTree = new Map(currentMessageTree);
+        const updatedMessage = {
+          ...lastMessage,
+          packets: [...packets, stopPacket],
+        } as Message;
+        newMessageTree.set(lastMessage.messageId, updatedMessage);
+        updateSessionMessageTree(currentSession, newMessageTree);
+      }
+    }
+
     updateChatStateAction(currentSession, "input");
   };
 
@@ -513,7 +510,6 @@ export function useChatController({
     resetInputBar();
 
     let answer = "";
-    let second_level_answer = "";
 
     const stopReason: StreamStopReason | null = null;
     let query: string | null = null;
@@ -527,7 +523,6 @@ export function useChatController({
     let error: string | null = null;
     let stackTrace: string | null = null;
 
-    let sub_questions: SubQuestionDetail[] = [];
     let finalMessage: BackendMessage | null = null;
     let toolCall: ToolCallMetadata | null = null;
     let files: FileDescriptor[] = [];
@@ -543,7 +538,6 @@ export function useChatController({
       );
 
       const stack = new CurrentMessageFIFO();
-
       updateCurrentMessageFIFO(stack, {
         signal: controller.signal,
         message: currMessage,

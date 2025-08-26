@@ -1,3 +1,5 @@
+import asyncio
+import json
 import threading
 import time
 from collections.abc import Callable
@@ -5,14 +7,26 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from functools import wraps
+from types import TracebackType
 from typing import Any
+from typing import cast
 
+import aioboto3  # type: ignore
+import httpx
+import openai
 import requests
+import vertexai  # type: ignore
+import voyageai  # type: ignore
+from cohere import AsyncClient as CohereAsyncClient
+from google.oauth2 import service_account  # type: ignore
 from httpx import HTTPError
+from litellm import aembedding
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
 from retry import retry
+from vertexai.language_models import TextEmbeddingInput  # type: ignore
+from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -25,16 +39,26 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
+from onyx.natural_language_processing.constants import EmbeddingModelTextType
 from onyx.natural_language_processing.exceptions import (
     ModelServerRateLimitError,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
+from onyx.utils.search_nlp_models_utils import pass_aws_key
+from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
+from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
+from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
@@ -52,6 +76,21 @@ from shared_configs.model_server_models import RerankResponse
 from shared_configs.utils import batch_list
 
 logger = setup_logger()
+
+# If we are not only indexing, dont want retry very long
+_RETRY_DELAY = 10 if INDEXING_ONLY else 0.1
+_RETRY_TRIES = 10 if INDEXING_ONLY else 2
+
+# OpenAI only allows 2048 embeddings to be computed at once
+_OPENAI_MAX_INPUT_LEN = 2048
+# Cohere allows up to 96 embeddings in a single embedding calling
+_COHERE_MAX_INPUT_LEN = 96
+
+# Authentication error string constants
+_AUTH_ERROR_401 = "401"
+_AUTH_ERROR_UNAUTHORIZED = "unauthorized"
+_AUTH_ERROR_INVALID_API_KEY = "invalid api key"
+_AUTH_ERROR_PERMISSION = "permission"
 
 
 WARM_UP_STRINGS = [
@@ -77,6 +116,377 @@ def build_model_server_url(
 
     # otherwise default to http
     return f"http://{model_server_url}"
+
+
+def is_authentication_error(error: Exception) -> bool:
+    """Check if an exception is related to authentication issues.
+
+    Args:
+        error: The exception to check
+
+    Returns:
+        bool: True if the error appears to be authentication-related
+    """
+    error_str = str(error).lower()
+    return (
+        _AUTH_ERROR_401 in error_str
+        or _AUTH_ERROR_UNAUTHORIZED in error_str
+        or _AUTH_ERROR_INVALID_API_KEY in error_str
+        or _AUTH_ERROR_PERMISSION in error_str
+    )
+
+
+def format_embedding_error(
+    error: Exception,
+    service_name: str,
+    model: str | None,
+    provider: EmbeddingProvider,
+    sanitized_api_key: str | None = None,
+    status_code: int | None = None,
+) -> str:
+    """
+    Format a standardized error string for embedding errors.
+    """
+    detail = f"Status {status_code}" if status_code else f"{type(error)}"
+
+    return (
+        f"{'HTTP error' if status_code else 'Exception'} embedding text with {service_name} - {detail}: "
+        f"Model: {model} "
+        f"Provider: {provider} "
+        f"API Key: {sanitized_api_key} "
+        f"Exception: {error}"
+    )
+
+
+# Custom exception for authentication errors
+class AuthenticationError(Exception):
+    """Raised when authentication fails with a provider."""
+
+    def __init__(self, provider: str, message: str = "API key is invalid or expired"):
+        self.provider = provider
+        self.message = message
+        super().__init__(f"{provider} authentication failed: {message}")
+
+
+class CloudEmbedding:
+    def __init__(
+        self,
+        api_key: str,
+        provider: EmbeddingProvider,
+        api_url: str | None = None,
+        api_version: str | None = None,
+        timeout: int = API_BASED_EMBEDDING_TIMEOUT,
+    ) -> None:
+        self.provider = provider
+        self.api_key = api_key
+        self.api_url = api_url
+        self.api_version = api_version
+        self.timeout = timeout
+        self.http_client = httpx.AsyncClient(timeout=timeout)
+        self._closed = False
+        self.sanitized_api_key = api_key[:4] + "********" + api_key[-4:]
+
+    async def _embed_openai(
+        self, texts: list[str], model: str | None, reduced_dimension: int | None
+    ) -> list[Embedding]:
+        if not model:
+            model = DEFAULT_OPENAI_MODEL
+
+        # Use the OpenAI specific timeout for this one
+        client = openai.AsyncOpenAI(
+            api_key=self.api_key, timeout=OPENAI_EMBEDDING_TIMEOUT
+        )
+
+        final_embeddings: list[Embedding] = []
+
+        for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
+            response = await client.embeddings.create(
+                input=text_batch,
+                model=model,
+                dimensions=reduced_dimension or openai.NOT_GIVEN,
+            )
+            final_embeddings.extend(
+                [embedding.embedding for embedding in response.data]
+            )
+        return final_embeddings
+
+    async def _embed_cohere(
+        self, texts: list[str], model: str | None, embedding_type: str
+    ) -> list[Embedding]:
+        if not model:
+            model = DEFAULT_COHERE_MODEL
+
+        client = CohereAsyncClient(api_key=self.api_key)
+
+        final_embeddings: list[Embedding] = []
+        for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
+            # Does not use the same tokenizer as the Onyx API server but it's approximately the same
+            # empirically it's only off by a very few tokens so it's not a big deal
+            response = await client.embed(
+                texts=text_batch,
+                model=model,
+                input_type=embedding_type,
+                truncate="END",
+            )
+            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+        return final_embeddings
+
+    async def _embed_voyage(
+        self, texts: list[str], model: str | None, embedding_type: str
+    ) -> list[Embedding]:
+        if not model:
+            model = DEFAULT_VOYAGE_MODEL
+
+        client = voyageai.AsyncClient(
+            api_key=self.api_key, timeout=API_BASED_EMBEDDING_TIMEOUT
+        )
+
+        response = await client.embed(
+            texts=texts,
+            model=model,
+            input_type=embedding_type,
+            truncation=True,
+        )
+        return response.embeddings
+
+    async def _embed_azure(
+        self, texts: list[str], model: str | None
+    ) -> list[Embedding]:
+        response = await aembedding(
+            model=model,
+            input=texts,
+            timeout=API_BASED_EMBEDDING_TIMEOUT,
+            api_key=self.api_key,
+            api_base=self.api_url,
+            api_version=self.api_version,
+        )
+        embeddings = [embedding["embedding"] for embedding in response.data]
+        return embeddings
+
+    async def _embed_vertex(
+        self, texts: list[str], model: str | None, embedding_type: str
+    ) -> list[Embedding]:
+        if not model:
+            model = DEFAULT_VERTEX_MODEL
+
+        service_account_info = json.loads(self.api_key)
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info
+        )
+        project_id = service_account_info["project_id"]
+        vertexai.init(project=project_id, credentials=credentials)
+        client = TextEmbeddingModel.from_pretrained(model)
+
+        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+
+        # Split into batches of 25 texts
+        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        batches = [
+            inputs[i : i + max_texts_per_batch]
+            for i in range(0, len(inputs), max_texts_per_batch)
+        ]
+
+        # Dispatch all embedding calls asynchronously at once
+        tasks = [
+            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
+        ]
+
+        # Wait for all tasks to complete in parallel
+        results = await asyncio.gather(*tasks)
+
+        return [embedding.values for batch in results for embedding in batch]
+
+    async def _embed_litellm_proxy(
+        self, texts: list[str], model_name: str | None
+    ) -> list[Embedding]:
+        if not model_name:
+            raise ValueError("Model name is required for LiteLLM proxy embedding.")
+
+        if not self.api_url:
+            raise ValueError("API URL is required for LiteLLM proxy embedding.")
+
+        headers = (
+            {} if not self.api_key else {"Authorization": f"Bearer {self.api_key}"}
+        )
+
+        response = await self.http_client.post(
+            self.api_url,
+            json={
+                "model": model_name,
+                "input": texts,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        result = response.json()
+        return [embedding["embedding"] for embedding in result["data"]]
+
+    @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
+    async def embed(
+        self,
+        *,
+        texts: list[str],
+        text_type: EmbedTextType,
+        model_name: str | None = None,
+        deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
+    ) -> list[Embedding]:
+        try:
+            if self.provider == EmbeddingProvider.OPENAI:
+                return await self._embed_openai(texts, model_name, reduced_dimension)
+            elif self.provider == EmbeddingProvider.AZURE:
+                return await self._embed_azure(texts, f"azure/{deployment_name}")
+            elif self.provider == EmbeddingProvider.LITELLM:
+                return await self._embed_litellm_proxy(texts, model_name)
+
+            embedding_type = EmbeddingModelTextType.get_type(self.provider, text_type)
+            if self.provider == EmbeddingProvider.COHERE:
+                return await self._embed_cohere(texts, model_name, embedding_type)
+            elif self.provider == EmbeddingProvider.VOYAGE:
+                return await self._embed_voyage(texts, model_name, embedding_type)
+            elif self.provider == EmbeddingProvider.GOOGLE:
+                return await self._embed_vertex(texts, model_name, embedding_type)
+            else:
+                raise ValueError(f"Unsupported provider: {self.provider}")
+        except openai.AuthenticationError:
+            raise AuthenticationError(provider="OpenAI")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError(provider=str(self.provider))
+
+            error_string = format_embedding_error(
+                e,
+                str(self.provider),
+                model_name or deployment_name,
+                self.provider,
+                sanitized_api_key=self.sanitized_api_key,
+                status_code=e.response.status_code,
+            )
+            logger.error(error_string)
+            logger.debug(f"Exception texts: {texts}")
+
+            raise RuntimeError(error_string)
+        except Exception as e:
+            if is_authentication_error(e):
+                raise AuthenticationError(provider=str(self.provider))
+
+            error_string = format_embedding_error(
+                e,
+                str(self.provider),
+                model_name or deployment_name,
+                self.provider,
+                sanitized_api_key=self.sanitized_api_key,
+            )
+            logger.error(error_string)
+            logger.debug(f"Exception texts: {texts}")
+
+            raise RuntimeError(error_string)
+
+    @staticmethod
+    def create(
+        api_key: str,
+        provider: EmbeddingProvider,
+        api_url: str | None = None,
+        api_version: str | None = None,
+    ) -> "CloudEmbedding":
+        logger.debug(f"Creating Embedding instance for provider: {provider}")
+        return CloudEmbedding(api_key, provider, api_url, api_version)
+
+    async def aclose(self) -> None:
+        """Explicitly close the client."""
+        if not self._closed:
+            await self.http_client.aclose()
+            self._closed = True
+
+    async def __aenter__(self) -> "CloudEmbedding":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+    def __del__(self) -> None:
+        """Finalizer to warn about unclosed clients."""
+        if not self._closed:
+            logger.warning(
+                "CloudEmbedding was not properly closed. Use 'async with' or call aclose()"
+            )
+
+
+# API-based reranking functions (moved from model server)
+async def cohere_rerank_api(
+    query: str, docs: list[str], model_name: str, api_key: str
+) -> list[float]:
+    cohere_client = CohereAsyncClient(api_key=api_key)
+    response = await cohere_client.rerank(query=query, documents=docs, model=model_name)
+    results = response.results
+    sorted_results = sorted(results, key=lambda item: item.index)
+    return [result.relevance_score for result in sorted_results]
+
+
+async def cohere_rerank_aws(
+    query: str,
+    docs: list[str],
+    model_name: str,
+    region_name: str,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+) -> list[float]:
+    session = aioboto3.Session(
+        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
+    )
+    async with session.client(
+        "bedrock-runtime", region_name=region_name
+    ) as bedrock_client:
+        body = json.dumps(
+            {
+                "query": query,
+                "documents": docs,
+                "api_version": 2,
+            }
+        )
+        # Invoke the Bedrock model asynchronously
+        response = await bedrock_client.invoke_model(
+            modelId=model_name,
+            accept="application/json",
+            contentType="application/json",
+            body=body,
+        )
+
+        # Read the response asynchronously
+        response_body = json.loads(await response["body"].read())
+
+        # Extract and sort the results
+        results = response_body.get("results", [])
+        sorted_results = sorted(results, key=lambda item: item["index"])
+
+        return [result["relevance_score"] for result in sorted_results]
+
+
+async def litellm_rerank(
+    query: str, docs: list[str], api_url: str, model_name: str, api_key: str | None
+) -> list[float]:
+    headers = {} if not api_key else {"Authorization": f"Bearer {api_key}"}
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            api_url,
+            json={
+                "model": model_name,
+                "query": query,
+                "documents": docs,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        result = response.json()
+        return [
+            item["relevance_score"]
+            for item in sorted(result["results"], key=lambda x: x["index"])
+        ]
 
 
 class EmbeddingModel:
@@ -113,8 +523,84 @@ class EmbeddingModel:
         )
         self.callback = callback
 
-        model_server_url = build_model_server_url(server_host, server_port)
-        self.embed_server_endpoint = f"{model_server_url}/encoder/bi-encoder-embed"
+        # Only build model server endpoint for local models
+        if self.provider_type is None:
+            model_server_url = build_model_server_url(server_host, server_port)
+            self.embed_server_endpoint: str | None = (
+                f"{model_server_url}/encoder/bi-encoder-embed"
+            )
+        else:
+            # API providers don't need model server endpoint
+            self.embed_server_endpoint = None
+
+    async def _make_direct_api_call(
+        self,
+        embed_request: EmbedRequest,
+        tenant_id: str | None = None,
+        request_id: str | None = None,
+    ) -> EmbedResponse:
+        """Make direct API call to cloud provider, bypassing model server."""
+        if self.provider_type is None:
+            raise ValueError("Provider type is required for direct API calls")
+
+        if self.api_key is None:
+            logger.error("API key not provided for cloud model")
+            raise RuntimeError("API key not provided for cloud model")
+
+        # Check for prefix usage with cloud models
+        if embed_request.manual_query_prefix or embed_request.manual_passage_prefix:
+            logger.warning("Prefix provided for cloud model, which is not supported")
+            raise ValueError(
+                "Prefix string is not valid for cloud models. "
+                "Cloud models take an explicit text type instead."
+            )
+
+        if not all(embed_request.texts):
+            logger.error("Empty strings provided for embedding")
+            raise ValueError("Empty strings are not allowed for embedding.")
+
+        if not embed_request.texts:
+            logger.error("No texts provided for embedding")
+            raise ValueError("No texts provided for embedding.")
+
+        start_time = time.monotonic()
+        total_chars = sum(len(text) for text in embed_request.texts)
+
+        logger.info(
+            f"Embedding {len(embed_request.texts)} texts with {total_chars} total characters with provider: {self.provider_type}"
+        )
+
+        async with CloudEmbedding(
+            api_key=self.api_key,
+            provider=self.provider_type,
+            api_url=self.api_url,
+            api_version=self.api_version,
+        ) as cloud_model:
+            embeddings = await cloud_model.embed(
+                texts=embed_request.texts,
+                model_name=embed_request.model_name,
+                deployment_name=embed_request.deployment_name,
+                text_type=embed_request.text_type,
+                reduced_dimension=embed_request.reduced_dimension,
+            )
+
+        if any(embedding is None for embedding in embeddings):
+            error_message = "Embeddings contain None values\n"
+            error_message += "Corresponding texts:\n"
+            error_message += "\n".join(embed_request.texts)
+            logger.error(error_message)
+            raise ValueError(error_message)
+
+        elapsed = time.monotonic() - start_time
+        logger.info(
+            f"event=embedding_provider "
+            f"texts={len(embed_request.texts)} "
+            f"chars={total_chars} "
+            f"provider={self.provider_type} "
+            f"elapsed={elapsed:.2f}"
+        )
+
+        return EmbedResponse(embeddings=embeddings)
 
     def _make_model_server_request(
         self,
@@ -122,6 +608,12 @@ class EmbeddingModel:
         tenant_id: str | None = None,
         request_id: str | None = None,
     ) -> EmbedResponse:
+        if self.embed_server_endpoint is None:
+            raise ValueError("Model server endpoint is not configured for local models")
+
+        # Store the endpoint in a local variable to help mypy understand it's not None
+        endpoint = self.embed_server_endpoint
+
         def _make_request() -> Response:
             headers = {}
             if tenant_id:
@@ -131,7 +623,7 @@ class EmbeddingModel:
                 headers["X-Onyx-Request-ID"] = request_id
 
             response = requests.post(
-                self.embed_server_endpoint,
+                endpoint,
                 headers=headers,
                 json=embed_request.model_dump(),
             )
@@ -219,11 +711,28 @@ class EmbeddingModel:
                 reduced_dimension=self.reduced_dimension,
             )
 
-            start_time = time.time()
-            response = self._make_model_server_request(
-                embed_request, tenant_id=tenant_id, request_id=request_id
-            )
-            end_time = time.time()
+            start_time = time.monotonic()
+
+            # Route between direct API calls and model server calls
+            if self.provider_type is not None:
+                # For API providers, make direct API call
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    response = loop.run_until_complete(
+                        self._make_direct_api_call(
+                            embed_request, tenant_id=tenant_id, request_id=request_id
+                        )
+                    )
+                finally:
+                    loop.close()
+            else:
+                # For local models, use model server
+                response = self._make_model_server_request(
+                    embed_request, tenant_id=tenant_id, request_id=request_id
+                )
+
+            end_time = time.monotonic()
 
             processing_time = end_time - start_time
             logger.debug(
@@ -360,29 +869,92 @@ class RerankingModel:
         model_server_host: str = MODEL_SERVER_HOST,
         model_server_port: int = MODEL_SERVER_PORT,
     ) -> None:
-        model_server_url = build_model_server_url(model_server_host, model_server_port)
-        self.rerank_server_endpoint = model_server_url + "/encoder/cross-encoder-scores"
         self.model_name = model_name
         self.provider_type = provider_type
         self.api_key = api_key
         self.api_url = api_url
 
+        # Only build model server endpoint for local models
+        if self.provider_type is None:
+            model_server_url = build_model_server_url(
+                model_server_host, model_server_port
+            )
+            self.rerank_server_endpoint: str | None = (
+                model_server_url + "/encoder/cross-encoder-scores"
+            )
+        else:
+            # API providers don't need model server endpoint
+            self.rerank_server_endpoint = None
+
+    async def _make_direct_rerank_call(
+        self, query: str, passages: list[str]
+    ) -> list[float]:
+        """Make direct API call to cloud provider, bypassing model server."""
+        if self.provider_type is None:
+            raise ValueError("Provider type is required for direct API calls")
+
+        if self.api_key is None:
+            raise ValueError("API key is required for cloud provider")
+
+        if self.provider_type == RerankerProvider.COHERE:
+            return await cohere_rerank_api(
+                query, passages, self.model_name, self.api_key
+            )
+        elif self.provider_type == RerankerProvider.BEDROCK:
+            aws_access_key_id, aws_secret_access_key, aws_region = pass_aws_key(
+                self.api_key
+            )
+            return await cohere_rerank_aws(
+                query,
+                passages,
+                self.model_name,
+                aws_region,
+                aws_access_key_id,
+                aws_secret_access_key,
+            )
+        elif self.provider_type == RerankerProvider.LITELLM:
+            if self.api_url is None:
+                raise ValueError("API URL is required for LiteLLM reranking.")
+            return await litellm_rerank(
+                query, passages, self.api_url, self.model_name, self.api_key
+            )
+        else:
+            raise ValueError(f"Unsupported reranking provider: {self.provider_type}")
+
     def predict(self, query: str, passages: list[str]) -> list[float]:
-        rerank_request = RerankRequest(
-            query=query,
-            documents=passages,
-            model_name=self.model_name,
-            provider_type=self.provider_type,
-            api_key=self.api_key,
-            api_url=self.api_url,
-        )
+        # Route between direct API calls and model server calls
+        if self.provider_type is not None:
+            # For API providers, make direct API call
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(
+                    self._make_direct_rerank_call(query, passages)
+                )
+            finally:
+                loop.close()
+        else:
+            # For local models, use model server
+            if self.rerank_server_endpoint is None:
+                raise ValueError(
+                    "Rerank server endpoint is not configured for local models"
+                )
 
-        response = requests.post(
-            self.rerank_server_endpoint, json=rerank_request.model_dump()
-        )
-        response.raise_for_status()
+            rerank_request = RerankRequest(
+                query=query,
+                documents=passages,
+                model_name=self.model_name,
+                provider_type=self.provider_type,
+                api_key=self.api_key,
+                api_url=self.api_url,
+            )
 
-        return RerankResponse(**response.json()).scores
+            response = requests.post(
+                self.rerank_server_endpoint, json=rerank_request.model_dump()
+            )
+            response.raise_for_status()
+
+            return RerankResponse(**response.json()).scores
 
 
 class QueryAnalysisModel:

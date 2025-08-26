@@ -33,22 +33,18 @@ export interface RendererResult {
   // can be used to override the look on the "expanded" view
   // used for things that should just show text w/o an icon or header
   // e.g. ReasoningRenderer
-  expandedText?: string;
+  expandedText?: JSX.Element;
 }
 
 export type MessageRenderer<
   T extends Packet,
   S extends Partial<FullChatState>,
-> = ({
-  packets,
-  state,
-  onComplete,
-  renderType,
-  animate,
-}: {
+> = React.ComponentType<{
   packets: T[];
   state: S;
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
-}) => RendererResult;
+  stopPacketSeen: boolean;
+  children: (result: RendererResult) => JSX.Element;
+}>;

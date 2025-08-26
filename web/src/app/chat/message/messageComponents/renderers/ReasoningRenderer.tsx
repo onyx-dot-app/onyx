@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
 import {
   PacketType,
   ReasoningDelta,
   ReasoningPacket,
 } from "../../../services/streamingModels";
-import { MessageRenderer } from "../interfaces";
+import { MessageRenderer, FullChatState } from "../interfaces";
+import { useMarkdownRenderer } from "../markdownUtils";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -33,11 +35,10 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   };
 }
 
-export const ReasoningRenderer: MessageRenderer<ReasoningPacket, {}> = ({
-  packets,
-  onComplete,
-  animate,
-}) => {
+export const ReasoningRenderer: MessageRenderer<
+  ReasoningPacket,
+  FullChatState
+> = ({ packets, state, onComplete, animate, children }) => {
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
     [packets]
@@ -90,16 +91,18 @@ export const ReasoningRenderer: MessageRenderer<ReasoningPacket, {}> = ({
     };
   }, []);
 
+  const { renderedContent } = useMarkdownRenderer(content, state, "text-sm");
+
   if (!hasStart && !hasEnd && content.length === 0) {
-    return { icon: null, status: null, content: <></> };
+    return children({ icon: null, status: null, content: <></> });
   }
 
-  return {
+  return children({
     icon: null,
     status: THINKING_STATUS,
-    content: <>{content}</>,
-    expandedText: content,
-  };
+    content: renderedContent,
+    expandedText: renderedContent,
+  });
 };
 
 export default ReasoningRenderer;

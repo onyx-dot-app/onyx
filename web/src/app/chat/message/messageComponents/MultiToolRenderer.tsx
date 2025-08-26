@@ -7,7 +7,7 @@ import {
 } from "react-icons/fi";
 import { Packet } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
-import { renderMessageComponent } from "./renderMessageComponent";
+import { RendererComponent } from "./renderMessageComponent";
 import { isToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
@@ -30,7 +30,7 @@ function ExpandedToolItem({
   showClickableToggle?: boolean;
   onToggleClick?: () => void;
   defaultIconColor?: string;
-  expandedText?: string;
+  expandedText?: JSX.Element | string;
 }) {
   const finalIcon = icon ? (
     icon({ size: 14 })
@@ -81,7 +81,7 @@ function ExpandedToolItem({
           )}
 
           <div
-            className={`${expandedText ? "text-sm" : "text-xs"} text-text-600`}
+            className={`${expandedText ? "text-sm " + STANDARD_TEXT_COLOR : "text-xs text-text-600"}`}
           >
             {expandedText || content}
           </div>
@@ -92,31 +92,6 @@ function ExpandedToolItem({
 }
 
 // React component wrapper to avoid hook count issues in map loops
-export function RendererComponent({
-  packets,
-  chatState,
-  onComplete,
-  animate,
-  useShortRenderer = false,
-  children,
-}: {
-  packets: Packet[];
-  chatState: FullChatState;
-  onComplete: () => void;
-  animate: boolean;
-  useShortRenderer?: boolean;
-  children: (result: RendererResult) => JSX.Element;
-}) {
-  const result = renderMessageComponent(
-    { packets },
-    chatState,
-    onComplete,
-    animate,
-    useShortRenderer
-  );
-
-  return children(result);
-}
 
 // Multi-tool renderer component for grouped tools
 function MultiToolRenderer({
@@ -124,12 +99,14 @@ function MultiToolRenderer({
   chatState,
   isComplete,
   isFinalAnswerComing,
+  stopPacketSeen,
   onAllToolsDisplayed,
 }: {
   packetGroups: { ind: number; packets: Packet[] }[];
   chatState: FullChatState;
   isComplete: boolean;
   isFinalAnswerComing: boolean;
+  stopPacketSeen: boolean;
   onAllToolsDisplayed?: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -176,7 +153,7 @@ function MultiToolRenderer({
     const latestToolIndex = toolsToDisplay.length - 1;
 
     return (
-      <div className="mb-4 relative border border-border-medium rounded-lg p-4">
+      <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
         <div className="relative">
           <div>
             {toolsToDisplay.map((toolGroup, index) => {
@@ -189,7 +166,7 @@ function MultiToolRenderer({
 
               return (
                 <div
-                  key={index}
+                  key={toolGroup.ind}
                   style={{ display: isVisible ? "block" : "none" }}
                 >
                   <RendererComponent
@@ -203,6 +180,7 @@ function MultiToolRenderer({
                       }
                     }}
                     animate
+                    stopPacketSeen={stopPacketSeen}
                     useShortRenderer={!isStreamingExpanded}
                   >
                     {({ icon, content, status, expandedText }) => {
@@ -256,7 +234,7 @@ function MultiToolRenderer({
                             {icon ? icon({ size: 14 }) : null}
                             {status}
                             {toolsToDisplay.length > 1 && isLastItem && (
-                              <div className="ml-1 transition-transform duration-300 ease-in-out">
+                              <div className="ml-1">
                                 {isStreamingExpanded ? (
                                   <FiChevronDown size={14} />
                                 ) : (
@@ -267,7 +245,7 @@ function MultiToolRenderer({
                           </div>
 
                           <div
-                            className={`relative z-10 mt-1 text-sm text-text-600 ${
+                            className={`relative z-10 text-sm text-text-600 ${
                               !isLastItem ? "mb-3" : ""
                             }`}
                           >
@@ -326,7 +304,7 @@ function MultiToolRenderer({
 
               return (
                 <RendererComponent
-                  key={index}
+                  key={toolGroup.ind}
                   packets={toolGroup.packets}
                   chatState={chatState}
                   onComplete={() => {
@@ -337,6 +315,7 @@ function MultiToolRenderer({
                     }
                   }}
                   animate
+                  stopPacketSeen={stopPacketSeen}
                   useShortRenderer={false}
                 >
                   {({ icon, content, status, expandedText }) => (
@@ -373,15 +352,26 @@ function MultiToolRenderer({
                   {/* Icon column */}
                   <div className="flex flex-col items-center w-5">
                     {/* Dot with background to cover the line */}
-                    <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
-                      <FiCheckCircle className="w-3 h-3 text-text-700 rounded-full" />
+                    <div
+                      className="
+                        flex-shrink-0 
+                        flex 
+                        items-center 
+                        justify-center 
+                        w-5 
+                        h-5 
+                        bg-background 
+                        rounded-full
+                      "
+                    >
+                      <FiCheckCircle className="w-3 h-3 rounded-full" />
                     </div>
                   </div>
 
                   {/* Content with padding */}
                   <div className="flex-1">
                     <div className="flex mb-1">
-                      <div className="text-sm text-text-700">Done</div>
+                      <div className="text-sm">Done</div>
                     </div>
                   </div>
                 </div>

@@ -12,23 +12,28 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         raise IndexError("state.tools_used cannot be empty")
 
     # next_tool is either a generic tool name or a DRPath string
-    next_tool = state.tools_used[-1]
-    try:
-        next_path = DRPath(next_tool)
-    except ValueError:
-        next_path = DRPath.GENERIC_TOOL
+    next_tool_name = state.tools_used[-1]
 
-    # handle END
-    if next_path == DRPath.END:
+    available_tools = state.available_tools
+    if not available_tools:
+        raise ValueError("No tool is available. This should not happen.")
+
+    if next_tool_name in available_tools:
+        next_tool_path = available_tools[next_tool_name].path
+    elif next_tool_name == DRPath.END.value:
         return END
+    elif next_tool_name == DRPath.LOGGER.value:
+        return DRPath.LOGGER
+    else:
+        return DRPath.ORCHESTRATOR
 
     # handle invalid paths
-    if next_path == DRPath.CLARIFIER:
+    if next_tool_path == DRPath.CLARIFIER:
         raise ValueError("CLARIFIER is not a valid path during iteration")
 
     # handle tool calls without a query
     if (
-        next_path
+        next_tool_path
         in (
             DRPath.INTERNAL_SEARCH,
             DRPath.INTERNET_SEARCH,
@@ -39,7 +44,7 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     ):
         return DRPath.CLOSER
 
-    return next_path
+    return next_tool_path
 
 
 def completeness_router(state: MainState) -> DRPath | str:
@@ -51,4 +56,4 @@ def completeness_router(state: MainState) -> DRPath | str:
 
     if next_path == DRPath.ORCHESTRATOR.value:
         return DRPath.ORCHESTRATOR
-    return END
+    return DRPath.LOGGER

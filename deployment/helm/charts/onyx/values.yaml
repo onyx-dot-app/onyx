@@ -96,6 +96,10 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 
 indexCapability:
   service:
@@ -125,6 +129,10 @@ indexCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 config:
   envConfigMapName: env-configmap
 
@@ -318,6 +326,10 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 
 celery_beat:
   replicaCount: 1
@@ -327,11 +339,6 @@ celery_beat:
     app: celery-beat
   deploymentLabels:
     app: celery-beat
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -355,11 +362,6 @@ celery_worker_heavy:
     app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -373,28 +375,23 @@ celery_worker_heavy:
   tolerations: []
   affinity: {}
 
-celery_worker_indexing:
+celery_worker_docprocessing:
   replicaCount: 1
   autoscaling:
     enabled: false
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-indexing
+    app: celery-worker-docprocessing
   deploymentLabels:
-    app: celery-worker-indexing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
+    app: celery-worker-docprocessing
   resources:
     requests:
-      cpu: 2000m
-      memory: 8Gi
+      cpu: 500m
+      memory: 4Gi
     limits:
-      cpu: 2000m
-      memory: 16Gi
+      cpu: 1000m
+      memory: 12Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -411,11 +408,6 @@ celery_worker_light:
     app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -439,11 +431,6 @@ celery_worker_monitoring:
     app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -467,11 +454,6 @@ celery_worker_primary:
     app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -495,11 +477,6 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   deploymentLabels:
     app: celery-worker-user-files-indexing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 2000m
@@ -536,6 +513,29 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+
+celery_worker_docfetching:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-docfetching
+  deploymentLabels:
+    app: celery-worker-docfetching
+  resources:
+    requests:
+      cpu: 500m
+      memory: 8Gi
+    limits:
+      cpu: 2000m
+      memory: 16Gi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 ######################################################################
 #
@@ -636,7 +636,9 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
-  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  # For sending verification emails, true or false
+  REQUIRE_EMAIL_VERIFICATION: ""
+  # If unspecified then defaults to 'smtp.gmail.com'
   SMTP_SERVER: ""
   # For sending verification emails, if unspecified then defaults to '587'
   SMTP_PORT: ""

@@ -15,6 +15,7 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
                 iteration_nr=state.iteration_nr,
                 parallelization_nr=parallelization_nr,
                 branch_question=query,
+                current_step_nr=state.current_step_nr,
                 context="",
                 active_source_types=state.active_source_types,
                 tools_used=state.tools_used,

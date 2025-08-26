@@ -32,13 +32,30 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
+from onyx.prompts.dr_prompts import DEFAULLT_DECISION_PROMPT
+from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import SUFFICIENT_INFORMATION_STRING
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_DECISION_SYSTEM_PROMPT_PREFIX = "Here are general instructions by the user, which \
+may or may not influence the decision what to do next:\n\n"
+
+
+def _get_implied_next_tool_based_on_tool_call_history(
+    tools_used: list[str],
+) -> str | None:
+    """
+    Identify the next tool based on the tool call history. Initially, we only support
+    special handling of the image generation tool.
+    """
+    if tools_used[-1] == DRPath.IMAGE_GENERATION.value:
+        return DRPath.LOGGER.value
+    else:
+        return None
 
 
 def orchestrator(
@@ -55,10 +72,23 @@ def orchestrator(
     if not question:
         raise ValueError("Question is required for orchestrator")
 
+    state.original_question
+
+    available_tools = state.available_tools
+
     plan_of_record = state.plan_of_record
     clarification = state.clarification
     assistant_system_prompt = state.assistant_system_prompt
-    assistant_task_prompt = state.assistant_task_prompt
+
+    if assistant_system_prompt:
+        decision_system_prompt: str = (
+            DEFAULLT_DECISION_PROMPT
+            + _DECISION_SYSTEM_PROMPT_PREFIX
+            + assistant_system_prompt
+        )
+    else:
+        decision_system_prompt = DEFAULLT_DECISION_PROMPT
+
     iteration_nr = state.iteration_nr + 1
     current_step_nr = state.current_step_nr
 
@@ -69,9 +99,45 @@ def orchestrator(
         aggregate_context(state.iteration_responses, include_documents=True).context
         or "(No answer history yet available)"
     )
+
+    next_tool_name = None
+
+    # Identify early exit condition based on tool call history
+
+    next_tool_based_on_tool_call_history = (
+        _get_implied_next_tool_based_on_tool_call_history(state.tools_used)
+    )
+
+    if next_tool_based_on_tool_call_history == DRPath.LOGGER.value:
+        return OrchestrationUpdate(
+            tools_used=[DRPath.LOGGER.value],
+            query_list=[],
+            iteration_nr=iteration_nr,
+            current_step_nr=current_step_nr,
+            log_messages=[
+                get_langgraph_node_log_string(
+                    graph_component="main",
+                    node_name="orchestrator",
+                    node_start_time=node_start_time,
+                )
+            ],
+            plan_of_record=plan_of_record,
+            remaining_time_budget=remaining_time_budget,
+            iteration_instructions=[
+                IterationInstructions(
+                    iteration_nr=iteration_nr,
+                    plan=plan_of_record.plan if plan_of_record else None,
+                    reasoning="",
+                    purpose="",
+                )
+            ],
+        )
+
+    # no early exit forced. Continue.
+
     available_tools = state.available_tools or {}
 
-    uploaded_context = state.uploaded_context or ""
+    uploaded_context = state.uploaded_test_context or ""
 
     questions = [
         f"{iteration_response.tool}: {iteration_response.question}"
@@ -138,8 +204,7 @@ def orchestrator(
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        reasoning_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt, reasoning_prompt
                     ),
                     event_name="basic_response",
                     writer=writer,
@@ -188,12 +253,30 @@ def orchestrator(
                     ],
                 )
 
+        # for Thoightful mode, we force a tool if requested an available
+        available_tools_for_decision = available_tools
+        force_use_tool = graph_config.tooling.force_use_tool
+        if iteration_nr == 1 and force_use_tool and force_use_tool.force_use:
+
+            forced_tool_name = force_use_tool.tool_name
+
+            available_tool_dict = {
+                available_tool.tool_object.name: available_tool
+                for _, available_tool in available_tools.items()
+                if available_tool.tool_object
+            }
+
+            if forced_tool_name in available_tool_dict.keys():
+                forced_tool = available_tool_dict[forced_tool_name]
+
+                available_tools_for_decision = {forced_tool.name: forced_tool}
+
         base_decision_prompt = get_dr_prompt_orchestration_templates(
             DRPromptPurpose.NEXT_STEP,
             ResearchType.THOUGHTFUL,
             entity_types_string=all_entity_types,
             relationship_types_string=all_relationship_types,
-            available_tools=available_tools,
+            available_tools=available_tools_for_decision,
         )
         decision_prompt = base_decision_prompt.build(
             question=question,
@@ -210,18 +293,18 @@ def orchestrator(
                 orchestrator_action = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        decision_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=35,
                     # max_tokens=2500,
                 )
                 next_step = orchestrator_action.next_step
-                next_tool = next_step.tool
+                next_tool_name = next_step.tool
                 query_list = [q for q in (next_step.questions or [])]
 
-                tool_calls_string = create_tool_call_string(next_tool, query_list)
+                tool_calls_string = create_tool_call_string(next_tool_name, query_list)
 
             except Exception as e:
                 logger.error(f"Error in approach extraction: {e}")
@@ -252,8 +335,8 @@ def orchestrator(
                 plan_of_record = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        plan_generation_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        plan_generation_prompt,
                     ),
                     schema=OrchestrationPlan,
                     timeout_override=25,
@@ -271,14 +354,39 @@ def orchestrator(
                 writer,
             )
 
-            write_custom_event(
-                current_step_nr,
-                ReasoningDelta(
-                    reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
-                    type="reasoning_delta",
-                ),
-                writer,
+            start_time = datetime.now()
+
+            repeat_plan_prompt = REPEAT_PROMPT.build(
+                original_information=f"{HIGH_LEVEL_PLAN_PREFIX}\n\n {plan_of_record.plan}"
             )
+
+            _, _, _ = run_with_timeout(
+                80,
+                lambda: stream_llm_answer(
+                    llm=graph_config.tooling.primary_llm,
+                    prompt=repeat_plan_prompt,
+                    event_name="basic_response",
+                    writer=writer,
+                    agent_answer_level=0,
+                    agent_answer_question_num=0,
+                    agent_answer_type="agent_level_answer",
+                    timeout_override=60,
+                    answer_piece="reasoning_delta",
+                    ind=current_step_nr,
+                ),
+            )
+
+            end_time = datetime.now()
+            logger.debug(f"Time taken for plan streaming: {end_time - start_time}")
+
+            # write_custom_event(
+            #     current_step_nr,
+            #     ReasoningDelta(
+            #         reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
+            #         type="reasoning_delta",
+            #     ),
+            #     writer,
+            # )
 
             write_custom_event(
                 current_step_nr,
@@ -316,43 +424,64 @@ def orchestrator(
                 orchestrator_action = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        decision_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=15,
                     # max_tokens=1500,
                 )
                 next_step = orchestrator_action.next_step
-                next_tool = next_step.tool
+                next_tool_name = next_step.tool
+
+                next_tool = available_tools[next_tool_name].path
+
                 query_list = [q for q in (next_step.questions or [])]
                 reasoning_result = orchestrator_action.reasoning
 
-                tool_calls_string = create_tool_call_string(next_tool, query_list)
+                tool_calls_string = create_tool_call_string(next_tool_name, query_list)
             except Exception as e:
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool].cost
+            remaining_time_budget -= available_tools[next_tool_name].cost
         else:
             reasoning_result = "Time to wrap up."
 
         write_custom_event(
             current_step_nr,
-            ReasoningStart(
-                type="reasoning_start",
-            ),
+            ReasoningStart(),
             writer,
         )
 
-        write_custom_event(
-            current_step_nr,
-            ReasoningDelta(
-                reasoning=reasoning_result,
-                type="reasoning_delta",
-            ),
-            writer,
+        repeat_reasoning_prompt = REPEAT_PROMPT.build(
+            original_information=reasoning_result
         )
+
+        _, _, _ = run_with_timeout(
+            80,
+            lambda: stream_llm_answer(
+                llm=graph_config.tooling.primary_llm,
+                prompt=repeat_reasoning_prompt,
+                event_name="basic_response",
+                writer=writer,
+                agent_answer_level=0,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=60,
+                answer_piece="reasoning_delta",
+                ind=current_step_nr,
+                # max_tokens=None,
+            ),
+        )
+
+        # write_custom_event(
+        #     current_step_nr,
+        #     ReasoningDelta(
+        #         reasoning=reasoning_result,
+        #     ),
+        #     writer,
+        # )
 
         write_custom_event(
             current_step_nr,
@@ -381,9 +510,7 @@ def orchestrator(
 
         write_custom_event(
             current_step_nr,
-            ReasoningStart(
-                type="reasoning_start",
-            ),
+            ReasoningStart(),
             writer,
         )
 
@@ -392,9 +519,8 @@ def orchestrator(
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=create_question_prompt(
-                    assistant_system_prompt,
-                    orchestration_next_step_purpose_prompt
-                    + (assistant_task_prompt or ""),
+                    decision_system_prompt,
+                    orchestration_next_step_purpose_prompt,
                 ),
                 event_name="basic_response",
                 writer=writer,
@@ -422,8 +548,11 @@ def orchestrator(
 
     purpose = cast(str, merge_content(*purpose_tokens))
 
+    if not next_tool_name:
+        raise ValueError("The next step has not been defined. This should not happen.")
+
     return OrchestrationUpdate(
-        tools_used=[next_tool],
+        tools_used=[next_tool_name],
         query_list=query_list or [],
         iteration_nr=iteration_nr,
         current_step_nr=current_step_nr,

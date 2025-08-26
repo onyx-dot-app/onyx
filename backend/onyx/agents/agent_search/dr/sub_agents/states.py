@@ -36,9 +36,7 @@ class SubAgentMainState(
     SubAgentUpdate,
     BranchUpdate,
 ):
-    # Add attributes from BranchInput for state flow
-    parallelization_nr: int = 0
-    branch_question: str | None = None
+    pass
 
 
 class BranchInput(SubAgentInput):

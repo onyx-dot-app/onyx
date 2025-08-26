@@ -40,6 +40,7 @@ langchainhub==0.1.21
 langgraph==0.2.72
 langgraph-checkpoint==2.0.13
 langgraph-sdk==0.1.44
+lazy_imports==1.0.1
 litellm==1.72.2 
 lxml==5.3.0
 lxml_html_clean==0.2.2
@@ -101,3 +102,5 @@ prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
+voyageai==0.2.3
+cohere==5.6.1
