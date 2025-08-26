@@ -8,11 +8,11 @@ from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    get_default_provider,
+from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+    InternetContent,
 )
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    InternetSearchResult,
+    get_default_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
 from onyx.agents.agent_search.dr.sub_agents.states import FetchInput
@@ -42,7 +42,7 @@ def _truncate_search_result_content(content: str, max_chars: int = 10000) -> str
 
 
 def _dummy_inference_section_from_internet_search_result(
-    result: InternetSearchResult,
+    result: InternetContent,
 ) -> InferenceSection:
     truncated_content = _truncate_search_result_content(result.full_content)
     return InferenceSection(
@@ -64,7 +64,7 @@ def _dummy_inference_section_from_internet_search_result(
             match_highlights=[],
             doc_summary=truncated_content,
             chunk_context=truncated_content,
-            updated_at=result.published_date,
+            updated_at=datetime.now(),  # TODO: Add published date
             image_file_id=None,
         ),
         chunks=[],

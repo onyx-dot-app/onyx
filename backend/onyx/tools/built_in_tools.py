@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    get_available_providers,
+    get_default_provider,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
@@ -67,7 +67,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             ),
         ]
-        if (bool(get_available_providers()))
+        if (bool(get_default_provider()))
         else []
     ),
     InCodeToolInfo(

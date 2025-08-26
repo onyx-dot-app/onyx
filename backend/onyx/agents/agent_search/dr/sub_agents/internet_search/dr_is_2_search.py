@@ -55,11 +55,13 @@ def web_search(
         raise ValueError("persona is not set")
 
     provider = get_default_provider()
+    if not provider:
+        raise ValueError("No internet search provider found")
 
     # Step 1: Perform search
     search_results: list[InternetSearchResult] = []
     try:
-        search_results = provider.search(search_query, 100000)
+        search_results = provider.search(search_query)
     except Exception as e:
         logger.error(f"Error performing search: {e}")
 
