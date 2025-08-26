@@ -355,6 +355,8 @@ def clarifier(
     original_question = graph_config.inputs.prompt_builder.raw_user_query
     research_type = graph_config.behavior.research_type
 
+    force_use_tool = graph_config.tooling.force_use_tool
+
     message_id = graph_config.persistence.message_id
 
     # Perform a commit to ensure the message_id is set and saved
@@ -435,166 +437,168 @@ def clarifier(
         graph_config.inputs.files
     )
 
-    if not use_tool_calling_llm or len(available_tools) == 1:
-        if len(available_tools) > 1:
-            decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
-                question=original_question,
-                chat_history_string=chat_history_string,
-                uploaded_context=uploaded_text_context or "",
-                active_source_type_descriptions_str=active_source_type_descriptions_str,
-                available_tool_descriptions_str=available_tool_descriptions_str,
-            )
+    if not (force_use_tool and force_use_tool.force_use):
 
-            llm_decision = invoke_llm_json(
-                llm=graph_config.tooling.primary_llm,
-                prompt=create_question_prompt(
-                    EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
-                    decision_prompt,
-                ),
-                schema=DecisionResponse,
-            )
-        else:
-            # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
-            llm_decision = DecisionResponse(decision="LLM", reasoning="")
+        if not use_tool_calling_llm or len(available_tools) == 1:
+            if len(available_tools) > 1:
+                decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
+                    question=original_question,
+                    chat_history_string=chat_history_string,
+                    uploaded_context=uploaded_text_context or "",
+                    active_source_type_descriptions_str=active_source_type_descriptions_str,
+                    available_tool_descriptions_str=available_tool_descriptions_str,
+                )
 
-        if llm_decision.decision == "LLM":
-
-            write_custom_event(
-                current_step_nr,
-                MessageStart(
-                    content="",
-                    final_documents=[],
-                ),
-                writer,
-            )
-
-            answer_prompt = ANSWER_PROMPT_WO_TOOL_CALLING.build(
-                question=original_question,
-                chat_history_string=chat_history_string,
-                uploaded_context=uploaded_text_context or "",
-                active_source_type_descriptions_str=active_source_type_descriptions_str,
-                available_tool_descriptions_str=available_tool_descriptions_str,
-            )
-
-            answer_tokens, _, _ = run_with_timeout(
-                80,
-                lambda: stream_llm_answer(
+                llm_decision = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        answer_prompt + assistant_task_prompt,
+                        EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
+                        decision_prompt,
                     ),
-                    event_name="basic_response",
-                    writer=writer,
-                    answer_piece="message_delta",
-                    agent_answer_level=0,
-                    agent_answer_question_num=0,
-                    agent_answer_type="agent_level_answer",
-                    timeout_override=60,
-                    ind=current_step_nr,
-                    context_docs=None,
-                    replace_citations=True,
-                    max_tokens=None,
-                ),
-            )
-
-            write_custom_event(
-                current_step_nr,
-                SectionEnd(
-                    type="section_end",
-                ),
-                writer,
-            )
-            current_step_nr += 1
-
-            answer_str = cast(str, merge_content(*answer_tokens))
-
-            write_custom_event(
-                current_step_nr,
-                OverallStop(),
-                writer,
-            )
-
-            update_db_session_with_messages(
-                db_session=db_session,
-                chat_message_id=message_id,
-                chat_session_id=str(graph_config.persistence.chat_session_id),
-                is_agentic=graph_config.behavior.use_agentic_search,
-                message=answer_str,
-                update_parent_message=True,
-                research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-            )
-            db_session.commit()
-
-            return OrchestrationSetup(
-                original_question=original_question,
-                chat_history_string="",
-                tools_used=[DRPath.END.value],
-                available_tools=available_tools,
-                query_list=[],
-                assistant_system_prompt=assistant_system_prompt,
-                assistant_task_prompt=assistant_task_prompt,
-            )
-
-    else:
-
-        decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
-            question=original_question,
-            chat_history_string=chat_history_string,
-            uploaded_context=uploaded_text_context or "",
-            active_source_type_descriptions_str=active_source_type_descriptions_str,
-        )
-
-        stream = graph_config.tooling.primary_llm.stream(
-            prompt=create_question_prompt(
-                assistant_system_prompt + EVAL_SYSTEM_PROMPT_W_TOOL_CALLING,
-                decision_prompt + assistant_task_prompt,
-                uploaded_image_context=uploaded_image_context,
-            ),
-            tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
-            tool_choice=(None),
-            structured_response_format=graph_config.inputs.structured_response_format,
-        )
-
-        full_response = process_llm_stream(
-            messages=stream,
-            should_stream_answer=True,
-            writer=writer,
-            ind=0,
-            generate_final_answer=True,
-            chat_message_id=str(graph_config.persistence.chat_session_id),
-        )
-
-        if len(full_response.ai_message_chunk.tool_calls) == 0:
-
-            if isinstance(full_response.full_answer, str):
-                full_answer = full_response.full_answer
+                    schema=DecisionResponse,
+                )
             else:
-                full_answer = None
+                # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
+                llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
-            update_db_session_with_messages(
-                db_session=db_session,
-                chat_message_id=message_id,
-                chat_session_id=str(graph_config.persistence.chat_session_id),
-                is_agentic=graph_config.behavior.use_agentic_search,
-                message=full_answer,
-                update_parent_message=True,
-                research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+            if llm_decision.decision == "LLM":
+
+                write_custom_event(
+                    current_step_nr,
+                    MessageStart(
+                        content="",
+                        final_documents=[],
+                    ),
+                    writer,
+                )
+
+                answer_prompt = ANSWER_PROMPT_WO_TOOL_CALLING.build(
+                    question=original_question,
+                    chat_history_string=chat_history_string,
+                    uploaded_context=uploaded_text_context or "",
+                    active_source_type_descriptions_str=active_source_type_descriptions_str,
+                    available_tool_descriptions_str=available_tool_descriptions_str,
+                )
+
+                answer_tokens, _, _ = run_with_timeout(
+                    80,
+                    lambda: stream_llm_answer(
+                        llm=graph_config.tooling.primary_llm,
+                        prompt=create_question_prompt(
+                            assistant_system_prompt,
+                            answer_prompt + assistant_task_prompt,
+                        ),
+                        event_name="basic_response",
+                        writer=writer,
+                        answer_piece="message_delta",
+                        agent_answer_level=0,
+                        agent_answer_question_num=0,
+                        agent_answer_type="agent_level_answer",
+                        timeout_override=60,
+                        ind=current_step_nr,
+                        context_docs=None,
+                        replace_citations=True,
+                        max_tokens=None,
+                    ),
+                )
+
+                write_custom_event(
+                    current_step_nr,
+                    SectionEnd(
+                        type="section_end",
+                    ),
+                    writer,
+                )
+                current_step_nr += 1
+
+                answer_str = cast(str, merge_content(*answer_tokens))
+
+                write_custom_event(
+                    current_step_nr,
+                    OverallStop(),
+                    writer,
+                )
+
+                update_db_session_with_messages(
+                    db_session=db_session,
+                    chat_message_id=message_id,
+                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    is_agentic=graph_config.behavior.use_agentic_search,
+                    message=answer_str,
+                    update_parent_message=True,
+                    research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                )
+                db_session.commit()
+
+                return OrchestrationSetup(
+                    original_question=original_question,
+                    chat_history_string="",
+                    tools_used=[DRPath.END.value],
+                    available_tools=available_tools,
+                    query_list=[],
+                    assistant_system_prompt=assistant_system_prompt,
+                    assistant_task_prompt=assistant_task_prompt,
+                )
+
+        else:
+
+            decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
+                question=original_question,
+                chat_history_string=chat_history_string,
+                uploaded_context=uploaded_text_context or "",
+                active_source_type_descriptions_str=active_source_type_descriptions_str,
             )
 
-            db_session.commit()
-
-            return OrchestrationSetup(
-                original_question=original_question,
-                chat_history_string="",
-                tools_used=[DRPath.END.value],
-                query_list=[],
-                available_tools=available_tools,
-                assistant_system_prompt=assistant_system_prompt,
-                assistant_task_prompt=assistant_task_prompt,
+            stream = graph_config.tooling.primary_llm.stream(
+                prompt=create_question_prompt(
+                    assistant_system_prompt + EVAL_SYSTEM_PROMPT_W_TOOL_CALLING,
+                    decision_prompt + assistant_task_prompt,
+                    uploaded_image_context=uploaded_image_context,
+                ),
+                tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
+                tool_choice=(None),
+                structured_response_format=graph_config.inputs.structured_response_format,
             )
 
-    # Continue, as external knowledge is required.
+            full_response = process_llm_stream(
+                messages=stream,
+                should_stream_answer=True,
+                writer=writer,
+                ind=0,
+                generate_final_answer=True,
+                chat_message_id=str(graph_config.persistence.chat_session_id),
+            )
+
+            if len(full_response.ai_message_chunk.tool_calls) == 0:
+
+                if isinstance(full_response.full_answer, str):
+                    full_answer = full_response.full_answer
+                else:
+                    full_answer = None
+
+                update_db_session_with_messages(
+                    db_session=db_session,
+                    chat_message_id=message_id,
+                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    is_agentic=graph_config.behavior.use_agentic_search,
+                    message=full_answer,
+                    update_parent_message=True,
+                    research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                )
+
+                db_session.commit()
+
+                return OrchestrationSetup(
+                    original_question=original_question,
+                    chat_history_string="",
+                    tools_used=[DRPath.END.value],
+                    query_list=[],
+                    available_tools=available_tools,
+                    assistant_system_prompt=assistant_system_prompt,
+                    assistant_task_prompt=assistant_task_prompt,
+                )
+
+        # Continue, as external knowledge is required.
 
     current_step_nr += 1
 
