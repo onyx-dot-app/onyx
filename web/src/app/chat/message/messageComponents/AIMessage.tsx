@@ -230,7 +230,11 @@ export function AIMessage({
 
   // Return a list of rendered message components, one for each ind
   return (
-    <div className="py-5 ml-4 lg:px-5 relative flex">
+    <div
+      // for e2e tests
+      id={displayComplete ? "onyx-ai-message" : undefined}
+      className="py-5 ml-4 lg:px-5 relative flex"
+    >
       <div className="mx-auto w-[90%] max-w-message-max">
         <div className="lg:mr-12 mobile:ml-0 md:ml-8">
           <div className="flex items-start">
