@@ -37,6 +37,10 @@ class ExaClient(InternetSearchProvider):
                 "contents": {
                     "text": False,
                     "livecrawl": "never",
+                    "highlights": {
+                        "num_highlights": 1,
+                        "num_sentences": 2,
+                    },
                 },
                 "num_results": 10,
             },
@@ -48,6 +52,9 @@ class ExaClient(InternetSearchProvider):
             InternetSearchResult(
                 title=result["title"],
                 link=result["url"],
+                snippet=result["highlights"][0],
+                author=result.get("author"),
+                published_date=result.get("published_date"),
             )
             for result in json_response["results"]
         ]

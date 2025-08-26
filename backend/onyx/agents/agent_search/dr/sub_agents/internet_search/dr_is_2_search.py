@@ -72,6 +72,13 @@ def web_search(
     search_results_text = "\n\n".join(
         [
             f"{i+1}. {result.title}\n   URL: {result.link}\n"
+            + (f"   Author: {result.author}\n" if result.author else "")
+            + (
+                f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
+                if result.published_date
+                else ""
+            )
+            + (f"   Snippet: {result.snippet}\n" if result.snippet else "")
             for i, result in enumerate(search_results)
         ]
     )
@@ -84,8 +91,7 @@ You have performed a search and received the following results:
 
 Your task is to:
 1. Analyze which URLs are most relevant to the original question
-2. Decide how many URLs to open (consider time and relevance)
-3. Determine if you need to perform additional searches with different queries
+2. Decide how many URLs to open
 
 Based on the search results above, please make your decision and return a JSON object with this structure:
 
@@ -95,9 +101,10 @@ Based on the search results above, please make your decision and return a JSON o
 
 Guidelines:
 - Select relevant URLs to open
-- Only suggest additional searches if the current results don't seem sufficient
 - Consider the title, snippet, and URL when making decisions
 - Focus on quality over quantity
+- Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
+- Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
 """
     agent_decision = invoke_llm_json(
         llm=graph_config.tooling.primary_llm,

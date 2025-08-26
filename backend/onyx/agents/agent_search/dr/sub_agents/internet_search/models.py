@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
@@ -15,6 +16,9 @@ class ProviderType(Enum):
 class InternetSearchResult(BaseModel):
     title: str
     link: str
+    author: str | None = None
+    published_date: datetime | None = None
+    snippet: str | None = None
 
 
 class InternetContent(BaseModel):
