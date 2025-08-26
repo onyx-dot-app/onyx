@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from retry import retry
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.configs.app_configs import VESPA_RESOURCE_LIMITS_DISK
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -258,6 +259,7 @@ class VespaIndex(DocumentIndex):
             services = services_template.render(
                 document_elements=doc_lines,
                 num_search_threads=str(VESPA_SEARCHER_THREADS),
+                resource_limits_disk=str(VESPA_RESOURCE_LIMITS_DISK),
             )
 
         kv_store = get_shared_kv_store()

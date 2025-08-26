@@ -819,3 +819,4 @@ S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
+VESPA_RESOURCE_LIMITS_DISK = float(os.environ.get("VESPA_RESOURCE_LIMITS_DISK") or 0.95)
