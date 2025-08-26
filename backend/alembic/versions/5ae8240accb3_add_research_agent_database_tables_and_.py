@@ -49,6 +49,11 @@ def upgrade() -> None:
         sa.Column("purpose", sa.String(), nullable=True),
         sa.Column("reasoning", sa.String(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "primary_question_id",
+            "iteration_nr",
+            name="_research_agent_iteration_unique_constraint",
+        ),
     )
 
     # Create research_agent_iteration_sub_step table
@@ -89,6 +94,14 @@ def upgrade() -> None:
         sa.Column("generated_images", postgresql.JSONB(), nullable=True),
         sa.Column("additional_data", postgresql.JSONB(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["primary_question_id", "iteration_nr"],
+            [
+                "research_agent_iteration.primary_question_id",
+                "research_agent_iteration.iteration_nr",
+            ],
+            ondelete="CASCADE",
+        ),
     )
 
 

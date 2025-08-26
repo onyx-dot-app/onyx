@@ -41,6 +41,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
+from sqlalchemy import ForeignKeyConstraint
 
 from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
@@ -3405,13 +3406,21 @@ class ResearchAgentIteration(Base):
         cascade="all, delete-orphan",
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "primary_question_id",
+            "iteration_nr",
+            name="_research_agent_iteration_unique_constraint",
+        ),
+    )
+
 
 class ResearchAgentIterationSubStep(Base):
     __tablename__ = "research_agent_iteration_sub_step"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     primary_question_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE")
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
     )
     parent_question_id: Mapped[int | None] = mapped_column(
         ForeignKey("research_agent_iteration_sub_step.id", ondelete="CASCADE"),
@@ -3455,4 +3464,15 @@ class ResearchAgentIterationSubStep(Base):
         "ResearchAgentIterationSubStep",
         foreign_keys=[parent_question_id],
         remote_side="ResearchAgentIterationSubStep.id",
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["primary_question_id", "iteration_nr"],
+            [
+                "research_agent_iteration.primary_question_id",
+                "research_agent_iteration.iteration_nr",
+            ],
+            ondelete="CASCADE",
+        ),
     )
