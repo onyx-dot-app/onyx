@@ -101,6 +101,7 @@ from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
 )
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
+from onyx.server.query_and_chat.search_backend import router as search_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import (
@@ -330,6 +331,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, search_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)

@@ -320,3 +320,8 @@ class ChatSearchRequest(BaseModel):
 
 class CreateChatResponse(BaseModel):
     chat_session_id: str
+
+
+class SearchRequest(BaseModel):
+    query: str
+    llm_override: LLMOverride | None = None

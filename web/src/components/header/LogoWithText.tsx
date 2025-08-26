@@ -2,35 +2,23 @@
 import { useContext } from "react";
 import { FiSidebar } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { LeftToLineIcon, NewChatIcon, RightToLineIcon } from "../icons/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { pageType } from "@/components/sidebar/types";
 import { Logo } from "../logo/Logo";
-import Link from "next/link";
 import { LogoComponent } from "@/components/logo/FixedLogo";
 
 export default function LogoWithText({
   toggleSidebar,
   hideOnMobile,
-  handleNewChat,
   page,
   toggled,
   showArrow,
-  assistantId,
   explicitlyUntoggle = () => null,
 }: {
   hideOnMobile?: boolean;
   toggleSidebar?: () => void;
-  handleNewChat?: () => void;
   page: pageType;
   toggled?: boolean;
   showArrow?: boolean;
-  assistantId?: number;
   explicitlyUntoggle?: () => void;
 }) {
   const combinedSettings = useContext(SettingsContext);
@@ -81,67 +69,7 @@ export default function LogoWithText({
           />
         </div>
       )}
-      {page == "chat" && !showArrow && (
-        <TooltipProvider delayDuration={1000}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                className="my-auto mobile:hidden"
-                href={
-                  `/${page}` +
-                  (assistantId ? `?assistantId=${assistantId}` : "")
-                }
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    return;
-                  }
-                  if (handleNewChat) {
-                    handleNewChat();
-                  }
-                }}
-              >
-                <NewChatIcon
-                  className="ml-2 flex-none text-text-700 hover:text-text-600 "
-                  size={24}
-                />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>New Chat</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-      <div className="flex ml-auto gap-x-4">
-        {showArrow && toggleSidebar && (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="mr-2 my-auto"
-                  onClick={() => {
-                    toggleSidebar();
-                    if (toggled) {
-                      explicitlyUntoggle();
-                    }
-                  }}
-                >
-                  {!toggled && !combinedSettings?.isMobile ? (
-                    <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                  ) : (
-                    <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                  )}
-                  <FiSidebar
-                    size={20}
-                    className="hidden mobile:block text-text-mobile-sidebar"
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="!border-none">
-                {toggled ? `Unpin sidebar` : "Pin sidebar"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
+      <div className="flex ml-auto gap-x-4"></div>
     </div>
   );
 }

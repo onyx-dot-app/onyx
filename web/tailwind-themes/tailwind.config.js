@@ -238,6 +238,7 @@ module.exports = {
         "text-900": "var(--neutral-900)",
         "text-950": "var(--neutral-950)",
         "text-muted": "var(--p)",
+        "text-muted-foreground": "hsl(var(--muted-foreground))",
 
         "user-text": "var(--text-800)",
 
@@ -459,5 +460,24 @@ module.exports = {
   plugins: [
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
+    // Simple debug utility class
+    function ({ addUtilities }) {
+      addUtilities({
+        ".dbg-blue": {
+          borderColor: "#4444ef", // blue
+          borderWidth: "2px",
+          borderStyle: "solid",
+        },
+      });
+    },
+    function ({ addUtilities }) {
+      addUtilities({
+        ".dbg-red": {
+          borderColor: "#ef4444", // red
+          borderWidth: "2px",
+          borderStyle: "solid",
+        },
+      });
+    },
   ],
 };
