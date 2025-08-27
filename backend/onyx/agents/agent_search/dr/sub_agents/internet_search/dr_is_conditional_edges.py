@@ -35,9 +35,9 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
 def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
     # Group URLs into pairs, with remainder as single item if needed
     urls_to_process = state.urls_to_open
-    url_pairs = zip(urls_to_process[::2], urls_to_process[1::2])
+    url_pairs = list(zip(urls_to_process[::2], urls_to_process[1::2]))
     if len(urls_to_process) % 2 == 1:
-        url_pairs.append((urls_to_process[-1]))
+        url_pairs.append((urls_to_process[-1],))
 
     return [
         Send(
@@ -45,7 +45,7 @@ def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
             BranchInput(
                 iteration_nr=state.iteration_nr,
                 parallelization_nr=parallelization_nr,
-                urls_to_open=url_pair,
+                urls_to_open=list(url_pair),
                 tools_used=state.tools_used,
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,
