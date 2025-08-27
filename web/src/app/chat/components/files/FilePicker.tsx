@@ -21,11 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ProjectFile } from "../../projects/ProjectsContext";
 
 type FilePickerProps = {
   className?: string;
-  onPickRecent?: (fileId: number) => void;
-  onOpenMyDocuments?: () => void;
+  onPickRecent?: (fileId: string) => void;
+  recentFiles: ProjectFile[];
 };
 
 // Small helper to render an icon + label row
@@ -36,64 +37,8 @@ const Row = ({ children }: { children: React.ReactNode }) => (
 export default function FilePicker({
   className,
   onPickRecent,
-  onOpenMyDocuments,
+  recentFiles,
 }: FilePickerProps) {
-  // Dummy recent files (no context usage)
-  const recentFiles = useMemo(
-    () => [
-      {
-        id: 1,
-        name: "Research Doc.pdf",
-        kind: "PDF",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 2,
-        name: "Screenshot.png",
-        kind: "Image",
-        last_accessed_at: "2025-01-01",
-      },
-      { id: 3, name: "Research Site", kind: "URL" },
-      {
-        id: 4,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 5,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 6,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 7,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 8,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-      {
-        id: 9,
-        name: "Research Site",
-        kind: "URL",
-        last_accessed_at: "2025-01-01",
-      },
-    ],
-    []
-  );
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
@@ -216,12 +161,7 @@ export default function FilePicker({
             <Files size={32} />
             <DialogTitle>Recent Files</DialogTitle>
           </DialogHeader>
-          <FilesList
-            recentFiles={recentFiles}
-            onPickRecent={(id) =>
-              onPickRecent ? onPickRecent(id) : console.log("Picked recent", id)
-            }
-          />
+          <FilesList recentFiles={recentFiles} onPickRecent={onPickRecent} />
         </DialogContent>
       </Dialog>
     </div>

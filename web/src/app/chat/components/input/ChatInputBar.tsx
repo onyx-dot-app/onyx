@@ -39,6 +39,7 @@ import { ActionToggle } from "./ActionManagement";
 import { SelectedTool } from "./SelectedTool";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import FilePicker from "../files/FilePicker";
+import { useProjectsContext } from "../../projects/ProjectsContext";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -150,6 +151,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   } = useDocumentsContext();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
+  const { recentFiles, uploadFilesToProject } = useProjectsContext();
 
   // Create a Set of IDs from currentMessageFiles for efficient lookup
   // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
@@ -621,8 +623,10 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                   tooltipContent={"Upload files and attach user files"}
                 />
                 <FilePicker
-                  onPickRecent={() => {}}
-                  onOpenMyDocuments={() => {}}
+                  onPickRecent={(fileId: string) => {
+                    console.log("Picked recent", fileId);
+                  }}
+                  recentFiles={recentFiles}
                 />
 
                 {selectedAssistant.tools.length > 0 && (

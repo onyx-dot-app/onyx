@@ -16,6 +16,8 @@ class UserFileSnapshot(BaseModel):
     file_id: str
     created_at: datetime
     status: UserFileStatus
+    last_accessed_at: datetime
+    file_type: str
 
     @classmethod
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
@@ -27,6 +29,8 @@ class UserFileSnapshot(BaseModel):
             file_id=model.file_id,
             created_at=model.created_at,
             status=model.status,
+            last_accessed_at=model.last_accessed_at,
+            file_type=model.file_type,
         )
 
 
