@@ -273,7 +273,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
                 isToggled={!disabledToolIds.includes(tool.id)}
                 isForced={forcedToolIds.includes(tool.id)}
                 onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-                onForceToggle={() => toggleForcedTool(tool.id)}
+                onForceToggle={() => {
+                  toggleForcedTool(tool.id);
+                  setOpen(false);
+                }}
               />
             ))
           )}

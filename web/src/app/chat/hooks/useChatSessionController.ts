@@ -136,9 +136,6 @@ export function useChatSessionController({
       // Remove uploaded files
       setCurrentMessageFiles([]);
 
-      // clear forced tool ids
-      setForcedToolIds([]);
-
       // If switching from one chat to another, then need to scroll again
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
@@ -147,6 +144,10 @@ export function useChatSessionController({
         if (existingChatSessionId) {
           updateHasPerformedInitialScroll(existingChatSessionId, false);
         }
+
+        // Clear forced tool ids if we're switching to a new chat session
+        // don't clear if this is the start of a new chat session
+        setForcedToolIds([]);
       }
     }
 

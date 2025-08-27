@@ -1323,6 +1323,16 @@ export function ChatPage({
                                     starterMessages={
                                       liveAssistant.starter_messages
                                     }
+                                    onSelectStarterMessage={(message) => {
+                                      onSubmit({
+                                        message: message,
+                                        selectedFiles: selectedFiles,
+                                        selectedFolders: selectedFolders,
+                                        currentMessageFiles:
+                                          currentMessageFiles,
+                                        useAgentSearch: deepResearchEnabled,
+                                      });
+                                    }}
                                   />
                                 </div>
                               )}
