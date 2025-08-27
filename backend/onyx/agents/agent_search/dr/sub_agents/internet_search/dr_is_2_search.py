@@ -22,6 +22,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.prompts.dr_prompts import INTERNET_SEARCH_URL_SELECTION_PROMPT
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.utils.logger import setup_logger
 
@@ -86,7 +87,7 @@ def web_search(
             logger.error(f"Error performing search: {e}")
         return search_results
 
-    search_results = _search(search_query)
+    search_results: list[InternetSearchResult] = _search(search_query)
     search_results_text = "\n\n".join(
         [
             f"{i+1}. {result.title}\n   URL: {result.link}\n"
@@ -100,29 +101,11 @@ def web_search(
             for i, result in enumerate(search_results)
         ]
     )
-    agent_decision_prompt = f"""
-    You are tasked with gathering information from the internet with search query: "{search_query}".
-    This is one search step for answering the user's overall question: "{base_question}".
-
-    You have performed a search and received the following results:
-
-    {search_results_text}
-
-    Your task is to:
-    Select the URLs most relevant to the search query and most likely to help answer the user's overall question.
-
-    Based on the search results above, please make your decision and return a JSON object with this structure:
-
-    {{
-        "urls_to_open": ["<url1>", "<url2>", "<url3>"],
-    }}
-
-    Guidelines:
-    - Consider the title, snippet, and URL when making decisions
-    - Focus on quality over quantity
-    - Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
-    - Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
-    """
+    agent_decision_prompt = INTERNET_SEARCH_URL_SELECTION_PROMPT.build(
+        search_query=search_query,
+        base_question=base_question,
+        search_results_text=search_results_text,
+    )
     agent_decision = invoke_llm_json(
         llm=graph_config.tooling.fast_llm,
         prompt=create_question_prompt(
@@ -132,6 +115,7 @@ def web_search(
         schema=WebSearchAnswer,
         timeout_override=30,
     )
+    urls_to_open = [search_results[i].link for i in agent_decision.urls_to_open_indices]
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
@@ -154,5 +138,5 @@ def web_search(
                 node_start_time=node_start_time,
             )
         ],
-        urls_to_open=agent_decision.urls_to_open,
+        urls_to_open=urls_to_open,
     )

@@ -8,7 +8,6 @@ from typing import TypeVar
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
-from langsmith import traceable
 from litellm import get_supported_openai_params
 from litellm import supports_response_schema
 from pydantic import BaseModel
@@ -134,7 +133,6 @@ def stream_llm_answer(
     return response, dispatch_timings, citation_infos
 
 
-@traceable(run_type="llm")
 def invoke_llm_json(
     llm: LLM,
     prompt: LanguageModelInput,

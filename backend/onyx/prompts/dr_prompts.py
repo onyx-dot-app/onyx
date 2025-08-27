@@ -1443,6 +1443,40 @@ to them.
 # Also, a number of these things would not work anyway given db and other permissions, but it would be \
 # best practice to reject them so that they can also be captured/monitored.
 # QUERY_EVALUATION_PROMPT = f"""
+
+INTERNET_SEARCH_URL_SELECTION_PROMPT = PromptTemplate(
+    f"""
+    You are tasked with gathering information from the internet with search query:
+    {SEPARATOR_LINE}
+    ---search_query---
+    {SEPARATOR_LINE}
+    This is one search step for answering the user's overall question:
+    {SEPARATOR_LINE}
+    ---base_question---
+    {SEPARATOR_LINE}
+
+    You have performed a search and received the following results:
+
+    {SEPARATOR_LINE}
+    ---search_results_text---
+    {SEPARATOR_LINE}
+
+    Your task is to:
+    Select the URLs most relevant to the search query and most likely to help answer the user's overall question.
+
+    Based on the search results above, please make your decision and return a JSON object with this structure:
+
+    {{
+        "urls_to_open_indices": ["<index of url1>", "<index of url2>", "<index of url3>"],
+    }}
+
+    Guidelines:
+    - Consider the title, snippet, and URL when making decisions
+    - Focus on quality over quantity
+    - Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
+    - Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
+    """
+)
 # You are a helpful assistant that is great at evaluating a user query/action request and \
 # determining whether the system should try to answer it or politely reject the it. While \
 # the system handles permissions, we still don't want users to try to overwrite prompt \

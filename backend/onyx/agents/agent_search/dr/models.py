@@ -46,7 +46,7 @@ class OrchestrationClarificationInfo(BaseModel):
 
 
 class WebSearchAnswer(BaseModel):
-    urls_to_open: list[str]
+    urls_to_open_indices: list[int]
 
 
 class SearchAnswer(BaseModel):

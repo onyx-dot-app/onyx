@@ -5,6 +5,7 @@ from typing import Literal
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
+from langsmith.run_helpers import traceable
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -86,6 +87,7 @@ class LLM(abc.ABC):
         if LOG_DANSWER_MODEL_INTERACTIONS:
             log_prompt(prompt)
 
+    @traceable(run_type="llm")
     def invoke(
         self,
         prompt: LanguageModelInput,
