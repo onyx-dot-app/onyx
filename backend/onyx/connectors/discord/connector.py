@@ -155,7 +155,7 @@ async def _fetch_documents_from_channel(
             yield _convert_message_to_document(thread_message, sections)
 
     async for archived_thread in channel.archived_threads(
-        limit=None
+        limit=None,
         ):
         async for thread_message in archived_thread.history(
             limit=None,
