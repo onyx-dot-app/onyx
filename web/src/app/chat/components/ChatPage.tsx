@@ -93,6 +93,7 @@ import { AIMessage } from "../message/messageComponents/AIMessage";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { HumanMessage } from "../message/HumanMessage";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 
 export function ChatPage({
   toggle,
@@ -747,8 +748,8 @@ export function ChatPage({
   const inputContainerClasses = useMemo(() => {
     return `absolute pointer-events-none z-10 w-full transition-transform duration-200 ease-out ${
       showCenteredInput
-        ? "bottom-0 translate-y-[-45vh]"
-        : "bottom-0 translate-y-0"
+        ? "top-1/2 left-0 -translate-y-1/2"
+        : "bottom-0 left-0 translate-y-0"
     }`;
   }, [showCenteredInput]);
 
@@ -1312,6 +1313,20 @@ export function ChatPage({
                               handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
                             />
+
+                            {liveAssistant.starter_messages &&
+                              liveAssistant.starter_messages.length > 0 &&
+                              messageHistory.length === 0 &&
+                              showCenteredInput && (
+                                <div className="mt-6">
+                                  <StarterMessageDisplay
+                                    starterMessages={
+                                      liveAssistant.starter_messages
+                                    }
+                                  />
+                                </div>
+                              )}
+
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
                                 <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
