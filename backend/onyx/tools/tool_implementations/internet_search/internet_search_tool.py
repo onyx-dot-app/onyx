@@ -13,6 +13,7 @@ from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
+# TODO: Align on separation of Tools and SubAgents. Right now, we're only keeping this around for backwards compatibility.
 QUERY_FIELD = "query"
 _GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Research Agent, not via tool calling."
 
