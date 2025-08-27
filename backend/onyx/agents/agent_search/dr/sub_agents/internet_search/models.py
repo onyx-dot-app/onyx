@@ -25,6 +25,7 @@ class InternetContent(BaseModel):
     title: str
     link: str
     full_content: str
+    published_date: datetime | None = None
 
 
 class InternetSearchProvider(ABC):

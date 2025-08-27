@@ -5,9 +5,6 @@ from langgraph.types import Send
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
@@ -33,11 +30,17 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
 
 
 def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
-    # Group URLs into pairs, with remainder as single item if needed
     urls_to_process = state.urls_to_open
-    url_pairs = list(zip(urls_to_process[::2], urls_to_process[1::2]))
+
+    # If no URLs to process, return empty list to go directly to reducer
+    if not urls_to_process:
+        return []
+
+    url_pairs = [
+        list(pair) for pair in zip(urls_to_process[::2], urls_to_process[1::2])
+    ]
     if len(urls_to_process) % 2 == 1:
-        url_pairs.append((urls_to_process[-1],))
+        url_pairs.append([urls_to_process[-1]])
 
     return [
         Send(
@@ -45,7 +48,7 @@ def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
             BranchInput(
                 iteration_nr=state.iteration_nr,
                 parallelization_nr=parallelization_nr,
-                urls_to_open=list(url_pair),
+                urls_to_open=url_pair,
                 tools_used=state.tools_used,
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,

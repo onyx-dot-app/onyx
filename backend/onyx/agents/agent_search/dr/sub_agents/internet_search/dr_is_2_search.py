@@ -86,22 +86,21 @@ def web_search(
             logger.error(f"Error performing search: {e}")
         return search_results
 
-    @traceable(name="Agent Url Open Decision")
-    def _agent_decision(search_results: list[InternetSearchResult]) -> WebSearchAnswer:
-        search_results_text = "\n\n".join(
-            [
-                f"{i+1}. {result.title}\n   URL: {result.link}\n"
-                + (f"   Author: {result.author}\n" if result.author else "")
-                + (
-                    f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
-                    if result.published_date
-                    else ""
-                )
-                + (f"   Snippet: {result.snippet}\n" if result.snippet else "")
-                for i, result in enumerate(search_results)
-            ]
-        )
-        agent_decision_prompt = f"""
+    search_results = _search(search_query)
+    search_results_text = "\n\n".join(
+        [
+            f"{i+1}. {result.title}\n   URL: {result.link}\n"
+            + (f"   Author: {result.author}\n" if result.author else "")
+            + (
+                f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
+                if result.published_date
+                else ""
+            )
+            + (f"   Snippet: {result.snippet}\n" if result.snippet else "")
+            for i, result in enumerate(search_results)
+        ]
+    )
+    agent_decision_prompt = f"""
     You are tasked with gathering information from the internet to answer: "{base_question}"
 
     You have performed a search and received the following results:
@@ -124,19 +123,15 @@ def web_search(
     - Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
     - Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
     """
-        agent_decision = invoke_llm_json(
-            llm=graph_config.tooling.fast_llm,
-            prompt=create_question_prompt(
-                assistant_system_prompt,
-                agent_decision_prompt + (assistant_task_prompt or ""),
-            ),
-            schema=WebSearchAnswer,
-            timeout_override=30,
-        )
-        return agent_decision
-
-    search_results = _search(search_query)
-    agent_decision = _agent_decision(search_results)
+    agent_decision = invoke_llm_json(
+        llm=graph_config.tooling.fast_llm,
+        prompt=create_question_prompt(
+            assistant_system_prompt,
+            agent_decision_prompt + (assistant_task_prompt or ""),
+        ),
+        schema=WebSearchAnswer,
+        timeout_override=30,
+    )
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(

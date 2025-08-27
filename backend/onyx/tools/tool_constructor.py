@@ -263,7 +263,7 @@ def construct_tools(
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
-                        "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
+                        "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
             # Handle Okta Profile Tool
             elif tool_cls.__name__ == OktaProfileTool.__name__:

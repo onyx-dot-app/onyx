@@ -759,7 +759,7 @@ def update_persona_visibility(
 
 def validate_persona_tools(tools: list[Tool]) -> None:
     for tool in tools:
-        if tool.name == "InternetSearchTool" and not EXA_API_KEY:
+        if tool.in_code_tool_id == "InternetSearchTool" and not EXA_API_KEY:
             raise ValueError(
                 "Internet Search API key not found, please contact your Onyx admin to get it added!"
             )

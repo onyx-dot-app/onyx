@@ -14,6 +14,7 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 QUERY_FIELD = "query"
+_GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Research Agent, not via tool calling."
 
 
 class InternetSearchTool(Tool[None]):
@@ -66,32 +67,20 @@ class InternetSearchTool(Tool[None]):
         llm: LLM,
         force_run: bool = False,
     ) -> dict[str, Any] | None:
-        raise ValueError(
-            "InternetSearchTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise ValueError(_GENERIC_ERROR_MESSAGE)
 
     def build_tool_message_content(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
-        raise ValueError(
-            "InternetSearchTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise ValueError(_GENERIC_ERROR_MESSAGE)
 
     def run(
-        self, override_kwargs: None = None, **kwargs: str
+        self, override_kwargs: None = None, **llm_kwargs: str
     ) -> Generator[ToolResponse, None, None]:
-        raise ValueError(
-            "InternetSearchTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise ValueError(_GENERIC_ERROR_MESSAGE)
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
-        raise ValueError(
-            "InternetSearchTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise ValueError(_GENERIC_ERROR_MESSAGE)
 
     def build_next_prompt(
         self,
@@ -100,7 +89,4 @@ class InternetSearchTool(Tool[None]):
         tool_responses: list[ToolResponse],
         using_tool_calling_llm: bool,
     ) -> AnswerPromptBuilder:
-        raise ValueError(
-            "InternetSearchTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise ValueError(_GENERIC_ERROR_MESSAGE)

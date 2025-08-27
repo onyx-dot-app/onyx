@@ -19,7 +19,6 @@ logger = setup_logger()
 # TODO Dependency inject for testing
 class ExaClient(InternetSearchProvider):
     def __init__(self):
-        self.api_key = EXA_API_KEY
         self.api_base = "https://api.exa.ai"
         self.headers = {
             "x-api-key": EXA_API_KEY,
@@ -52,7 +51,7 @@ class ExaClient(InternetSearchProvider):
             InternetSearchResult(
                 title=result["title"],
                 link=result["url"],
-                snippet=result["highlights"][0],
+                snippet=result.get("highlights", [""])[0],
                 author=result.get("author"),
                 published_date=result.get("published_date"),
             )
@@ -74,7 +73,8 @@ class ExaClient(InternetSearchProvider):
             InternetContent(
                 title=result["title"],
                 link=result["url"],
-                full_content=result["text"],
+                full_content=result.get("text", ""),
+                published_date=result.get("published_date"),
             )
             for result in results
         ]

@@ -66,7 +66,7 @@ def _dummy_inference_section_from_internet_search_result(
             match_highlights=[],
             doc_summary=truncated_content,
             chunk_context=truncated_content,
-            updated_at=datetime.now(),  # TODO: Add published date
+            updated_at=result.published_date,
             image_file_id=None,
         ),
         chunks=[],
