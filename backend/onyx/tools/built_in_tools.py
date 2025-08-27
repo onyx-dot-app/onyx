@@ -65,7 +65,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             )
         ]
-        if (bool(get_available_providers()))
+        if os.environ.get("BING_API_KEY")
         else []
     ),
     # Show Okta Profile tool if the environment variables are set
