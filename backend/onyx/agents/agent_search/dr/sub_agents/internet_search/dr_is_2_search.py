@@ -3,6 +3,7 @@ from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
+from langsmith import traceable
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
@@ -76,63 +77,66 @@ def web_search(
     if not provider:
         raise ValueError("No internet search provider found")
 
-    # Step 1: Perform search
-    search_results: list[InternetSearchResult] = []
-    try:
-        search_results = provider.search(search_query)
-    except Exception as e:
-        logger.error(f"Error performing search: {e}")
+    @traceable(name="Search Provider API Call")
+    def _search(search_query: str) -> list[InternetSearchResult]:
+        search_results: list[InternetSearchResult] = []
+        try:
+            search_results = provider.search(search_query)
+        except Exception as e:
+            logger.error(f"Error performing search: {e}")
+        return search_results
 
-    if not search_results:
-        logger.warning("No search results found")
+    @traceable(name="Agent Url Open Decision")
+    def _agent_decision(search_results: list[InternetSearchResult]) -> WebSearchAnswer:
+        search_results_text = "\n\n".join(
+            [
+                f"{i+1}. {result.title}\n   URL: {result.link}\n"
+                + (f"   Author: {result.author}\n" if result.author else "")
+                + (
+                    f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
+                    if result.published_date
+                    else ""
+                )
+                + (f"   Snippet: {result.snippet}\n" if result.snippet else "")
+                for i, result in enumerate(search_results)
+            ]
+        )
+        agent_decision_prompt = f"""
+    You are tasked with gathering information from the internet to answer: "{base_question}"
 
-    # Step 2: Agent decides which URLs to open
-    search_results_text = "\n\n".join(
-        [
-            f"{i+1}. {result.title}\n   URL: {result.link}\n"
-            + (f"   Author: {result.author}\n" if result.author else "")
-            + (
-                f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
-                if result.published_date
-                else ""
-            )
-            + (f"   Snippet: {result.snippet}\n" if result.snippet else "")
-            for i, result in enumerate(search_results)
-        ]
-    )
-    agent_decision_prompt = f"""
-You are tasked with gathering information from the internet to answer: "{base_question}"
+    You have performed a search and received the following results:
 
-You have performed a search and received the following results:
+    {search_results_text}
 
-{search_results_text}
+    Your task is to:
+    1. Analyze which URLs are most relevant to the original question
+    2. Decide how many URLs to open
 
-Your task is to:
-1. Analyze which URLs are most relevant to the original question
-2. Decide how many URLs to open
+    Based on the search results above, please make your decision and return a JSON object with this structure:
 
-Based on the search results above, please make your decision and return a JSON object with this structure:
+    {{
+        "urls_to_open": ["<url1>", "<url2>", "<url3>"],
+    }}
 
-{{
-    "urls_to_open": ["<url1>", "<url2>", "<url3>"],
-}}
+    Guidelines:
+    - Consider the title, snippet, and URL when making decisions
+    - Focus on quality over quantity
+    - Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
+    - Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
+    """
+        agent_decision = invoke_llm_json(
+            llm=graph_config.tooling.primary_llm,
+            prompt=create_question_prompt(
+                assistant_system_prompt,
+                agent_decision_prompt + (assistant_task_prompt or ""),
+            ),
+            schema=WebSearchAnswer,
+            timeout_override=30,
+        )
+        return agent_decision
 
-Guidelines:
-- Consider the title, snippet, and URL when making decisions
-- Focus on quality over quantity
-- Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
-- Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
-"""
-    agent_decision = invoke_llm_json(
-        llm=graph_config.tooling.primary_llm,
-        prompt=create_question_prompt(
-            assistant_system_prompt,
-            agent_decision_prompt + (assistant_task_prompt or ""),
-        ),
-        schema=WebSearchAnswer,
-        timeout_override=30,
-    )
-
+    search_results = _search(search_query)
+    agent_decision = _agent_decision(search_results)
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
