@@ -142,5 +142,7 @@ def web_search(
                 node_start_time=node_start_time,
             )
         ],
+        # TODO: Pass through IterationAnswer instead of BranchUpdate
+        # There's some tricky langgraph magic needed to make this work
         urls_to_open=urls_to_open,
     )
