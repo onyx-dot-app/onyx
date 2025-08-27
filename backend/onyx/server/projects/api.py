@@ -12,8 +12,8 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.projects import upload_files_to_user_files_with_indexing
+from onyx.server.projects.models import UserFileSnapshot
 from onyx.server.projects.models import UserProjectSnapshot
-from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -61,21 +61,6 @@ def upload_user_files(
     except Exception as e:
         logger.error(f"Error uploading files: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
-
-
-@router.get("/files/recent")
-def get_recent_files(
-    user: User = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> list[UserFileSnapshot]:
-    user_files = (
-        db_session.query(UserFile)
-        .filter(UserFile.user_id == user.id)
-        .order_by(UserFile.last_accessed_at.desc())
-        .limit(100)
-        .all()
-    )
-    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
 
 @router.get("/files/{project_id}")

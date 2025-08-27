@@ -12,19 +12,12 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-export type RecentFile = {
-  id: number;
-  name: string;
-  kind: string;
-  last_accessed_at?: string;
-  status?: string;
-};
+import { ProjectFile } from "../../projects/ProjectsContext";
 
 interface FilesListProps {
   className?: string;
-  recentFiles: RecentFile[];
-  onPickRecent?: (fileId: number) => void;
+  recentFiles: ProjectFile[];
+  onPickRecent?: (fileId: string) => void;
 }
 
 const kindIcon = (kind: string) => {
@@ -80,11 +73,11 @@ export default function FilesList({
               onClick={() => onPickRecent && onPickRecent(f.id)}
             >
               <div className="flex items-center gap-3 min-w-0">
-                {kindIcon(f.kind)}
+                {kindIcon(f.file_type)}
                 <div className="min-w-0">
                   <div className="truncate text-sm font-normal">{f.name}</div>
                   <div className="text-xs text-text-400 dark:text-neutral-400">
-                    {f.status ? f.status : f.kind}
+                    {f.status ? f.status : f.file_type}
                   </div>
                 </div>
               </div>

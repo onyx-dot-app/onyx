@@ -55,6 +55,7 @@ from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
+from onyx.db.models import UserFile
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -78,6 +79,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.projects.models import UserFileSnapshot
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -889,3 +891,19 @@ def update_assistant_preferences_for_user_api(
     update_assistant_preferences(
         assistant_id, user.id, new_assistant_preference, db_session
     )
+    db_session.commit()
+
+
+@router.get("/user/files/recent")
+def get_recent_files(
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    user_files = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user.id)
+        .order_by(UserFile.last_accessed_at.desc())
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
