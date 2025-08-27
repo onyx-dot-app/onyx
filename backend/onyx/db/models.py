@@ -2669,7 +2669,7 @@ class Persona__UserFile(Base):
     __tablename__ = "persona__user_file"
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    user_file_id: Mapped[int] = mapped_column(
+    user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
 
@@ -3278,7 +3278,9 @@ class InputPrompt__User(Base):
 class Project__UserFile(Base):
     __tablename__ = "project__user_file"
 
-    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("user_folder.id"), primary_key=True
+    )
     user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
@@ -3317,7 +3319,7 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[UUID] = mapped_column(PGUUID, primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
