@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import Link from "next/link";
 
 // Helper functions to identify specific tools
 const isSearchTool = (tool: ToolSnapshot): boolean => {
@@ -260,7 +261,9 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
                 d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
               />
             </svg>
-            <span className="ml-2">More Connectors & Actions</span>
+            <Link href="/admin/actions" className="ml-2">
+              More Connectors & Actions
+            </Link>
           </div>
         </button>
       </PopoverContent>

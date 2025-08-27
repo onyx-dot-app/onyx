@@ -671,27 +671,8 @@ export function ChatInputBar({
                   }}
                   tooltipContent={"Upload files and attach user files"}
                 />
-                {/* 
-                {retrievalEnabled && (
-                  <FilterPopup
-                    availableSources={availableSources}
-                    availableDocumentSets={
-                      selectedAssistant.document_sets &&
-                      selectedAssistant.document_sets.length > 0
-                        ? selectedAssistant.document_sets
-                        : availableDocumentSets
-                    }
-                    availableTags={availableTags}
-                    filterManager={filterManager}
-                    trigger={{
-                      name: "Filters",
-                      Icon: FiFilter,
-                      tooltipContent: "Filter your search",
-                    }}
-                  />
-                )} */}
 
-                {retrievalEnabled && (
+                {selectedAssistant.tools.length > 0 && (
                   <ActionToggle selectedAssistant={selectedAssistant} />
                 )}
 
