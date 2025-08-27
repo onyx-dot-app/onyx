@@ -2701,6 +2701,20 @@ class PersonaLabel(Base):
     )
 
 
+class Assistant__UserSpecificConfig(Base):
+    __tablename__ = "assistant__user_specific_config"
+
+    assistant_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    disabled_tool_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False
+    )
+
+
 AllowedAnswerFilters = (
     Literal["well_answered_postfilter"] | Literal["questionmark_prefilter"]
 )

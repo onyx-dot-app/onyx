@@ -15,10 +15,6 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from pydantic import BaseModel
-from sqlalchemy import Column
-from sqlalchemy import desc
-from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_user_email_invite
@@ -46,8 +42,35 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import AccessToken
 from onyx.db.models import User
+from onyx.db.user_preferences import activate_user as db_activate_user
+from onyx.db.user_preferences import deactivate_user as db_deactivate_user
+from onyx.db.user_preferences import (
+    get_all_user_assistant_specific_configs as db_get_all_user_assistant_specific_configs,
+)
+from onyx.db.user_preferences import get_latest_access_token_for_user
+from onyx.db.user_preferences import (
+    update_assistant_preferences,
+)
+from onyx.db.user_preferences import (
+    update_user_assistant_visibility as db_update_user_assistant_visibility,
+)
+from onyx.db.user_preferences import (
+    update_user_auto_scroll as db_update_user_auto_scroll,
+)
+from onyx.db.user_preferences import (
+    update_user_default_model as db_update_user_default_model,
+)
+from onyx.db.user_preferences import (
+    update_user_pinned_assistants as db_update_user_pinned_assistants,
+)
+from onyx.db.user_preferences import update_user_role as db_update_user_role
+from onyx.db.user_preferences import (
+    update_user_shortcut_enabled as db_update_user_shortcut_enabled,
+)
+from onyx.db.user_preferences import (
+    update_user_temperature_override_enabled as db_update_user_temperature_override_enabled,
+)
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -66,6 +89,8 @@ from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
 from onyx.server.manage.models import UserRoleUpdateRequest
+from onyx.server.manage.models import UserSpecificAssistantPreference
+from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
@@ -121,9 +146,7 @@ def set_user_role(
             "remove_curator_status__no_commit",
         )(db_session, user_to_update)
 
-    user_to_update.role = user_role_update_request.new_role
-
-    db_session.commit()
+    db_update_user_role(user_to_update, requested_role, db_session)
 
 
 class TestUpsertRequest(BaseModel):
@@ -413,9 +436,7 @@ def deactivate_user(
     if user_to_deactivate.is_active is False:
         logger.warning("{} is already deactivated".format(user_to_deactivate.email))
 
-    user_to_deactivate.is_active = False
-    db_session.add(user_to_deactivate)
-    db_session.commit()
+    db_deactivate_user(user_to_deactivate, db_session)
 
 
 @router.delete("/manage/admin/delete-user")
@@ -470,9 +491,7 @@ def activate_user(
     if user_to_activate.is_active is True:
         logger.warning("{} is already activated".format(user_to_activate.email))
 
-    user_to_activate.is_active = True
-    db_session.add(user_to_activate)
-    db_session.commit()
+    db_activate_user(user_to_activate, db_session)
 
 
 @router.get("/manage/admin/valid-domains")
@@ -577,23 +596,12 @@ def get_current_token_creation(
 ) -> datetime | None:
     if user is None:
         return None
-    try:
-        result = db_session.execute(
-            select(AccessToken)
-            .where(AccessToken.user_id == user.id)  # type: ignore
-            .order_by(desc(Column("created_at")))
-            .limit(1)
-        )
-        access_token = result.scalar_one_or_none()
 
-        if access_token:
-            return access_token.created_at
-        else:
-            logger.error("No AccessToken found for user")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
+    access_token = get_latest_access_token_for_user(user.id, db_session)
+    if access_token:
+        return access_token.created_at
+    else:
+        logger.error("No AccessToken found for user")
         return None
 
 
@@ -692,12 +700,9 @@ def update_user_temperature_override_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(temperature_override_enabled=temperature_override_enabled)
+    db_update_user_temperature_override_enabled(
+        user.id, temperature_override_enabled, db_session
     )
-    db_session.commit()
 
 
 class ChosenDefaultModelRequest(BaseModel):
@@ -720,12 +725,7 @@ def update_user_shortcut_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(shortcut_enabled=shortcut_enabled)
-    )
-    db_session.commit()
+    db_update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
 
 
 @router.patch("/auto-scroll")
@@ -744,12 +744,7 @@ def update_user_auto_scroll(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(auto_scroll=request.auto_scroll)
-    )
-    db_session.commit()
+    db_update_user_auto_scroll(user.id, request.auto_scroll, db_session)
 
 
 @router.patch("/user/default-model")
@@ -768,12 +763,7 @@ def update_user_default_model(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(default_model=request.default_model)
-    )
-    db_session.commit()
+    db_update_user_default_model(user.id, request.default_model, db_session)
 
 
 class ReorderPinnedAssistantsRequest(BaseModel):
@@ -798,12 +788,7 @@ def update_user_pinned_assistants(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(pinned_assistants=ordered_assistant_ids)
-    )
-    db_session.commit()
+    db_update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
 
 
 class ChosenAssistantsRequest(BaseModel):
@@ -861,13 +846,62 @@ def update_user_assistant_visibility(
     )
     if updated_preferences.chosen_assistants is not None:
         updated_preferences.chosen_assistants.append(assistant_id)
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(
-            hidden_assistants=updated_preferences.hidden_assistants,
-            visible_assistants=updated_preferences.visible_assistants,
-            chosen_assistants=updated_preferences.chosen_assistants,
-        )
+    db_update_user_assistant_visibility(
+        user.id,
+        updated_preferences.hidden_assistants,
+        updated_preferences.visible_assistants,
+        updated_preferences.chosen_assistants,
+        db_session,
     )
-    db_session.commit()
+
+
+@router.get("/user/assistant/preferences")
+def get_user_assistant_preferences(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> UserSpecificAssistantPreferences | None:
+    """Fetch all assistant preferences for the user."""
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            return no_auth_user.preferences.assistant_specific_configs
+        else:
+            raise RuntimeError("This should never happen")
+
+    assistant_specific_configs = db_get_all_user_assistant_specific_configs(
+        user.id, db_session
+    )
+    return {
+        config.assistant_id: UserSpecificAssistantPreference(
+            disabled_tool_ids=config.disabled_tool_ids
+        )
+        for config in assistant_specific_configs
+    }
+
+
+@router.patch("/user/assistant/{assistant_id}/preferences")
+def update_assistant_preferences_for_user(
+    assistant_id: int,
+    new_assistant_preference: UserSpecificAssistantPreference,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            if no_auth_user.preferences.assistant_specific_configs is None:
+                no_auth_user.preferences.assistant_specific_configs = {}
+
+            no_auth_user.preferences.assistant_specific_configs[assistant_id] = (
+                new_assistant_preference
+            )
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_assistant_preferences(
+        assistant_id, user.id, new_assistant_preference, db_session
+    )

@@ -16,6 +16,11 @@ import {
   filterAssistants,
 } from "@/lib/assistants/utils";
 import { useUser } from "../user/UserProvider";
+import {
+  UserSpecificAssistantPreference,
+  UserSpecificAssistantPreferences,
+} from "@/lib/types";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 
 interface AssistantsContextProps {
   assistants: MinimalPersonaSnapshot[];
@@ -25,8 +30,15 @@ interface AssistantsContextProps {
   ownedButHiddenAssistants: MinimalPersonaSnapshot[];
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
+
   pinnedAssistants: MinimalPersonaSnapshot[];
   setPinnedAssistants: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
+
+  assistantPreferences: UserSpecificAssistantPreferences | null;
+  setSpecificAssistantPreferences: (
+    assistantId: number,
+    assistantPreferences: UserSpecificAssistantPreference
+  ) => void;
 }
 
 const AssistantsContext = createContext<AssistantsContextProps | undefined>(
@@ -43,6 +55,8 @@ export const AssistantsProvider: React.FC<{
     initialAssistants || []
   );
   const { user } = useUser();
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
 
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
@@ -149,6 +163,8 @@ export const AssistantsProvider: React.FC<{
         isImageGenerationAvailable,
         setPinnedAssistants,
         pinnedAssistants,
+        assistantPreferences,
+        setSpecificAssistantPreferences,
       }}
     >
       {children}

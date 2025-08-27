@@ -4,20 +4,56 @@ import {
   GlobeIcon,
   ImageIcon,
   CpuIcon,
-  ChevronRightIcon,
   UsersIcon,
   DatabaseIcon,
 } from "@/components/icons/icons";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChatInputOption } from "./ChatInputOption";
 import { Switch } from "@/components/ui/switch";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
+
+// Helper functions to identify specific tools
+const isSearchTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "SearchTool" ||
+    tool.name === "run_search" ||
+    tool.display_name?.toLowerCase().includes("search tool")
+  );
+};
+
+const isWebSearchTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "InternetSearchTool" ||
+    tool.display_name?.toLowerCase().includes("internet search")
+  );
+};
+
+const isImageGenerationTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "ImageGenerationTool" ||
+    tool.display_name?.toLowerCase().includes("image generation")
+  );
+};
+
+const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "KnowledgeGraphTool" ||
+    tool.display_name?.toLowerCase().includes("knowledge graph")
+  );
+};
+
+const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "OktaProfileTool" ||
+    tool.display_name?.toLowerCase().includes("okta profile")
+  );
+};
 
 interface ActionItemProps {
   icon: React.ReactNode;
@@ -62,69 +98,60 @@ export function ActionItem({
   );
 }
 
+export function ToolItem({
+  tool,
+  isToggled,
+  onToggle,
+}: {
+  tool: ToolSnapshot;
+  isToggled: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  let icon: React.ReactNode;
+  if (isSearchTool(tool)) {
+    icon = <SearchIcon size={16} className="text-default" />;
+  } else if (isWebSearchTool(tool)) {
+    icon = <GlobeIcon size={16} className="text-default" />;
+  } else if (isImageGenerationTool(tool)) {
+    icon = <ImageIcon size={16} className="text-default" />;
+  } else if (isKnowledgeGraphTool(tool)) {
+    icon = <DatabaseIcon size={16} className="text-default" />;
+  } else if (isOktaProfileTool(tool)) {
+    icon = <UsersIcon size={16} className="text-default" />;
+  } else {
+    icon = <CpuIcon size={16} className="text-default" />;
+  }
+
+  return (
+    <ActionItem
+      icon={icon}
+      label={tool.display_name || tool.name}
+      defaultChecked={isToggled}
+      onToggle={onToggle}
+    />
+  );
+}
+
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
 }
 
-// Helper functions to identify specific tools
-const isSearchTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "SearchTool" ||
-    tool.name === "run_search" ||
-    tool.display_name?.toLowerCase().includes("search tool")
-  );
-};
-
-const isWebSearchTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "InternetSearchTool" ||
-    tool.display_name?.toLowerCase().includes("internet search")
-  );
-};
-
-const isImageGenerationTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "ImageGenerationTool" ||
-    tool.display_name?.toLowerCase().includes("image generation")
-  );
-};
-
-const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "KnowledgeGraphTool" ||
-    tool.display_name?.toLowerCase().includes("knowledge graph")
-  );
-};
-
-const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "OktaProfileTool" ||
-    tool.display_name?.toLowerCase().includes("okta profile")
-  );
-};
-
 export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   const [open, setOpen] = useState(false);
 
-  // Check which tools are available for this assistant
-  const hasSearchTool = selectedAssistant.tools.some(isSearchTool);
-  const hasWebSearchTool = selectedAssistant.tools.some(isWebSearchTool);
-  const hasImageGenerationTool = selectedAssistant.tools.some(
-    isImageGenerationTool
-  );
-  const hasKnowledgeGraphTool =
-    selectedAssistant.tools.some(isKnowledgeGraphTool);
-  const hasOktaProfileTool = selectedAssistant.tools.some(isOktaProfileTool);
+  // Get the assistant preference for this assistant
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantsContext();
 
-  // Get custom tools (tools that aren't one of the built-in ones)
-  const customTools = selectedAssistant.tools.filter(
-    (tool) =>
-      !isSearchTool(tool) &&
-      !isWebSearchTool(tool) &&
-      !isImageGenerationTool(tool) &&
-      !isKnowledgeGraphTool(tool) &&
-      !isOktaProfileTool(tool)
-  );
+  const assistantPreference = assistantPreferences?.[selectedAssistant.id];
+  const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
+  const toggleToolForCurrentAssistant = (toolId: number, enabled: boolean) => {
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: enabled
+        ? disabledToolIds.filter((id) => id !== toolId)
+        : [...disabledToolIds, toolId],
+    });
+  };
 
   // If no tools are available, don't render the component
   if (selectedAssistant.tools.length === 0) {
@@ -181,70 +208,13 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
       >
         {/* Options */}
         <div className="pt-2">
-          {hasSearchTool && (
-            <ActionItem
-              icon={<SearchIcon size={16} className="text-default" />}
-              label="App Search"
-              defaultChecked={true}
-              onToggle={(checked) =>
-                console.log("File Search toggled:", checked)
-              }
-            />
-          )}
-
-          {hasWebSearchTool && (
-            <ActionItem
-              icon={<GlobeIcon size={16} className="text-default" />}
-              label="Web Search"
-              defaultChecked={true}
-              onToggle={(checked) =>
-                console.log("Web Search toggled:", checked)
-              }
-            />
-          )}
-
-          {hasImageGenerationTool && (
-            <ActionItem
-              icon={<ImageIcon size={16} className="text-default" />}
-              label="Image Generation"
-              defaultChecked={false}
-              onToggle={(checked) =>
-                console.log("Image Generation toggled:", checked)
-              }
-            />
-          )}
-
-          {hasKnowledgeGraphTool && (
-            <ActionItem
-              icon={<DatabaseIcon size={16} className="text-default" />}
-              label="Knowledge Graph"
-              defaultChecked={true}
-              onToggle={(checked) =>
-                console.log("Knowledge Graph toggled:", checked)
-              }
-            />
-          )}
-
-          {hasOktaProfileTool && (
-            <ActionItem
-              icon={<UsersIcon size={16} className="text-default" />}
-              label="Okta Profile"
-              defaultChecked={true}
-              onToggle={(checked) =>
-                console.log("Okta Profile toggled:", checked)
-              }
-            />
-          )}
-
-          {/* Render custom tools */}
-          {customTools.map((tool) => (
-            <ActionItem
+          {selectedAssistant.tools.map((tool) => (
+            <ToolItem
               key={tool.id}
-              icon={<CpuIcon size={16} className="text-default" />}
-              label={tool.display_name || tool.name}
-              defaultChecked={true}
+              tool={tool}
+              isToggled={!disabledToolIds.includes(tool.id)}
               onToggle={(checked) =>
-                console.log(`${tool.display_name} toggled:`, checked)
+                toggleToolForCurrentAssistant(tool.id, checked)
               }
             />
           ))}

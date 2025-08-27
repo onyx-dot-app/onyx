@@ -29,7 +29,6 @@ interface ChatSessionData {
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
-  agenticGenerating: boolean;
   uncaughtError: string | null;
   loadingError: string | null;
   isReady: boolean;
@@ -112,7 +111,6 @@ interface ChatSessionStore {
 
   // Actions - Session-specific State (previously global)
   setIsFetchingChatMessages: (sessionId: string, fetching: boolean) => void;
-  setAgenticGenerating: (sessionId: string, generating: boolean) => void;
   setUncaughtError: (sessionId: string, error: string | null) => void;
   setLoadingError: (sessionId: string, error: string | null) => void;
   setIsReady: (sessionId: string, ready: boolean) => void;
@@ -150,7 +148,6 @@ const createInitialSessionData = (
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
-  agenticGenerating: false,
   uncaughtError: null,
   loadingError: null,
   isReady: true,
@@ -387,10 +384,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { isFetchingChatMessages });
   },
 
-  setAgenticGenerating: (sessionId: string, agenticGenerating: boolean) => {
-    get().updateSessionData(sessionId, { agenticGenerating });
-  },
-
   setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
     get().updateSessionData(sessionId, { uncaughtError });
   },
@@ -569,15 +562,6 @@ export const useAbortControllers = () => {
 };
 
 // Session-specific state hooks (previously global)
-export const useAgenticGenerating = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.agenticGenerating || false;
-  });
-
 export const useIsFetching = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

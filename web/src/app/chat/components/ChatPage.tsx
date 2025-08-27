@@ -79,7 +79,6 @@ import {
 import {
   useCurrentChatState,
   useSubmittedMessage,
-  useAgenticGenerating,
   useLoadingError,
   useIsReady,
   useIsFetching,
@@ -116,7 +115,6 @@ export function ChatPage({
     llmProviders,
     folders,
     shouldShowWelcomeModal,
-    proSearchToggled,
     refreshChatSessions,
   } = useChatContext();
 
@@ -469,7 +467,6 @@ export function ChatPage({
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const submittedMessage = useSubmittedMessage();
-  const agenticGenerating = useAgenticGenerating();
   const loadingError = useLoadingError();
   const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
@@ -532,8 +529,7 @@ export function ChatPage({
     onSubmit,
   });
 
-  const autoScrollEnabled =
-    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
+  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
   useScrollonStream({
     chatState: currentChatState,
