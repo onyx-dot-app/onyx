@@ -35,13 +35,12 @@ def get_dr_prompt_orchestration_templates(
         f"{tool_name}: {tool.cost}" for tool_name, tool in available_tools.items()
     )
 
-    tool_differentiations: list[str] = []
-    for tool_1 in available_tools:
-        for tool_2 in available_tools:
-            if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS:
-                tool_differentiations.append(
-                    TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
-                )
+    tool_differentiations: list[str] = [
+        TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
+        for tool_1 in available_tools
+        for tool_2 in available_tools
+        if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS
+    ]
     tool_differentiation_hint_string = (
         "\n".join(tool_differentiations) or "(No differentiating hints available)"
     )

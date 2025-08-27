@@ -992,7 +992,7 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
 or you MUST then qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
@@ -1017,7 +1017,7 @@ ANSWER:
 FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS = PromptTemplate(
     f"""
 You are great at answering a user question based \
-a list of documents that were retrieved in response to subh-questions, and possibly also \
+a list of documents that were retrieved in response to sub-questions, and possibly also \
 corresponding sub-answers  (note, a given subquestion may or may not have a corresponding sub-answer).
 
 Here is the question that needs to be answered:
@@ -1046,7 +1046,7 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers (if available) mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
 or you MUST then qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers (if available) do not explicitly mention the topic of interest with \
@@ -1097,7 +1097,7 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
 or you MUST then qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
@@ -1265,10 +1265,10 @@ rewrite the query.
 
 Guidelines:
  - if one or more source types have been identified in 'specified_source_types', \
-they MUST NOT be part of the rewritten search query... take it out in that case! \
+they MUST NOT be part of the rewritten search query! Take it out in that case! \
 Particularly look for expressions like '...in our Google docs...', '...in our \
-Google calls', etc., in which case the source type is 'google_drive' or 'gong' \
-should not be included in the rewritten query!
+Google calls...', etc., in which case the source type is 'google_drive' or 'gong', \
+those should not be included in the rewritten query!
  - if a time filter has been identified in 'time_filter', it MUST NOT be part of \
 the rewritten search query... take it out in that case! Look for expressions like \
 '...of this year...', '...of this month...', etc., in which case the time filter \
@@ -1304,7 +1304,7 @@ EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING = """
 You are great at 1) determining whether a question can be answered \
 by you directly using your knowledge alone and the chat history (if any), and 2) actually \
 answering the question/request, \
-if the request DOES NOT require or would strongly benefit from ANY external tool \
+if the request DOES NOT require nor would strongly benefit from ANY external tool \
 (any kind of search [internal, web search, etc.], action taking, etc.) or from external knowledge.
 """
 
