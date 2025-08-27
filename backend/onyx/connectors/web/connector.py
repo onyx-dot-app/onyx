@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+import gzip
 from typing import Any
 from typing import cast
 from typing import Tuple
@@ -334,7 +335,13 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
             sitemap_url, verify=False, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, "html.parser")
+        if sitemap_url.endswith('.gz'):
+            with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as f:
+                content = f.read()
+        else:
+            content = response.content
+
+        soup = BeautifulSoup(content, "html.parser")
         urls = [_ensure_absolute_url(sitemap_url, loc_tag.text)
                 for loc_tag in soup.find_all("loc")]
 

@@ -5,6 +5,7 @@ asyncpg==0.30.0
 atlassian-python-api==3.41.16
 beautifulsoup4==4.12.3
 boto3==1.36.23
+brotli==1.1.0
 celery==5.5.1
 chardet==5.2.0
 chonkie==1.0.10
