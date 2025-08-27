@@ -101,15 +101,15 @@ def web_search(
         ]
     )
     agent_decision_prompt = f"""
-    You are tasked with gathering information from the internet to answer: "{base_question}"
+    You are tasked with gathering information from the internet with search query: "{search_query}".
+    This is one search step for answering the user's overall question: "{base_question}".
 
     You have performed a search and received the following results:
 
     {search_results_text}
 
     Your task is to:
-    1. Analyze which URLs are most relevant to the original question
-    2. Decide how many URLs to open
+    Select the URLs most relevant to the search query and most likely to help answer the user's overall question.
 
     Based on the search results above, please make your decision and return a JSON object with this structure:
 
