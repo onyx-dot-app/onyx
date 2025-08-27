@@ -3348,6 +3348,7 @@ class UserFile(Base):
     cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
         "ConnectorCredentialPair", back_populates="user_file"
     )
+    file_type: Mapped[str] = mapped_column(String, nullable=False)
 
     status: Mapped[UserFileStatus] = mapped_column(
         Enum(UserFileStatus, native_enum=False),
