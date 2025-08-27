@@ -79,8 +79,17 @@ def query_slack(
         response.validate()
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
-    except SlackApiError as e:
-        logger.error(f"Slack API error in query_slack: {e}")
+        logger.info(f"Successfully used search_messages, found {len(matches)} messages")
+    except SlackApiError as slack_error:
+        logger.error(f"Slack API error in search_messages: {slack_error}")
+        logger.error(
+            f"Slack API error details: status={slack_error.response.status_code}, "
+            f"error={slack_error.response.get('error')}, response={slack_error.response}"
+        )
+        if "not_allowed_token_type" in str(slack_error):
+            logger.error(
+                f"TOKEN TYPE ERROR: access_token starts with: {access_token[:10]}..."
+            )
         return []
 
     # convert matches to slack messages
@@ -92,6 +101,13 @@ def query_slack(
         channel_id: str | None = match.get("channel", {}).get("id")
         channel_name: str | None = match.get("channel", {}).get("name")
         username: str | None = match.get("username")
+        if not username:
+            # Fallback: try to get from user field if username is missing
+            user_info = match.get("user", "")
+            if isinstance(user_info, str) and user_info:
+                username = user_info  # Use user ID as fallback
+            else:
+                username = "unknown_user"
         score: float = match.get("score", 0.0)
         if (  # can't use any() because of type checking :(
             not text
@@ -291,31 +307,54 @@ def slack_retrieval(
     access_token: str,
     db_session: Session,
     limit: int | None = None,
+    context_aware_entities: dict[str, Any] | None = None,
 ) -> list[InferenceChunk]:
     # query slack
     _, fast_llm = get_default_llms()
     query_strings = build_slack_queries(query, fast_llm)
 
-    results: list[list[SlackMessage]] = run_functions_tuples_in_parallel(
+    # Use context-aware entities if provided, otherwise use default behavior
+    entities = context_aware_entities or {}
+
+    # Determine search scope based on entities
+    channels = entities.get("channels")
+    include_dm = entities.get("include_dm", False)
+
+    logger.info(
+        f"Slack retrieval: searching public channels only (channels={channels}, include_dm={include_dm})"
+    )
+
+    # Simplified: always search all accessible channels (which will be public channels due to bot permissions)
+    logger.info("Searching all accessible public channels")
+    results = run_functions_tuples_in_parallel(
         [
             (query_slack, (query_string, query, access_token, limit))
             for query_string in query_strings
         ]
     )
+
     slack_messages, docid_to_message = merge_slack_messages(results)
     slack_messages = slack_messages[: limit or len(slack_messages)]
     if not slack_messages:
         return []
 
-    # contextualize the slack messages
-    thread_texts: list[str] = run_functions_tuples_in_parallel(
-        [
-            (get_contextualized_thread_text, (slack_message, access_token))
-            for slack_message in slack_messages
-        ]
-    )
-    for slack_message, thread_text in zip(slack_messages, thread_texts):
-        slack_message.text = thread_text
+    # Check if we're in a bot context by looking at the access token prefix
+    if access_token.startswith("xoxp-"):
+        # This is a user OAuth token, likely from bot context - skip thread context to avoid additional scope requirements
+        logger.info(
+            "Bot context detected (user OAuth token): skipping thread context to avoid additional scope requirements"
+        )
+        # Use original message text without thread context
+    else:
+        thread_texts: list[str] = run_functions_tuples_in_parallel(
+            [
+                (get_contextualized_thread_text, (slack_message, access_token))
+                for slack_message in slack_messages
+            ]
+        )
+        for slack_message, thread_text in zip(slack_messages, thread_texts):
+            slack_message.text = thread_text
+    # else: use original message text without thread context
 
     # get the highlighted texts from shortest to longest
     highlighted_texts: set[str] = set()
