@@ -163,7 +163,6 @@ def orchestrator(
     all_relationship_types = get_relationship_types_str(active=True)
 
     # default to closer
-    next_tool = DRPath.CLOSER.value
     query_list = ["Answer the question with the information you have."]
     decision_prompt = None
 
@@ -310,7 +309,11 @@ def orchestrator(
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool].cost
+            if next_tool_name in available_tools.keys():
+                remaining_time_budget -= available_tools[next_tool_name].cost
+            else:
+                logger.warning(f"Tool {next_tool_name} not found in available tools")
+                remaining_time_budget -= 1.0
     else:
         if iteration_nr == 1 and not plan_of_record:
             # by default, we start a new iteration, but if there is a feedback request,
@@ -434,8 +437,6 @@ def orchestrator(
                 next_step = orchestrator_action.next_step
                 next_tool_name = next_step.tool
 
-                next_tool = available_tools[next_tool_name].path
-
                 query_list = [q for q in (next_step.questions or [])]
                 reasoning_result = orchestrator_action.reasoning
 
@@ -444,7 +445,11 @@ def orchestrator(
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool_name].cost
+            if next_tool_name in available_tools.keys():
+                remaining_time_budget -= available_tools[next_tool_name].cost
+            else:
+                logger.warning(f"Tool {next_tool_name} not found in available tools")
+                remaining_time_budget -= 1.0
         else:
             reasoning_result = "Time to wrap up."
 
