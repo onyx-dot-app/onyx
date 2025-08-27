@@ -33,6 +33,7 @@ from onyx.server.models import StatusResponse
 USER_FILE_CONSTANT = "USER_FILE_CONNECTOR"
 
 
+# TODO(subash): remove this
 def create_user_files(
     files: List[UploadFile],
     folder_id: int | None,
@@ -66,6 +67,7 @@ def create_user_files(
     return user_files
 
 
+# TODO(subash): remove this
 def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     folder_id: int | None,

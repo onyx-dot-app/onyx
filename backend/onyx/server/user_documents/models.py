@@ -19,6 +19,7 @@ class UserFileStatus(str, PyEnum):
     REINDEXING = "REINDEXING"
 
 
+# TODO(subash): remove this
 # this maps to FileResponse on the front end
 class UserFileSnapshot(BaseModel):
     id: int

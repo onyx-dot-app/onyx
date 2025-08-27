@@ -3275,13 +3275,22 @@ class InputPrompt__User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class Project__UserFile(Base):
+    __tablename__ = "project__user_file"
+
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), primary_key=True)
+    user_file_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user_file.id"), primary_key=True
+    )
+
+
 class UserFolder(Base):
     __tablename__ = "user_folder"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
-    description: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -3291,6 +3300,11 @@ class UserFolder(Base):
         "Persona",
         secondary=Persona__UserFolder.__table__,
         back_populates="user_folders",
+    )
+    user_files: Mapped[list["UserFile"]] = relationship(
+        "UserFile",
+        secondary=Project__UserFile.__table__,
+        back_populates="projects",
     )
 
 
@@ -3303,7 +3317,7 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[UUID] = mapped_column(UUID, primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
@@ -3345,17 +3359,10 @@ class UserFile(Base):
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
-
-class Project__UserFile(Base):
-    __tablename__ = "project__user_file"
-
-    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), primary_key=True)
-    user_file_id: Mapped[str] = mapped_column(
-        ForeignKey("user_file.id"), primary_key=True
-    )
-
-    project: Mapped["UserFolder"] = relationship(
-        "UserFolder", back_populates="user_files"
+    projects: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder",
+        secondary=Project__UserFile.__table__,
+        back_populates="user_files",
     )
 
 
