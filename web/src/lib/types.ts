@@ -367,11 +367,13 @@ export type SlackBot = {
   }>;
   bot_token: string;
   app_token: string;
+  user_token?: string;
 };
 
 export interface SlackBotTokens {
   bot_token: string;
   app_token: string;
+  user_token?: string;
 }
 
 /* EE Only Types */

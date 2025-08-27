@@ -1442,7 +1442,7 @@ class FederatedConnector(Base):
 
 
 class FederatedConnectorOAuthToken(Base):
-    """NOTE: in the future, can be made more general to support OAuth tokens
+    """
     for actions."""
 
     __tablename__ = "federated_connector_oauth_token"
@@ -2760,6 +2760,7 @@ class SlackBot(Base):
 
     bot_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
     app_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
+    user_token: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
         "SlackChannelConfig",

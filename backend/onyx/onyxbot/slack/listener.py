@@ -223,6 +223,7 @@ class SlackbotHandler:
         slack_bot_tokens = SlackBotTokens(
             bot_token=bot.bot_token,
             app_token=bot.app_token,
+            user_token=bot.user_token,
         )
         tenant_bot_pair = (tenant_id, bot.id)
 

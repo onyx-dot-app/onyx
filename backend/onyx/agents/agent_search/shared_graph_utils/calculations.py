@@ -64,7 +64,7 @@ def get_fit_scores(
                     [
                         float(doc.center_chunk.score)
                         for doc in docs[:i]
-                        if type(doc) == InferenceSection
+                        if isinstance(doc, InferenceSection)
                         and doc.center_chunk.score is not None
                     ]
                 )
@@ -86,7 +86,7 @@ def get_fit_scores(
         ].scores["1"]
 
         fit_eval.fit_scores[rank_type].chunk_ids = [
-            unique_chunk_id(doc) for doc in docs if type(doc) == InferenceSection
+            unique_chunk_id(doc) for doc in docs if isinstance(doc, InferenceSection)
         ]
 
     fit_eval.fit_score_lift = (
