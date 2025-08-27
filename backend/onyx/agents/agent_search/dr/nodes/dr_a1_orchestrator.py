@@ -437,8 +437,6 @@ def orchestrator(
                 next_step = orchestrator_action.next_step
                 next_tool_name = next_step.tool
 
-                available_tools[next_tool_name].path
-
                 query_list = [q for q in (next_step.questions or [])]
                 reasoning_result = orchestrator_action.reasoning
 

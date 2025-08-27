@@ -134,7 +134,7 @@ def generic_internal_tool_act(
                 cited_documents={},
                 reasoning="",
                 additional_data=None,
-                response_type="text",
+                response_type="text",  # TODO: convert all response types to enums
                 data=answer_string,
             )
         ],

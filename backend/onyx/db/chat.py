@@ -1505,6 +1505,7 @@ def translate_db_message_to_packets(
                         step_nr += 1
 
                     elif tool_name == "OktaProfileTool":
+                        # TODO: convert all response types to enums
                         packet_list.extend(
                             create_custom_tool_packets(
                                 tool_name=tool_name,
@@ -1516,6 +1517,7 @@ def translate_db_message_to_packets(
                         step_nr += 1
 
                     else:
+                        # TODO: convert all response types to enums
                         packet_list.extend(
                             create_custom_tool_packets(
                                 tool_name=tool_name,
