@@ -125,7 +125,7 @@ def web_search(
     - Ensure source diversity: try to include 1–2 official docs, 1 explainer, 1 news/report, 1 code/sample, etc.
     """
         agent_decision = invoke_llm_json(
-            llm=graph_config.tooling.primary_llm,
+            llm=graph_config.tooling.fast_llm,
             prompt=create_question_prompt(
                 assistant_system_prompt,
                 agent_decision_prompt + (assistant_task_prompt or ""),
