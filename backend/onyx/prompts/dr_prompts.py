@@ -548,8 +548,6 @@ Here is the overall question that you need to answer:
 ---question---
 {SEPARATOR_LINE}
 
-The current iteration is ---iteration_nr---:
-
 Here is the high-level plan:
 {SEPARATOR_LINE}
 ---current_plan_of_record_string---
@@ -838,7 +836,7 @@ TOOL CALL ARGUMENTS:
 OKTA_TOOL_USE_SPECIAL_PROMPT = PromptTemplate(
     f"""\
 You are great at formatting the response from Okta and also provide a short reasoning and answer \
-in natural language to answer the specific task query, if possible.
+in natural language to answer the specific task query (not the base question!), if possible.
 
 Here is the specific task query:
 {SEPARATOR_LINE}
@@ -862,6 +860,8 @@ If the Okta information appears not to be relevant, simply say that the Okta \
 information does not appear to relate to the specific task query.
 
 Guidelines:
+   - only use the base question for context, but don't try to answer it. Try to answer \
+the 'specific task query', if possible.
    - ONLY base any answer DIRECTLY on the Okta response. Do NOT DRAW on your own internal knowledge!
 
 ANSWER:
