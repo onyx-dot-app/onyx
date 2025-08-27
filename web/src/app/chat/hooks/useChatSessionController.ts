@@ -25,6 +25,7 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { getCitations } from "../services/packetUtils";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -111,6 +112,7 @@ export function useChatSessionController({
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
+  const { setForcedToolIds } = useAssistantsContext();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -133,6 +135,9 @@ export function useChatSessionController({
 
       // Remove uploaded files
       setCurrentMessageFiles([]);
+
+      // clear forced tool ids
+      setForcedToolIds([]);
 
       // If switching from one chat to another, then need to scroll again
       // If we're creating a brand new chat, then don't need to scroll
