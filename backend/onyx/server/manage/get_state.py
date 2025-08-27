@@ -9,8 +9,8 @@ from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DEV_VERSION_PATTERN
-from onyx.configs.app_configs import STABLE_VERSION_PATTERN
+from onyx.configs.constants import DEV_VERSION_PATTERN
+from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -42,7 +42,9 @@ def get_version() -> VersionResponse:
 @router.get("/versions")
 def get_versions() -> AllVersions:
     """
-    Fetches the latest stable and beta versions of Onyx Docker images
+    Fetches the latest stable and beta versions of Onyx Docker images.
+    Since DockerHub does not explicitly flag stable and beta images,
+    this endpoint can be used to programmatically check for new images.
     """
     # Fetch the latest tags from DockerHub for each Onyx component
     dockerhub_repos = [

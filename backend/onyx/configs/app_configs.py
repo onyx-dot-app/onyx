@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import urllib.parse
 from datetime import datetime
 from datetime import timezone
@@ -26,13 +25,6 @@ APP_PORT = 8080
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
 SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
-
-#####
-# Version Pattern Configs
-#####
-# Version patterns for Docker image tags
-STABLE_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-DEV_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$")
 
 #####
 # User Facing Features Configs
