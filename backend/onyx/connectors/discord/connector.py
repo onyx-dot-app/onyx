@@ -118,6 +118,7 @@ async def _fetch_documents_from_channel(
         start_time = discord_epoch
 
     async for channel_message in channel.history(
+        limit=None,
         after=start_time,
         before=end_time,
     ):
@@ -136,6 +137,7 @@ async def _fetch_documents_from_channel(
 
     for active_thread in channel.threads:
         async for thread_message in active_thread.history(
+            limit=None,
             after=start_time,
             before=end_time,
         ):
@@ -152,8 +154,11 @@ async def _fetch_documents_from_channel(
 
             yield _convert_message_to_document(thread_message, sections)
 
-    async for archived_thread in channel.archived_threads():
+    async for archived_thread in channel.archived_threads(
+        limit=None
+        ):
         async for thread_message in archived_thread.history(
+            limit=None,
             after=start_time,
             before=end_time,
         ):
