@@ -108,7 +108,11 @@ _VALID_EMAIL_DOMAINS_STR = (
     os.environ.get("VALID_EMAIL_DOMAINS", "") or _VALID_EMAIL_DOMAIN
 )
 VALID_EMAIL_DOMAINS = (
-    [domain.strip() for domain in _VALID_EMAIL_DOMAINS_STR.split(",")]
+    [
+        domain.strip().lower()
+        for domain in _VALID_EMAIL_DOMAINS_STR.split(",")
+        if domain.strip()
+    ]
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )
@@ -121,6 +125,8 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+# OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
+OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -616,6 +622,17 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 )
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
+
+
+#####
+# Tool Configs
+#####
+OKTA_PROFILE_TOOL_ENABLED = (
+    os.environ.get("OKTA_PROFILE_TOOL_ENABLED", "").lower() == "true"
+)
+# API token for SSWS auth to Okta Admin API. If set, Users API will be used to enrich profile.
+OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN") or ""
+
 
 #####
 # Miscellaneous

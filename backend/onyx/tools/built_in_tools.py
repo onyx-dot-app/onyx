@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -14,6 +15,12 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+)
+from onyx.tools.tool_implementations.internet_search.providers import (
+    get_available_providers,
+)
+from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+    OktaProfileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
@@ -58,7 +65,20 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             )
         ]
-        if os.environ.get("BING_API_KEY")
+        if (bool(get_available_providers()))
+        else []
+    ),
+    # Show Okta Profile tool if the environment variables are set
+    *(
+        [
+            InCodeToolInfo(
+                cls=OktaProfileTool,
+                description="The Okta Profile Action allows the assistant to fetch user information from Okta.",
+                in_code_tool_id=OktaProfileTool.__name__,
+                display_name=OktaProfileTool._DISPLAY_NAME,
+            )
+        ]
+        if OKTA_PROFILE_TOOL_ENABLED
         else []
     ),
 ]

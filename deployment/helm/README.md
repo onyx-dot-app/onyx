@@ -35,6 +35,23 @@
     * k -n onyx delete pvc vespa-storage-da-vespa-0
   * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
 
+## Run as non-root user
+By default, some onyx containers run as root. If you'd like to explicitly run the onyx containers as a non-root user, update the values.yaml file for the following components:
+  * `celery_shared`, `api`, `webserver`, `indexCapability`, `inferenceCapability`
+    ```yaml
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+    ```
+  * `vespa`
+    ```yaml
+    podSecurityContext:
+      fsGroup: 1000
+    securityContext:
+      privileged: false
+      runAsUser: 1000
+    ```
+
 ## Resourcing
 In the helm charts, we have resource suggestions for all Onyx-owned components. 
 These are simply initial suggestions, and may need to be tuned for your specific use case.

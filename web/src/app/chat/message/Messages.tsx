@@ -26,7 +26,12 @@ import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
-import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
+import {
+  ChatFileType,
+  FileDescriptor,
+  isTextFile,
+  ToolCallMetadata,
+} from "../interfaces";
 import {
   IMAGE_GENERATION_TOOL_NAME,
   SEARCH_TOOL_NAME,
@@ -99,12 +104,10 @@ function FileDisplay({
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) {
   const [close, setClose] = useState(true);
-  const [expandedKnowledge, setExpandedKnowledge] = useState(false);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const textFiles = files.filter(
-    (file) => file.type == ChatFileType.PLAIN_TEXT
+    (file) => isTextFile(file.type) && file.type !== ChatFileType.CSV
   );
-
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
@@ -554,29 +557,32 @@ export const AIMessage = ({
                             )}
                         </>
                       ) : null)}
-                    {userKnowledgeFiles && (
+                    {userKnowledgeFiles.length > 0 && (
                       <UserKnowledgeFiles
                         userKnowledgeFiles={userKnowledgeFiles}
                       />
                     )}
 
-                    {!userKnowledgeFiles &&
+                    {userKnowledgeFiles.length === 0 &&
                       toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
                       ) && (
-                        <ToolRunDisplay
-                          toolName={
-                            toolCall.tool_result && content
-                              ? `Used "${toolCall.tool_name}"`
-                              : `Using "${toolCall.tool_name}"`
-                          }
-                          toolLogo={
-                            <FiTool size={15} className="my-auto mr-1" />
-                          }
-                          isRunning={!toolCall.tool_result || !content}
-                        />
+                        <div className="mb-1">
+                          <ToolRunDisplay
+                            toolName={
+                              toolCall.tool_result && content
+                                ? `Used "${toolCall.tool_name}"`
+                                : `Using "${toolCall.tool_name}"`
+                            }
+                            toolLogo={
+                              <FiTool size={15} className="my-auto mr-1" />
+                            }
+                            isRunning={!toolCall.tool_result || !content}
+                          />
+                        </div>
                       )}
+
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&

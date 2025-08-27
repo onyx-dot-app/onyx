@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
-import { TextFormField } from "@/components/Field";
+import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/connectors/credentials";
 import { createEditingValidationSchema, createInitialValues } from "../lib";
 import { dictionaryType, formType } from "../types";
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
 const EditCredential = ({
   credential,
@@ -68,22 +69,30 @@ const EditCredential = ({
               label="Name (optional):"
             />
 
-            {Object.entries(credential.credential_json).map(([key, value]) => (
-              <TextFormField
-                includeRevert
-                key={key}
-                name={key}
-                placeholder={value}
-                label={getDisplayNameForCredentialKey(key)}
-                type={
-                  key.toLowerCase().includes("token") ||
-                  key.toLowerCase().includes("password")
-                    ? "password"
-                    : "text"
-                }
-                disabled={key === "authentication_method"}
-              />
-            ))}
+            {Object.entries(credential.credential_json).map(([key, value]) =>
+              isTypedFileField(key) ? (
+                <TypedFileUploadFormField
+                  key={key}
+                  name={key}
+                  label={getDisplayNameForCredentialKey(key)}
+                />
+              ) : (
+                <TextFormField
+                  includeRevert
+                  key={key}
+                  name={key}
+                  placeholder={value as string}
+                  label={getDisplayNameForCredentialKey(key)}
+                  type={
+                    key.toLowerCase().includes("token") ||
+                    key.toLowerCase().includes("password")
+                      ? "password"
+                      : "text"
+                  }
+                  disabled={key === "authentication_method"}
+                />
+              )
+            )}
             <div className="flex justify-between w-full">
               <Button type="button" onClick={() => resetForm()}>
                 <div className="flex gap-x-2 items-center w-full border-none">

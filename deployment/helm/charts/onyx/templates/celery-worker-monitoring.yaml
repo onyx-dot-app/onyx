@@ -32,11 +32,11 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.celery_worker_monitoring.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       containers:
         - name: celery-worker-monitoring
           securityContext:
-            {{- toYaml .Values.celery_worker_monitoring.securityContext | nindent 12 }}
+            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -57,6 +57,10 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+          {{- with .Values.celery_worker_monitoring.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
@@ -79,3 +83,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_monitoring_liveness.txt
+      {{- with .Values.celery_worker_monitoring.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -21,6 +21,7 @@ from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import PUBLIC_CREDENTIAL_ID
 from onyx.db.document import check_docs_exist
+from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import mock_successful_index_attempt
@@ -263,6 +264,14 @@ def seed_initial_documents(
             .where(DbDocument.id == doc.id)
             .values(chunk_count=doc.chunk_count)
         )
+
+    # Since we bypass the indexing flow, we need to manually mark the document as indexed
+    mark_document_as_indexed_for_cc_pair__no_commit(
+        connector_id=connector_id,
+        credential_id=PUBLIC_CREDENTIAL_ID,
+        document_ids=[doc.id for doc in docs],
+        db_session=db_session,
+    )
 
     db_session.commit()
     kv_store.store(KV_DOCUMENTS_SEEDED_KEY, True)

@@ -32,6 +32,8 @@ from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
+from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
+from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
@@ -92,7 +94,6 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
-from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -100,11 +101,17 @@ from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger()
 
 USER_FILE_INDEXING_LIMIT = 100
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
+DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
+# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
+# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
+HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -136,14 +143,10 @@ def validate_active_indexing_attempts(
     every INDEXING_WORKER_HEARTBEAT_INTERVAL seconds.
     """
     logger.info("Validating active indexing attempts")
-    # Heartbeat timeout: if no heartbeat received for 5 minutes, consider it dead
-    # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
-    HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+
+    heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
 
     with get_session_with_current_tenant() as db_session:
-        cutoff_time = datetime.now(timezone.utc) - timedelta(
-            seconds=HEARTBEAT_TIMEOUT_SECONDS
-        )
 
         # Find all active indexing attempts
         active_attempts = (
@@ -202,6 +205,15 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
+            if fresh_attempt.total_batches and fresh_attempt.completed_batches == 0:
+                heartbeat_timeout_seconds = (
+                    HEARTBEAT_TIMEOUT_SECONDS
+                    * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
+                )
+            cutoff_time = datetime.now(timezone.utc) - timedelta(
+                seconds=heartbeat_timeout_seconds
+            )
+
             # Heartbeat hasn't advanced - check if it's been too long
             if last_check_time >= cutoff_time:
                 task_logger.debug(
@@ -211,7 +223,7 @@ def validate_active_indexing_attempts(
 
             # No heartbeat for too long - mark as failed
             failure_reason = (
-                f"No heartbeat received for {HEARTBEAT_TIMEOUT_SECONDS} seconds"
+                f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
             )
 
             task_logger.warning(
@@ -496,7 +508,14 @@ def check_indexing_completion(
                 ConnectorCredentialPairStatus.SCHEDULED,
                 ConnectorCredentialPairStatus.INITIAL_INDEXING,
             ]:
-                cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+                # User file connectors must be paused on success
+                # NOTE: _run_indexing doesn't update connectors if the index attempt is the future embedding model
+                # TODO: figure out why this doesn't pause connectors during swap
+                cc_pair.status = (
+                    ConnectorCredentialPairStatus.PAUSED
+                    if cc_pair.is_user_file
+                    else ConnectorCredentialPairStatus.ACTIVE
+                )
                 db_session.commit()
 
             # Clear repeated error state on success
@@ -971,6 +990,95 @@ def cleanup_checkpoint_task(
         )
 
 
+# primary
+@shared_task(
+    name=OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
+    soft_time_limit=300,
+    bind=True,
+)
+def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
+    """Clean up old index attempts that are older than 7 days."""
+    locked = False
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+
+    # these tasks should never overlap
+    if not lock.acquire(blocking=False):
+        task_logger.info(
+            f"check_for_index_attempt_cleanup - Lock not acquired: tenant={tenant_id}"
+        )
+        return None
+
+    try:
+        locked = True
+        batch_size = INDEX_ATTEMPT_BATCH_SIZE
+        with get_session_with_current_tenant() as db_session:
+            old_attempts = get_old_index_attempts(db_session)
+            # We need to batch this because during the initial run, the system might have a large number
+            # of index attempts since they were never deleted. After that, the number will be
+            # significantly lower.
+            if len(old_attempts) == 0:
+                task_logger.info(
+                    "check_for_index_attempt_cleanup - No index attempts to cleanup"
+                )
+                return
+
+            for i in range(0, len(old_attempts), batch_size):
+                batch = old_attempts[i : i + batch_size]
+                task_logger.info(
+                    f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
+                )
+                self.app.send_task(
+                    OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
+                    kwargs={
+                        "index_attempt_ids": [attempt.id for attempt in batch],
+                        "tenant_id": tenant_id,
+                    },
+                    queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+                    priority=OnyxCeleryPriority.MEDIUM,
+                )
+    except Exception:
+        task_logger.exception("Unexpected exception during index attempt cleanup check")
+        return None
+    finally:
+        if locked:
+            if lock.owned():
+                lock.release()
+            else:
+                task_logger.error(
+                    "check_for_index_attempt_cleanup - Lock not owned on completion: "
+                    f"tenant={tenant_id}"
+                )
+
+
+# light worker
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
+    bind=True,
+)
+def cleanup_index_attempt_task(
+    self: Task, *, index_attempt_ids: list[int], tenant_id: str
+) -> None:
+    """Clean up an index attempt"""
+    start = time.monotonic()
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cleanup_index_attempts(db_session, index_attempt_ids)
+
+    finally:
+        elapsed = time.monotonic() - start
+
+        task_logger.info(
+            f"cleanup_index_attempt_task completed: tenant_id={tenant_id} "
+            f"index_attempt_ids={index_attempt_ids} "
+            f"elapsed={elapsed:.2f}"
+        )
+
+
 class DocumentProcessingBatch(BaseModel):
     """Data structure for a document processing batch."""
 
@@ -1072,9 +1180,12 @@ def docprocessing_task(
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
     try:
+        # Cannot use the TaskSingleton approach here because the worker is multithreaded
+        token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
         _docprocessing_task(index_attempt_id, cc_pair_id, tenant_id, batch_num)
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
+        INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
 def _docprocessing_task(
@@ -1085,9 +1196,6 @@ def _docprocessing_task(
 ) -> None:
     start_time = time.monotonic()
 
-    # set the indexing attempt ID so that all log messages from this process
-    # will have it added as a prefix
-    TaskAttemptSingleton.set_cc_and_index_id(index_attempt_id, cc_pair_id)
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
