@@ -3,9 +3,9 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.states.asyncio import StateContext
 from telebot.types import Message, CallbackQuery
 
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_llm_providers_for_user
 from onyx.db.persona import get_personas_for_user
-from onyx.db.telegram import get_user_telegram_api_key_by_tg_user_id, get_user_by_telegram_user_id, \
+from onyx.db.telegram import get_user_by_telegram_user_id, \
     edit_user_telegram_settings_persona, edit_user_telegram_settings_model
 from telegram.keyboard.settings import settings_constructor_for_personas, settings_constructor_for_llm_providers
 from telegram.utils.database import with_session
@@ -15,7 +15,9 @@ def handler(bot: AsyncTeleBot):
     @bot.message_handler(commands=["model"], auth=True)
     @with_session
     async def handle_edit_model(message: Message, session: Session, state: StateContext):
-        llm_providers = fetch_existing_llm_providers(session)
+        user_by_token = get_user_by_telegram_user_id(message.from_user.id, session)
+
+        llm_providers = fetch_existing_llm_providers_for_user(session, user_by_token)
 
         keyboard = settings_constructor_for_llm_providers(llm_providers)
 

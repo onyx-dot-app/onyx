@@ -17,7 +17,9 @@ def settings_constructor_for_personas(personas: Sequence[Persona]) -> types.Inli
 def settings_constructor_for_llm_providers(llm_providers: Sequence[LLMProvider]) -> types.InlineKeyboardMarkup:
     keyboard = types.InlineKeyboardMarkup()
     for provider in llm_providers:
-        button = types.InlineKeyboardButton(text=provider.provider, callback_data=f"model_{provider.name}_{provider.default_model_name}")
-        keyboard.add(button)
+        for model_name in provider.display_model_names:
+            button = types.InlineKeyboardButton(text=model_name, callback_data=f"model_{provider.name}_{model_name}")
+            keyboard.add(button)
 
     return keyboard
+
