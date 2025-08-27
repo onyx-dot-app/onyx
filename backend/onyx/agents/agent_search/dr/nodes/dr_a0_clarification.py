@@ -60,6 +60,7 @@ from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -490,7 +491,7 @@ def clarifier(
                         ),
                         event_name="basic_response",
                         writer=writer,
-                        answer_piece="message_delta",
+                        answer_piece=StreamingType.MESSAGE_DELTA.value,
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
@@ -676,19 +677,11 @@ def clarifier(
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
                         timeout_override=60,
-                        answer_piece="message_delta",
+                        answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
                         # max_tokens=None,
                     ),
                 )
-                # write_custom_event(
-                #     0,
-                #     MessageDelta(
-                #         content=clarification_response.clarification_question,
-                #         type="message_delta",
-                #     ),
-                #     writer,
-                # )
 
                 write_custom_event(
                     current_step_nr,

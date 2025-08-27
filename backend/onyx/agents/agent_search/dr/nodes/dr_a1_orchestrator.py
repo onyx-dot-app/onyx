@@ -37,6 +37,7 @@ from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import SUFFICIENT_INFORMATION_STRING
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -211,7 +212,7 @@ def orchestrator(
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
                     timeout_override=60,
-                    answer_piece="reasoning_delta",
+                    answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                     # max_tokens=None,
                 ),
@@ -351,9 +352,7 @@ def orchestrator(
 
             write_custom_event(
                 current_step_nr,
-                ReasoningStart(
-                    type="reasoning_start",
-                ),
+                ReasoningStart(),
                 writer,
             )
 
@@ -374,22 +373,13 @@ def orchestrator(
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
                     timeout_override=60,
-                    answer_piece="reasoning_delta",
+                    answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                 ),
             )
 
             end_time = datetime.now()
             logger.debug(f"Time taken for plan streaming: {end_time - start_time}")
-
-            # write_custom_event(
-            #     current_step_nr,
-            #     ReasoningDelta(
-            #         reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
-            #         type="reasoning_delta",
-            #     ),
-            #     writer,
-            # )
 
             write_custom_event(
                 current_step_nr,
@@ -474,19 +464,11 @@ def orchestrator(
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
                 timeout_override=60,
-                answer_piece="reasoning_delta",
+                answer_piece=StreamingType.REASONING_DELTA.value,
                 ind=current_step_nr,
                 # max_tokens=None,
             ),
         )
-
-        # write_custom_event(
-        #     current_step_nr,
-        #     ReasoningDelta(
-        #         reasoning=reasoning_result,
-        #     ),
-        #     writer,
-        # )
 
         write_custom_event(
             current_step_nr,
@@ -533,7 +515,7 @@ def orchestrator(
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
                 timeout_override=60,
-                answer_piece="reasoning_delta",
+                answer_piece=StreamingType.REASONING_DELTA.value,
                 ind=current_step_nr,
                 # max_tokens=None,
             ),
