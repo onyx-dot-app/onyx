@@ -90,7 +90,7 @@ def web_search(
     search_results: list[InternetSearchResult] = _search(search_query)
     search_results_text = "\n\n".join(
         [
-            f"{i+1}. {result.title}\n   URL: {result.link}\n"
+            f"{i}. {result.title}\n   URL: {result.link}\n"
             + (f"   Author: {result.author}\n" if result.author else "")
             + (
                 f"   Date: {result.published_date.strftime('%Y-%m-%d')}\n"
@@ -115,7 +115,11 @@ def web_search(
         schema=WebSearchAnswer,
         timeout_override=30,
     )
-    urls_to_open = [search_results[i].link for i in agent_decision.urls_to_open_indices]
+    urls_to_open = [
+        search_results[i].link
+        for i in agent_decision.urls_to_open_indices
+        if i < len(search_results) and i >= 0
+    ]
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
