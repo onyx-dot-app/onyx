@@ -50,8 +50,6 @@ PYTHONUNBUFFERED=1
 
 # Internet Search
 EXA_API_KEY=<REPLACE THIS>
-GOOGLE_CLOUD_API_KEY=<REPLACE THIS>
-GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID=<REPLACE THIS>
 
 
 # Enable the full set of Danswer Enterprise Edition features
