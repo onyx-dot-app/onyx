@@ -58,7 +58,7 @@ psycopg2-binary==2.9.9
 puremagic==1.28
 pyairtable==3.0.1
 pycryptodome==3.19.1
-pydantic==2.8.2
+pydantic==2.11.7
 PyGithub==2.5.0
 python-dateutil==2.8.2
 python-gitlab==5.6.0
