@@ -74,6 +74,14 @@ def _dummy_inference_section_from_internet_search_result(
     )
 
 
+def _dummy_internet_content_from_url(url: str) -> InternetContent:
+    return InternetContent(
+        title=url,
+        link=url,
+        full_content=url,
+    )
+
+
 def web_fetch(
     state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> BranchUpdate:
@@ -89,6 +97,21 @@ def web_fetch(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
     urls_to_open = state.urls_to_open
+
+    dummy_docs = [_dummy_internet_content_from_url(url) for url in urls_to_open]
+    dummy_docs_inference_sections = [
+        _dummy_inference_section_from_internet_search_result(doc) for doc in dummy_docs
+    ]
+    write_custom_event(
+        current_step_nr,
+        SearchToolDelta(
+            queries=[],
+            documents=convert_inference_sections_to_search_docs(
+                dummy_docs_inference_sections, is_internet=True
+            ),
+        ),
+        writer,
+    )
 
     if not state.available_tools:
         raise ValueError("available_tools is not set")
@@ -181,17 +204,6 @@ def web_fetch(
             doc_num + 1: retrieved_doc
             for doc_num, retrieved_doc in enumerate(retrieved_docs[:15])
         }
-
-    write_custom_event(
-        current_step_nr,
-        SearchToolDelta(
-            queries=[],
-            documents=convert_inference_sections_to_search_docs(
-                retrieved_docs, is_internet=True
-            ),
-        ),
-        writer,
-    )
 
     return BranchUpdate(
         branch_iteration_responses=[
