@@ -14,7 +14,7 @@ class SubAgentUpdate(LoggerUpdate):
 
 class BranchUpdate(LoggerUpdate):
     branch_iteration_responses: Annotated[list[IterationAnswer], add] = []
-    urls_to_open: list[str] = []
+    urls_to_open: Annotated[list[str], add] = []
 
 
 class SubAgentInput(LoggerUpdate):
@@ -42,10 +42,6 @@ class SubAgentMainState(
 class BranchInput(SubAgentInput):
     parallelization_nr: int = 0
     branch_question: str | None = None
-
-
-class FetchInput(SubAgentInput):
-    urls_to_open: list[str] = []
 
 
 class CustomToolBranchInput(LoggerUpdate):

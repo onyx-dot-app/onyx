@@ -5,6 +5,9 @@ from langgraph.types import Send
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
@@ -35,14 +38,16 @@ def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
             "fetch",
             BranchInput(
                 iteration_nr=state.iteration_nr,
-                context=state.context,
-                branch_question=state.query_list[0],
+                parallelization_nr=parallelization_nr,
+                urls_to_open=[url],
                 tools_used=state.tools_used,
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,
                 assistant_task_prompt=state.assistant_task_prompt,
-                urls_to_open=state.urls_to_open,
                 current_step_nr=state.current_step_nr,
             ),
+        )
+        for parallelization_nr, url in enumerate(
+            state.urls_to_open[:MAX_DR_PARALLEL_SEARCH]
         )
     ]

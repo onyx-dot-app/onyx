@@ -89,9 +89,6 @@ def web_fetch(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
     urls_to_open = state.urls_to_open
-    search_query = state.branch_question
-    if not search_query:
-        raise ValueError("search_query is not set")
 
     if not state.available_tools:
         raise ValueError("available_tools is not set")
@@ -203,13 +200,12 @@ def web_fetch(
                 tool_id=is_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
-                question=search_query,
+                question=state.branch_question or "",
                 answer=answer_string,
                 claims=claims,
                 cited_documents=cited_documents,
                 reasoning=reasoning,
                 additional_data=None,
-                urls_to_open=urls_to_open,
             )
         ],
         log_messages=[

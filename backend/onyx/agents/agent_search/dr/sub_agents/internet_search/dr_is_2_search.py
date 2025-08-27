@@ -146,10 +146,8 @@ Guidelines:
                 cited_documents={},
                 reasoning="",
                 additional_data=None,
-                urls_to_open=agent_decision.urls_to_open,
             )
         ],
-        urls_to_open=agent_decision.urls_to_open,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="internet_search",
@@ -157,4 +155,5 @@ Guidelines:
                 node_start_time=node_start_time,
             )
         ],
+        urls_to_open=agent_decision.urls_to_open,
     )
