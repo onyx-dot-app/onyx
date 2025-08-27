@@ -39,6 +39,9 @@ interface AssistantsContextProps {
     assistantId: number,
     assistantPreferences: UserSpecificAssistantPreference
   ) => void;
+
+  forcedToolIds: number[];
+  setForcedToolIds: Dispatch<SetStateAction<number[]>>;
 }
 
 const AssistantsContext = createContext<AssistantsContextProps | undefined>(
@@ -57,6 +60,7 @@ export const AssistantsProvider: React.FC<{
   const { user } = useUser();
   const { assistantPreferences, setSpecificAssistantPreferences } =
     useAssistantPreferences();
+  const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
 
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
@@ -165,6 +169,8 @@ export const AssistantsProvider: React.FC<{
         pinnedAssistants,
         assistantPreferences,
         setSpecificAssistantPreferences,
+        forcedToolIds,
+        setForcedToolIds,
       }}
     >
       {children}

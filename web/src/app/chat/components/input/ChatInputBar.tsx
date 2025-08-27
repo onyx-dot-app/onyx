@@ -32,6 +32,7 @@ import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { DeepResearchToggle } from "./DeepResearchToggle";
 import { ActionToggle } from "./ActionManagement";
+import { SelectedTool } from "./SelectedTool";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -99,18 +100,12 @@ interface ChatInputBarProps {
   selectedAssistant: MinimalPersonaSnapshot;
 
   toggleDocumentSidebar: () => void;
-  setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
-  availableSources: SourceMetadata[];
-  availableDocumentSets: DocumentSetSummary[];
-  availableTags: Tag[];
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
   setDeepResearchEnabled: (deepResearchEnabled: boolean) => void;
-  chatSessionId: string | null;
-  assistantId: number | undefined;
   placeholder?: string;
 }
 
@@ -131,17 +126,11 @@ export function ChatInputBar({
   // assistants
   selectedAssistant,
 
-  setFiles,
   handleFileUpload,
   textAreaRef,
-  availableSources,
-  availableDocumentSets,
-  availableTags,
   llmManager,
   deepResearchEnabled,
   setDeepResearchEnabled,
-  chatSessionId,
-  assistantId,
   placeholder,
 }: ChatInputBarProps) {
   const { user } = useUser();
@@ -153,6 +142,8 @@ export function ChatInputBar({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
 
   // Create a Set of IDs from currentMessageFiles for efficient lookup
   // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
@@ -190,8 +181,6 @@ export function ChatInputBar({
       }
     }
   };
-
-  const { finalAssistants: assistantOptions } = useAssistantsContext();
 
   const { llmProviders, inputPrompts } = useChatContext();
 
@@ -662,7 +651,7 @@ export function ChatInputBar({
             )}
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
-              <div className="space-x-1 flex  px-4 ">
+              <div className="space-x-1 flex px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
                   Icon={FileUploadIcon}
@@ -683,7 +672,32 @@ export function ChatInputBar({
                       setDeepResearchEnabled={setDeepResearchEnabled}
                     />
                   )}
+
+                {forcedToolIds.length > 0 && (
+                  <div className="pl-1 flex items-center gap-2 text-blue-500">
+                    {forcedToolIds.map((toolId) => (
+                      <div
+                        key={toolId}
+                        onClick={() => {
+                          setForcedToolIds(
+                            forcedToolIds.filter((id) => id !== toolId)
+                          );
+                        }}
+                      >
+                        <SelectedTool
+                          key={toolId}
+                          tool={
+                            selectedAssistant.tools.find(
+                              (tool) => tool.id === toolId
+                            )!
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center my-auto gap-x-2">
                 <LLMPopover
                   llmProviders={llmProviders}

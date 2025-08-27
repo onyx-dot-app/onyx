@@ -22,7 +22,6 @@ import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
-  ChatSessionSharedStatus,
   CitationMap,
   FileChatDisplay,
   FileDescriptor,
@@ -31,7 +30,6 @@ import {
   RegenerationState,
   RetrievalType,
   StreamingError,
-  SubQuestionDetail,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
@@ -123,7 +121,7 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshChatSessions, llmProviders } = useChatContext();
-  const { assistantPreferences } = useAssistantsContext();
+  const { assistantPreferences, forcedToolIds } = useAssistantsContext();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -578,6 +576,7 @@ export function useChatController({
                 .filter((tool) => !disabledToolIds?.includes(tool.id))
                 .map((tool) => tool.id)
             : undefined,
+        forcedToolIds: forcedToolIds,
       });
 
       const delay = (ms: number) => {

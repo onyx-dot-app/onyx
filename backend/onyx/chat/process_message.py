@@ -144,6 +144,21 @@ def _get_force_search_settings(
     tools: list[Tool],
     search_tool_override_kwargs: SearchToolOverrideKwargs | None,
 ) -> ForceUseTool:
+    if new_msg_req.forced_tool_ids:
+        forced_tools = [
+            tool for tool in tools if tool.id in new_msg_req.forced_tool_ids
+        ]
+        if not forced_tools:
+            raise ValueError(
+                f"No tools found for forced tool IDs: {new_msg_req.forced_tool_ids}"
+            )
+        return ForceUseTool(
+            force_use=True,
+            tool_name=forced_tools[0].name,
+            args=None,
+            override_kwargs=None,
+        )
+
     internet_search_available = any(
         isinstance(tool, InternetSearchTool) for tool in tools
     )

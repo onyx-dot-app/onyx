@@ -92,6 +92,7 @@ import {
 import { AIMessage } from "../message/messageComponents/AIMessage";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { HumanMessage } from "../message/HumanMessage";
+import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 
 export function ChatPage({
   toggle,
@@ -1254,9 +1255,18 @@ export function ChatPage({
                             </div>
                           )}
 
-                          <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
+                          <div className="pointer-events-auto w-[95%] mx-auto relative mb-8 text-text-600">
                             {showCenteredInput && (
                               <div className="flex justify-center mb-6 transition-opacity duration-300">
+                                {/* 
+                                TODO: decide which way to go
+                                <AssistantIcon
+                                  assistant={liveAssistant}
+                                  size="large"
+                                />
+                                <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
+                                  {liveAssistant.name}
+                                </div> */}
                                 <Logo
                                   height={48}
                                   width={48}
@@ -1269,12 +1279,7 @@ export function ChatPage({
                               setDeepResearchEnabled={() =>
                                 toggleDeepResearch()
                               }
-                              chatSessionId={existingChatSessionId}
-                              assistantId={selectedAssistant?.id}
                               toggleDocumentSidebar={toggleDocumentSidebar}
-                              availableSources={sources}
-                              availableDocumentSets={documentSets}
-                              availableTags={tags}
                               filterManager={filterManager}
                               llmManager={llmManager}
                               removeDocs={() => {
@@ -1304,12 +1309,10 @@ export function ChatPage({
                               selectedAssistant={
                                 selectedAssistant || liveAssistant
                               }
-                              setFiles={setCurrentMessageFiles}
                               handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
                             />
-                            {!showCenteredInput &&
-                              enterpriseSettings &&
+                            {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
                                 <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
                                   <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
@@ -1321,8 +1324,7 @@ export function ChatPage({
                                   </div>
                                 </div>
                               )}
-                            {!showCenteredInput &&
-                              enterpriseSettings &&
+                            {enterpriseSettings &&
                               enterpriseSettings.use_custom_logotype && (
                                 <div className="hidden lg:block absolute right-0 bottom-0">
                                   <img

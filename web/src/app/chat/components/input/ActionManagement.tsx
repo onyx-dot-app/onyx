@@ -1,11 +1,8 @@
 import {
   SlidersVerticalIcon,
   SearchIcon,
-  GlobeIcon,
-  ImageIcon,
-  CpuIcon,
-  UsersIcon,
-  DatabaseIcon,
+  DisableIcon,
+  IconProps,
 } from "@/components/icons/icons";
 import React, { useState } from "react";
 import {
@@ -13,86 +10,87 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
-
-// Helper functions to identify specific tools
-const isSearchTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "SearchTool" ||
-    tool.name === "run_search" ||
-    tool.display_name?.toLowerCase().includes("search tool")
-  );
-};
-
-const isWebSearchTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "InternetSearchTool" ||
-    tool.display_name?.toLowerCase().includes("internet search")
-  );
-};
-
-const isImageGenerationTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "ImageGenerationTool" ||
-    tool.display_name?.toLowerCase().includes("image generation")
-  );
-};
-
-const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "KnowledgeGraphTool" ||
-    tool.display_name?.toLowerCase().includes("knowledge graph")
-  );
-};
-
-const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "OktaProfileTool" ||
-    tool.display_name?.toLowerCase().includes("okta profile")
-  );
-};
+import { getIconForAction } from "../../services/actionUtils";
 
 interface ActionItemProps {
-  icon: React.ReactNode;
+  Icon: (iconProps: IconProps) => JSX.Element;
   label: string;
-  defaultChecked?: boolean;
-  onToggle?: (checked: boolean) => void;
+  disabled: boolean;
+  isForced: boolean;
+  onToggle: () => void;
+  onForceToggle: () => void;
 }
 
 export function ActionItem({
-  icon,
+  Icon,
   label,
-  defaultChecked = false,
+  disabled,
+  isForced,
   onToggle,
+  onForceToggle,
 }: ActionItemProps) {
   return (
     <div
-      className="
+      className={`
+      group
       flex 
       items-center 
       justify-between 
       px-2 
       cursor-pointer 
-      hover:bg-background-150 
+      hover:bg-background-100 
       rounded-lg 
       py-2 
       mx-1
-    "
+      ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
+    `}
+      onClick={() => {
+        // If disabled, un-disable the tool
+        if (onToggle && disabled) {
+          onToggle();
+        }
+
+        onForceToggle();
+      }}
     >
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm font-medium">{label}</span>
+      <div
+        className={`flex items-center gap-2 flex-1 ${
+          disabled ? "opacity-50" : ""
+        } ${isForced && "text-blue-500"}`}
+      >
+        <Icon size={16} className="text-text-500" />
+        <span
+          className={`text-sm font-medium select-none ${
+            disabled ? "line-through" : ""
+          }`}
+        >
+          {label}
+        </span>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch
-          defaultChecked={defaultChecked}
-          onCheckedChange={onToggle}
-          className="data-[state=checked]:bg-blue-500 dark:data-[state=checked]:bg-white"
-          size="sm"
+      <div
+        className={`
+          flex
+          items-center
+          gap-2
+          transition-opacity
+          duration-200
+          ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+        `}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
+        <DisableIcon
+          className={`transition-colors cursor-pointer ${
+            disabled
+              ? "text-text-900 hover:text-text-500"
+              : "text-text-500 hover:text-text-900"
+          }`}
         />
       </div>
     </div>
@@ -102,33 +100,25 @@ export function ActionItem({
 export function ToolItem({
   tool,
   isToggled,
+  isForced,
   onToggle,
+  onForceToggle,
 }: {
   tool: ToolSnapshot;
   isToggled: boolean;
-  onToggle: (checked: boolean) => void;
+  isForced: boolean;
+  onToggle: () => void;
+  onForceToggle: () => void;
 }) {
-  let icon: React.ReactNode;
-  if (isSearchTool(tool)) {
-    icon = <SearchIcon size={16} className="text-default" />;
-  } else if (isWebSearchTool(tool)) {
-    icon = <GlobeIcon size={16} className="text-default" />;
-  } else if (isImageGenerationTool(tool)) {
-    icon = <ImageIcon size={16} className="text-default" />;
-  } else if (isKnowledgeGraphTool(tool)) {
-    icon = <DatabaseIcon size={16} className="text-default" />;
-  } else if (isOktaProfileTool(tool)) {
-    icon = <UsersIcon size={16} className="text-default" />;
-  } else {
-    icon = <CpuIcon size={16} className="text-default" />;
-  }
-
+  const Icon = getIconForAction(tool);
   return (
     <ActionItem
-      icon={icon}
+      Icon={Icon}
       label={tool.display_name || tool.name}
-      defaultChecked={isToggled}
+      disabled={!isToggled}
+      isForced={isForced}
       onToggle={onToggle}
+      onForceToggle={onForceToggle}
     />
   );
 }
@@ -139,20 +129,45 @@ interface ActionToggleProps {
 
 export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Get the assistant preference for this assistant
-  const { assistantPreferences, setSpecificAssistantPreferences } =
-    useAssistantsContext();
+  const {
+    assistantPreferences,
+    setSpecificAssistantPreferences,
+    forcedToolIds,
+    setForcedToolIds,
+  } = useAssistantsContext();
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
-  const toggleToolForCurrentAssistant = (toolId: number, enabled: boolean) => {
+  const toggleToolForCurrentAssistant = (toolId: number) => {
+    const disabled = disabledToolIds.includes(toolId);
     setSpecificAssistantPreferences(selectedAssistant.id, {
-      disabled_tool_ids: enabled
+      disabled_tool_ids: disabled
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
     });
   };
+
+  const toggleForcedTool = (toolId: number) => {
+    if (forcedToolIds.includes(toolId)) {
+      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+    } else {
+      setForcedToolIds([...forcedToolIds, toolId]);
+    }
+  };
+
+  // Filter tools based on search term
+  const filteredTools = selectedAssistant.tools.filter((tool) => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      tool.display_name?.toLowerCase().includes(searchLower) ||
+      tool.name.toLowerCase().includes(searchLower) ||
+      tool.description?.toLowerCase().includes(searchLower)
+    );
+  });
 
   // If no tools are available, don't render the component
   if (selectedAssistant.tools.length === 0) {
@@ -160,7 +175,16 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(newOpen) => {
+        setOpen(newOpen);
+        // Clear search when closing
+        if (!newOpen) {
+          setSearchTerm("");
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           className="
@@ -184,10 +208,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
           data-testid="action-popover-trigger"
           title={open ? undefined : "Configure actions"}
         >
-          <SlidersVerticalIcon
-            size={16}
-            className="h-4 w-4 my-auto flex-none"
-          />
+          <SlidersVerticalIcon size={16} className="my-auto flex-none" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -195,7 +216,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
         align="start"
         className="
           w-[244px] 
-          max-h-[240px]
+          max-h-[300px]
           text-text-600 
           text-sm 
           p-0 
@@ -205,20 +226,57 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
           rounded-xl 
           shadow-xl 
           overflow-hidden
+          flex
+          flex-col
         "
       >
-        {/* Options */}
-        <div className="pt-2">
-          {selectedAssistant.tools.map((tool) => (
-            <ToolItem
-              key={tool.id}
-              tool={tool}
-              isToggled={!disabledToolIds.includes(tool.id)}
-              onToggle={(checked) =>
-                toggleToolForCurrentAssistant(tool.id, checked)
-              }
+        {/* Search Input */}
+        <div className="pt-1 mx-1">
+          <div className="relative">
+            <SearchIcon
+              size={16}
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-400"
             />
-          ))}
+            <input
+              type="text"
+              placeholder="Search Menu"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="
+                w-full 
+                pl-9 
+                pr-3 
+                py-2 
+                bg-background-50 
+                rounded-lg 
+                text-sm 
+                outline-none 
+                text-text-700
+                placeholder:text-text-400
+              "
+              autoFocus
+            />
+          </div>
+        </div>
+
+        {/* Options */}
+        <div className="pt-2 flex-1 overflow-y-auto border-b border-border mx-1 pb-2">
+          {filteredTools.length === 0 ? (
+            <div className="text-center py-1 text-text-400">
+              No matching tools found
+            </div>
+          ) : (
+            filteredTools.map((tool) => (
+              <ToolItem
+                key={tool.id}
+                tool={tool}
+                isToggled={!disabledToolIds.includes(tool.id)}
+                isForced={forcedToolIds.includes(tool.id)}
+                onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                onForceToggle={() => toggleForcedTool(tool.id)}
+              />
+            ))
+          )}
         </div>
 
         {/* More Connectors & Actions */}
@@ -235,9 +293,9 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
         >
           <div
             className="
-              mx-1 
+              mx-2 
               mb-2 
-              px-2.5 
+              px-2 
               py-1.5 
               flex 
               items-center 
