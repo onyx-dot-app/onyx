@@ -67,10 +67,6 @@ def web_search(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
 
-    logger.debug(
-        f"Search start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
-    )
-
     if graph_config.inputs.persona is None:
         raise ValueError("persona is not set")
 

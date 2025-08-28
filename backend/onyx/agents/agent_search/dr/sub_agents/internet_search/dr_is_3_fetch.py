@@ -121,10 +121,6 @@ def web_fetch(
     base_question = graph_config.inputs.prompt_builder.raw_user_query
     research_type = graph_config.behavior.research_type
 
-    logger.debug(
-        f"Web Fetch for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
-    )
-
     if graph_config.inputs.persona is None:
         raise ValueError("persona is not set")
 
@@ -155,11 +151,6 @@ def web_fetch(
 
     document_texts = "\n\n".join(document_texts_list)
 
-    logger.debug(
-        f"Fetch end/LLM start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
-    )
-
-    # Process with LLM based on research type
     if research_type == ResearchType.DEEP:
         search_prompt = INTERNAL_SEARCH_PROMPTS[research_type].build(
             search_query=state.branch_question or "",
@@ -167,7 +158,6 @@ def web_fetch(
             document_text=document_texts,
         )
 
-        # Run LLM
         search_answer_json = invoke_llm_json(
             llm=graph_config.tooling.primary_llm,
             prompt=create_question_prompt(
@@ -177,11 +167,6 @@ def web_fetch(
             timeout_override=40,
         )
 
-        logger.debug(
-            f"LLM/all done for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
-        )
-
-        # Get cited documents
         answer_string = search_answer_json.answer
         claims = search_answer_json.claims or []
         reasoning = search_answer_json.reasoning or ""
