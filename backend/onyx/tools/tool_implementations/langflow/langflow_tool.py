@@ -23,7 +23,7 @@ LANGFLOW_RESPONSE_SUMMARY_ID = "langflow_response_summary"
 
 
 class LangflowResponseSummary(BaseModel):
-    tool_result: dict
+    tool_result: str
     tool_name: str
 
 
@@ -72,9 +72,9 @@ class LangflowTool(Tool):
 
     def build_tool_message_content(
             self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
+    ) -> str:
         response = cast(LangflowResponseSummary, args[0].response)
-        return json.dumps(response.tool_result)
+        return response.tool_result
 
     def get_args_for_non_tool_calling_llm(
             self,
