@@ -55,9 +55,19 @@ def add_user_telegram_api_key(user_id: UUID, db_session: Session):
 
 
 def edit_telegram_user_id_by_api_key(api_key: str, user_id: int, db_session: Session):
-    stmt = update(TelegramUserApiKey).where(TelegramUserApiKey.api_key == api_key).values(telegram_user_id=user_id)
+    # Удаляем привязку ко всем старым ключам этого пользователя
+    stmt_remove_old = update(TelegramUserApiKey).where(
+        TelegramUserApiKey.telegram_user_id == user_id
+    ).values(telegram_user_id=None)
 
-    db_session.execute(stmt)
+    db_session.execute(stmt_remove_old)
+
+    # Привязываем к новому ключу
+    stmt_add_new = update(TelegramUserApiKey).where(
+        TelegramUserApiKey.api_key == api_key
+    ).values(telegram_user_id=user_id)
+
+    db_session.execute(stmt_add_new)
     db_session.commit()
 
 
