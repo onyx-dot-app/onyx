@@ -1258,7 +1258,7 @@ Here is the list of document types that are available for the search:
 {SEPARATOR_LINE}
 To interpret what the document types refer to, please refer to your own knowledge.
 
-And today is {datetime.now().strftime("%Y-%m-%d")}.
+And today is ---today---.
 
 With this, please try to identify mentioned source types and time filters, and \
 rewrite the query.

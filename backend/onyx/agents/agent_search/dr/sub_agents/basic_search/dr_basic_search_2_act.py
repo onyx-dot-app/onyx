@@ -66,6 +66,9 @@ def basic_search(
     if not state.available_tools:
         raise ValueError("available_tools is not set")
 
+    elif len(state.tools_used) == 0:
+        raise ValueError("tools_used is empty")
+
     search_tool_info = state.available_tools[state.tools_used[-1]]
     search_tool = cast(SearchTool, search_tool_info.tool_object)
 
@@ -81,6 +84,7 @@ def basic_search(
     base_search_processing_prompt = BASE_SEARCH_PROCESSING_PROMPT.build(
         active_source_types_str=active_source_types_str,
         branch_query=branch_query,
+        today=datetime.now().strftime("%Y-%m-%d"),
     )
 
     try:
@@ -219,6 +223,10 @@ def basic_search(
             answer_string,
             claims,
         ) = extract_document_citations(answer_string, claims)
+
+        if max(citation_numbers) > len(retrieved_docs):
+            raise ValueError("Citation numbers are out of range for retrieved docs.")
+
         cited_documents = {
             citation_number: retrieved_docs[citation_number - 1]
             for citation_number in citation_numbers
