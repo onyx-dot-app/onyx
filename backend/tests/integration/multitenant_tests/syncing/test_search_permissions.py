@@ -104,7 +104,7 @@ def test_tenant1_can_access_own_documents(reset_multitenant: None) -> None:
     # User 1 sends a message and gets a response
     response1 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
 
@@ -135,7 +135,7 @@ def test_tenant2_can_access_own_documents(reset_multitenant: None) -> None:
     # User 2 sends a message and gets a response
     response2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
 
@@ -167,7 +167,7 @@ def test_tenant1_cannot_access_tenant2_documents(reset_multitenant: None) -> Non
     # User 1 tries to access Tenant 2's documents
     response_cross = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
 
@@ -192,7 +192,7 @@ def test_tenant2_cannot_access_tenant1_documents(reset_multitenant: None) -> Non
     # User 2 tries to access Tenant 1's documents
     response_cross2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
 
@@ -218,7 +218,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # User 1 sends a message and gets a response with only Tenant 1's documents
     response1 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
     assert all(
@@ -231,7 +231,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # User 2 sends a message and gets a response with only Tenant 2's documents
     response2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
     assert all(
@@ -244,7 +244,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # User 1 tries to access Tenant 2's documents and fails
     response_cross = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
     assert all(
@@ -258,7 +258,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # User 2 tries to access Tenant 1's documents and fails
     response_cross2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
     assert all(
