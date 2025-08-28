@@ -21,7 +21,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 
 
-
 class OutlineConnector(LoadConnector, PollConnector):
     def __init__(
         self,
@@ -52,11 +51,13 @@ class OutlineConnector(LoadConnector, PollConnector):
             "offset": start_ind,
         }
 
-        if start:
-            data["updatedAt"] = datetime.utcfromtimestamp(start).isoformat()
-
-        if end:
-            data["updatedAt"] = datetime.utcfromtimestamp(end).isoformat()
+        if start and end:
+            data["start"] = datetime.utcfromtimestamp(start).isoformat()
+            data["end"] = datetime.utcfromtimestamp(end).isoformat()
+        elif start:
+            data["start"] = datetime.utcfromtimestamp(start).isoformat()
+        elif end:
+            data["end"] = datetime.utcfromtimestamp(end).isoformat()
 
         batch = outline_client.post(endpoint, data=data).get("data", [])
         doc_batch = [transformer(outline_client, item) for item in batch]
@@ -75,7 +76,7 @@ class OutlineConnector(LoadConnector, PollConnector):
         )
         return Document(
             id="collection__" + str(collection.get("id")),
-            sections=[TextSection(link=url, text=text)],
+            sections=[TextSection(link=url, text=html.unescape(text))],
             source=DocumentSource.OUTLINE,
             semantic_identifier="Collection: " + title,
             title=title,
@@ -97,7 +98,7 @@ class OutlineConnector(LoadConnector, PollConnector):
         )
         return Document(
             id="document__" + str(document.get("id")),
-            sections=[TextSection(link=url, text=text)],
+            sections=[TextSection(link=url, text=html.unescape(text))],
             source=DocumentSource.OUTLINE,
             semantic_identifier="Document: " + title,
             title=title,
@@ -106,8 +107,6 @@ class OutlineConnector(LoadConnector, PollConnector):
             ),
             metadata={"type": "document"},
         )
-
-
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         if self.outline_client is None:
