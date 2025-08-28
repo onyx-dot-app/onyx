@@ -1,6 +1,7 @@
 import {
   AxeroIcon,
   BookstackIcon,
+  OutlineIcon,
   ClickupIcon,
   ConfluenceIcon,
   DiscourseIcon,
@@ -204,6 +205,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "BookStack",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/bookstack",
+  },
+  outline: {
+    icon: OutlineIcon,
+    displayName: "Outline",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/outline",
   },
   google_sites: {
     icon: GoogleSitesIcon,

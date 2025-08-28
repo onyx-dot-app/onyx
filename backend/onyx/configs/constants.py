@@ -160,6 +160,7 @@ class DocumentSource(str, Enum):
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"
+    OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
     SLAB = "slab"
@@ -545,6 +546,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITLAB: "gitlab data",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
+    DocumentSource.OUTLINE: "outline data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
     DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
     DocumentSource.SLAB: "slab data",

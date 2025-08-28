@@ -34,6 +34,7 @@ import {
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
+import outlinePNG from "../../../public/Outline.png";
 import jiraSVG from "../../../public/Jira.svg";
 import confluenceSVG from "../../../public/Confluence.svg";
 import deepseekSVG from "../../../public/Deepseek.svg";
@@ -1147,6 +1148,17 @@ export const BookstackIcon = ({
 }: IconProps) => {
   return <SiBookstack size={size} className={className} />;
 };
+
+export const OutlineIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon
+    size={size + 4}
+    className={`${className} -m-0.5`}
+    src={outlinePNG}
+  />
+);
 
 export const ConfluenceIcon = ({
   size = 16,
