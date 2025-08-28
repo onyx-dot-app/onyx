@@ -21,7 +21,7 @@ def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -
 def test_send_message__basic_searches(
     reset: None, admin_user: DATestUser, document_builder: DocumentBuilderType
 ) -> None:
-    MESSAGE = "run a search for 'test'"
+    MESSAGE = "run a search for 'test'. Use the internal search tool."
     SHORT_DOC_CONTENT = "test"
     LONG_DOC_CONTENT = "blah blah blah blah" * 100
 
