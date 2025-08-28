@@ -43,21 +43,11 @@ class OutlineConnector(LoadConnector, PollConnector):
         endpoint: str,
         transformer: Callable[[OutlineApiClient, dict], Document],
         start_ind: int,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
     ) -> tuple[list[Document], int]:
         data = {
             "limit": batch_size,
             "offset": start_ind,
         }
-
-        if start and end:
-            data["start"] = datetime.utcfromtimestamp(start).isoformat()
-            data["end"] = datetime.utcfromtimestamp(end).isoformat()
-        elif start:
-            data["start"] = datetime.utcfromtimestamp(start).isoformat()
-        elif end:
-            data["end"] = datetime.utcfromtimestamp(end).isoformat()
 
         batch = outline_client.post(endpoint, data=data).get("data", [])
         doc_batch = [transformer(outline_client, item) for item in batch]
@@ -120,6 +110,19 @@ class OutlineConnector(LoadConnector, PollConnector):
         if self.outline_client is None:
             raise ConnectorMissingCredentialError("Outline")
 
+        # Create time filter function for client-side filtering
+        time_filter = None
+        if start is not None or end is not None:
+            def time_filter(doc: Document) -> bool:
+                if doc.doc_updated_at is None:
+                    return False
+                doc_timestamp = doc.doc_updated_at.timestamp()
+                if start is not None and doc_timestamp < start:
+                    return False
+                if end is not None and doc_timestamp > end:
+                    return False
+                return True
+
         transform_by_endpoint: dict[
             str, Callable[[OutlineApiClient, dict], Document]
         ] = {
@@ -136,9 +139,12 @@ class OutlineConnector(LoadConnector, PollConnector):
                     endpoint=endpoint,
                     transformer=transform,
                     start_ind=start_ind,
-                    start=start,
-                    end=end,
                 )
+                
+                # Apply time filtering if specified
+                if time_filter is not None:
+                    doc_batch = [doc for doc in doc_batch if time_filter(doc)]
+                
                 start_ind += num_results
                 if doc_batch:
                     yield doc_batch
