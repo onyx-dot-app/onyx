@@ -208,7 +208,10 @@ class TestSlackFederatedConnector:
             callback_data = {"code": "test_code"}
             redirect_uri = "https://test.com/callback"
 
-            with pytest.raises(
-                RuntimeError, match="Missing authed_user in OAuth response from Slack"
-            ):
-                slack_connector.callback(callback_data, redirect_uri)
+            result = slack_connector.callback(callback_data, redirect_uri)
+
+            # Should handle gracefully - access_token can be None in some edge cases
+            assert result.access_token is None
+            assert result.refresh_token is None
+            assert result.token_type == MOCK_TOKEN_TYPE
+            assert result.scope == MOCK_SCOPE
