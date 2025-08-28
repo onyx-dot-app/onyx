@@ -43,34 +43,18 @@ from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.user_preferences import activate_user as db_activate_user
-from onyx.db.user_preferences import deactivate_user as db_deactivate_user
-from onyx.db.user_preferences import (
-    get_all_user_assistant_specific_configs as db_get_all_user_assistant_specific_configs,
-)
+from onyx.db.user_preferences import activate_user
+from onyx.db.user_preferences import deactivate_user
+from onyx.db.user_preferences import get_all_user_assistant_specific_configs
 from onyx.db.user_preferences import get_latest_access_token_for_user
-from onyx.db.user_preferences import (
-    update_assistant_preferences,
-)
-from onyx.db.user_preferences import (
-    update_user_assistant_visibility as db_update_user_assistant_visibility,
-)
-from onyx.db.user_preferences import (
-    update_user_auto_scroll as db_update_user_auto_scroll,
-)
-from onyx.db.user_preferences import (
-    update_user_default_model as db_update_user_default_model,
-)
-from onyx.db.user_preferences import (
-    update_user_pinned_assistants as db_update_user_pinned_assistants,
-)
-from onyx.db.user_preferences import update_user_role as db_update_user_role
-from onyx.db.user_preferences import (
-    update_user_shortcut_enabled as db_update_user_shortcut_enabled,
-)
-from onyx.db.user_preferences import (
-    update_user_temperature_override_enabled as db_update_user_temperature_override_enabled,
-)
+from onyx.db.user_preferences import update_assistant_preferences
+from onyx.db.user_preferences import update_user_assistant_visibility
+from onyx.db.user_preferences import update_user_auto_scroll
+from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_pinned_assistants
+from onyx.db.user_preferences import update_user_role
+from onyx.db.user_preferences import update_user_shortcut_enabled
+from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -146,7 +130,7 @@ def set_user_role(
             "remove_curator_status__no_commit",
         )(db_session, user_to_update)
 
-    db_update_user_role(user_to_update, requested_role, db_session)
+    update_user_role(user_to_update, requested_role, db_session)
 
 
 class TestUpsertRequest(BaseModel):
@@ -413,7 +397,7 @@ def remove_invited_user(
 
 
 @router.patch("/manage/admin/deactivate-user")
-def deactivate_user(
+def deactivate_user_api(
     user_email: UserByEmail,
     current_user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -436,7 +420,7 @@ def deactivate_user(
     if user_to_deactivate.is_active is False:
         logger.warning("{} is already deactivated".format(user_to_deactivate.email))
 
-    db_deactivate_user(user_to_deactivate, db_session)
+    deactivate_user(user_to_deactivate, db_session)
 
 
 @router.delete("/manage/admin/delete-user")
@@ -477,7 +461,7 @@ async def delete_user(
 
 
 @router.patch("/manage/admin/activate-user")
-def activate_user(
+def activate_user_api(
     user_email: UserByEmail,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -491,7 +475,7 @@ def activate_user(
     if user_to_activate.is_active is True:
         logger.warning("{} is already activated".format(user_to_activate.email))
 
-    db_activate_user(user_to_activate, db_session)
+    activate_user(user_to_activate, db_session)
 
 
 @router.get("/manage/admin/valid-domains")
@@ -683,7 +667,7 @@ def verify_user_logged_in(
 
 
 @router.patch("/temperature-override-enabled")
-def update_user_temperature_override_enabled(
+def update_user_temperature_override_enabled_api(
     temperature_override_enabled: bool,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -700,7 +684,7 @@ def update_user_temperature_override_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_update_user_temperature_override_enabled(
+    update_user_temperature_override_enabled(
         user.id, temperature_override_enabled, db_session
     )
 
@@ -710,7 +694,7 @@ class ChosenDefaultModelRequest(BaseModel):
 
 
 @router.patch("/shortcut-enabled")
-def update_user_shortcut_enabled(
+def update_user_shortcut_enabled_api(
     shortcut_enabled: bool,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -725,11 +709,11 @@ def update_user_shortcut_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
+    update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
 
 
 @router.patch("/auto-scroll")
-def update_user_auto_scroll(
+def update_user_auto_scroll_api(
     request: AutoScrollRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -744,11 +728,11 @@ def update_user_auto_scroll(
         else:
             raise RuntimeError("This should never happen")
 
-    db_update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+    update_user_auto_scroll(user.id, request.auto_scroll, db_session)
 
 
 @router.patch("/user/default-model")
-def update_user_default_model(
+def update_user_default_model_api(
     request: ChosenDefaultModelRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -763,7 +747,7 @@ def update_user_default_model(
         else:
             raise RuntimeError("This should never happen")
 
-    db_update_user_default_model(user.id, request.default_model, db_session)
+    update_user_default_model(user.id, request.default_model, db_session)
 
 
 class ReorderPinnedAssistantsRequest(BaseModel):
@@ -771,7 +755,7 @@ class ReorderPinnedAssistantsRequest(BaseModel):
 
 
 @router.patch("/user/pinned-assistants")
-def update_user_pinned_assistants(
+def update_user_pinned_assistants_api(
     request: ReorderPinnedAssistantsRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -788,7 +772,7 @@ def update_user_pinned_assistants(
         else:
             raise RuntimeError("This should never happen")
 
-    db_update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
+    update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
 
 
 class ChosenAssistantsRequest(BaseModel):
@@ -818,7 +802,7 @@ def update_assistant_visibility(
 
 
 @router.patch("/user/assistant-list/update/{assistant_id}")
-def update_user_assistant_visibility(
+def update_user_assistant_visibility_api(
     assistant_id: int,
     show: bool,
     user: User | None = Depends(current_user),
@@ -846,7 +830,7 @@ def update_user_assistant_visibility(
     )
     if updated_preferences.chosen_assistants is not None:
         updated_preferences.chosen_assistants.append(assistant_id)
-    db_update_user_assistant_visibility(
+    update_user_assistant_visibility(
         user.id,
         updated_preferences.hidden_assistants,
         updated_preferences.visible_assistants,
@@ -869,7 +853,7 @@ def get_user_assistant_preferences(
         else:
             raise RuntimeError("This should never happen")
 
-    assistant_specific_configs = db_get_all_user_assistant_specific_configs(
+    assistant_specific_configs = get_all_user_assistant_specific_configs(
         user.id, db_session
     )
     return {
@@ -881,7 +865,7 @@ def get_user_assistant_preferences(
 
 
 @router.patch("/user/assistant/{assistant_id}/preferences")
-def update_assistant_preferences_for_user(
+def update_assistant_preferences_for_user_api(
     assistant_id: int,
     new_assistant_preference: UserSpecificAssistantPreference,
     user: User | None = Depends(current_user),
