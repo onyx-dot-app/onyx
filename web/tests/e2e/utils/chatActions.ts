@@ -21,7 +21,7 @@ export async function sendMessage(page: Page, message: string) {
   await page.locator("#onyx-chat-input-textarea").click();
   await page.locator("#onyx-chat-input-textarea").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
-  await page.waitForSelector("#onyx-ai-message");
+  await page.waitForSelector('[data-testid="onyx-ai-message"]');
   await page.waitForTimeout(2000);
 }
 
