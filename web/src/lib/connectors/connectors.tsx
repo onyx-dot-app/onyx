@@ -1595,7 +1595,7 @@ export interface GmailConfig {}
 export interface BookstackConfig {}
 
 export interface OutlineConfig {
-  base_url: string;
+  // No connector-specific config
 }
 
 export interface ConfluenceConfig {
