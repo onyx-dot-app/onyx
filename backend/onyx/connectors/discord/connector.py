@@ -118,9 +118,9 @@ async def _fetch_documents_from_channel(
         start_time = discord_epoch
 
     # NOTE: limit=None is the correct way to fetch all messages and threads with pagination
-    # The discord package erroneously uses limit for both pagination AND number of results.
-    # This causes the history and archived_threads methods to return 100 results even if there are more results within the filters.
-    # Pagination is handled automatically (100 results at a time) when limit=None.
+    # The discord package erroneously uses limit for both pagination AND number of results
+    # This causes the history and archived_threads methods to return 100 results even if there are more results within the filters
+    # Pagination is handled automatically (100 results at a time) when limit=None
 
     async for channel_message in channel.history(
         limit=None,
@@ -161,7 +161,7 @@ async def _fetch_documents_from_channel(
 
     async for archived_thread in channel.archived_threads(
         limit=None,
-        ):
+    ):
         async for thread_message in archived_thread.history(
             limit=None,
             after=start_time,
