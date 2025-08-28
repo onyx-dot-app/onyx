@@ -163,6 +163,8 @@ class ChatSessionManager:
                 )
                 continue
 
+        analyzed.used_tools = list(ind_to_tool_use.values())
+
         return analyzed
 
     @staticmethod
