@@ -60,12 +60,11 @@ def get_fit_scores(
 
         for i in [1, 5, 10]:
             fit_eval.fit_scores[rank_type].scores[str(i)] = (
-                # type(doc) is - is slightly faster than isinstance and no need to check for inheritence
                 sum(
                     [
                         float(doc.center_chunk.score)
                         for doc in docs[:i]
-                        if type(doc) is InferenceSection
+                        if isinstance(doc, InferenceSection)
                         and doc.center_chunk.score is not None
                     ]
                 )
@@ -86,9 +85,8 @@ def get_fit_scores(
             rank_type
         ].scores["1"]
 
-        # type(doc) is - is slightly faster than isinstance and no need to check for inheritence
         fit_eval.fit_scores[rank_type].chunk_ids = [
-            unique_chunk_id(doc) for doc in docs if type(doc) is InferenceSection
+            unique_chunk_id(doc) for doc in docs if isinstance(doc, InferenceSection)
         ]
 
     fit_eval.fit_score_lift = (
