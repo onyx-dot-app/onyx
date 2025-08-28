@@ -128,7 +128,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test_onyx-backend:test-${{ github.run_id }}
+          tags: onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
@@ -160,7 +160,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test_onyx-model-server:test-${{ github.run_id }}
+          tags: onyxdotapp/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
           outputs: type=registry
           provenance: false
@@ -201,7 +201,7 @@ jobs:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test_onyx-integration:test-${{ github.run_id }}
+          tags: onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
