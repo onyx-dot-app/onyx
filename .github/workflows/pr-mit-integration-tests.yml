@@ -24,20 +24,42 @@ env:
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
   PLATFORM_PAIR: linux-amd64
+
 jobs:
-  integration-tests-mit:
-    # See https://runs-on.com/runners/linux/
-    runs-on:
-      [
-        runs-on,
-        runner=32cpu-linux-x64,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+  discover-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
+      - name: Discover test directories
+        id: set-matrix
+        run: |
+          # Find all leaf-level directories in both test directories
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+
+          # Create JSON array with directory info
+          all_dirs=""
+          for dir in $tests_dirs; do
+            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+          done
+          for dir in $connector_dirs; do
+            all_dirs="$all_dirs{\"path\":\"connector_job_tests/$dir\",\"name\":\"connector-$dir\"},"
+          done
+
+          # Remove trailing comma and wrap in array
+          all_dirs="[${all_dirs%,}]"
+          echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
+
+  prepare-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -46,7 +68,9 @@ jobs:
           cache-dependency-path: |
             backend/requirements/default.txt
             backend/requirements/dev.txt
-      - run: |
+
+      - name: Install Python dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
@@ -70,69 +94,172 @@ jobs:
             --package-name onyx_openapi_client \
             --skip-validate-spec \
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-            
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Upload OpenAPI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-artifacts
+          path: backend/generated/
+
+  build-backend-image:
+    runs-on:
+      [
+        runs-on,
+        runner=16cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # tag every docker image with "test" so that we can spin up the correct set
-      # of images during testing
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # We don't need to build the Web Docker image since it's not yet used
-      # in the integration tests. We have a separate action to verify that it builds
-      # successfully.
-      - name: Pull Web Docker image
-        run: |
-          docker pull onyxdotapp/onyx-web-server:latest
-          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
-
-      # we use the runs-on cache for docker builds
-      # in conjunction with runs-on runners, it has better speed and unlimited caching
-      # https://runs-on.com/caching/s3-cache-for-github-actions/
-      # https://runs-on.com/caching/docker/
-      # https://github.com/moby/buildkit#s3-cache-experimental
-
-      # images are built and run locally for testing purposes. Not pushed.
-      - name: Build Backend Docker image
+      - name: Build and push Backend Docker image
         uses: ./.github/actions/custom-build-and-push
         with:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/onyx-backend:test
-          push: false
-          load: true
+          tags: onyxdotapp/integration-test_onyx-backend:test-${{ github.run_id }}
+          push: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
-      - name: Build Model Server Docker image
-        uses: ./.github/actions/custom-build-and-push
+  build-model-server-image:
+    runs-on:
+      [
+        runs-on,
+        runner=16cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Build and push Model Server Docker image
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          tags: onyxdotapp/onyx-model-server:test
-          push: false
-          load: true
+          tags: onyxdotapp/integration-test_onyx-model-server:test-${{ github.run_id }}
+          push: true
+          outputs: type=registry
+          provenance: false
           cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
-      - name: Build integration test Docker image
+  build-integration-image:
+    needs: prepare-build
+    runs-on:
+      [
+        runs-on,
+        runner=16cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Download OpenAPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-artifacts
+          path: backend/generated/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push integration test Docker image
         uses: ./.github/actions/custom-build-and-push
         with:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/onyx-integration:test
-          push: false
-          load: true
+          tags: onyxdotapp/integration-test_onyx-integration:test-${{ github.run_id }}
+          push: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+
+  integration-tests-mit:
+    needs:
+      [
+        discover-test-dirs,
+        build-backend-image,
+        build-model-server-image,
+        build-integration-image,
+      ]
+    # See https://runs-on.com/runners/linux/
+    runs-on:
+      [
+        runs-on,
+        runner=8cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Pull Docker images
+        run: |
+          # Pull all images from registry in parallel
+          echo "Pulling Docker images in parallel..."
+          (docker pull onyxdotapp/onyx-web-server:latest) &
+          (docker pull onyxdotapp/integration-test_onyx-backend:test-${{ github.run_id }}) &
+          (docker pull onyxdotapp/integration-test_onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull onyxdotapp/integration-test_onyx-integration:test-${{ github.run_id }}) &
+
+          # Wait for all background jobs to complete
+          wait
+          echo "All Docker images pulled successfully"
+
+          # Re-tag with expected names for docker-compose
+          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
+          docker tag onyxdotapp/integration-test_onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag onyxdotapp/integration-test_onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag onyxdotapp/integration-test_onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       - name: Start Docker containers
@@ -189,9 +316,9 @@ jobs:
             -p mock-it-services-stack up -d
 
       # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
-      - name: Run Standard Integration Tests
+      - name: Run Integration Tests for ${{ matrix.test-dir.name }}
         run: |
-          echo "Running integration tests..."
+          echo "Running integration tests for ${{ matrix.test-dir.path }}..."
           docker run --rm --network onyx-stack_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
@@ -221,8 +348,7 @@ jobs:
             -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
             -e MOCK_CONNECTOR_SERVER_PORT=8001 \
             onyxdotapp/onyx-integration:test \
-            /app/tests/integration/tests \
-            /app/tests/integration/connector_job_tests
+            /app/tests/integration/${{ matrix.test-dir.path }}
         continue-on-error: true
         id: run_tests
 
@@ -253,7 +379,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: docker-all-logs
+          name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
