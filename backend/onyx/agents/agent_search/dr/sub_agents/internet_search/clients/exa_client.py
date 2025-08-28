@@ -23,20 +23,19 @@ class ExaClient(InternetSearchProvider):
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[InternetSearchResult]:
         response = self.exa.search_and_contents(
-            query=query,
+            query,
             type="fast",
-            text=False,
             livecrawl="never",
             highlights=HighlightsContentsOptions(
                 num_sentences=2,
-                num_highlights=1,
+                highlights_per_url=1,
             ),
             num_results=10,
         )
 
         return [
             InternetSearchResult(
-                title=result.title,
+                title=result.title or "",
                 link=result.url,
                 snippet=result.highlights[0] if result.highlights else "",
                 author=result.author,
