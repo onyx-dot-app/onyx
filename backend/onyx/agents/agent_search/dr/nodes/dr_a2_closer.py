@@ -182,7 +182,6 @@ def save_iteration(
 
         research_agent_iteration_sub_step = ResearchAgentIterationSubStep(
             primary_question_id=message_id,
-            parent_question_id=None,
             iteration_nr=iteration_answer.iteration_nr,
             iteration_sub_step_nr=iteration_answer.parallelization_nr,
             sub_step_instructions=iteration_answer.question,

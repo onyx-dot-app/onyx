@@ -1173,6 +1173,16 @@ def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | N
     return search_doc
 
 
+def get_db_search_doc_by_document_id(
+    document_id: str, db_session: Session
+) -> DBSearchDoc | None:
+    """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
+    search_doc = (
+        db_session.query(SearchDoc).filter(SearchDoc.document_id == document_id).first()
+    )
+    return search_doc
+
+
 def create_search_doc_from_user_file(
     db_user_file: UserFile, associated_chat_file: InMemoryChatFile, db_session: Session
 ) -> SearchDoc:
@@ -1381,6 +1391,7 @@ def translate_db_message_to_packets(
                     )
                 )
 
+        research_iterations = []
         if chat_message.research_type in [
             ResearchType.THOUGHTFUL,
             ResearchType.DEEP,
@@ -1531,6 +1542,25 @@ def translate_db_message_to_packets(
             )
         )
         step_nr += 1
+
+        # Stream Search results in case there were no substeps (example: legacy agentic and legacy search)
+        if len(citation_info_list) > 0 and len(research_iterations) == 0:
+
+            saved_search_docs = []
+            for citation_info in citation_info_list:
+                cited_doc = get_db_search_doc_by_document_id(
+                    citation_info.document_id, db_session
+                )
+                if cited_doc:
+                    saved_search_docs.append(
+                        translate_db_search_doc_to_server_search_doc(cited_doc)
+                    )
+
+            packet_list.extend(
+                create_search_packets([], saved_search_docs, False, step_nr)
+            )
+
+            step_nr += 1
 
         packet_list.extend(create_citation_packets(citation_info_list, step_nr))
 
