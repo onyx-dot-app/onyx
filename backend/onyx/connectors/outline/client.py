@@ -28,7 +28,7 @@ class OutlineApiClient:
             data = {}
         url: str = self._build_url(endpoint)
         headers = self._build_headers()
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, timeout=60)
 
         try:
             json = response.json()
