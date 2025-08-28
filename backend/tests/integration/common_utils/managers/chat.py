@@ -1,4 +1,6 @@
 import json
+from typing import Any
+from typing import cast
 from uuid import UUID
 
 import requests
@@ -17,6 +19,8 @@ from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import StreamedResponse
+from tests.integration.common_utils.test_models import ToolName
+from tests.integration.common_utils.test_models import ToolResult
 
 
 class ChatSessionManager:
@@ -99,33 +103,65 @@ class ChatSessionManager:
 
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
-        response_data = [
-            json.loads(line.decode("utf-8")) for line in response.iter_lines() if line
-        ]
+        response_data = cast(
+            list[dict[str, Any]],
+            [
+                json.loads(line.decode("utf-8"))
+                for line in response.iter_lines()
+                if line
+            ],
+        )
 
         analyzed = StreamedResponse()
 
+        ind_to_tool_use: dict[int, ToolResult] = {}
+
         for data in response_data:
-            if "rephrased_query" in data:
-                analyzed.rephrased_query = data["rephrased_query"]
-            if "tool_name" in data:
-                analyzed.tool_name = data["tool_name"]
-                analyzed.tool_result = (
-                    data.get("tool_result")
-                    if analyzed.tool_name == "run_search"
-                    else None
-                )
-            if "relevance_summaries" in data:
-                analyzed.relevance_summaries = data["relevance_summaries"]
-            if "answer_piece" in data and data["answer_piece"]:
-                analyzed.full_message += data["answer_piece"]
-            if "top_documents" in data:
-                assert (
-                    analyzed.top_documents is None
-                ), "top_documents should only be set once"
+            if not (data_obj := data.get("obj")):
+                continue
+
+            if not (packet_type := data_obj.get("type")):
+                continue
+
+            if packet_type == "message_start":
                 analyzed.top_documents = [
-                    SavedSearchDoc(**doc) for doc in data["top_documents"]
+                    SavedSearchDoc(**doc) for doc in data_obj["final_documents"]
                 ]
+                analyzed.full_message = data_obj["content"]
+                continue
+
+            if packet_type == "message_delta":
+                analyzed.full_message += data_obj["content"]
+                continue
+
+            if not (ind := data.get("ind")):
+                continue
+
+            if packet_type == "internal_search_tool_start":
+                if data_obj.get("is_internet_search", False):
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=ToolName.INTERNET_SEARCH,
+                    )
+                else:
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=ToolName.INTERNAL_SEARCH,
+                    )
+                continue
+
+            if packet_type == "image_generation_tool_start":
+                ind_to_tool_use[ind] = ToolResult(
+                    tool_name=ToolName.IMAGE_GENERATION,
+                )
+                continue
+
+            if packet_type == "internal_search_tool_delta":
+                ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
+
+                documents = data_obj.get("documents", [])
+                ind_to_tool_use[ind].documents.extend(
+                    [SavedSearchDoc(**doc) for doc in documents]
+                )
+                continue
 
         return analyzed
 
