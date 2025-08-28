@@ -315,6 +315,11 @@ def orchestrator(
             else:
                 logger.warning(f"Tool {next_tool_name} not found in available tools")
                 remaining_time_budget -= 1.0
+
+        else:
+            reasoning_result = "Time to wrap up."
+            next_tool_name = DRPath.CLOSER.value
+
     else:
         if iteration_nr == 1 and not plan_of_record:
             # by default, we start a new iteration, but if there is a feedback request,
@@ -442,6 +447,7 @@ def orchestrator(
                 remaining_time_budget -= 1.0
         else:
             reasoning_result = "Time to wrap up."
+            next_tool_name = DRPath.CLOSER.value
 
         write_custom_event(
             current_step_nr,

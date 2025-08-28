@@ -25,6 +25,7 @@ from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -295,6 +296,12 @@ def construct_tools(
 
             # Handle KG Tool
             elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
+
+                # skip the knowledge graph tool if KG is not enabled/exposed
+                kg_config = get_kg_config_settings()
+                if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
+                    continue
+
                 if persona.name != TMP_DRALPHA_PERSONA_NAME:
                     # TODO: remove this after the beta period
                     raise ValueError(

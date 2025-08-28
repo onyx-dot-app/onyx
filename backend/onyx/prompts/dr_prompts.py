@@ -57,7 +57,12 @@ TOOL_DESCRIPTION[
 ] = f"""\
 This tool is used to answer questions that can be answered using the information \
 that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
-{MAX_DR_PARALLEL_SEARCH} queries. \
+{MAX_DR_PARALLEL_SEARCH} queries.
+USAGE HINTS:
+  - Since {INTERNET_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
+if questions of this type would be the actual goal, you should send questions to the \
+{INTERNAL_SEARCH} tool of the type '... RECENT publications...', and trust that future lanuage model \
+calls will be able to find the 'latest publication' from within the results.
 """
 
 TOOL_DESCRIPTION[
