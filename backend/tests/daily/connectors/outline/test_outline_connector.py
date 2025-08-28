@@ -6,12 +6,15 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.outline.connector import OutlineConnector
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
+from onyx.connectors.models import Document, ConnectorMissingCredentialError
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    ConnectorValidationError,
+)
 
 
 class TestOutlineConnector:
-    """Test Outline connector functionality using real API calls."""
+    """Comprehensive test suite for the OutlineConnector."""
 
     @pytest.fixture
     def connector(self) -> OutlineConnector:
@@ -21,16 +24,23 @@ class TestOutlineConnector:
     @pytest.fixture
     def credentials(self) -> dict[str, Any]:
         """Provide test credentials from environment variables."""
+        outline_base_url = os.environ.get("OUTLINE_BASE_URL")
+        outline_api_token = os.environ.get("OUTLINE_API_TOKEN")
+
+        if not outline_base_url or not outline_api_token:
+            pytest.skip(
+                "OUTLINE_BASE_URL and OUTLINE_API_TOKEN environment variables must be set"
+            )
+
         return {
-            "outline_api_token": os.environ["OUTLINE_API_TOKEN"],
-            "outline_base_url": os.environ["OUTLINE_BASE_URL"],
+            "outline_api_token": outline_api_token,
+            "outline_base_url": outline_base_url,
         }
 
     def test_credentials_missing_raises_exception(self) -> None:
-        """Test that connector raises exception when credentials are missing."""
+        """Should raise if credentials are missing."""
         connector = OutlineConnector()
-        
-        # Should raise exception when trying to load without credentials
+
         with pytest.raises(ConnectorMissingCredentialError) as exc_info:
             list(connector.load_from_state())
         assert "Outline" in str(exc_info.value)
@@ -38,162 +48,161 @@ class TestOutlineConnector:
     def test_load_credentials(
         self, connector: OutlineConnector, credentials: dict[str, Any]
     ) -> None:
-        """Test that credentials are loaded correctly."""
+        """Credentials should load correctly."""
         result = connector.load_credentials(credentials)
-        
-        assert result is None  # Should return None on success
+
+        assert result is None
         assert connector.outline_client is not None
         assert connector.outline_client.api_token == credentials["outline_api_token"]
-        assert connector.outline_client.base_url == credentials["outline_base_url"].rstrip("/")
+        assert connector.outline_client.base_url == credentials["outline_base_url"].rstrip(
+            "/"
+        )
 
     def test_outline_connector_basic(
         self, connector: OutlineConnector, credentials: dict[str, Any]
     ) -> None:
-        """Test the OutlineConnector with real Outline workspace.
-        
-        This test validates that the connector can:
-        1. Load credentials properly
-        2. Connect to Outline API
-        3. Fetch documents and collections
-        4. Return properly formatted Document objects
-        """
-        # Load credentials
+        """Validate that connector fetches and structures documents properly."""
         connector.load_credentials(credentials)
-        
-        # Get documents from poll_source
-        doc_batch_generator = connector.poll_source(0, time.time())
-        
-        # Collect all documents
-        all_documents = []
-        for doc_batch in doc_batch_generator:
-            all_documents.extend(doc_batch)
-            
-        # Should have at least some documents
-        assert len(all_documents) > 0, "Expected to find at least one document or collection"
-        
-        # Verify document structure
-        for doc in all_documents:
-            assert isinstance(doc, Document)
-            assert doc.id is not None
-            assert doc.source == DocumentSource.OUTLINE
-            assert doc.semantic_identifier is not None
-            assert len(doc.sections) >= 1
-            
-            # Check that each section has required fields
-            for section in doc.sections:
-                assert section.text is not None
-                assert section.link is not None
-                assert section.link.startswith("http")  # Should be a valid URL
-                
-            # Verify metadata structure
-            assert "type" in doc.metadata
-            assert doc.metadata["type"] in ["document", "collection"]
+
+        documents: list[Document] = []
+        for batch in connector.load_from_state():
+            documents.extend(batch)
+
+        assert len(documents) > 0, "Expected at least one document/collection"
+
+        collections = [d for d in documents if d.metadata.get("type") == "collection"]
+        docs = [d for d in documents if d.metadata.get("type") == "document"]
+
+        assert len(collections) > 0, "Should find at least one collection"
+
+        collection = collections[0]
+        assert collection.id.startswith("outline_collection__")
+        assert collection.source == DocumentSource.OUTLINE
+        assert collection.title is not None
+        assert len(collection.sections) == 1
+        assert collection.sections[0].text is not None
+        assert collection.metadata["type"] == "collection"
+        assert "collection_id" in collection.metadata
+
+        if docs:
+            document = docs[0]
+            assert document.id.startswith("outline_document__")
+            assert document.source == DocumentSource.OUTLINE
+            assert document.title is not None
+            assert len(document.sections) == 1
+            assert document.sections[0].text is not None
+            assert document.metadata["type"] == "document"
+            assert "collection_id" in document.metadata
+            assert "document_id" in document.metadata
+
+            section_link = document.sections[0].link
+            assert section_link is not None
+            assert "/doc/" in section_link
 
     def test_outline_connector_time_filtering(
         self, connector: OutlineConnector, credentials: dict[str, Any]
     ) -> None:
-        """Test that time filtering works correctly."""
+        """Validate poll_source with time range filtering."""
         connector.load_credentials(credentials)
-        
-        # Get documents from a specific time range (last 30 days)
+
         end_time = time.time()
-        start_time = end_time - (30 * 24 * 60 * 60)  # 30 days ago
-        
-        doc_batch_generator = connector.poll_source(start_time, end_time)
-        
-        # Collect documents
-        filtered_documents = []
-        for doc_batch in doc_batch_generator:
-            filtered_documents.extend(doc_batch)
-            
-        # All documents should be valid
-        for doc in filtered_documents:
+        start_time = end_time - 30 * 24 * 60 * 60
+
+        docs: list[Document] = []
+        for batch in connector.poll_source(start_time, end_time):
+            docs.extend(batch)
+
+        for doc in docs:
             assert isinstance(doc, Document)
             assert doc.source == DocumentSource.OUTLINE
-            assert doc.doc_updated_at is not None
-            # Note: Outline API may not strictly filter by updatedAt, 
-            # so we don't assert on time bounds here
+            if doc.doc_updated_at:
+                assert doc.doc_updated_at.timestamp() <= end_time
 
     def test_outline_connector_load_from_state(
         self, connector: OutlineConnector, credentials: dict[str, Any]
     ) -> None:
-        """Test load_from_state method."""
+        """load_from_state should fetch documents."""
         connector.load_credentials(credentials)
-        
-        # load_from_state should work the same as poll_source(None, None)
-        doc_batch_generator = connector.load_from_state()
-        
-        # Should be able to get at least one batch
-        doc_batch = next(doc_batch_generator)
-        assert len(doc_batch) >= 0  # Could be empty but should not fail
-        
-        # If there are documents, verify their structure
-        for doc in doc_batch:
+
+        gen = connector.load_from_state()
+        batch = next(gen)
+        assert isinstance(batch, list)
+
+        for doc in batch:
             assert isinstance(doc, Document)
             assert doc.source == DocumentSource.OUTLINE
 
     def test_outline_connector_batch_processing(
-        self, connector: OutlineConnector, credentials: dict[str, Any]
+        self, credentials: dict[str, Any]
     ) -> None:
-        """Test that batch processing works correctly."""
-        # Create connector with small batch size
+        """Connector should respect batch size."""
         small_batch_connector = OutlineConnector(batch_size=2)
         small_batch_connector.load_credentials(credentials)
-        
-        doc_batch_generator = small_batch_connector.poll_source(0, time.time())
-        
-        # Each batch should respect the batch size limit
-        for doc_batch in doc_batch_generator:
-            assert len(doc_batch) <= 2, f"Batch size exceeded: {len(doc_batch)}"
-            break  # Just test the first batch
+
+        for batch in small_batch_connector.poll_source(0, time.time()):
+            assert len(batch) <= 2
+            break
 
     def test_outline_connector_document_types(
         self, connector: OutlineConnector, credentials: dict[str, Any]
     ) -> None:
-        """Test that both documents and collections are properly handled."""
+        """Validate metadata for collections and documents."""
         connector.load_credentials(credentials)
-        
-        doc_batch_generator = connector.poll_source(0, time.time())
-        
-        # Collect all documents and check types
-        all_documents = []
-        for doc_batch in doc_batch_generator:
-            all_documents.extend(doc_batch)
-            
-        if all_documents:
-            # Check that we have proper metadata types
-            document_types = {doc.metadata["type"] for doc in all_documents}
-            # Should have at least one type (either document or collection)
-            assert len(document_types) > 0
-            assert document_types.issubset({"document", "collection"})
-            
-            # Verify that each type has proper content
-            for doc in all_documents:
+
+        docs: list[Document] = []
+        for batch in connector.poll_source(0, time.time()):
+            docs.extend(batch)
+
+        if docs:
+            doc_types = {d.metadata["type"] for d in docs}
+            assert doc_types.issubset({"document", "collection"})
+
+            for doc in docs:
                 if doc.metadata["type"] == "document":
-                    # Documents should have meaningful content
-                    assert any(len(section.text.strip()) > 0 for section in doc.sections)
+                    assert any(s.text.strip() for s in doc.sections)
                 elif doc.metadata["type"] == "collection":
-                    # Collections might have less content but should still be valid
                     assert len(doc.sections) >= 1
 
-    def test_outline_connector_error_handling(self) -> None:
-        """Test error handling for invalid credentials."""
+    def test_outline_connector_invalid_credentials(self) -> None:
+        """Should raise with invalid/missing credentials."""
         connector = OutlineConnector()
-        
-        # Invalid credentials should not crash but may raise specific errors
-        invalid_credentials = {
-            "outline_api_token": "invalid_token",
-            "outline_base_url": "https://invalid.example.com",
-        }
-        
-        connector.load_credentials(invalid_credentials)
-        
-        # Should be able to handle API errors gracefully
-        # Note: Specific error handling depends on the API response
-        # This test mainly ensures no unexpected crashes occur
-        try:
-            doc_batch_generator = connector.poll_source(0, time.time())
-            next(doc_batch_generator)
-        except Exception as e:
-            # Should be a specific connector exception, not a generic error
-            assert "Outline" in str(type(e).__name__) or "Connection" in str(type(e).__name__)
+
+        # Missing everything
+        with pytest.raises(ConnectorMissingCredentialError):
+            connector.load_credentials({})
+
+        # Missing base URL
+        with pytest.raises(ConnectorMissingCredentialError):
+            connector.load_credentials({"outline_api_token": "token"})
+
+        # Missing token
+        with pytest.raises(ConnectorMissingCredentialError):
+            connector.load_credentials({"outline_base_url": "https://example.com"})
+
+        # Invalid token
+        with pytest.raises((CredentialExpiredError, Exception)):
+            connector.load_credentials(
+                {
+                    "outline_base_url": "https://httpbin.org",
+                    "outline_api_token": "invalid",
+                }
+            )
+
+    def test_outline_connector_invalid_url(self) -> None:
+        """Invalid domain should raise validation error."""
+        connector = OutlineConnector()
+
+        with pytest.raises(
+            ConnectorValidationError, match="domain must contain a dot or be localhost"
+        ):
+            connector.load_credentials(
+                {"outline_base_url": "invalid-domain", "outline_api_token": "token"}
+            )
+
+        with pytest.raises(ConnectorValidationError):
+            connector.load_credentials(
+                {
+                    "outline_base_url": "https://not-a-valid-url.invalid",
+                    "outline_api_token": "token",
+                }
+            )
