@@ -68,16 +68,6 @@ def get_federated_retrieval_functions(
 
                 # Create a wrapper that properly handles session and context
                 def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
-                    logger.info(
-                        f"WRAPPER DEBUG: slack_wrapper called with query: {query.query}"
-                    )
-                    logger.info(
-                        f"WRAPPER DEBUG: slack_context captured value: {slack_context}"
-                    )
-                    logger.info(
-                        f"WRAPPER DEBUG: About to call slack_retrieval with slack_event_context={slack_context}"
-                    )
-
                     result = slack_retrieval(
                         query=query,
                         access_token=tenant_slack_bot.user_token or "",
@@ -85,10 +75,6 @@ def get_federated_retrieval_functions(
                         limit=MAX_FEDERATED_CHUNKS,
                         slack_event_context=slack_context,  # Captured from outer scope
                         bot_token=tenant_slack_bot.bot_token,
-                    )
-
-                    logger.info(
-                        f"WRAPPER DEBUG: slack_retrieval returned {len(result)} chunks"
                     )
                     return result
 
