@@ -1258,7 +1258,10 @@ export function ChatPage({
 
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8 text-text-600">
                             {showCenteredInput && (
-                              <div className="flex text-text-800 justify-center mb-6 transition-opacity duration-300">
+                              <div
+                                data-testid="chat-intro"
+                                className="flex text-text-800 justify-center mb-6 transition-opacity duration-300"
+                              >
                                 <AssistantIcon
                                   colorOverride="text-text-800"
                                   assistant={liveAssistant}
