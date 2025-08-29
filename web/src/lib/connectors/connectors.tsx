@@ -1442,6 +1442,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  outline: {
+    description: "Configure Outline connector",
+    values: [],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1750,3 +1755,5 @@ export interface ImapConfig {
   port?: number;
   mailboxes?: string[];
 }
+
+export interface OutlineConfig {}

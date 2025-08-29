@@ -196,8 +196,8 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
-
     IMAP = "imap"
+    OUTLINE = "outline"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
