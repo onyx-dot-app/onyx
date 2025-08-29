@@ -7,6 +7,9 @@ from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
 
+MESSAGE = "Hi"
+
+
 @pytest.fixture(scope="module", autouse=True)
 def reset_for_module() -> None:
     """Reset all data once before running any tests in this module."""
@@ -35,7 +38,7 @@ def test_soft_delete_chat_session(
     # Send a message to create some data
     response = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
-        message="Hi",
+        message=MESSAGE,
         user_performing_action=basic_user,
     )
 
@@ -88,7 +91,7 @@ def test_hard_delete_chat_session(
     # Send a message to create some data
     response = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
-        message="Explain the concept of machine learning in detail",
+        message=MESSAGE,
         user_performing_action=basic_user,
     )
 
