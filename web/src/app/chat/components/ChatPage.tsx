@@ -28,8 +28,6 @@ import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
-// import { ChatIntro } from "./ChatIntro";
-// import { StarterMessages } from "../../../components/assistants/StarterMessage";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
@@ -709,14 +707,6 @@ export function ChatPage({
     redirect("/auth/login");
   }
 
-  if (noAssistants)
-    return (
-      <>
-        <HealthCheckBanner />
-        <NoAssistantModal isAdmin={isAdmin} />
-      </>
-    );
-
   const clearSelectedDocuments = () => {
     setSelectedDocuments([]);
     clearSelectedItems();
@@ -752,6 +742,16 @@ export function ChatPage({
         : "bottom-0 left-0 translate-y-0"
     }`;
   }, [showCenteredInput]);
+
+  // handle error case where no assistants are available
+  if (noAssistants) {
+    return (
+      <>
+        <HealthCheckBanner />
+        <NoAssistantModal isAdmin={isAdmin} />
+      </>
+    );
+  }
 
   return (
     <>
