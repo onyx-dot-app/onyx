@@ -114,10 +114,8 @@ class OutlineConnector(LoadConnector, PollConnector):
         if self.outline_client is None:
             raise ConnectorMissingCredentialError("Outline")
 
-        # Create time filter function for client-side filtering with early termination
-        # Note: Outline API does not support date-based filtering natively,
-        # so we implement client-side filtering after fetching documents.
-        # However, we optimize by stopping pagination when documents become too old.
+        # Outline API does not support date-based filtering natively,
+        # so we implement client-side filtering with early termination optimization
         time_filter = None
         if start is not None or end is not None:
             def time_filter(doc: Document) -> bool:
@@ -139,10 +137,6 @@ class OutlineConnector(LoadConnector, PollConnector):
 
         for endpoint, transform in transform_by_endpoint.items():
             start_ind = 0
-            consecutive_old_batches = 0
-            max_consecutive_old_batches = 3  # Stop after 3 consecutive batches with no valid docs
-            found_old_document = False
-            
             while True:
                 doc_batch, num_results = self._get_doc_batch(
                     batch_size=self.batch_size,
@@ -152,40 +146,16 @@ class OutlineConnector(LoadConnector, PollConnector):
                     start_ind=start_ind,
                 )
                 
-                # Apply time filtering if specified and track efficiency
+                # Apply time filtering if specified
                 filtered_batch = []
-                if time_filter is not None:
-                    for doc in doc_batch:
-                        if doc.doc_updated_at is None:
-                            continue
-                        
-                        doc_timestamp = doc.doc_updated_at.timestamp()
-                        
-                        # Early termination: if document is too old, stop processing this endpoint
-                        # This assumes documents are returned in reverse chronological order (newest first)
-                        if start is not None and doc_timestamp < start:
-                            # Found a document older than our start time - stop processing this endpoint
-                            found_old_document = True
-                            break
-                        
-                        if time_filter(doc):
-                            filtered_batch.append(doc)
+                for doc in doc_batch:
+                    # Early termination: stop when we encounter documents older than start time
+                    if start is not None and doc.doc_updated_at is not None:
+                        if doc.doc_updated_at.timestamp() < start:
+                            return
                     
-                    # If we found an old document, stop processing this endpoint
-                    if found_old_document:
-                        break
-                    
-                    # Track consecutive batches with no valid documents for efficiency
-                    if not filtered_batch and doc_batch:
-                        consecutive_old_batches += 1
-                        # If we've had several consecutive batches with no valid docs, 
-                        # likely all remaining docs are too old - stop early
-                        if consecutive_old_batches >= max_consecutive_old_batches:
-                            break
-                    else:
-                        consecutive_old_batches = 0
-                else:
-                    filtered_batch = doc_batch
+                    if time_filter is None or time_filter(doc):
+                        filtered_batch.append(doc)
                 
                 start_ind += num_results
                 if filtered_batch:
