@@ -28,7 +28,7 @@ def handler(bot: AsyncTeleBot):
     async def handle_edit_persona(message: Message, session: Session, state: StateContext):
         user_by_token = get_user_by_telegram_user_id(message.from_user.id, session)
 
-        personas = get_personas_for_user(user_by_token, session)
+        personas = get_personas_for_user(user_by_token, session, get_editable=False)
 
         keyboard = settings_constructor_for_personas(personas)
 
