@@ -92,7 +92,10 @@ class LangflowTool(Tool):
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
         response = requests.request(method, url, json=request_body, headers={"x-api-key": LANGFLOW_API_KEY})
-        text_response = response.json()["outputs"][0]["outputs"][0]["results"]["message"]["text"]
+        try:
+            text_response = response.json()["outputs"][0]["outputs"][0]["results"]["message"]["text"]
+        except:
+            text_response = "Произошла ошибка на стороне LangFlow, проверьте логи в приложении"
         yield ToolResponse(
             id=LANGFLOW_RESPONSE_SUMMARY_ID,
             response=LangflowResponseSummary(tool_result=text_response, tool_name=self.name),

@@ -22,7 +22,7 @@ def minio_get_client():
         f'{config.minio_host}:{config.minio_port}',
         access_key=config.minio_access_key,
         secret_key=config.minio_secret_key,
-        secure=True
+        secure=False
     )
     return client
 
