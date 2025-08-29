@@ -21,8 +21,9 @@ import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
 
 interface ActionItemProps {
-  Icon: (iconProps: IconProps) => JSX.Element;
-  label: string;
+  tool?: ToolSnapshot;
+  Icon?: (iconProps: IconProps) => JSX.Element;
+  label?: string;
   disabled: boolean;
   isForced: boolean;
   onToggle: () => void;
@@ -30,13 +31,17 @@ interface ActionItemProps {
 }
 
 export function ActionItem({
-  Icon,
-  label,
+  tool,
+  Icon: ProvidedIcon,
+  label: providedLabel,
   disabled,
   isForced,
   onToggle,
   onForceToggle,
 }: ActionItemProps) {
+  // If a tool is provided, derive the icon and label from it
+  const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
+  const label = tool ? tool.display_name || tool.name : providedLabel!;
   return (
     <div
       className={`
@@ -100,32 +105,6 @@ export function ActionItem({
         />
       </div>
     </div>
-  );
-}
-
-export function ToolItem({
-  tool,
-  isToggled,
-  isForced,
-  onToggle,
-  onForceToggle,
-}: {
-  tool: ToolSnapshot;
-  isToggled: boolean;
-  isForced: boolean;
-  onToggle: () => void;
-  onForceToggle: () => void;
-}) {
-  const Icon = getIconForAction(tool);
-  return (
-    <ActionItem
-      Icon={Icon}
-      label={tool.display_name || tool.name}
-      disabled={!isToggled}
-      isForced={isForced}
-      onToggle={onToggle}
-      onForceToggle={onForceToggle}
-    />
   );
 }
 
@@ -278,10 +257,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             </div>
           ) : (
             filteredTools.map((tool) => (
-              <ToolItem
+              <ActionItem
                 key={tool.id}
                 tool={tool}
-                isToggled={!disabledToolIds.includes(tool.id)}
+                disabled={disabledToolIds.includes(tool.id)}
                 isForced={forcedToolIds.includes(tool.id)}
                 onToggle={() => toggleToolForCurrentAssistant(tool.id)}
                 onForceToggle={() => {

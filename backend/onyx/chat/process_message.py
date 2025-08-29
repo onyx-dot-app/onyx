@@ -156,7 +156,7 @@ def _get_force_search_settings(
             force_use=True,
             tool_name=forced_tools[0].name,
             args=None,
-            override_kwargs=None,
+            override_kwargs=search_tool_override_kwargs,
         )
 
     internet_search_available = any(
