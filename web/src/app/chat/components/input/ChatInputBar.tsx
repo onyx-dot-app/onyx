@@ -151,85 +151,14 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     removeSelectedFile,
     removeSelectedFolder,
   } = useDocumentsContext();
-  const { currentMessageFiles, setCurrentMessageFiles, uploadFiles } =
-    useProjectsContext();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
-  const { recentFiles, uploadFilesToProject } = useProjectsContext();
-  const recentFiles = [
-    {
-      id: "1",
-      name: "File 1",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "1",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-    },
-    {
-      id: "2",
-      name: "File 2",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "2",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.DOCUMENT,
-    },
-    {
-      id: "3",
-      name: "File 3",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "3",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-    },
-    {
-      id: "1",
-      name: "File 1",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "1",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.IMAGE,
-    },
-    {
-      id: "2",
-      name: "File 2",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "2",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-    },
-    {
-      id: "3",
-      name: "File 3",
-      file_type: "pdf",
-      last_accessed_at: "2021-01-01",
-      project_id: "1",
-      user_id: "1",
-      file_id: "3",
-      created_at: "2021-01-01",
-      status: "active",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-    },
-  ];
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    uploadFiles,
+    recentFiles,
+  } = useProjectsContext();
 
   const handleUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

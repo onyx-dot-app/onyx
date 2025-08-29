@@ -39,7 +39,7 @@ class UserFileSnapshot(BaseModel):
 
 
 class UserProjectSnapshot(BaseModel):
-    id: UUID
+    id: int
     name: str
     description: str | None
     created_at: datetime
