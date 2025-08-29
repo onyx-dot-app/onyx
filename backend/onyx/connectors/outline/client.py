@@ -50,19 +50,27 @@ class OutlineApiClient:
                 -1, f"Network error occurred: {e}"
             )
 
-        try:
-            response_json = response.json()
-        except Exception:
-            response_json = {}
-
         if response.status_code >= 300:
             error = response.reason
-            response_error = response_json.get("error", {}).get("message", "")
-            if response_error:
-                error = response_error
+            try:
+                response_json = response.json()
+                if isinstance(response_json, dict):
+                    response_error = response_json.get("error", {}).get("message", "")
+                    if response_error:
+                        error = response_error
+            except Exception:
+                # If JSON parsing fails, fall back to response.text for better debugging
+                if response.text.strip():
+                    error = f"{response.reason}: {response.text.strip()}"
             raise OutlineClientRequestFailedError(response.status_code, error)
 
-        return response_json
+        try:
+            return response.json()
+        except Exception:
+            raise OutlineClientRequestFailedError(
+                response.status_code, 
+                f"Response was successful but contained invalid JSON: {response.text}"
+            )
 
     def _build_headers(self) -> dict[str, str]:
         return {
