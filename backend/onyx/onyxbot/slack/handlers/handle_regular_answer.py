@@ -227,6 +227,7 @@ def handle_regular_answer(
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
+                slack_context=message_info.slack_context,  # Pass Slack context from message_info
             )
 
         # if it's a DM or ephemeral message, answer based on private documents.

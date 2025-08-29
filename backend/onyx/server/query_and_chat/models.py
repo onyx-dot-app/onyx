@@ -148,6 +148,9 @@ class CreateChatMessageRequest(ChunkContext):
     # List of tool IDs we MUST use.
     forced_tool_ids: list[int] | None = None
 
+    # Slack context for federated search (channel_type, channel_id, user_id)
+    slack_context: dict[str, str] | None = None
+
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
         if self.search_doc_ids is None and self.retrieval_options is None:

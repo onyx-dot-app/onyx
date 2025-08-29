@@ -83,6 +83,39 @@ def get_onyx_bot_auth_ids(
     return user_id, bot_id
 
 
+def get_channel_type_from_id(web_client: WebClient, channel_id: str) -> str:
+    """
+    Get the channel type from a channel ID using Slack API.
+    Returns: 'im', 'mpim', 'private_channel', 'public_channel', or 'unknown'
+    """
+    try:
+        channel_info = web_client.conversations_info(channel=channel_id)
+        if channel_info.get("ok") and channel_info.get("channel"):
+            channel = channel_info.get("channel", {})
+
+            if channel.get("is_im"):
+                return "im"  # Direct message
+            elif channel.get("is_mpim"):
+                return "mpim"  # Multi-person direct message
+            elif channel.get("is_private"):
+                return "private_channel"  # Private channel
+            elif channel.get("is_channel"):
+                return "public_channel"  # Public channel
+            else:
+                logger.warning(
+                    f"Could not determine channel type for {channel_id}, defaulting to unknown"
+                )
+                return "unknown"
+        else:
+            logger.warning(f"Invalid channel info response for {channel_id}")
+            return "unknown"
+    except Exception as e:
+        logger.warning(
+            f"Error getting channel info for {channel_id}, defaulting to unknown: {e}"
+        )
+        return "unknown"
+
+
 def check_message_limit() -> bool:
     """
     This isnt a perfect solution.

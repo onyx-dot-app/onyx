@@ -15,6 +15,8 @@ class SlackMessageInfo(BaseModel):
     bypass_filters: bool  # User has tagged @OnyxBot
     is_slash_command: bool  # User is using /OnyxBot
     is_bot_dm: bool  # User is direct messaging to OnyxBot
+    # Slack context for federated search
+    slack_context: dict[str, str] | None = None  # channel_type, channel_id, user_id
 
 
 # Models used to encode the relevant data for the ephemeral message actions

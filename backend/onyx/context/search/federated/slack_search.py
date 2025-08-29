@@ -64,11 +64,39 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     ]
 
 
+def _is_public_channel(channel_info: dict[str, Any]) -> bool:
+    """Check if a channel is public based on its info"""
+    # The channel_info structure has a nested 'channel' object
+    channel = channel_info.get("channel", {})
+
+    is_channel = channel.get("is_channel", False)
+    is_private = channel.get("is_private", False)
+    is_group = channel.get("is_group", False)
+    is_mpim = channel.get("is_mpim", False)
+    is_im = channel.get("is_im", False)
+
+    # A public channel is: a channel that is NOT private, NOT a group, NOT mpim, NOT im
+    is_public = (
+        is_channel and not is_private and not is_group and not is_mpim and not is_im
+    )
+
+    # Add detailed logging for debugging
+    logger.debug(
+        f"Channel info: is_channel={is_channel}, is_private={is_private}, "
+        f"is_group={is_group}, is_mpim={is_mpim}, is_im={is_im}, is_public={is_public}"
+    )
+
+    return is_public
+
+
 def query_slack(
     query_string: str,
     original_query: SearchQuery,
     access_token: str,
     limit: int | None = None,
+    allowed_private_channel: str | None = None,  # Add allowed private channel parameter
+    bot_token: str | None = None,  # Add bot token parameter for channel info calls
+    include_dm: bool = False,  # Whether to include direct messages
 ) -> list[SlackMessage]:
     # query slack
     slack_client = WebClient(token=access_token)
@@ -94,6 +122,7 @@ def query_slack(
 
     # convert matches to slack messages
     slack_messages: list[SlackMessage] = []
+    filtered_count = 0
     for match in matches:
         text: str | None = match.get("text")
         permalink: str | None = match.get("permalink")
@@ -118,6 +147,67 @@ def query_slack(
             or not username
         ):
             continue
+
+        # Apply channel filtering if needed
+        if allowed_private_channel is not None:
+            # Private channel context: only allow the specific private channel + public channels
+            if channel_id == allowed_private_channel:
+                # This is the allowed private channel - keep it
+                pass
+            else:
+                # Check if this is a public channel
+                try:
+                    # Use bot token if available (has full permissions), otherwise fall back to user token
+                    token_to_use = bot_token if bot_token else access_token
+                    channel_client = WebClient(token=token_to_use)
+                    channel_info = channel_client.conversations_info(channel=channel_id)
+
+                    if _is_public_channel(channel_info):
+                        # This is a public channel - keep it
+                        pass
+                    else:
+                        # This is another private channel - filter it out
+                        filtered_count += 1
+                        logger.debug(
+                            f"Skipping message from private channel {channel_id} "
+                            f"(not the allowed private channel: {allowed_private_channel})"
+                        )
+                        continue
+                except Exception as e:
+                    # If we can't get channel info, be conservative and filter it out
+                    logger.warning(
+                        f"Could not determine channel type for {channel_id}, filtering out: {e}"
+                    )
+                    filtered_count += 1
+                    continue
+        elif include_dm:
+            # Include direct messages - no filtering needed
+            pass
+        else:
+            # Default case: filter out all private channels, only allow public channels
+            try:
+                # Use bot token if available (has full permissions), otherwise fall back to user token
+                token_to_use = bot_token if bot_token else access_token
+                channel_client = WebClient(token=token_to_use)
+                channel_info = channel_client.conversations_info(channel=channel_id)
+
+                if _is_public_channel(channel_info):
+                    # This is a public channel - keep it
+                    pass
+                else:
+                    # This is a private channel - filter it out
+                    filtered_count += 1
+                    logger.debug(
+                        f"Skipping message from private channel {channel_id} (only public channels allowed)"
+                    )
+                    continue
+            except Exception as e:
+                # If we can't get channel info, be conservative and filter it out
+                logger.warning(
+                    f"Could not determine channel type for {channel_id}, filtering out: {e}"
+                )
+                filtered_count += 1
+                continue
 
         # generate thread id and document id
         thread_id = (
@@ -169,6 +259,11 @@ def query_slack(
                 highlighted_texts=highlighted_texts,
                 slack_score=score,
             )
+        )
+
+    if filtered_count > 0:
+        logger.info(
+            f"Channel filtering applied: {filtered_count} messages filtered out, {len(slack_messages)} messages kept"
         )
 
     return slack_messages
@@ -307,34 +402,82 @@ def slack_retrieval(
     access_token: str,
     db_session: Session,
     limit: int | None = None,
-    context_aware_entities: dict[str, Any] | None = None,
+    slack_event_context: (
+        dict[str, str] | None
+    ) = None,  # Add Slack event context parameter
+    bot_token: str | None = None,  # Add bot token parameter
 ) -> list[InferenceChunk]:
+    # ENTRY DEBUG: Log all parameters
+    logger.info("SLACK_RETRIEVAL ENTRY DEBUG: Function called with:")
+    logger.info(f"  - query: {query.query}")
+    logger.info(
+        f"  - access_token: {access_token[:20]}..."
+        if access_token
+        else "  - access_token: None"
+    )
+    logger.info(f"  - limit: {limit}")
+    logger.info(f"  - slack_event_context: {slack_event_context}")
+    logger.info(
+        f"  - bot_token: {bot_token[:20]}..." if bot_token else "  - bot_token: None"
+    )
+
     # query slack
     _, fast_llm = get_default_llms()
     query_strings = build_slack_queries(query, fast_llm)
 
-    # Use context-aware entities if provided, otherwise use default behavior
-    entities = context_aware_entities or {}
+    # Log Slack event context received
+    if slack_event_context:
+        logger.info(
+            f"slack_retrieval: Received Slack event context: {slack_event_context}"
+        )
+    else:
+        logger.info("slack_retrieval: No Slack event context received")
 
-    # Determine search scope based on entities
-    channels = entities.get("channels")
-    include_dm = entities.get("include_dm", False)
+    include_dm = False
+    allowed_private_channel = None
 
-    logger.info(
-        f"Slack retrieval: searching public channels only (channels={channels}, include_dm={include_dm})"
-    )
+    if slack_event_context:
+        channel_type = slack_event_context.get(
+            "channel_type"
+        )  # "im", "private_channel", "public_channel"
+        if channel_type == "im":  # DM with user
+            include_dm = True
+        if channel_type == "private_channel":
+            allowed_private_channel = slack_event_context.get("channel_id")
+            logger.info(
+                f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
+            )
 
-    # Simplified: always search all accessible channels (which will be public channels due to bot permissions)
-    logger.info("Searching all accessible public channels")
     results = run_functions_tuples_in_parallel(
         [
-            (query_slack, (query_string, query, access_token, limit))
+            (
+                query_slack,
+                (
+                    query_string,
+                    query,
+                    access_token,
+                    limit,
+                    allowed_private_channel,
+                    bot_token,
+                    include_dm,
+                ),
+            )
             for query_string in query_strings
         ]
     )
 
     slack_messages, docid_to_message = merge_slack_messages(results)
     slack_messages = slack_messages[: limit or len(slack_messages)]
+
+    # Debug: Log what Slack messages we have
+    logger.info(
+        f"slack_retrieval: Total Slack messages after merge: {len(slack_messages)}"
+    )
+    for i, msg in enumerate(slack_messages):
+        logger.info(
+            f"slack_retrieval: Message {i+1}: channel={msg.channel_id}, content={msg.text[:100]}..."
+        )
+
     if not slack_messages:
         return []
 

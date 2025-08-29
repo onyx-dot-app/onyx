@@ -32,11 +32,6 @@ SCOPES = [
     "users.profile:read",
 ]
 
-USER_SCOPES = [
-    "search:read.public",
-    "channels:history",
-]
-
 
 class SlackFederatedConnector(FederatedConnector):
     def __init__(self, credentials: dict[str, Any]):
@@ -118,7 +113,6 @@ class SlackFederatedConnector(FederatedConnector):
         params = {
             "client_id": self.slack_credentials.client_id,
             "scope": " ".join(SCOPES),
-            "user_scope": " ".join(USER_SCOPES),
             "redirect_uri": redirect_uri,
         }
 
@@ -176,7 +170,6 @@ class SlackFederatedConnector(FederatedConnector):
         }
 
         # Extract OAuth tokens - bot token from root, user token from authed_user
-        bot_token = token_response.get("access_token")  # Bot token
         user_token = authed_user.get("access_token")  # User token
         refresh_token = authed_user.get("refresh_token")
         token_type = authed_user.get("token_type", "bearer")
@@ -190,8 +183,7 @@ class SlackFederatedConnector(FederatedConnector):
             )
 
         return OAuthResult(
-            access_token=bot_token,  # Bot token for bot operations
-            user_token=user_token,  # User token for federated search
+            access_token=user_token,  # Bot token for bot operations
             token_type=token_type,
             scope=scope,
             expires_at=expires_at,

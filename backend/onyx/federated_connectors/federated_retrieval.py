@@ -37,45 +37,66 @@ def get_federated_retrieval_functions(
     user_id: UUID | None,
     source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
+    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> list[FederatedRetrievalInfo]:
-    if user_id is None:
-        # No user ID provided, checking for Slack bot context...
-        logger.warning("No user ID provided, checking for Slack bot context...")
+    logger.info(
+        f"get_federated_retrieval_functions called with document_set_names: {document_set_names}"
+    )
+
+    # Log Slack context received
+    if slack_context:
+        logger.info(
+            f"get_federated_retrieval_functions: Received Slack context: {slack_context}"
+        )
+    else:
+        logger.info("get_federated_retrieval_functions: No Slack context received")
+
+    # Check for Slack bot context first (regardless of user_id)
+    if slack_context:
+        logger.info("Slack context detected, checking for Slack bot setup...")
 
         try:
             logger.info("Fetching Slack bots...")
             slack_bots = fetch_slack_bots(db_session)
-            logger.info(f"Found {len(slack_bots)} Slack bots")
-
             tenant_slack_bot = next((bot for bot in slack_bots if bot.enabled), None)
-            logger.info(f"Tenant Slack bot found: {tenant_slack_bot is not None}")
-
-            if tenant_slack_bot:
-                logger.info(
-                    f"Bot enabled: {tenant_slack_bot.enabled}, has user_token: {bool(tenant_slack_bot.user_token)}"
-                )
 
             if tenant_slack_bot and tenant_slack_bot.user_token:
-                logger.info(
-                    "Found Slack bot with user_token, adding Slack federated search"
-                )
-                logger.info(
-                    f"Token type check - user_token starts with: "
-                    f"{tenant_slack_bot.user_token[:10] if tenant_slack_bot.user_token else 'None'}..."
-                )
-                logger.info(
-                    f"Bot token starts with: {tenant_slack_bot.bot_token[:10] if tenant_slack_bot.bot_token else 'None'}..."
-                )
+                # For Slack bot context, we'll determine search scope in slack_retrieval
+                # based on the current Slack event context
 
                 federated_retrieval_infos_slack = []
+
+                # Create a wrapper that properly handles session and context
+                def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
+                    logger.info(
+                        f"WRAPPER DEBUG: slack_wrapper called with query: {query.query}"
+                    )
+                    logger.info(
+                        f"WRAPPER DEBUG: slack_context captured value: {slack_context}"
+                    )
+                    logger.info(
+                        f"WRAPPER DEBUG: About to call slack_retrieval with slack_event_context={slack_context}"
+                    )
+
+                    result = slack_retrieval(
+                        query=query,
+                        access_token=tenant_slack_bot.user_token or "",
+                        db_session=get_session_with_current_tenant().__enter__(),
+                        limit=MAX_FEDERATED_CHUNKS,
+                        slack_event_context=slack_context,  # Captured from outer scope
+                        bot_token=tenant_slack_bot.bot_token,
+                    )
+
+                    logger.info(
+                        f"WRAPPER DEBUG: slack_retrieval returned {len(result)} chunks"
+                    )
+                    return result
+
+                slack_retrieval_function = slack_wrapper
+
                 federated_retrieval_infos_slack.append(
                     FederatedRetrievalInfo(
-                        retrieval_function=lambda query: slack_retrieval(
-                            query=query,
-                            access_token=tenant_slack_bot.user_token or "",
-                            db_session=get_session_with_current_tenant().__enter__(),
-                            limit=MAX_FEDERATED_CHUNKS,
-                        ),
+                        retrieval_function=slack_retrieval_function,
                         source=FederatedConnectorSource.FEDERATED_SLACK,
                     )
                 )
@@ -86,7 +107,19 @@ def get_federated_retrieval_functions(
 
         except Exception as e:
             logger.warning(f"Could not setup Slack bot federated search: {e}")
-            return []
+            # Fall through to regular federated connector logic
+
+    if user_id is None:
+        # No user ID provided and no Slack context, return empty
+        logger.warning(
+            "No user ID provided and no Slack context, returning empty retrieval functions"
+        )
+        return []
+
+    # Scenario 3: Regular OAuth Federated Connectors (user_id provided, check for OAuth tokens)
+    logger.info(
+        f"🔍 FEDERATED TRACE: user_id provided ({user_id}), checking OAuth federated connectors..."
+    )
 
     federated_connector__document_set_pairs = (
         (
@@ -126,9 +159,15 @@ def get_federated_retrieval_functions(
         else:
             entities = {}
 
+        logger.info(
+            f"🔍 FEDERATED TRACE: Creating federated connector for {oauth_token.federated_connector.source}"
+        )
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
+        )
+        logger.info(
+            f"🔍 FEDERATED TRACE: Adding federated retrieval function for {oauth_token.federated_connector.source}"
         )
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
@@ -141,4 +180,8 @@ def get_federated_retrieval_functions(
                 source=oauth_token.federated_connector.source,
             )
         )
+
+    logger.info(
+        f"🔍 FEDERATED TRACE: Returning {len(federated_retrieval_infos)} federated retrieval functions"
+    )
     return federated_retrieval_infos

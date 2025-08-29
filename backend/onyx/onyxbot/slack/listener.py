@@ -86,6 +86,7 @@ from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
+from onyx.onyxbot.slack.utils import get_channel_type_from_id
 from onyx.onyxbot.slack.utils import get_onyx_bot_auth_ids
 from onyx.onyxbot.slack.utils import read_slack_thread
 from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
@@ -223,7 +224,6 @@ class SlackbotHandler:
         slack_bot_tokens = SlackBotTokens(
             bot_token=bot.bot_token,
             app_token=bot.app_token,
-            user_token=bot.user_token,
         )
         tenant_bot_pair = (tenant_id, bot.id)
 
@@ -659,9 +659,21 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
         # Ensure that the message is a new message of expected type
         event_type = event.get("type")
-        if event_type not in ["app_mention", "message"]:
+        channel_type = event.get("channel_type")
+
+        # Only allow specific event types:
+        # 1. app_mention - when someone uses @OnyxBot
+        # 2. message in DMs (channel_type == "im") - when someone messages the bot directly
+        if event_type == "app_mention":
+            # Someone used @OnyxBot - allow this
+            pass
+        elif event_type == "message" and channel_type == "im":
+            # This is a DM with the bot - allow this
+            pass
+        else:
+            # Block everything else: regular messages in channels, other event types, etc.
             channel_specific_logger.info(
-                f"Ignoring non-message event of type '{event_type}' for channel '{channel}'"
+                f"Ignoring event: type='{event_type}' channel_type='{channel_type}' - not an app_mention or DM"
             )
             return False
 
@@ -865,6 +877,17 @@ def build_request_details(
         if tagged:
             logger.debug("User tagged OnyxBot")
 
+        # Build Slack context for federated search
+        # Get proper channel type from Slack API instead of relying on event.channel_type
+        channel_type = get_channel_type_from_id(client.web_client, channel)
+
+        slack_context = {
+            "channel_type": channel_type,
+            "channel_id": channel,
+            "user_id": sender_id or "unknown",
+        }
+        logger.info(f"build_request_details: Capturing Slack context: {slack_context}")
+
         if thread_ts != message_ts and thread_ts is not None:
             thread_messages = read_slack_thread(
                 tenant_id=tenant_id,
@@ -900,6 +923,7 @@ def build_request_details(
             bypass_filters=tagged,
             is_slash_command=False,
             is_bot_dm=event.get("channel_type") == "im",
+            slack_context=slack_context,  # Add Slack context for federated search
         )
 
     elif req.type == "slash_commands":
@@ -911,6 +935,18 @@ def build_request_details(
             sender, client.web_client, user_cache={}
         )
         email = expert_info.email if expert_info else None
+
+        # Get proper channel type for slash commands too
+        channel_type = get_channel_type_from_id(client.web_client, channel)
+
+        slack_context = {
+            "channel_type": channel_type,
+            "channel_id": channel,
+            "user_id": sender,
+        }
+        logger.info(
+            f"build_request_details: Capturing Slack context for slash command: {slack_context}"
+        )
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
@@ -924,6 +960,7 @@ def build_request_details(
             bypass_filters=True,
             is_slash_command=True,
             is_bot_dm=channel_name == "directmessage",
+            slack_context=slack_context,  # Add Slack context for federated search
         )
 
     raise RuntimeError("Programming fault, this should never happen.")
