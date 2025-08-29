@@ -179,7 +179,7 @@ class TestOutlineConnector:
         # Invalid credentials will be caught during validation, not credential loading
         connector.load_credentials(
             {
-                "outline_base_url": "https://httpbin.org",
+                "outline_base_url": "https://invalid.invalid",
                 "outline_api_token": "invalid",
             }
         )
