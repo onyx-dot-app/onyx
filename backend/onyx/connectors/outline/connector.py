@@ -36,9 +36,7 @@ class OutlineConnector(LoadConnector, PollConnector):
         required_keys = ["outline_api_token", "outline_base_url"]
         for key in required_keys:
             if key not in credentials:
-                raise ConnectorMissingCredentialError(
-                    f"Outline connector is missing required credential key: {key}"
-                )
+                raise ConnectorMissingCredentialError("Outline")
         
         self.outline_client = OutlineApiClient(
             api_token=credentials["outline_api_token"],
@@ -183,9 +181,7 @@ class OutlineConnector(LoadConnector, PollConnector):
         Specifically checks that we can make an authenticated request to Outline.
         """
         if not self.outline_client:
-            raise ConnectorMissingCredentialError(
-                "Outline credentials have not been loaded."
-            )
+            raise ConnectorMissingCredentialError("Outline")
 
         try:
             # Use auth.info endpoint for validation
