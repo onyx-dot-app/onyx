@@ -6,6 +6,8 @@ from requests.exceptions import RequestException
 from requests.exceptions import Timeout
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+
 
 class OutlineClientRequestFailedError(ConnectionError):
     """Custom error class for handling failed requests to the Outline API with status code and error message"""
@@ -34,10 +36,10 @@ class OutlineApiClient:
         headers = self._build_headers()
         
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=60)
+            response = requests.post(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT_SECONDS)
         except Timeout:
             raise OutlineClientRequestFailedError(
-                408, "Request timed out - server did not respond within 60 seconds"
+                408, f"Request timed out - server did not respond within {REQUEST_TIMEOUT_SECONDS} seconds"
             )
         except RequestsConnectionError as e:
             raise OutlineClientRequestFailedError(
