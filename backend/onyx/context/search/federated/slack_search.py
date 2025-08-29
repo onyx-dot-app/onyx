@@ -183,8 +183,10 @@ def query_slack(
         elif include_dm:
             # Include direct messages - no filtering needed
             pass
-        else:
-            # Default case: filter out all private channels, only allow public channels
+        elif (
+            allowed_private_channel is None and not include_dm and bot_token is not None
+        ):
+            # Slack bot context (has bot_token but no specific channel context): apply default filtering (only public channels)
             try:
                 # Use bot token if available (has full permissions), otherwise fall back to user token
                 token_to_use = bot_token if bot_token else access_token
@@ -198,7 +200,7 @@ def query_slack(
                     # This is a private channel - filter it out
                     filtered_count += 1
                     logger.debug(
-                        f"Skipping message from private channel {channel_id} (only public channels allowed)"
+                        f"Skipping message from private channel {channel_id} (only public channels allowed in Slack bot context)"
                     )
                     continue
             except Exception as e:
@@ -208,6 +210,9 @@ def query_slack(
                 )
                 filtered_count += 1
                 continue
+        else:
+            # Web chat federated search: no filtering - include all channels
+            pass
 
         # generate thread id and document id
         thread_id = (
