@@ -13,9 +13,7 @@ class OutlineClientRequestFailedError(ConnectionError):
         self.status_code = status
         self.error = error
         super().__init__(
-            "Outline Client request failed with status {status}: {error}".format(
-                status=status, error=error
-            )
+            f"Outline Client request failed with status {status}: {error}"
         )
 
 

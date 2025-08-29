@@ -165,15 +165,15 @@ class TestOutlineConnector:
         connector = OutlineConnector()
 
         # Missing everything
-        with pytest.raises(KeyError):
+        with pytest.raises(ConnectorMissingCredentialError):
             connector.load_credentials({})
 
         # Missing base URL
-        with pytest.raises(KeyError):
+        with pytest.raises(ConnectorMissingCredentialError):
             connector.load_credentials({"outline_api_token": "token"})
 
         # Missing token
-        with pytest.raises(KeyError):
+        with pytest.raises(ConnectorMissingCredentialError):
             connector.load_credentials({"outline_base_url": "https://example.com"})
 
         # Invalid credentials will be caught during validation, not credential loading
