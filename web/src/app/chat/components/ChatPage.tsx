@@ -1258,21 +1258,19 @@ export function ChatPage({
 
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8 text-text-600">
                             {showCenteredInput && (
-                              <div className="flex justify-center mb-6 transition-opacity duration-300">
-                                {/* 
-                                TODO: decide which way to go
+                              <div className="flex text-text-700 justify-center mb-6 transition-opacity duration-300">
                                 <AssistantIcon
                                   assistant={liveAssistant}
                                   size="large"
                                 />
                                 <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
                                   {liveAssistant.name}
-                                </div> */}
-                                <Logo
+                                </div>
+                                {/* <Logo
                                   height={48}
                                   width={48}
                                   className="mx-auto"
-                                />
+                                /> */}
                               </div>
                             )}
                             <ChatInputBar
