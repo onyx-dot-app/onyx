@@ -8,6 +8,9 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_1_branch impor
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_2_search import (
     web_search,
 )
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_dedup_urls import (
+    dedup_urls,
+)
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_fetch import (
     web_fetch,
 )
@@ -43,6 +46,8 @@ def dr_is_graph_builder() -> StateGraph:
 
     graph.add_node("fetch", web_fetch)
 
+    graph.add_node("dedup_urls", dedup_urls)
+
     graph.add_node("reducer", is_reducer)
 
     ### Add edges ###
@@ -51,10 +56,12 @@ def dr_is_graph_builder() -> StateGraph:
 
     graph.add_conditional_edges("branch", branching_router)
 
-    graph.add_conditional_edges("search", fetch_router)
+    graph.add_edge(start_key="search", end_key="dedup_urls")
+
+    graph.add_conditional_edges("dedup_urls", fetch_router)
 
     # Fallback edge from search to reducer when no URLs are found
-    graph.add_edge(start_key="search", end_key="reducer")
+    graph.add_edge(start_key="dedup_urls", end_key="reducer")
 
     graph.add_edge(start_key="fetch", end_key="reducer")
 
