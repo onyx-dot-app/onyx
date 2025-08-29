@@ -11,18 +11,16 @@ def dedup_urls(
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
 ) -> InternetSearchInput:
-    urls_to_open = state.urls_to_open
-    url_set = set()
+    seen_urls = set()
     deduped_urls_to_open = []
-    for query, url in urls_to_open:
-        if url not in url_set:
-            url_set.add(url)
+    for query, url in state.urls_to_open:
+        if url not in seen_urls:
+            seen_urls.add(url)
             deduped_urls_to_open.append((query, url))
     deduped_branch_question_to_urls: dict[str, list[str]] = {}
     for query, url in deduped_urls_to_open:
-        if query not in deduped_branch_question_to_urls:
-            deduped_branch_question_to_urls[query] = []
-        deduped_branch_question_to_urls[query].append(url)
+        deduped_branch_question_to_urls.setdefault(query, []).append(url)
+
     return InternetSearchInput(
         urls_to_open=[],
         parallelization_nr=state.parallelization_nr,
