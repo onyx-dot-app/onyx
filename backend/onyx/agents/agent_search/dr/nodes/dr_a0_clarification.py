@@ -40,6 +40,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.db.connector import fetch_unique_document_sources
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Tool
 from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
@@ -376,8 +377,13 @@ def clarifier(
         [tool.description for tool in available_tools.values()]
     )
 
-    all_entity_types = get_entity_types_str(active=True)
-    all_relationship_types = get_relationship_types_str(active=True)
+    kg_config = get_kg_config_settings()
+    if kg_config.KG_ENABLED and kg_config.KG_EXPOSED:
+        all_entity_types = get_entity_types_str(active=True)
+        all_relationship_types = get_relationship_types_str(active=True)
+    else:
+        all_entity_types = ""
+        all_relationship_types = ""
 
     # if not active_source_types:
     #    raise ValueError("No active source types found")

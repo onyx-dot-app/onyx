@@ -55,14 +55,13 @@ def get_dr_prompt_orchestration_templates(
         or "(No examples available)"
     )
 
-    if DRPath.KNOWLEDGE_GRAPH.value in available_tools:
-        if not entity_types_string or not relationship_types_string:
-            raise ValueError(
-                "Entity types and relationship types must be provided if the Knowledge Graph is used."
-            )
+    if DRPath.KNOWLEDGE_GRAPH.value in available_tools and (
+        entity_types_string or relationship_types_string
+    ):
+
         kg_types_descriptions = KG_TYPES_DESCRIPTIONS.build(
-            possible_entities=entity_types_string,
-            possible_relationships=relationship_types_string,
+            possible_entities=entity_types_string or "",
+            possible_relationships=relationship_types_string or "",
         )
     else:
         kg_types_descriptions = "(The Knowledge Graph is not used.)"
