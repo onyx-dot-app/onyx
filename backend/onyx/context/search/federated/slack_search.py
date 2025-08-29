@@ -412,31 +412,9 @@ def slack_retrieval(
     ) = None,  # Add Slack event context parameter
     bot_token: str | None = None,  # Add bot token parameter
 ) -> list[InferenceChunk]:
-    # ENTRY DEBUG: Log all parameters
-    logger.info("SLACK_RETRIEVAL ENTRY DEBUG: Function called with:")
-    logger.info(f"  - query: {query.query}")
-    logger.info(
-        f"  - access_token: {access_token[:20]}..."
-        if access_token
-        else "  - access_token: None"
-    )
-    logger.info(f"  - limit: {limit}")
-    logger.info(f"  - slack_event_context: {slack_event_context}")
-    logger.info(
-        f"  - bot_token: {bot_token[:20]}..." if bot_token else "  - bot_token: None"
-    )
-
     # query slack
     _, fast_llm = get_default_llms()
     query_strings = build_slack_queries(query, fast_llm)
-
-    # Log Slack event context received
-    if slack_event_context:
-        logger.info(
-            f"slack_retrieval: Received Slack event context: {slack_event_context}"
-        )
-    else:
-        logger.info("slack_retrieval: No Slack event context received")
 
     include_dm = False
     allowed_private_channel = None
