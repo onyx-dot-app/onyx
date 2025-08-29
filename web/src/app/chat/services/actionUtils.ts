@@ -5,6 +5,7 @@ import {
   UsersIcon,
   AppSearchIcon,
   GlobeIcon,
+  ImageIcon,
 } from "@/components/icons/icons";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
@@ -53,7 +54,7 @@ export function getIconForAction(
   } else if (isWebSearchTool(action)) {
     return GlobeIcon;
   } else if (isImageGenerationTool(action)) {
-    return DatabaseIcon;
+    return ImageIcon;
   } else if (isKnowledgeGraphTool(action)) {
     return DatabaseIcon;
   } else if (isOktaProfileTool(action)) {
