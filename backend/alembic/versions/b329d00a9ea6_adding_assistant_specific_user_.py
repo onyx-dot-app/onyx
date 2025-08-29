@@ -1,7 +1,7 @@
 """Adding assistant-specific user preferences
 
 Revision ID: b329d00a9ea6
-Revises: bd7c3bf8beba
+Revises: f9b8c7d6e5a4
 Create Date: 2025-08-26 23:14:44.592985
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b329d00a9ea6"
-down_revision = "bd7c3bf8beba"
+down_revision = "f9b8c7d6e5a4"
 branch_labels = None
 depends_on = None
 
