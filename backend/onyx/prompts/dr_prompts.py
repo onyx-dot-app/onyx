@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -49,7 +47,7 @@ You generally should not need to ask clarification questions about the topics be
 by the {INTERNAL_SEARCH} tool, as the retrieved documents will likely provide you with more context.
 Each request to the {INTERNAL_SEARCH} tool should largely be written as a SEARCH QUERY, and NOT as a question \
 or an instruction! Also, \
-The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. \
+The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
 TOOL_DESCRIPTION[
@@ -59,9 +57,9 @@ This tool is used to answer questions that can be answered using the information
 that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
 {MAX_DR_PARALLEL_SEARCH} queries.
 USAGE HINTS:
-  - Since {INTERNET_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
+  - Since the {INTERNET_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
 if questions of this type would be the actual goal, you should send questions to the \
-{INTERNAL_SEARCH} tool of the type '... RECENT publications...', and trust that future language model \
+{INTERNET_SEARCH} tool of the type '... RECENT publications...', and trust that future language model \
 calls will be able to find the 'latest publication' from within the results.
 """
 
@@ -998,7 +996,7 @@ focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
 was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1052,7 +1050,7 @@ focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers (if available) mention whether the topic of interest \
 was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers (if available) do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1103,7 +1101,7 @@ focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
 was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1263,7 +1261,7 @@ Here is the list of document types that are available for the search:
 {SEPARATOR_LINE}
 To interpret what the document types refer to, please refer to your own knowledge.
 
-And today is ---today---.
+And the current time is ---current_time---.
 
 With this, please try to identify mentioned source types and time filters, and \
 rewrite the query.
@@ -1326,7 +1324,7 @@ doubt, do not use the information or at minimum communicate that you are not sur
 GENERAL_DR_ANSWER_PROMPT = PromptTemplate(
     f"""\
 Below you see a user question and potentially an earlier chat history that can be referred to \
-for context. Also, today is {datetime.now().strftime("%Y-%m-%d")}.
+for context. Also, the current time is ---current_time---.
 Please answer it directly, again pointing out any uncertainties \
 you may have.
 

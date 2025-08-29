@@ -84,7 +84,7 @@ def basic_search(
     base_search_processing_prompt = BASE_SEARCH_PROCESSING_PROMPT.build(
         active_source_types_str=active_source_types_str,
         branch_query=branch_query,
-        today=datetime.now().strftime("%Y-%m-%d"),
+        current_time=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
     try:
