@@ -6,7 +6,6 @@ import {
   MenubarItem,
   MenubarMenu,
   MenubarSeparator,
-  MenubarShortcut,
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { FileUploadIcon } from "@/components/icons/icons";
@@ -21,12 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ProjectFile } from "../../projects/ProjectsContext";
+import { ProjectFile } from "../../projects/projectsService";
 
 type FilePickerProps = {
   className?: string;
   onPickRecent?: (fileId: string) => void;
   recentFiles: ProjectFile[];
+  handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isUploading: boolean;
 };
 
 // Small helper to render an icon + label row
@@ -38,37 +39,13 @@ export default function FilePicker({
   className,
   onPickRecent,
   recentFiles,
+  handleUploadChange,
+  isUploading,
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
-
-  const handleUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setIsUploading(true);
-    try {
-      // Dummy handler: just log selected file names
-      const names = Array.from(files).map((f) => f.name);
-      console.log("Selected files:", names);
-    } finally {
-      setIsUploading(false);
-      e.target.value = ""; // reset input
-    }
-  };
-
-  const handleUrlAdd = async () => {
-    const url = window.prompt("Paste a URL to add as a file");
-    if (!url) return;
-    try {
-      // Dummy handler: log URL
-      console.log("URL added:", url);
-    } catch (e) {
-      // swallow; upstream surfaces errors
-    }
-  };
 
   return (
     <div className={cn("relative", className)}>

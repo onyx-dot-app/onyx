@@ -7,15 +7,18 @@ import React, {
   useMemo,
   useState,
   ReactNode,
+  Dispatch,
+  SetStateAction,
 } from "react";
 import type { Project, ProjectFile } from "./projectsService";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
-  uploadFilesToProject as svcUploadFilesToProject,
+  uploadFiles as svcUploadFiles,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
 } from "./projectsService";
+import { FileDescriptor } from "../interfaces";
 
 export type { Project, ProjectFile } from "./projectsService";
 
@@ -26,12 +29,13 @@ interface ProjectsContextType {
   currentProjectId: string | null;
   isLoading: boolean;
   error: string | null;
-
+  currentMessageFiles: FileDescriptor[];
+  setCurrentMessageFiles: Dispatch<SetStateAction<FileDescriptor[]>>;
   setCurrentProjectId: (projectId: string | null) => void;
 
   fetchProjects: () => Promise<Project[]>;
   createProject: (name: string) => Promise<Project>;
-  uploadFilesToProject: (
+  uploadFiles: (
     files: File[],
     projectId?: string | number | null
   ) => Promise<ProjectFile[]>;
@@ -60,6 +64,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentMessageFiles, setCurrentMessageFiles] = useState<
+    FileDescriptor[]
+  >([]);
 
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     setError(null);
@@ -93,7 +100,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     [fetchProjects]
   );
 
-  const uploadFilesToProject = useCallback(
+  const uploadFiles = useCallback(
     async (
       files: File[],
       projectId?: string | number | null
@@ -101,10 +108,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       setIsLoading(true);
       setError(null);
       try {
-        const uploaded: ProjectFile[] = await svcUploadFilesToProject(
-          files,
-          projectId
-        );
+        const uploaded: ProjectFile[] = await svcUploadFiles(files, projectId);
 
         // If we uploaded into a specific project, refresh that project's files
         if (projectId) {
@@ -195,10 +199,12 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentProjectId,
       isLoading,
       error,
+      currentMessageFiles,
+      setCurrentMessageFiles,
       setCurrentProjectId,
       fetchProjects,
       createProject,
-      uploadFilesToProject,
+      uploadFiles,
       getRecentFiles,
       getFilesInProject,
       refreshProjectFiles,
@@ -211,9 +217,11 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentProjectId,
       isLoading,
       error,
+      currentMessageFiles,
+      setCurrentMessageFiles,
       fetchProjects,
       createProject,
-      uploadFilesToProject,
+      uploadFiles,
       getRecentFiles,
       getFilesInProject,
       refreshProjectFiles,
