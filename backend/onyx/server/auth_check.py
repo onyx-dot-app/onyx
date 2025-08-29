@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_admin_user, telegram_api_key_dep
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
@@ -113,6 +113,7 @@ def check_router_auth(
                     or depends_fn == current_admin_user
                     or depends_fn == current_curator_or_admin_user
                     or depends_fn == api_key_dep
+                    or depends_fn == telegram_api_key_dep
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == current_chat_accessible_user
                     or depends_fn == control_plane_dep

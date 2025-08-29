@@ -86,7 +86,7 @@ export const UserEditor = ({
 
         {onSubmit && (
           <Button
-            className="ml-3 flex-nowrap w-32"
+            className="ml-3 flex-nowrap"
             onClick={() => onSubmit(selectedUsers)}
           >
             {i18n.t(k.ADD_USERS)}

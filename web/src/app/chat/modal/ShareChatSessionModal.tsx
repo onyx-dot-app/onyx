@@ -202,7 +202,7 @@ export function ShareChatSessionModal({
           {showAdvancedOptions && (
             <>
               <div className="mb-4">
-                <Callout type="notice" title="Seed New Chat">
+                <Callout type="notice" title="Создать новый чат">
                   {i18n.t(k.GENERATE_A_LINK_TO_A_NEW_CHAT)}
                 </Callout>
               </div>

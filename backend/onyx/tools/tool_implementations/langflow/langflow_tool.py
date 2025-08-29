@@ -2,20 +2,20 @@ import json
 from typing import Any, cast, Generator
 
 import requests
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder, default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import LANGFLOW_BASE_URL, LANGFLOW_API_KEY
+from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.tools.message import ToolCallSummary
 from onyx.utils.special_types import JSON_ro
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.models import PreviousMessage
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import TOOL_ARG_SYSTEM_PROMPT, TOOL_ARG_USER_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,7 +23,8 @@ LANGFLOW_RESPONSE_SUMMARY_ID = "langflow_response_summary"
 
 
 class LangflowResponseSummary(BaseModel):
-    tool_result: dict
+    tool_result: str
+    tool_name: str
 
 
 class LangflowTool(Tool):
@@ -34,7 +35,7 @@ class LangflowTool(Tool):
     def __init__(self, db_session: Session, pipeline_id: str, prompt_config: PromptConfig, llm_config: LLMConfig):
         self.db_session = db_session
         self.pipeline_id = pipeline_id
-        self.base_url = LANGFLOW_BASE_URL + "/api/v1/"
+        self.base_url = LANGFLOW_BASE_URL
         self.prompt_config = prompt_config
         self.llm_config = llm_config
 
@@ -71,9 +72,9 @@ class LangflowTool(Tool):
 
     def build_tool_message_content(
             self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
+    ) -> str:
         response = cast(LangflowResponseSummary, args[0].response)
-        return json.dumps(response.tool_result)
+        return response.tool_result
 
     def get_args_for_non_tool_calling_llm(
             self,
@@ -83,54 +84,18 @@ class LangflowTool(Tool):
             force_run: bool = True,
     ) -> dict[str, Any] | None:
 
-        args_result = llm.invoke(
-            [
-                SystemMessage(content=TOOL_ARG_SYSTEM_PROMPT),
-                HumanMessage(
-                    content=TOOL_ARG_USER_PROMPT.format(
-                        history=history,
-                        query=query,
-                        tool_name=self.name,
-                        tool_description=self.description,
-                        tool_args=self.tool_definition()["function"]["parameters"],
-                    )
-                ),
-            ]
-        )
-        args_result_str = cast(str, args_result.content)
-        logger.info(args_result_str)
-        try:
-            return json.loads(args_result_str.strip())
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```
-        try:
-            return json.loads(args_result_str.strip("```"))
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```json
-        try:
-            return json.loads(args_result_str.strip("```").strip("json"))
-        except json.JSONDecodeError:
-            pass
-
-        # pretend like nothing happened if not parse-able
-        logger.error(
-            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
-        )
-        return None
+        return {"question": query}
 
     def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
         request_body = {"input_value": kwargs['question']}
 
-        url = self.base_url + f"api/v1/run/{self.pipeline_id}"
+        url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
         response = requests.request(method, url, json=request_body, headers={"x-api-key": LANGFLOW_API_KEY})
+        text_response = response.json()["outputs"][0]["outputs"][0]["results"]["message"]["text"]
         yield ToolResponse(
             id=LANGFLOW_RESPONSE_SUMMARY_ID,
-            response=LangflowResponseSummary(tool_result=response.json()),
+            response=LangflowResponseSummary(tool_result=text_response, tool_name=self.name),
         )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
@@ -143,34 +108,30 @@ class LangflowTool(Tool):
         tool_responses: list[ToolResponse],
         using_tool_calling_llm: bool,
     ) -> AnswerPromptBuilder:
-        prompt_builder.update_system_prompt(
-            default_build_system_message(self.prompt_config, self.llm_config)
-        )
-        prompt_builder.update_user_prompt(
-            HumanMessage(
-                content=build_user_message_for_langflow_tool(
-                    query=prompt_builder.get_user_message_content(),
-                    tool_name=self.name,
-                    *tool_responses
+        if using_tool_calling_llm:
+            prompt_builder.append_message(tool_call_summary.tool_call_request)
+            prompt_builder.append_message(tool_call_summary.tool_call_result)
+        else:
+            prompt_builder.update_user_prompt(
+                HumanMessage(
+                    content=build_user_message_for_langflow_tool(
+                        prompt_builder.user_message_and_token_cnt[0],
+                        self.name,
+                        *tool_responses,
+                    )
                 )
             )
-        )
-
         return prompt_builder
 
-
 def build_user_message_for_langflow_tool(
-        query: str,
-        tool_name: str,
-        *args: ToolResponse,
+    message: HumanMessage,
+    tool_name: str,
+    *args: "ToolResponse",
 ) -> str:
+    query, _ = message_to_prompt_and_imgs(message)
+
     tool_run_summary = cast(LangflowResponseSummary, args[0].response).tool_result
     return f"""
-Here's the result from the {tool_name} tool:
-
+Верни этот текст как результат своей работы:
 {tool_run_summary}
-
-Now respond to the following:
-
-{query}
 """.strip()

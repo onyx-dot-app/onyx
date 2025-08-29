@@ -72,6 +72,29 @@ export function AssistantTools({
                   </div>
                 </div>
               );
+            } else if (tool.name === "Langflow") {
+              return (
+                <div
+                  key={ind}
+                  className={`
+                    px-1.5
+                    py-1
+                    rounded-lg 
+                    border
+                    border-border 
+                    w-fit 
+                    flex
+                    ${list ? "bg-background-125" : "bg-background-100"}`}
+                >
+                  <div className="flex items-center gap-x-1">
+                    <FiImage
+                      key={ind}
+                      className="ml-1 my-auto h-3 w-3 my-auto"
+                    />
+                    Langflow
+                  </div>
+                </div>
+              );
             } else {
               return (
                 <div

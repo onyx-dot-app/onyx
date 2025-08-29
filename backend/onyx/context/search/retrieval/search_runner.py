@@ -6,6 +6,7 @@ from nltk.corpus import stopwords  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
+from onyx.chat.models import LlmDoc
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -83,6 +84,27 @@ def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
         return text_trimmed or word_tokens
     except Exception:
         return keywords
+
+
+def combine_inference_chunks(inf_chunks: list[InferenceChunk]) -> LlmDoc:
+    if not inf_chunks:
+        raise ValueError("Cannot combine empty list of chunks")
+
+    # Use the first link of the document
+    first_chunk = inf_chunks[0]
+    chunk_texts = [chunk.content for chunk in inf_chunks]
+    return LlmDoc(
+        document_id=first_chunk.document_id,
+        content="\n".join(chunk_texts),
+        blurb=first_chunk.blurb,
+        semantic_identifier=first_chunk.semantic_identifier,
+        source_type=first_chunk.source_type,
+        metadata=first_chunk.metadata,
+        updated_at=first_chunk.updated_at,
+        link=first_chunk.source_links[0] if first_chunk.source_links else None,
+        source_links=first_chunk.source_links,
+        match_highlights=first_chunk.match_highlights
+    )
 
 
 def combine_retrieval_results(

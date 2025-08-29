@@ -69,6 +69,8 @@ class PersonaUpsertRequest(BaseModel):
     prompt_ids: list[int]
     llm_filter_extraction: bool
     llm_relevance_filter: bool
+    pipeline_id: str | None = None
+    template_file: bytes | None = None
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
@@ -113,6 +115,8 @@ class PersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     num_chunks: float | None = None
+    pipeline_id: str | None = None
+    template_file: bytes | None = None
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -150,6 +154,8 @@ class PersonaSnapshot(BaseModel):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
+            pipeline_id=persona.pipeline_id,
+            template_file=persona.template_file,
         )
 
 

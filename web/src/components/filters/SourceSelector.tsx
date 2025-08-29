@@ -14,7 +14,6 @@ import {
   FiX,
 } from "react-icons/fi";
 import { DateRangeSelector } from "@/components/search/DateRangeSelector";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { TagFilter } from "@/components/search/filtering/TagFilter";
@@ -25,6 +24,7 @@ import { CalendarIcon } from "lucide-react";
 import { getTimeAgoString } from "@/lib/dateUtils";
 import { Separator } from "@/components/ui/separator";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
+import { DateRangePickerValue } from "@tremor/react";
 
 const SectionTitle = ({ children }: { children: string }) => (
   <div className="font-bold text-xs mt-2 flex">{children}</div>
@@ -147,7 +147,9 @@ export function SourceSelector({
                 selected={
                   timeRange
                     ? {
+                        // @ts-ignore
                         from: new Date(timeRange.from),
+                        // @ts-ignore
                         to: new Date(timeRange.to),
                       }
                     : undefined
@@ -535,7 +537,8 @@ export function HorizontalSourceSelector({
             mode="range"
             selected={
               timeRange
-                ? { from: new Date(timeRange.from), to: new Date(timeRange.to) }
+                ? // @ts-ignore
+                  { from: new Date(timeRange.from), to: new Date(timeRange.to) }
                 : undefined
             }
             onSelect={(daterange) => {

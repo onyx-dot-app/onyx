@@ -50,7 +50,7 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.db.engine import warm_up_connections
 from onyx.server.api_key.api import router as api_key_router
-from onyx.server.auth_check import check_router_auth
+from onyx.server.features.knowledge_map.api import router as knowledge_map_router
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
@@ -65,6 +65,7 @@ from onyx.server.features.input_prompt.api import (
     basic_router as input_prompt_router,
 )
 from onyx.server.features.notifications.api import router as notification_router
+from onyx.server.features.telegram.api import basic_router as telegram_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
@@ -341,6 +342,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, persona_router)
     include_router_with_global_prefix_prepended(application, admin_persona_router)
     include_router_with_global_prefix_prepended(application, notification_router)
+    include_router_with_global_prefix_prepended(application, telegram_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
     include_router_with_global_prefix_prepended(application, state_router)
@@ -371,6 +373,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
     include_router_with_global_prefix_prepended(application, query_router_ee)
+
+
+
+    include_router_with_global_prefix_prepended(application, knowledge_map_router)
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(

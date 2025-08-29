@@ -39,7 +39,16 @@ export default function TextView({
       "text/x-rst",
       "text/x-org",
       "txt",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
     ];
+
+    // Special case: .docx is not a markdown format, but we want to support it for preview
+    if (
+      mimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      return true;
+    }
 
     return markdownFormats.some((format) => mimeType.startsWith(format));
   };
@@ -62,6 +71,7 @@ export default function TextView({
       "image/jpeg",
       "image/gif",
       "image/svg+xml",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
     ];
 
     return supportedFormats.some((format) => mimeType.startsWith(format));

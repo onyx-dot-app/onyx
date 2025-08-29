@@ -18,7 +18,7 @@ import {
   SettingsIconSkeleton,
   PaintingIconSkeleton,
   ZoomInIconSkeleton,
-  SlackIconSkeleton,
+  KnowledgeMapIcon,
   DocumentSetIconSkeleton,
   AssistantsIconSkeleton,
   SearchIcon,
@@ -192,6 +192,17 @@ export function ClientLayout({
                     ),
 
                     link: i18n.t(k.ADMIN_DOCUMENTS_FEEDBACK),
+                  },
+                  {
+                    name: (
+                      <div className="flex">
+                        <KnowledgeMapIcon className="text-text-700" size={18} />
+
+                        <div className="ml-1">Карта знаний</div>
+                      </div>
+                    ),
+
+                    link: "/admin/documents/knowledge_maps",
                   },
                 ],
               },

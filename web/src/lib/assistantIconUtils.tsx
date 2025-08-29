@@ -60,9 +60,8 @@ export function generateRandomIconShape(): GridShape {
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
-          y + 12
-        } Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12
+          } Z `;
       }
     }
   }
@@ -111,9 +110,8 @@ export function createSVG(
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
-          y + 12
-        } Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12
+          } Z `;
       }
     }
   }
@@ -178,6 +176,7 @@ export const constructMiniFiedPersona = (
     groups: [],
     user_file_ids: [],
     user_folder_ids: [],
+    knowledge_maps: []
   };
 };
 

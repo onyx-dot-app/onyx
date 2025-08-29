@@ -211,7 +211,9 @@ export function SimplifiedChatInputBar({
 
           {filterManager && (
             <HorizontalSourceSelector
+              // @ts-ignore
               timeRange={filterManager.timeRange}
+              // @ts-ignore
               setTimeRange={filterManager.setTimeRange}
               selectedSources={filterManager.selectedSources}
               setSelectedSources={filterManager.setSelectedSources}

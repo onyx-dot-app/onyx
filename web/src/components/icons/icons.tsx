@@ -13,6 +13,7 @@ import {
   Question,
   Gear,
   ArrowSquareOut,
+  MapTrifold,
 } from "@phosphor-icons/react";
 import {
   FiChevronsDown,
@@ -33,6 +34,7 @@ import {
   FiCpu,
   FiInfo,
   FiBarChart2,
+  FiBookOpen,
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
@@ -522,6 +524,13 @@ export const BrainIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return <Brain size={size} className={className} />;
+};
+
+export const KnowledgeMapIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <MapTrifold size={size} className={className} />;
 };
 
 export const EditIcon = ({
@@ -1757,7 +1766,12 @@ export const BookmarkIcon = ({
     </svg>
   );
 };
-
+export const BookOpen = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <FiBookOpen size={size} className={className} />;
+};
 export const BookIcon = ({
   size = 16,
   className = defaultTailwindCSS,

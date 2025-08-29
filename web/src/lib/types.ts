@@ -1,6 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
 interface UserPreferences {
@@ -14,7 +13,23 @@ interface UserPreferences {
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
 }
-
+export interface ConnectorBase<T> {
+  name: string;
+  input_type: ValidInputTypes;
+  source: ValidSources;
+  connector_specific_config: T;
+  refresh_freq: number | null;
+  prune_freq: number | null;
+  indexing_start: Date | null;
+  access_type: string;
+  groups?: number[];
+}
+export interface Connector<T> extends ConnectorBase<T> {
+  id: number;
+  credential_ids: number[];
+  time_created: string;
+  time_updated: string;
+}
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -22,7 +37,6 @@ export enum UserRole {
   CURATOR = "curator",
   GLOBAL_CURATOR = "global_curator",
   EXT_PERM_USER = "ext_perm_user",
-  SLACK_USER = "slack_user",
 }
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
@@ -32,7 +46,6 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.CURATOR]: "Curator",
   [UserRole.LIMITED]: "Limited",
   [UserRole.EXT_PERM_USER]: "External Permissioned User",
-  [UserRole.SLACK_USER]: "Slack User",
 };
 
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
@@ -41,8 +54,6 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
   [UserRole.GLOBAL_CURATOR]:
     "Global Curator users can perform admin actions for all groups they are a member of",
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
-  [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use SmartSearch via Slack",
 };
 
 export interface User {

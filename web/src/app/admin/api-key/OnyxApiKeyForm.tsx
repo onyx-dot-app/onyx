@@ -8,12 +8,17 @@ import {
   TextFormField,
 } from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
+import { FiPlus, FiX } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";
+import { SearchMultiSelectDropdown } from "@/components/Dropdown";
+import { useUsers } from "@/lib/hooks";
+import { UsersIcon } from "@/components/icons/icons";
+import { useState } from "react";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -28,7 +33,21 @@ export const OnyxApiKeyForm = ({
   onCreateApiKey,
   apiKey,
 }: OnyxApiKeyFormProps) => {
+  const [selectedUser, setSelectedUser] = useState<
+    | {
+        name: string;
+        value: string;
+      }
+    | undefined
+  >();
+
   const isUpdate = apiKey !== undefined;
+
+  const {
+    data: users,
+    isLoading: userIsLoading,
+    error: usersError,
+  } = useUsers({ includeApiKeys: true });
 
   return (
     <Modal onOutsideClick={onClose} width="w-2/6">
@@ -51,7 +70,10 @@ export const OnyxApiKeyForm = ({
             const payload = {
               ...values,
               role: values.role as UserRole, // Assign the role directly as a UserRole type
+              user_id: selectedUser?.value,
             };
+
+            console.log("TEST API_KEY", payload, selectedUser);
 
             let response;
             if (isUpdate) {
@@ -116,6 +138,55 @@ export const OnyxApiKeyForm = ({
                   },
                 ]}
               />
+
+              <SearchMultiSelectDropdown
+                options={
+                  !userIsLoading && users
+                    ? users.accepted
+                        .filter((user) => selectedUser?.value !== user.id)
+                        .filter((user) => !user.email.includes("api_key"))
+                        .map((user) => {
+                          return {
+                            name: user.email,
+                            value: user.id,
+                          };
+                        })
+                    : []
+                }
+                onSelect={(option) => {
+                  // @ts-ignore
+                  setSelectedUser(option);
+                }}
+                itemComponent={({ option }) => (
+                  <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
+                    <UsersIcon className="mr-2 my-auto" />
+                    {option.name}
+                    <div className="ml-auto my-auto">
+                      <FiPlus />
+                    </div>
+                  </div>
+                )}
+              />
+
+              {selectedUser?.name && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-text-700 mb-2">
+                    {i18n.t(k.SELECTED_USERS)}
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    <div
+                      key={selectedUser?.value}
+                      onClick={() => {
+                        setSelectedUser(undefined);
+                      }}
+                      className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
+                    >
+                      {selectedUser?.name}
+                      <FiX className="ml-2 text-blue-500" />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <Button
                 type="submit"

@@ -281,7 +281,7 @@ export function ChatPage({
     const newSearchParams = new URLSearchParams(searchParamsString);
     const message = newSearchParams?.get("user-prompt");
 
-    filterManager.buildFiltersFromQueryString(
+    filterManager?.buildFiltersFromQueryString(
       newSearchParams.toString(),
       availableSources,
       documentSets.map((ds) => ds.name),

@@ -40,6 +40,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
@@ -240,9 +241,15 @@ def construct_tools(
                         llm_config=llm.config
                     )
                 ]
+            elif tool_cls.__name__ == KnowledgeMapTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    KnowledgeMapTool(
+                        db_session=db_session,
+                        llm=llm
+                    )
+                ]
             elif tool_cls.__name__ == ResumeTool.__name__:
-                random_characters = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-                template_file_name = f'resume_{random_characters}.docx'
+                template_file_name = f'resume_{persona.name}.docx'
                 template_file_name, persona.template_file = minio_put_template_bytes(
                     template_file_name,
                     persona.template_file
@@ -252,7 +259,9 @@ def construct_tools(
                         db_session,
                         pipeline_id=persona.pipeline_id,
                         docs=user_file_files,
-                        template_file=persona.template_file,
+                        template_file=template_file_name,
+                        prompt_config=prompt_config,
+                        llm_config=llm.config
                     )
                 ]
 

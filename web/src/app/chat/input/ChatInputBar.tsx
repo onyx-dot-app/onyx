@@ -692,6 +692,7 @@ export function ChatInputBar({
                       key="time-range"
                       icon={<CalendarIcon size={12} />}
                       title={`${getFormattedDateRangeString(
+                        // @ts-ignore
                         filterManager.timeRange.from,
                         filterManager.timeRange.to
                       )}`}
@@ -820,7 +821,7 @@ export function ChatInputBar({
                         toggle
                         flexPriority="stiff"
                         name={getDisplayNameForModel(
-                          llmManager?.currentLlm.modelName || "Models"
+                          llmManager?.currentLlm.modelName || "Модели"
                         )}
                         Icon={getProviderIcon(
                           llmManager?.currentLlm.provider || "anthropic",

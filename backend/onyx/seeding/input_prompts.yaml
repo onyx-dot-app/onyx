@@ -1,24 +1,24 @@
 input_prompts:
   - id: -5
-    prompt: "Elaborate"
-    content: "Elaborate on the above, give me a more in depth explanation."
+    prompt: "Подробнее"
+    content: "Раскройте вышеизложенное более подробно."
     active: true
     is_public: true
 
   - id: -4
-    prompt: "Reword"
-    content: "Help me rewrite the following politely and concisely for professional communication:\n"
+    prompt: "Перефразировать"
+    content: "Помогите мне переписать следующее вежливо и кратко для профессионального общения:\n"
     active: true
     is_public: true
 
   - id: -3
-    prompt: "Email"
-    content: "Write a professional email for me including a subject line, signature, etc. Template the parts that need editing with [ ]. The email should cover the following points:\n"
+    prompt: "Электронное письмо"
+    content: "Напишите мне профессиональное электронное письмо, включая тему, подпись и т. д. Обозначьте части, требующие редактирования, скобками [ ]. Письмо должно охватывать следующие моменты:\n"
     active: true
     is_public: true
 
   - id: -2
-    prompt: "Debug"
-    content: "Provide step-by-step troubleshooting instructions for the following issue:\n"
+    prompt: "Отладка"
+    content: "Предоставьте пошаговые инструкции по устранению следующей проблемы:\n"
     active: true
     is_public: true

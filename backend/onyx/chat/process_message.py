@@ -137,6 +137,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LANGFLOW_RESPONSE_SUMMARY_ID, \
     LangflowResponseSummary, LangflowTool
 from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool, ResumeResponseSummary
@@ -303,6 +304,9 @@ def _get_force_search_settings(
 
     if any(isinstance(tool, LangflowTool) for tool in tools):
         return ForceUseTool(force_use=True, tool_name=LangflowTool.NAME)
+
+    if any(isinstance(tool, KnowledgeMapTool) for tool in tools):
+        return ForceUseTool(force_use=True, tool_name=KnowledgeMapTool.NAME)
 
     if any(isinstance(tool, ResumeTool) for tool in tools):
         return ForceUseTool(force_use=True, tool_name=ResumeTool.NAME)
@@ -1238,61 +1242,17 @@ def stream_chat_message_objects(
                 elif packet.id == LANGFLOW_RESPONSE_SUMMARY_ID:
                     tool_response = cast(LangflowResponseSummary, packet.response)
 
-                    if (
-                        tool_response.response_type == "image"
-                        or tool_response.response_type == "csv"
-                    ):
-                        file_ids = tool_response.tool_result.file_ids
-                        info.ai_message_files.extend(
-                            [
-                                FileDescriptor(
-                                    id=str(file_id),
-                                    type=(
-                                        ChatFileType.IMAGE
-                                        if tool_response.response_type == "image"
-                                        else ChatFileType.CSV
-                                    ),
-                                )
-                                for file_id in file_ids
-                            ]
-                        )
-                        yield FileChatDisplay(
-                            file_ids=[str(file_id) for file_id in file_ids]
-                        )
-                    else:
-                        yield LangflowToolResponse(
-                            response=tool_response.tool_result,
-                            tool_name=tool_response.tool_name,
-                        )
+                    yield LangflowToolResponse(
+                        response=tool_response.tool_result,
+                        tool_name=tool_response.tool_name,
+                    )
                 elif packet.id == LANGFLOW_RESPONSE_SUMMARY_ID:
                     tool_response = cast(ResumeResponseSummary, packet.response)
 
-                    if (
-                        tool_response.response_type == "image"
-                        or tool_response.response_type == "csv"
-                    ):
-                        file_ids = tool_response.tool_result.file_ids
-                        info.ai_message_files.extend(
-                            [
-                                FileDescriptor(
-                                    id=str(file_id),
-                                    type=(
-                                        ChatFileType.IMAGE
-                                        if tool_response.response_type == "image"
-                                        else ChatFileType.CSV
-                                    ),
-                                )
-                                for file_id in file_ids
-                            ]
-                        )
-                        yield FileChatDisplay(
-                            file_ids=[str(file_id) for file_id in file_ids]
-                        )
-                    else:
-                        yield ResumeToolResponse(
-                            response=tool_response.tool_result,
-                            tool_name=tool_response.tool_name,
-                        )
+                    yield ResumeToolResponse(
+                        response=tool_response.tool_result,
+                        tool_name=tool_response.tool_name,
+                    )
                 elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
                     custom_tool_response = cast(CustomToolCallSummary, packet.response)
 

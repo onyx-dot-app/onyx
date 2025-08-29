@@ -100,21 +100,34 @@ import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
+import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
 }
 
 function findLangflowTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "Langflow");
+  return tools.find((tool) => tool.in_code_tool_id === "LangflowTool");
+}
+
+function findDocFormatterTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "ResumeTool");
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
 }
 
+function findLanglfowTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "Langflow");
+}
+
 function findInternetSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
+}
+
+function findKnowledgeMapTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "KnowledgeMapTool");
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -132,6 +145,7 @@ export function AssistantEditor({
   existingPersona,
   ccPairs,
   documentSets,
+  knowledgeMaps,
   user,
   defaultPublic,
   llmProviders,
@@ -142,6 +156,7 @@ export function AssistantEditor({
   existingPersona?: FullPersona | null;
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
+  knowledgeMaps: KnowledgeMapCreationRequest[];
   user: User | null;
   defaultPublic: boolean;
   llmProviders: LLMProviderView[];
@@ -223,23 +238,31 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const langflowTool = findLangflowTool(tools);
+  const docFormatterTool = findDocFormatterTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
+  const knowledgeMapTool = findKnowledgeMapTool(tools);
+
+  console.log("TEST LANGFLOW", tools);
 
   const customTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== docFormatterTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
   );
 
   const availableTools = [
     ...customTools,
     ...(searchTool ? [searchTool] : []),
     ...(langflowTool ? [langflowTool] : []),
+    ...(docFormatterTool ? [docFormatterTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
+    ...(knowledgeMapTool ? [knowledgeMapTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -249,6 +272,8 @@ export function AssistantEditor({
   const { selectedFiles, selectedFolders } = useDocumentsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
+
+  console.log("existingPersona", existingPersona);
 
   const initialValues = {
     name: existingPersona?.name ?? "",
@@ -260,6 +285,10 @@ export function AssistantEditor({
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
       ([] as number[]),
+    knowledge_maps_ids:
+      existingPersona?.knowledge_maps?.map(
+        (knowledge_map) => knowledge_map.id
+      ) ?? ([] as number[]),
     num_chunks: existingPersona?.num_chunks ?? null,
     search_start_date: existingPersona?.search_start_date
       ? existingPersona?.search_start_date.toString().split("T")[0]
@@ -288,12 +317,16 @@ export function AssistantEditor({
     selectedGroups: existingPersona?.groups ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
+
     knowledge_source:
       (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
       (existingPersona?.user_folder_ids?.length ?? 0) > 0
         ? "user_files"
         : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
+    pipeline_id: existingPersona?.pipeline_id,
+    use_default: existingPersona?.use_default,
+    template_file: null,
   };
 
   interface AssistantPrompt {
@@ -555,8 +588,14 @@ export function AssistantEditor({
           const langflowToolEnabled = langflowTool
             ? enabledTools.includes(langflowTool.id)
             : false;
+          const docFormatterToolEnabled = docFormatterTool
+            ? enabledTools.includes(docFormatterTool.id)
+            : false;
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
+            : false;
+          const knowledgeMapToolEnabled = knowledgeMapTool
+            ? enabledTools.includes(knowledgeMapTool.id)
             : false;
 
           // if disable_retrieval is set, set num_chunks to 0
@@ -570,6 +609,8 @@ export function AssistantEditor({
               message: message.message,
               name: message.message,
             }));
+
+          console.log("test values", values);
 
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.selectedGroups;
@@ -669,6 +710,27 @@ export function AssistantEditor({
 
           function langflowToolEnabled() {
             return langflowTool && values.enabled_tools_map[langflowTool.id]
+              ? true
+              : false;
+          }
+
+          function docFormatterToolEnabled() {
+            return docFormatterTool &&
+              values.enabled_tools_map[docFormatterTool.id]
+              ? true
+              : false;
+          }
+
+          console.log("TEST LANGFLOW", langflowTool, langflowToolEnabled());
+          console.log(
+            "TEST LANGFLOW",
+            docFormatterTool,
+            docFormatterToolEnabled()
+          );
+
+          function knowledgeMapToolEnabled() {
+            return knowledgeMapTool &&
+              values.enabled_tools_map[knowledgeMapTool.id]
               ? true
               : false;
           }
@@ -1074,36 +1136,6 @@ export function AssistantEditor({
                             )}
                           </div>
                         )}
-                      {langflowTool && (
-                        <>
-                          <BooleanFormField
-                            name={`enabled_tools_map.${langflowTool.id}`}
-                            label="Инструмент Langflow"
-                            subtext="Инструмент Langflow."
-                            onChange={() => {
-                              toggleToolInValues(langflowTool.id);
-                            }}
-                          />
-
-                          {langflowToolEnabled() && (
-                            <div className="pl-4 border-l-2 ml-4 border-border">
-                              {ccPairs.length > 0 && (
-                                <>
-                                  <TextFormField
-                                    name="pipeline_id"
-                                    label="Id пайплайна"
-                                  />
-
-                                  <BooleanFormField
-                                    name="use_default"
-                                    label="Использовать по умолчанию"
-                                  />
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
                     </div>
                   )}
 
@@ -1134,6 +1166,92 @@ export function AssistantEditor({
                       </>
                     )}
 
+                    {langflowTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${langflowTool.id}`}
+                          label="Инструмент Langflow"
+                          subtext="Инструмент интеграции с визуальным нодовым редаактором."
+                          onChange={() => {
+                            toggleToolInValues(langflowTool.id);
+                          }}
+                        />
+
+                        {langflowToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
+                            <>
+                              <TextFormField
+                                name="pipeline_id"
+                                label="Id пайплайна"
+                                placeholder="Введите идентификатор пайплайна"
+                                subtext="Идентификатор пайплайна Langflow"
+                              />
+
+                              <BooleanFormField
+                                name="use_default"
+                                label="Использовать инструмент для всех запросов"
+                                subtext="Если включено, все запросы после ввода будут отправляться в инструмент без предварительной проверки необходимости его использования"
+                              />
+                            </>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {docFormatterTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${docFormatterTool.id}`}
+                          label="Doc Formatter"
+                          subtext="Инструмент резюме"
+                          onChange={() => {
+                            toggleToolInValues(docFormatterTool.id);
+                          }}
+                        />
+
+                        {docFormatterToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
+                            <>
+                              <TextFormField
+                                name="pipeline_id"
+                                label="Id пайплайна"
+                                placeholder="Введите идентификатор пайплайна"
+                                subtext="Идентификатор пайплайна Langflow"
+                              />
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex justify-start gap-x-2"
+                                onClick={() => {
+                                  const fileInput =
+                                    document.createElement("input");
+                                  fileInput.type = "file";
+                                  fileInput.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement)
+                                      .files?.[0];
+                                    if (file) {
+                                      setFieldValue("template_file", file);
+                                    }
+                                  };
+                                  fileInput.click();
+                                }}
+                              >
+                                <CameraIcon size={14} />
+                                Загрузить файл шаблона
+                              </Button>
+                              {values.template_file && (
+                                <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+                                  {values.template_file.name}
+                                </div>
+                              )}
+                            </>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {internetSearchTool && (
                       <>
                         <BooleanFormField
@@ -1141,6 +1259,127 @@ export function AssistantEditor({
                           label={internetSearchTool.display_name}
                           subtext="Получайте доступ к информации в режиме реального времени и ищите в Интернете актуальные результаты"
                         />
+                      </>
+                    )}
+
+                    {knowledgeMapTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${knowledgeMapTool.id}`}
+                          label="KnowledgeMapTool"
+                          subtext="Инструмент для поиска информации в карте знаний по запросу пользователя."
+                          onChange={() => {
+                            toggleToolInValues(knowledgeMapTool?.id);
+                          }}
+                        />
+
+                        {knowledgeMapToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border">
+                            {ccPairs.length > 0 && (
+                              <>
+                                <Label>Карты знаний</Label>
+
+                                <div>
+                                  <SubLabel>
+                                    Выберите Карты знаний, в которых цифровой
+                                    помощник должен искать ответ. Должна быть
+                                    выбрана хотя бы одна Карта знаний.
+                                  </SubLabel>
+                                </div>
+                                {knowledgeMaps.length > 0 ? (
+                                  <FieldArray
+                                    name="knowledge_maps_ids"
+                                    render={(arrayHelpers: ArrayHelpers) => (
+                                      <div>
+                                        <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                          {knowledgeMaps.map((map) => {
+                                            const ind =
+                                              values.knowledge_maps_ids?.indexOf(
+                                                map.id
+                                              );
+                                            let isSelected = ind !== -1;
+
+                                            return (
+                                              <div
+                                                key={map.id}
+                                                className={
+                                                  `
+                                                      w-72
+                                                      px-3 
+                                                      py-1
+                                                      rounded-lg 
+                                                      border
+                                                      border-border
+                                                      flex ` +
+                                                  (isSelected
+                                                    ? " bg-hover"
+                                                    : " bg-background hover:bg-hover-light")
+                                                }
+                                                // onClick={() => {
+                                                //   console.log(
+                                                //     "TEST",
+                                                //     arrayHelpers
+                                                //   );
+                                                //   if (isSelected) {
+                                                //     arrayHelpers.remove(ind);
+                                                //   } else {
+                                                //     arrayHelpers?.push(
+                                                //       map?.id || 1
+                                                //     );
+                                                //   }
+                                                // }}
+                                              >
+                                                <div className="flex w-full">
+                                                  <div className="flex flex-col h-full">
+                                                    <div className="font-bold">
+                                                      {map.name}
+                                                    </div>
+                                                    <div className="text-xs">
+                                                      {map.description}
+                                                    </div>
+                                                    <div className="flex gap-x-2 pt-1 mt-auto mb-1"></div>
+                                                  </div>
+                                                  <div className="ml-auto my-auto">
+                                                    <div className="pl-1">
+                                                      <Checkbox
+                                                        checked={isSelected}
+                                                        onClick={() => {
+                                                          if (isSelected) {
+                                                            arrayHelpers.remove(
+                                                              ind
+                                                            );
+                                                          } else {
+                                                            arrayHelpers?.push(
+                                                              map?.id || 1
+                                                            );
+                                                          }
+                                                        }}
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  />
+                                ) : (
+                                  <i className="text-sm">
+                                    Нет доступных карт знаний
+                                    {user?.role !== "admin" && (
+                                      <>
+                                        Если эта функция будет вам полезна,
+                                        обратитесь за помощью к администраторам.
+                                      </>
+                                    )}
+                                  </i>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
 

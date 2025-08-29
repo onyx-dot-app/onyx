@@ -85,6 +85,7 @@ export function SelectedFilterDisplay({
         {timeRange &&
           (timeRange.selectValue || timeRange.from || timeRange.to) && (
             <SelectedFilter onClick={() => setTimeRange(null)}>
+              {/* @ts-ignore */}
               <div className="flex">{displayTimeRange(timeRange)}</div>
             </SelectedFilter>
           )}
