@@ -108,7 +108,6 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
-    user_file: int | None
     user_folder: int | None
     boost: int
     aggregated_chunk_boost_factor: float
@@ -119,7 +118,6 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         index_chunk: IndexChunk,
         access: "DocumentAccess",
         document_sets: set[str],
-        user_file: int | None,
         user_folder: int | None,
         boost: int,
         aggregated_chunk_boost_factor: float,
@@ -130,7 +128,6 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             **index_chunk_data,
             access=access,
             document_sets=document_sets,
-            user_file=user_file,
             user_folder=user_folder,
             boost=boost,
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
@@ -223,8 +220,8 @@ class BuildMetadataAwareChunksResult(BaseModel):
     chunks: list[DocMetadataAwareIndexChunk]
     doc_id_to_previous_chunk_cnt: dict[str, int]
     doc_id_to_new_chunk_cnt: dict[str, int]
-    user_file_id_to_raw_text: dict[int, str]
-    user_file_id_to_token_count: dict[int, int | None]
+    user_file_id_to_raw_text: dict[str, str]
+    user_file_id_to_token_count: dict[str, int | None]
 
 
 class IndexingBatchAdapter(Protocol):

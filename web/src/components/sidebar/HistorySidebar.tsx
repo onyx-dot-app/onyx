@@ -55,6 +55,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
+import Projects from "./Projects";
 
 interface HistorySidebarProps {
   liveAssistant?: MinimalPersonaSnapshot | null;
@@ -422,6 +423,16 @@ export const HistorySidebar = React.memo(
                 folders={folders}
               />
             </div>
+            <Projects />
+            <PagesTab
+              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
+              showDeleteModal={showDeleteModal}
+              showShareModal={showShareModal}
+              closeSidebar={removeToggle}
+              existingChats={existingChats}
+              currentChatId={currentChatId}
+              folders={folders}
+            />
           </div>
         </>
       );

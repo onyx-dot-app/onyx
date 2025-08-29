@@ -78,7 +78,7 @@ logger = setup_logger()
 
 class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
-    id_to_db_doc_map: dict[str, DBDocument]
+    id_to_boost_map: dict[str, int]
     indexable_docs: list[IndexingDocument] = []
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -239,7 +239,7 @@ def index_doc_batch_with_handler(
     information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     document_batch: list[Document],
-    index_attempt_metadata: IndexAttemptMetadata,
+    request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
@@ -253,7 +253,7 @@ def index_doc_batch_with_handler(
             information_content_classification_model=information_content_classification_model,
             document_index=document_index,
             document_batch=document_batch,
-            index_attempt_metadata=index_attempt_metadata,
+            request_id=request_id,
             tenant_id=tenant_id,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
@@ -348,9 +348,9 @@ def index_doc_batch_prepare(
     if not updatable_docs:
         return None
 
-    id_to_db_doc_map = {doc.id: doc for doc in db_docs}
+    id_to_boost_map = {doc.id: doc.boost for doc in db_docs}
     return DocumentBatchPrepareContext(
-        updatable_docs=updatable_docs, id_to_db_doc_map=id_to_db_doc_map
+        updatable_docs=updatable_docs, id_to_boost_map=id_to_boost_map
     )
 
 
@@ -665,7 +665,7 @@ def index_doc_batch(
     embedder: IndexingEmbedder,
     information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
-    index_attempt_metadata: IndexAttemptMetadata,
+    request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
@@ -733,7 +733,7 @@ def index_doc_batch(
             chunks=chunks,
             embedder=embedder,
             tenant_id=tenant_id,
-            request_id=index_attempt_metadata.request_id,
+            request_id=request_id,
         )
         if chunks
         else ([], [])
@@ -761,7 +761,11 @@ def index_doc_batch(
     # NOTE: don't need to acquire till here, since this is when the actual race condition
     # with Vespa can occur.
     with adapter.lock_context(context.updatable_docs):
-
+        # we're concerned about race conditions where multiple simultaneous indexings might result
+        # in one set of metadata overwriting another one in vespa.
+        # we still write data here for the immediate and most likely correct sync, but
+        # to resolve this, an update of the last modified field at the end of this loop
+        # always triggers a final metadata sync via the celery queue
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=chunks_with_embeddings,
             chunk_content_scores=chunk_content_scores,
@@ -1182,7 +1186,7 @@ def index_doc_batch(
 def run_indexing_pipeline(
     *,
     document_batch: list[Document],
-    index_attempt_metadata: IndexAttemptMetadata,
+    request_id: str | None,
     embedder: IndexingEmbedder,
     information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
@@ -1229,7 +1233,7 @@ def run_indexing_pipeline(
         information_content_classification_model=information_content_classification_model,
         document_index=document_index,
         document_batch=document_batch,
-        index_attempt_metadata=index_attempt_metadata,
+        request_id=request_id,
         tenant_id=tenant_id,
         adapter=adapter,
         enable_contextual_rag=enable_contextual_rag,
