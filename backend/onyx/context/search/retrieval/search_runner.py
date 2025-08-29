@@ -329,6 +329,7 @@ def retrieve_chunks(
     retrieval_metrics_callback: (
         Callable[[RetrievalMetricsContainer], None] | None
     ) = None,
+    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> list[InferenceChunk]:
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
@@ -340,8 +341,19 @@ def retrieve_chunks(
     )
 
     # Federated retrieval
+    if slack_context:
+        logger.info(
+            f"retrieve_chunks: Passing Slack context to federated retrieval: {slack_context}"
+        )
+    else:
+        logger.info("retrieve_chunks: No Slack context to pass to federated retrieval")
+
     federated_retrieval_infos = get_federated_retrieval_functions(
-        db_session, user_id, query.filters.source_type, query.filters.document_set
+        db_session,
+        user_id,
+        query.filters.source_type,
+        query.filters.document_set,
+        slack_context,
     )
     federated_sources = set(
         federated_retrieval_info.source.to_non_federated_source()
