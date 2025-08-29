@@ -115,15 +115,15 @@ def _get_available_tools(
         if isinstance(tool, InternetSearchTool):
             llm_path = DRPath.INTERNET_SEARCH.value
             path = DRPath.INTERNET_SEARCH
-        elif isinstance(tool, SearchTool) and len(active_source_types) > 0:
-            # tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
+        elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
-        elif (
-            isinstance(tool, KnowledgeGraphTool)
-            and include_kg
-            and len(active_source_types) > 0
-        ):
+        elif isinstance(tool, KnowledgeGraphTool) and include_kg:
+            if len(active_source_types) == 0:
+                logger.error(
+                    "No active source types found, skipping Knowledge Graph tool"
+                )
+                continue
             llm_path = DRPath.KNOWLEDGE_GRAPH.value
             path = DRPath.KNOWLEDGE_GRAPH
         elif isinstance(tool, ImageGenerationTool):
