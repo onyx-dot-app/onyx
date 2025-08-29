@@ -13,6 +13,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
+from sqlalchemy import exists
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -562,7 +563,7 @@ def check_indexing_completion(
     logger.info(f"Database coordination completed for attempt {index_attempt_id}")
 
 
-def _existing_index_attempts(
+def active_indexing_attempt(
     cc_pair_id: int,
     search_settings_id: int,
     db_session: Session,
@@ -574,9 +575,9 @@ def _existing_index_attempts(
 
     Returns True if there's an active indexing attempt, False otherwise.
     """
-    existing_attempts = (
-        db_session.execute(
-            select(IndexAttempt).where(
+    active_indexing_attempt = db_session.execute(
+        select(
+            exists().where(
                 IndexAttempt.connector_credential_pair_id == cc_pair_id,
                 IndexAttempt.search_settings_id == search_settings_id,
                 IndexAttempt.status.in_(
@@ -587,18 +588,15 @@ def _existing_index_attempts(
                 ),
             )
         )
-        .scalars()
-        .all()
-    )
+    ).scalar()
 
-    if existing_attempts:
+    if active_indexing_attempt:
         task_logger.debug(
-            f"_existing_index_attempts - Skipping due to active indexing attempt: "
-            f"cc_pair={cc_pair_id} search_settings={search_settings_id} "
-            f"active_attempts={[a.id for a in existing_attempts]}"
+            f"active_indexing_attempt - Skipping due to active indexing attempt: "
+            f"cc_pair={cc_pair_id} search_settings={search_settings_id}"
         )
-        return True
-    return False
+
+    return bool(active_indexing_attempt)
 
 
 def _kickoff_indexing_tasks(
@@ -621,7 +619,7 @@ def _kickoff_indexing_tasks(
         lock_beat.reacquire()
 
         # Lightweight check prior to fetching cc pair
-        if _existing_index_attempts(
+        if active_indexing_attempt(
             cc_pair_id=cc_pair_id,
             search_settings_id=search_settings.id,
             db_session=db_session,
@@ -685,7 +683,7 @@ def _kickoff_indexing_tasks(
             tenant_id,
         )
 
-        if attempt_id:
+        if attempt_id is not None:
             task_logger.info(
                 f"Connector indexing queued: "
                 f"index_attempt={attempt_id} "
@@ -694,7 +692,7 @@ def _kickoff_indexing_tasks(
             )
             tasks_created += 1
         else:
-            task_logger.info(
+            task_logger.error(
                 f"Failed to create indexing task: "
                 f"cc_pair={cc_pair.id} "
                 f"search_settings={search_settings.id}"
