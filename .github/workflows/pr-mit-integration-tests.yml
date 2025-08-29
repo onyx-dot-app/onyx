@@ -317,49 +317,43 @@ jobs:
 
       # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
       - name: Run Integration Tests for ${{ matrix.test-dir.name }}
-        run: |
-          echo "Running integration tests for ${{ matrix.test-dir.path }}..."
-          docker run --rm --network onyx-stack_default \
-            --name test-runner \
-            -e POSTGRES_HOST=relational_db \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=password \
-            -e POSTGRES_DB=postgres \
-            -e DB_READONLY_USER=db_readonly_user \
-            -e DB_READONLY_PASSWORD=password \
-            -e POSTGRES_POOL_PRE_PING=true \
-            -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e REDIS_HOST=cache \
-            -e API_SERVER_HOST=api_server \
-            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
-            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
-            -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
-            -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
-            -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
-            -e JIRA_BASE_URL=${JIRA_BASE_URL} \
-            -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
-            -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
-            -e PERM_SYNC_SHAREPOINT_CLIENT_ID=${PERM_SYNC_SHAREPOINT_CLIENT_ID} \
-            -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
-            -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
-            -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
-            -e TEST_WEB_HOSTNAME=test-runner \
-            -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
-            -e MOCK_CONNECTOR_SERVER_PORT=8001 \
-            onyxdotapp/onyx-integration:test \
-            /app/tests/integration/${{ matrix.test-dir.path }}
-        continue-on-error: true
-        id: run_tests
-
-      - name: Check test results
-        run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
-            echo "Integration tests failed. Exiting with error."
-            exit 1
-          else
-            echo "All integration tests passed successfully."
-          fi
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            echo "Running integration tests for ${{ matrix.test-dir.path }}..."
+            docker run --rm --network onyx-stack_default \
+              --name test-runner \
+              -e POSTGRES_HOST=relational_db \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=password \
+              -e POSTGRES_DB=postgres \
+              -e DB_READONLY_USER=db_readonly_user \
+              -e DB_READONLY_PASSWORD=password \
+              -e POSTGRES_POOL_PRE_PING=true \
+              -e POSTGRES_USE_NULL_POOL=true \
+              -e VESPA_HOST=index \
+              -e REDIS_HOST=cache \
+              -e API_SERVER_HOST=api_server \
+              -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+              -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
+              -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
+              -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+              -e JIRA_BASE_URL=${JIRA_BASE_URL} \
+              -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
+              -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
+              -e PERM_SYNC_SHAREPOINT_CLIENT_ID=${PERM_SYNC_SHAREPOINT_CLIENT_ID} \
+              -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
+              -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
+              -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e TEST_WEB_HOSTNAME=test-runner \
+              -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
+              -e MOCK_CONNECTOR_SERVER_PORT=8001 \
+              onyxdotapp/onyx-integration:test \
+              /app/tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down":
