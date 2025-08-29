@@ -23,7 +23,5 @@ def dedup_urls(
 
     return InternetSearchInput(
         urls_to_open=[],
-        parallelization_nr=state.parallelization_nr,
-        branch_question=state.branch_question,
         deduped_branch_question_to_urls=deduped_branch_question_to_urls,
     )

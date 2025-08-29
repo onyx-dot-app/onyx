@@ -8,11 +8,10 @@ from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 
 class InternetSearchInput(SubAgentInput):
     urls_to_open: Annotated[list[tuple[str, str]], add] = []
-    parallelization_nr: Annotated[int, add] = 0
-    branch_question: Annotated[str, add] = ""
-    deduped_branch_question_to_urls: Annotated[
-        dict[str, list[str]], lambda d1, d2: {**d1, **d2}
-    ] = {}
+    branch_question: Annotated[str, lambda x, y: y] = ""
+    deduped_branch_question_to_urls: Annotated[dict[str, list[str]], lambda x, y: y] = (
+        {}
+    )
 
 
 class InternetSearchUpdate(LoggerUpdate):

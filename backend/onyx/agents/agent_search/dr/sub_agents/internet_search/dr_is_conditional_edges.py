@@ -25,13 +25,9 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
                 assistant_system_prompt=state.assistant_system_prompt,
                 assistant_task_prompt=state.assistant_task_prompt,
                 urls_to_open=[],
-                parallelization_nr=parallelization_nr,
-                deduped_branch_question_to_urls={},
             ),
         )
-        for parallelization_nr, query in enumerate(
-            state.query_list[:MAX_DR_PARALLEL_SEARCH]
-        )
+        for _, query in enumerate(state.query_list[:MAX_DR_PARALLEL_SEARCH])
     ]
 
 
