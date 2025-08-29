@@ -5,10 +5,18 @@ from typing import List
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.server.documents.connector import upload_files
+from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 
 def create_user_files(
@@ -29,13 +37,15 @@ def create_user_files(
 
     for file_path, file in zip(upload_response.file_paths, files):
         new_file = UserFile(
-            id=str(uuid.uuid4()),
+            id=uuid.uuid4(),
             user_id=user.id if user else None,
             file_id=file_path,
+            document_id=uuid.uuid4(),  # TODO: remove this column
             name=file.filename,
             token_count=None,
             link_url=link_url,
             content_type=file.content_type,
+            file_type=file.content_type,
             last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
         )
         if project_id:
@@ -58,6 +68,17 @@ def upload_files_to_user_files_with_indexing(
 ) -> list[UserFile]:
     user_files = create_user_files(files, project_id, user, db_session)
 
-    # Trigger indexing immediately
-    # TODO(subash): trigger indexing for all user files
+    # Trigger per-file processing immediately for the current tenant
+    tenant_id = get_current_tenant_id()
+    for user_file in user_files:
+        task = client_app.send_task(
+            OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
+            kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+            priority=OnyxCeleryPriority.HIGH,
+        )
+        logger.info(
+            f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
+        )
+
     return user_files

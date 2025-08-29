@@ -2,12 +2,12 @@ import contextlib
 import time
 from collections.abc import Generator
 
-from backend.onyx.access.access import get_access_for_user_files
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.session import TransactionalContext
 
+from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.connectors.models import Document
@@ -18,6 +18,7 @@ from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import UpdatableChunkData
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -49,10 +50,11 @@ class UserFileIndexingAdapter:
         self.tenant_id = tenant_id
         self.db_session = db_session
 
-    def prepare(self, documents: list[Document]) -> DocumentBatchPrepareContext:
+    def prepare(
+        self, documents: list[Document], ignore_time_skip: bool
+    ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
-            updatable_docs=documents,
-            id_to_db_doc_map={doc.id: doc for doc in documents},
+            updatable_docs=documents, id_to_boost_map={}  # TODO(subash): add boost map
         )
 
     @contextlib.contextmanager
@@ -144,7 +146,6 @@ class UserFileIndexingAdapter:
                 index_chunk=chunk,
                 access=user_file_id_to_access.get(chunk.source_document.id, no_access),
                 document_sets=set(),
-                user_file=chunk.source_document.id,
                 user_folder=None,
                 # we are going to index userfiles only once, so we just set the boost to the default
                 boost=DEFAULT_BOOST,
@@ -162,7 +163,13 @@ class UserFileIndexingAdapter:
             user_file_id_to_token_count={},
         )
 
-    def post_index(self, context: DocumentBatchPrepareContext) -> None:
+    def post_index(
+        self,
+        context: DocumentBatchPrepareContext,
+        updatable_chunk_data: list[UpdatableChunkData],
+        filtered_documents: list[Document],
+        result: BuildMetadataAwareChunksResult,
+    ) -> None:
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
         user_files = (

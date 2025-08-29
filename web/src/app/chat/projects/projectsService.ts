@@ -1,3 +1,5 @@
+import { ChatFileType } from "../interfaces";
+
 export interface Project {
   id: string;
   name: string;
@@ -16,6 +18,7 @@ export interface ProjectFile {
   status: string;
   file_type: string;
   last_accessed_at: string;
+  chat_file_type: ChatFileType;
 }
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -38,7 +41,7 @@ export async function createProject(name: string): Promise<Project> {
   return response.json();
 }
 
-export async function uploadFilesToProject(
+export async function uploadFiles(
   files: File[],
   projectId?: string | number | null
 ): Promise<ProjectFile[]> {
@@ -62,7 +65,7 @@ export async function uploadFilesToProject(
 }
 
 export async function getRecentFiles(): Promise<ProjectFile[]> {
-  const response = await fetch(`/api/user/projects/files/recent`);
+  const response = await fetch(`/api/user/files/recent`);
   if (!response.ok) {
     throw new Error("Failed to fetch recent files");
   }

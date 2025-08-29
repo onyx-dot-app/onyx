@@ -39,7 +39,10 @@ import { ActionToggle } from "./ActionManagement";
 import { SelectedTool } from "./SelectedTool";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import FilePicker from "../files/FilePicker";
-import { useProjectsContext } from "../../projects/ProjectsContext";
+import {
+  ProjectFile,
+  useProjectsContext,
+} from "../../projects/ProjectsContext";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -140,18 +143,116 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   toggleDeepResearch,
   placeholder,
 }: ChatInputBarProps) {
+  const [isUploading, setIsUploading] = useState(false);
   const { user } = useUser();
   const {
     selectedFiles,
     selectedFolders,
     removeSelectedFile,
     removeSelectedFolder,
-    currentMessageFiles,
-    setCurrentMessageFiles,
   } = useDocumentsContext();
+  const { currentMessageFiles, setCurrentMessageFiles, uploadFiles } =
+    useProjectsContext();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
   const { recentFiles, uploadFilesToProject } = useProjectsContext();
+  const recentFiles = [
+    {
+      id: "1",
+      name: "File 1",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "1",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+    },
+    {
+      id: "2",
+      name: "File 2",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "2",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.DOCUMENT,
+    },
+    {
+      id: "3",
+      name: "File 3",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "3",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+    },
+    {
+      id: "1",
+      name: "File 1",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "1",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.IMAGE,
+    },
+    {
+      id: "2",
+      name: "File 2",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "2",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+    },
+    {
+      id: "3",
+      name: "File 3",
+      file_type: "pdf",
+      last_accessed_at: "2021-01-01",
+      project_id: "1",
+      user_id: "1",
+      file_id: "3",
+      created_at: "2021-01-01",
+      status: "active",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+    },
+  ];
+
+  const handleUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    try {
+      const uploadedMessageFiles: ProjectFile[] = await uploadFiles(
+        Array.from(files)
+      );
+      const messageFiles: FileDescriptor[] = uploadedMessageFiles.map(
+        (file) => ({
+          id: file.id,
+          name: file.name,
+          type: file.chat_file_type,
+          isUploading: true,
+        })
+      );
+      setCurrentMessageFiles(messageFiles);
+    } finally {
+      setIsUploading(false);
+      e.target.value = ""; // reset input
+    }
+  };
 
   // Create a Set of IDs from currentMessageFiles for efficient lookup
   // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
@@ -627,6 +728,8 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                     console.log("Picked recent", fileId);
                   }}
                   recentFiles={recentFiles}
+                  handleUploadChange={handleUploadChange}
+                  isUploading={isUploading}
                 />
 
                 {selectedAssistant.tools.length > 0 && (

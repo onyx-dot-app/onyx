@@ -46,7 +46,7 @@ def _user_file_lock_key(user_file_id: int) -> str:
 def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     """Scan for user files with PROCESSING status and enqueue per-file tasks.
 
-    Uses direct Redis locks to avoid overlapping runs. No cc-pair usage.
+    Uses direct Redis locks to avoid overlapping runs.
     """
     task_logger.info("check_user_file_processing - Starting")
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -98,14 +98,8 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     bind=True,
     ignore_result=True,
 )
-def process_single_user_file(self: Task, *, user_file_id: int, tenant_id: str) -> None:
-    """Process a single user file by invoking the LocalFileConnector.
-
-    - Uses the file_id as the connector path
-    - Collects documents returned by the connector
-    - Updates the UserFile status to COMPLETED/FAILED
-    - No cc-pair interactions; direct file processing only
-    """
+def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -> None:
+    task_logger.info(f"process_single_user_file - Starting id={user_file_id}")
     start = time.monotonic()
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
@@ -187,12 +181,21 @@ def process_single_user_file(self: Task, *, user_file_id: int, tenant_id: str) -
                     None,
                     httpx_client=HttpxPool.get("vespa"),
                 )
+
+                task_logger.info(
+                    f"process_single_user_file - Documents before indexing: {documents}"
+                )
+
+                # update the doument id to userfile id in the documents
+                for document in documents:
+                    document.id = str(user_file_id)
+
                 # real work happens here!
                 index_pipeline_result = run_indexing_pipeline(
                     embedder=embedding_model,
                     information_content_classification_model=information_content_classification_model,
                     document_index=document_index,
-                    ignore_time_skip=True,  # Documents are already filtered during extraction
+                    ignore_time_skip=True,
                     db_session=db_session,
                     tenant_id=tenant_id,
                     document_batch=documents,
@@ -203,6 +206,15 @@ def process_single_user_file(self: Task, *, user_file_id: int, tenant_id: str) -
                 task_logger.info(
                     f"process_single_user_file - Indexing pipeline completed ={index_pipeline_result}"
                 )
+
+                if index_pipeline_result.failures:
+                    task_logger.error(
+                        f"process_single_user_file - Indexing pipeline failed id={user_file_id}"
+                    )
+                    uf.status = UserFileStatus.FAILED
+                    db_session.add(uf)
+                    db_session.commit()
+                    return None
 
             except Exception as e:
                 task_logger.exception(

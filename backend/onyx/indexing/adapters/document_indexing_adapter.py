@@ -184,11 +184,6 @@ class DocumentIndexingBatchAdapter:
             else:
                 user_file_id_to_token_count[user_file_id] = None
 
-        # we're concerned about race conditions where multiple simultaneous indexings might result
-        # in one set of metadata overwriting another one in vespa.
-        # we still write data here for the immediate and most likely correct sync, but
-        # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync via the celery queue
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
@@ -196,13 +191,12 @@ class DocumentIndexingBatchAdapter:
                 document_sets=set(
                     doc_id_to_document_set.get(chunk.source_document.id, [])
                 ),
-                user_file=doc_id_to_user_file_id.get(chunk.source_document.id, None),
                 user_folder=doc_id_to_user_folder_id.get(
                     chunk.source_document.id, None
                 ),
                 boost=(
-                    context.id_to_db_doc_map[chunk.source_document.id].boost
-                    if chunk.source_document.id in context.id_to_db_doc_map
+                    context.id_to_boost_map[chunk.source_document.id]
+                    if chunk.source_document.id in context.id_to_boost_map
                     else DEFAULT_BOOST
                 ),
                 tenant_id=tenant_id,
