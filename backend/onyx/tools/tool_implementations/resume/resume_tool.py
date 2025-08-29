@@ -113,8 +113,6 @@ class ResumeTool(Tool):
         return file_name
 
     def run(self, override_kwargs: Any | None = None, **llm_kwargs: Any) -> Generator[ToolResponse, None, None]:
-        logger.info(llm_kwargs)
-        logger.info(override_kwargs)
         request_body = {"input_value": llm_kwargs['question']}
 
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
@@ -160,10 +158,6 @@ class ResumeTool(Tool):
         tool_summary = tool_responses[0].response if tool_responses else None
         tool_result = cast(ResumeResponseSummary, tool_summary).tool_result if tool_summary else {}
         query = prompt_builder.get_user_message_content()
-
-        logger.info(tool_result)
-        logger.info(query)
-        logger.info(tool_responses)
 
         prompt_builder.update_user_prompt(
             HumanMessage(
