@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/menubar";
 import { FileUploadIcon } from "@/components/icons/icons";
 import { Files } from "@phosphor-icons/react";
-import { FileIcon, Paperclip } from "lucide-react";
+import { FileIcon, Paperclip, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatInputOption } from "../input/ChatInputOption";
 import FilesList from "./FilesList";
@@ -28,6 +28,8 @@ type FilePickerProps = {
   recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isUploading: boolean;
+  showTriggerLabel?: boolean;
+  triggerLabel?: string;
 };
 
 // Small helper to render an icon + label row
@@ -41,6 +43,8 @@ export default function FilePicker({
   recentFiles,
   handleUploadChange,
   isUploading,
+  showTriggerLabel = false,
+  triggerLabel = "Add Files",
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
@@ -60,15 +64,22 @@ export default function FilePicker({
       <Menubar className="bg-transparent dark:bg-transparent p-0 border-0">
         <MenubarMenu>
           <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 py-1.5 px-0">
-            <Row>
-              {/* <FileUploadIcon size={16} />
-              <span className="sr-only">Add files</span> */}
-              <ChatInputOption
-                flexPriority="stiff"
-                Icon={FileUploadIcon}
-                tooltipContent={"Upload files and attach user files"}
-              />
-            </Row>
+            {showTriggerLabel ? (
+              <div className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered transition-all duration-150">
+                <FileUploadIcon className="text-text-darker dark:text-text-lighter" />
+                <p className="text-sm text-text-darker dark:text-text-lighter">
+                  {triggerLabel}
+                </p>
+              </div>
+            ) : (
+              <Row>
+                <ChatInputOption
+                  flexPriority="stiff"
+                  Icon={FileUploadIcon}
+                  tooltipContent={"Upload files and attach user files"}
+                />
+              </Row>
+            )}
           </MenubarTrigger>
           <MenubarContent
             align="start"
@@ -91,7 +102,11 @@ export default function FilePicker({
                     className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
                   >
                     <Row>
-                      <FileIcon className="h-4 w-4" />
+                      {String(f.status).toLowerCase() === "processing" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileIcon className="h-4 w-4" />
+                      )}
                       <span className="truncate max-w-[160px]" title={f.name}>
                         {f.name}
                       </span>

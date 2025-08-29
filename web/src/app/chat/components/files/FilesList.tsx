@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   FileText,
   Search,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "../../projects/ProjectsContext";
@@ -20,7 +21,10 @@ interface FilesListProps {
   onPickRecent?: (fileId: string) => void;
 }
 
-const kindIcon = (kind: string) => {
+const kindIcon = (kind: string, status?: string) => {
+  if (String(status).toLowerCase() === "processing") {
+    return <Loader2 className="h-4 w-4 animate-spin" />;
+  }
   const normalized = kind.toLowerCase();
   if (normalized.includes("url") || normalized.includes("site"))
     return <Globe className="h-4 w-4" />;
@@ -73,11 +77,15 @@ export default function FilesList({
               onClick={() => onPickRecent && onPickRecent(f.id)}
             >
               <div className="flex items-center gap-3 min-w-0">
-                {kindIcon(f.file_type)}
+                {kindIcon(f.file_type, (f as any).status)}
                 <div className="min-w-0">
                   <div className="truncate text-sm font-normal">{f.name}</div>
                   <div className="text-xs text-text-400 dark:text-neutral-400">
-                    {f.status ? f.status : f.file_type}
+                    {f.status
+                      ? String(f.status).toLowerCase() === "processing"
+                        ? "Processing..."
+                        : f.status
+                      : f.file_type}
                   </div>
                 </div>
               </div>

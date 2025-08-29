@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
   ReactNode,
   Dispatch,
   SetStateAction,
@@ -17,22 +18,28 @@ import {
   uploadFiles as svcUploadFiles,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
+  getProject as svcGetProject,
+  getProjectInstructions as svcGetProjectInstructions,
+  upsertProjectInstructions as svcUpsertProjectInstructions,
+  getProjectDetails as svcGetProjectDetails,
+  ProjectDetails,
 } from "./projectsService";
 import { FileDescriptor } from "../interfaces";
+import { Prompt } from "@/app/admin/assistants/interfaces";
 
 export type { Project, ProjectFile } from "./projectsService";
 
 interface ProjectsContextType {
   projects: Project[];
   recentFiles: ProjectFile[];
-  projectFiles: Record<string, ProjectFile[]>; // keyed by project id
+  currentProjectDetails: ProjectDetails | null;
   currentProjectId: string | null;
   isLoading: boolean;
   error: string | null;
   currentMessageFiles: FileDescriptor[];
   setCurrentMessageFiles: Dispatch<SetStateAction<FileDescriptor[]>>;
   setCurrentProjectId: (projectId: string | null) => void;
-
+  upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
   createProject: (name: string) => Promise<Project>;
   uploadFiles: (
@@ -41,7 +48,7 @@ interface ProjectsContextType {
   ) => Promise<ProjectFile[]>;
   getRecentFiles: () => Promise<ProjectFile[]>;
   getFilesInProject: (projectId: string) => Promise<ProjectFile[]>;
-  refreshProjectFiles: (projectId: string) => Promise<void>;
+  refreshCurrentProjectDetails: (projectId: string) => Promise<void>;
   refreshRecentFiles: () => Promise<void>;
 }
 
@@ -58,15 +65,16 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
-  const [projectFiles, setProjectFiles] = useState<
-    Record<string, ProjectFile[]>
-  >({});
+  const [currentProjectDetails, setCurrentProjectDetails] =
+    useState<ProjectDetails | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentMessageFiles, setCurrentMessageFiles] = useState<
     FileDescriptor[]
   >([]);
+  const pollIntervalRef = useRef<number | null>(null);
+  const isPollingRef = useRef<boolean>(false);
 
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     setError(null);
@@ -81,6 +89,28 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       return [];
     }
   }, []);
+
+  // Load full details for current project
+  const refreshCurrentProjectDetails = useCallback(
+    async (projectId: string) => {
+      console.log("refreshing current project details", projectId);
+      const details = await svcGetProjectDetails(projectId);
+      setCurrentProjectDetails(details);
+    },
+    [currentProjectId]
+  );
+
+  const upsertInstructions = useCallback(
+    async (instructions: string) => {
+      if (!currentProjectId) {
+        throw new Error("No project selected");
+      }
+      console.log("upserting instructions", instructions);
+      await svcUpsertProjectInstructions(currentProjectId, instructions);
+      await refreshCurrentProjectDetails(currentProjectId);
+    },
+    [currentProjectId, refreshCurrentProjectDetails]
+  );
 
   const createProject = useCallback(
     async (name: string): Promise<Project> => {
@@ -112,7 +142,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
         // If we uploaded into a specific project, refresh that project's files
         if (projectId) {
-          await refreshProjectFiles(String(projectId));
+          await refreshCurrentProjectDetails(String(projectId));
         }
         // Refresh recent files as well
         await refreshRecentFiles();
@@ -159,14 +189,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     []
   );
 
-  const refreshProjectFiles = useCallback(
-    async (projectId: string) => {
-      const files = await getFilesInProject(projectId);
-      setProjectFiles((prev) => ({ ...prev, [projectId]: files }));
-    },
-    [getFilesInProject]
-  );
-
   const refreshRecentFiles = useCallback(async () => {
     const files = await getRecentFiles();
     setRecentFiles(files);
@@ -187,44 +209,96 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   useEffect(() => {
     if (currentProjectId) {
-      refreshProjectFiles(currentProjectId);
+      refreshCurrentProjectDetails(currentProjectId);
     }
-  }, [currentProjectId, refreshProjectFiles]);
+  }, [currentProjectId, refreshCurrentProjectDetails]);
+
+  // Poll every second while any file is processing
+  useEffect(() => {
+    const hasProcessingInProject = Boolean(
+      currentProjectDetails?.files?.some(
+        (f) => String(f.status).toLowerCase() === "processing"
+      )
+    );
+    const hasProcessingInRecent = recentFiles.some(
+      (f) => String(f.status).toLowerCase() === "processing"
+    );
+    const shouldPoll = hasProcessingInProject || hasProcessingInRecent;
+
+    const runRefresh = async () => {
+      if (isPollingRef.current) return;
+      isPollingRef.current = true;
+      try {
+        if (currentProjectId) {
+          await refreshCurrentProjectDetails(currentProjectId);
+        }
+        await refreshRecentFiles();
+      } finally {
+        isPollingRef.current = false;
+      }
+    };
+
+    if (shouldPoll && pollIntervalRef.current === null) {
+      // Kick once immediately, then start interval
+      runRefresh();
+      pollIntervalRef.current = window.setInterval(runRefresh, 1000);
+    }
+
+    if (!shouldPoll && pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    return () => {
+      if (pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [
+    recentFiles,
+    currentProjectDetails,
+    currentProjectId,
+    refreshCurrentProjectDetails,
+    refreshRecentFiles,
+  ]);
 
   const value: ProjectsContextType = useMemo(
     () => ({
       projects,
       recentFiles,
-      projectFiles,
+      currentProjectDetails,
       currentProjectId,
       isLoading,
       error,
       currentMessageFiles,
       setCurrentMessageFiles,
       setCurrentProjectId,
+      upsertInstructions,
       fetchProjects,
       createProject,
       uploadFiles,
       getRecentFiles,
       getFilesInProject,
-      refreshProjectFiles,
+      refreshCurrentProjectDetails,
       refreshRecentFiles,
     }),
     [
       projects,
       recentFiles,
-      projectFiles,
+      currentProjectDetails,
       currentProjectId,
       isLoading,
       error,
       currentMessageFiles,
       setCurrentMessageFiles,
+      upsertInstructions,
       fetchProjects,
       createProject,
       uploadFiles,
       getRecentFiles,
       getFilesInProject,
-      refreshProjectFiles,
+      refreshCurrentProjectDetails,
       refreshRecentFiles,
     ]
   );

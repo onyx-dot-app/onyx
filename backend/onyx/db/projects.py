@@ -48,13 +48,15 @@ def create_user_files(
             file_type=file.content_type,
             last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
         )
+        # Persist the UserFile first to satisfy FK constraints for association table
+        db_session.add(new_file)
+        db_session.flush()
         if project_id:
             project_to_user_file = Project__UserFile(
                 project_id=project_id,
                 user_file_id=new_file.id,
             )
             db_session.add(project_to_user_file)
-        db_session.add(new_file)
         user_files.append(new_file)
     db_session.commit()
     return user_files

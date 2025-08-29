@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Folder as FolderIcon,
@@ -9,6 +10,8 @@ import {
   FolderPlus,
 } from "lucide-react";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import type { ChatSession } from "@/app/chat/interfaces";
 
 type ProjectItem = {
   id: string;
@@ -17,7 +20,6 @@ type ProjectItem = {
 };
 
 interface ProjectsProps {
-  onCreateNewProject?: () => void;
   onOpenProject?: (projectId: string) => void;
 }
 
@@ -25,34 +27,55 @@ function CollapsibleFolder({
   title,
   children,
   defaultOpen = true,
+  onToggle,
+  onNameClick,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  onToggle?: (open: boolean) => void;
+  onNameClick?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [hoveringIcon, setHoveringIcon] = useState(false);
 
   return (
     <div className="w-full">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-      >
-        {open ? (
-          <FolderOpen
-            size={18}
-            className="flex-none text-text-history-sidebar-button"
-          />
-        ) : (
-          <FolderIcon
-            size={18}
-            className="flex-none text-text-history-sidebar-button"
-          />
-        )}
-        <span className="truncate">{title}</span>
-      </button>
+      <div className="w-full flex items-center gap-x-2 px-2 rounded-md hover:bg-background-chat-hover">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() =>
+            setOpen((v) => {
+              const next = !v;
+              onToggle?.(next);
+              return next;
+            })
+          }
+          onMouseEnter={() => setHoveringIcon(true)}
+          onMouseLeave={() => setHoveringIcon(false)}
+          className="cursor-pointer text-base rounded-md p-1"
+        >
+          {open || hoveringIcon ? (
+            <FolderOpen
+              size={18}
+              className="flex-none text-text-history-sidebar-button"
+            />
+          ) : (
+            <FolderIcon
+              size={18}
+              className="flex-none text-text-history-sidebar-button"
+            />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onNameClick}
+          className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1 px-2 rounded-md"
+        >
+          <span className="truncate">{title}</span>
+        </button>
+      </div>
 
       <div
         className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
@@ -67,52 +90,12 @@ function CollapsibleFolder({
   );
 }
 
-function LeafProject({
-  item,
-  onOpen,
-}: {
-  item: ProjectItem;
-  onOpen?: (id: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen?.(item.id)}
-      className="w-full text-left text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-    >
-      <FileText
-        size={16}
-        className="flex-none text-text-history-sidebar-button"
-      />
-      <span className="truncate">{item.name}</span>
-    </button>
-  );
-}
-
-export default function Projects({
-  onCreateNewProject,
-  onOpenProject,
-}: ProjectsProps) {
+export default function Projects({ onOpenProject }: ProjectsProps) {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
-  const data = useMemo<ProjectItem[]>(
-    () => [
-      {
-        id: "folder-notes",
-        name: "_Notes",
-        children: [
-          { id: "p-1", name: "Notes app UI code" },
-          { id: "p-2", name: "Classy notes app UI" },
-          { id: "p-3", name: "Notes app feature plan" },
-          { id: "p-4", name: "UI design prototype" },
-          { id: "p-5", name: "Notes app feature list" },
-        ],
-      },
-      { id: "folder-1", name: "Sri Sneka", children: [] },
-      { id: "folder-2", name: "Understanding Vespa", children: [] },
-      { id: "folder-3", name: "Kubernetes", children: [] },
-    ],
-    []
-  );
+  const { createProject, projects } = useProjectsContext();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <div className="flex flex-col gap-y-2 mt-4">
@@ -128,36 +111,33 @@ export default function Projects({
       </div>
 
       <div className="px-4 space-y-1">
-        {data.map((item) =>
-          item.children && item.children.length > 0 ? (
-            <CollapsibleFolder key={item.id} title={item.name} defaultOpen>
-              {item.children.map((c) => (
-                <LeafProject key={c.id} item={c} onOpen={onOpenProject} />
-              ))}
-            </CollapsibleFolder>
-          ) : (
-            <div key={item.id} className="w-full">
-              <button
-                type="button"
-                onClick={() => onOpenProject?.(item.id)}
-                className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-              >
-                <FolderIcon
-                  size={18}
-                  className="flex-none text-text-history-sidebar-button"
-                />
-                <span className="truncate">{item.name}</span>
-              </button>
+        {projects.map((p) => (
+          <CollapsibleFolder
+            key={p.id}
+            title={p.name}
+            defaultOpen={false}
+            onNameClick={() => {
+              const params = new URLSearchParams(
+                searchParams?.toString() || ""
+              );
+              params.set("projectid", String(p.id));
+              router.push(`${pathname}?${params.toString()}`);
+            }}
+          >
+            <div className="text-xs text-neutral-500 px-2 py-1">
+              This project doesn’t have any chats.
             </div>
-          )
+          </CollapsibleFolder>
+        ))}
+        {projects.length === 0 && (
+          <p className="text-xs text-neutral-500 px-2">No projects yet.</p>
         )}
       </div>
       <CreateProjectModal
         open={isCreateProjectOpen}
         setOpen={setIsCreateProjectOpen}
         onCreate={async (_name) => {
-          // TODO: hook into real project creation when API is ready.
-          onCreateNewProject?.();
+          await createProject(_name);
         }}
       />
     </div>

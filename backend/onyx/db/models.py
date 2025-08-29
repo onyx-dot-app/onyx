@@ -3308,6 +3308,9 @@ class UserFolder(Base):
         secondary=Project__UserFile.__table__,
         back_populates="projects",
     )
+    prompt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("prompt.id"), nullable=True
+    )
 
 
 class UserDocument(str, Enum):
