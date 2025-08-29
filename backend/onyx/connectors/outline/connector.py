@@ -152,11 +152,6 @@ class OutlineConnector(LoadConnector, PollConnector):
                 # Apply time filtering if specified
                 filtered_batch = []
                 for doc in doc_batch:
-                    # Early termination: stop when we encounter documents older than start time
-                    if start is not None and doc.doc_updated_at is not None:
-                        if doc.doc_updated_at.timestamp() < start:
-                            return
-                    
                     if time_filter is None or time_filter(doc):
                         filtered_batch.append(doc)
                 
