@@ -47,6 +47,8 @@ export function ActionItem({
       px-2 
       cursor-pointer 
       hover:bg-background-100 
+      dark:hover:bg-neutral-800
+      dark:text-neutral-300
       rounded-lg 
       py-2 
       mx-1
@@ -66,7 +68,7 @@ export function ActionItem({
           disabled ? "opacity-50" : ""
         } ${isForced && "text-blue-500"}`}
       >
-        <Icon size={16} className="text-text-500" />
+        <Icon size={16} className="text-text-500 dark:text-neutral-400" />
         <span
           className={`text-sm font-medium select-none ${
             disabled ? "line-through" : ""
@@ -204,7 +206,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             text-input-text 
             hover:bg-background-chat-hover 
             hover:text-neutral-900 
-            dark:hover:text-neutral-50 
+            dark:hover:text-neutral-50
             py-1.5 
             px-2 
             flex-none 
@@ -260,6 +262,8 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
                 outline-none 
                 text-text-700
                 placeholder:text-text-400
+                dark:placeholder:text-neutral-600
+                dark:bg-neutral-950
               "
               autoFocus
             />
@@ -297,31 +301,34 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
           <Link href="/admin/actions">
             <button
               className="
-            w-full 
-            flex 
-            items-center 
-            justify-between 
-            text-text-400
-            text-sm
-            mt-2.5
-          "
+                w-full 
+                flex 
+                items-center 
+                justify-between 
+                text-text-400
+                text-sm
+                mt-2.5
+              "
             >
               <div
                 className="
-              mx-2 
-              mb-2 
-              px-2 
-              py-1.5 
-              flex 
-              items-center 
-              hover:bg-background-100
-              hover:text-text-500
-              transition-colors
-              rounded-lg
-              w-full
-            "
+                  mx-2 
+                  mb-2 
+                  px-2 
+                  py-1.5 
+                  flex 
+                  items-center 
+                  text-text-500
+                  dark:text-neutral-500
+                  dark:hover:bg-neutral-800
+                  hover:bg-background-100
+                  hover:text-text-500
+                  transition-colors
+                  rounded-lg
+                  w-full
+                "
               >
-                <MoreActionsIcon className="text-text-500" />
+                <MoreActionsIcon className="text-text-500 dark:text-neutral-200" />
                 <div className="ml-2">More Actions</div>
               </div>
             </button>
