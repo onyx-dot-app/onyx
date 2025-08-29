@@ -116,11 +116,6 @@ def get_federated_retrieval_functions(
         )
         return []
 
-    # Scenario 3: Regular OAuth Federated Connectors (user_id provided, check for OAuth tokens)
-    logger.info(
-        f"🔍 FEDERATED TRACE: user_id provided ({user_id}), checking OAuth federated connectors..."
-    )
-
     federated_connector__document_set_pairs = (
         (
             get_federated_connector_document_set_mappings_by_document_set_names(
@@ -159,16 +154,11 @@ def get_federated_retrieval_functions(
         else:
             entities = {}
 
-        logger.info(
-            f"🔍 FEDERATED TRACE: Creating federated connector for {oauth_token.federated_connector.source}"
-        )
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
-        logger.info(
-            f"🔍 FEDERATED TRACE: Adding federated retrieval function for {oauth_token.federated_connector.source}"
-        )
+
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
                 retrieval_function=lambda query: connector.search(
@@ -181,7 +171,4 @@ def get_federated_retrieval_functions(
             )
         )
 
-    logger.info(
-        f"🔍 FEDERATED TRACE: Returning {len(federated_retrieval_infos)} federated retrieval functions"
-    )
     return federated_retrieval_infos
