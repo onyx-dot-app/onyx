@@ -49,7 +49,7 @@ class OutlineApiClient:
             )
 
         try:
-            json = response.json()
+            response_json = response.json()
         except (ValueError, json.JSONDecodeError) as e:
             raise OutlineClientRequestFailedError(
                 response.status_code, 
@@ -58,12 +58,12 @@ class OutlineApiClient:
 
         if response.status_code >= 300:
             error = response.reason
-            response_error = json.get("error", {}).get("message", "")
+            response_error = response_json.get("error", {}).get("message", "")
             if response_error:
                 error = response_error
             raise OutlineClientRequestFailedError(response.status_code, error)
 
-        return json
+        return response_json
 
     def _build_headers(self) -> dict[str, str]:
         return {
