@@ -1,4 +1,5 @@
-import { ChatFileType } from "../interfaces";
+import { Prompt } from "@/app/admin/assistants/interfaces";
+import { ChatFileType, ChatSession } from "../interfaces";
 
 export interface Project {
   id: string;
@@ -20,6 +21,12 @@ export interface ProjectFile {
   last_accessed_at: string;
   chat_file_type: ChatFileType;
 }
+
+export type ProjectDetails = {
+  project: Project;
+  files?: ProjectFile[];
+  instructions?: Prompt;
+};
 
 export async function fetchProjects(): Promise<Project[]> {
   const response = await fetch("/api/user/projects/");
@@ -78,6 +85,53 @@ export async function getFilesInProject(
   const response = await fetch(`/api/user/projects/files/${projectId}`);
   if (!response.ok) {
     throw new Error("Failed to fetch project files");
+  }
+  return response.json();
+}
+
+export async function getProject(projectId: string): Promise<Project> {
+  const response = await fetch(`/api/user/projects/${projectId}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch project");
+  }
+  return response.json();
+}
+
+export async function getProjectInstructions(
+  projectId: string
+): Promise<Prompt | null> {
+  const response = await fetch(`/api/user/projects/${projectId}/instructions`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch project instructions");
+  }
+  const data = await response.json();
+  return data;
+}
+
+export async function upsertProjectInstructions(
+  projectId: string,
+  instructions: string
+): Promise<Prompt> {
+  const response = await fetch(`/api/user/projects/${projectId}/instructions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instructions }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as any).detail || "Failed to upsert project instructions"
+    );
+  }
+  return response.json();
+}
+
+export async function getProjectDetails(
+  projectId: string
+): Promise<ProjectDetails> {
+  const response = await fetch(`/api/user/projects/${projectId}/details`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch project details");
   }
   return response.json();
 }

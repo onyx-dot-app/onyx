@@ -139,6 +139,17 @@ def upgrade() -> None:
         "user_file",
         sa.Column("last_accessed_at", sa.DateTime(timezone=True), nullable=True),
     )
+    op.add_column(
+        "user_folder",
+        sa.Column("prompt_id", sa.Integer(), nullable=True),
+    )
+    op.create_foreign_key(
+        "user_folder_prompt_id_fkey",
+        "user_folder",
+        "prompt",
+        ["prompt_id"],
+        ["id"],
+    )
 
 
 def downgrade() -> None:
@@ -199,3 +210,5 @@ def downgrade() -> None:
         new_column_name="user_file_id",
         existing_type=sa.Integer(),
     )
+
+    op.drop_column("user_folder", "prompt_id")
