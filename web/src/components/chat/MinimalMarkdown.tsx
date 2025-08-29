@@ -46,7 +46,10 @@ export default function MinimalMarkdown({
         className="prose dark:prose-invert max-w-full text-sm break-words"
         components={markdownComponents}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[
+          remarkGfm,
+          [remarkMath, { singleDollarTextMath: false }],
+        ]}
         urlTransform={transformLinkUri}
       >
         {content}
