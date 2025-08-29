@@ -32,7 +32,7 @@ class OutlineApiClient:
 
         try:
             json = response.json()
-        except (ValueError, requests.exceptions.JSONDecodeError) as e:
+        except (ValueError, json.JSONDecodeError) as e:
             raise OutlineClientRequestFailedError(
                 response.status_code, 
                 f"Invalid JSON response: {e}"
