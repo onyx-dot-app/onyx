@@ -1,4 +1,4 @@
-"""drop parent_question_id column from research_agent_iteration_sub_step
+"""remove foreign key constraints from research_agent_iteration_sub_step
 
 Revision ID: f9b8c7d6e5a4
 Revises: bd7c3bf8beba
@@ -28,8 +28,26 @@ def upgrade() -> None:
     # Drop the parent_question_id column entirely
     op.drop_column("research_agent_iteration_sub_step", "parent_question_id")
 
+    # Drop the foreign key constraint for primary_question_id to chat_message.id
+    # (keep the column as it's needed for the composite foreign key)
+    op.drop_constraint(
+        "research_agent_iteration_sub_step_primary_question_id_fkey",
+        "research_agent_iteration_sub_step",
+        type_="foreignkey",
+    )
+
 
 def downgrade() -> None:
+    # Restore the foreign key constraint for primary_question_id to chat_message.id
+    op.create_foreign_key(
+        "research_agent_iteration_sub_step_primary_question_id_fkey",
+        "research_agent_iteration_sub_step",
+        "chat_message",
+        ["primary_question_id"],
+        ["id"],
+        ondelete="CASCADE",
+    )
+
     # Add back the parent_question_id column
     op.add_column(
         "research_agent_iteration_sub_step",

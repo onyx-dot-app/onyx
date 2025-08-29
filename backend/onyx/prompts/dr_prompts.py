@@ -1249,7 +1249,6 @@ whether there is a time filter implied in the query, and to rewrite the \
 query into a query that is much better suited for a search query against the predicted \
 document types.
 
-
 Here is the initial search query:
 {SEPARATOR_LINE}
 ---branch_query---
