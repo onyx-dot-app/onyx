@@ -35,7 +35,7 @@ def test_soft_delete_chat_session(
     # Send a message to create some data
     response = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
-        message="Explain the concept of machine learning in detail",
+        message="Hi",
         user_performing_action=basic_user,
     )
 
