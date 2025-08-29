@@ -113,7 +113,7 @@ class TestOutlineConnector:
             assert isinstance(doc, Document)
             assert doc.source == DocumentSource.OUTLINE
             if doc.doc_updated_at:
-                assert doc.doc_updated_at.timestamp() <= end_time
+                assert start_time <= doc.doc_updated_at.timestamp() <= end_time
 
     def test_outline_connector_load_from_state(
         self, connector: OutlineConnector, credentials: dict[str, Any]
