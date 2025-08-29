@@ -22,6 +22,9 @@ from onyx.connectors.models import TextSection
 
 
 class OutlineConnector(LoadConnector, PollConnector):
+    """Connector for Outline knowledge base. Handles authentication, document loading and polling.
+    Implements both LoadConnector for initial state loading and PollConnector for incremental updates.
+    """
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,

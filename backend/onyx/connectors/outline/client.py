@@ -8,6 +8,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 
 
 class OutlineClientRequestFailedError(ConnectionError):
+    """Custom error class for handling failed requests to the Outline API with status code and error message"""
     def __init__(self, status: int, error: str) -> None:
         self.status_code = status
         self.error = error
@@ -19,6 +20,7 @@ class OutlineClientRequestFailedError(ConnectionError):
 
 
 class OutlineApiClient:
+    """Client for interacting with the Outline API. Handles authentication and making HTTP requests."""
     def __init__(
         self,
         api_token: str,
