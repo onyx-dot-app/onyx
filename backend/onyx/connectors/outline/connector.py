@@ -33,6 +33,13 @@ class OutlineConnector(LoadConnector, PollConnector):
         self.outline_client: OutlineApiClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        required_keys = ["outline_api_token", "outline_base_url"]
+        for key in required_keys:
+            if key not in credentials:
+                raise ConnectorMissingCredentialError(
+                    f"Outline connector is missing required credential key: {key}"
+                )
+        
         self.outline_client = OutlineApiClient(
             api_token=credentials["outline_api_token"],
             base_url=credentials["outline_base_url"],
@@ -109,27 +116,33 @@ class OutlineConnector(LoadConnector, PollConnector):
         if self.outline_client is None:
             raise ConnectorMissingCredentialError("Outline")
 
-        return self.poll_source(None, None)
+        return self._fetch_documents()
 
     def poll_source(
-        self, start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         if self.outline_client is None:
             raise ConnectorMissingCredentialError("Outline")
 
         # Outline API does not support date-based filtering natively,
         # so we implement client-side filtering after fetching documents
-        time_filter = None
-        if start is not None or end is not None:
-            def time_filter(doc: Document) -> bool:
-                if doc.doc_updated_at is None:
-                    return False
-                doc_timestamp = doc.doc_updated_at.timestamp()
-                if start is not None and doc_timestamp < start:
-                    return False
-                if end is not None and doc_timestamp > end:
-                    return False
-                return True
+        def time_filter(doc: Document) -> bool:
+            if doc.doc_updated_at is None:
+                return False
+            doc_timestamp = doc.doc_updated_at.timestamp()
+            if doc_timestamp < start:
+                return False
+            if doc_timestamp > end:
+                return False
+            return True
+
+        return self._fetch_documents(time_filter)
+
+    def _fetch_documents(
+        self, time_filter: Callable[[Document], bool] | None = None
+    ) -> GenerateDocumentsOutput:
+        if self.outline_client is None:
+            raise ConnectorMissingCredentialError("Outline")
 
         transform_by_endpoint: dict[
             str, Callable[[OutlineApiClient, dict], Document]
