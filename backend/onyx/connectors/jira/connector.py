@@ -49,7 +49,6 @@ logger = setup_logger()
 
 ONE_HOUR = 3600
 
-JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "3"
 _JIRA_SLIM_PAGE_SIZE = 500
 _JIRA_FULL_PAGE_SIZE = 50
 
@@ -113,11 +112,11 @@ def process_jira_issue(
             )
             return None
 
-    description = (
-        issue.fields.description
-        if JIRA_API_VERSION in ("2", "3")
-        else extract_text_from_adf(issue.raw["fields"]["description"])
-    )
+    if isinstance(issue.fields.description, str):
+        description = issue.fields.description
+    else:
+        description = extract_text_from_adf(issue.raw["fields"]["description"])
+
     comments = get_comment_strs(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
