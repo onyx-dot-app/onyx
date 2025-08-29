@@ -1,6 +1,10 @@
+import json
 from typing import Any
 
 import requests
+from requests.exceptions import RequestException
+from requests.exceptions import Timeout
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 
 class OutlineClientRequestFailedError(ConnectionError):
@@ -28,7 +32,21 @@ class OutlineApiClient:
             data = {}
         url: str = self._build_url(endpoint)
         headers = self._build_headers()
-        response = requests.post(url, headers=headers, json=data, timeout=60)
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=60)
+        except Timeout:
+            raise OutlineClientRequestFailedError(
+                408, "Request timed out - server did not respond within 60 seconds"
+            )
+        except RequestsConnectionError as e:
+            raise OutlineClientRequestFailedError(
+                -1, f"Connection error - unable to reach Outline server: {e}"
+            )
+        except RequestException as e:
+            raise OutlineClientRequestFailedError(
+                -1, f"Network error occurred: {e}"
+            )
 
         try:
             json = response.json()
