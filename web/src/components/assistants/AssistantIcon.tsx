@@ -94,12 +94,14 @@ export function AssistantIcon({
   border,
   className,
   disableToolip,
+  colorOverride,
 }: {
   assistant: MinimalPersonaSnapshot | Persona;
   size?: IconSize;
   className?: string;
   border?: boolean;
   disableToolip?: boolean;
+  colorOverride?: string;
 }) {
   const dimension =
     typeof size === "number"
@@ -130,7 +132,13 @@ export function AssistantIcon({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={className + " text-[#000] dark:text-[#fff]"}>
+          <div
+            className={
+              (className || "") + colorOverride
+                ? ` ${colorOverride}`
+                : " text-[#000] dark:text-[#fff]"
+            }
+          >
             {assistant.id == -3 ? (
               <ArtAsistantIcon size={dimension} />
             ) : assistant.id == 0 ? (
