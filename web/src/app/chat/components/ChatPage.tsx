@@ -736,7 +736,7 @@ export function ChatPage({
   ]);
 
   const inputContainerClasses = useMemo(() => {
-    return `absolute pointer-events-none z-10 w-full transition-transform duration-200 ease-out ${
+    return `absolute pointer-events-none z-10 w-full ${
       showCenteredInput
         ? "top-1/2 left-0 -translate-y-1/2"
         : "bottom-0 left-0 translate-y-0"
