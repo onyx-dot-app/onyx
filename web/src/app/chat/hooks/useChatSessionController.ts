@@ -145,8 +145,7 @@ export function useChatSessionController({
           updateHasPerformedInitialScroll(existingChatSessionId, false);
         }
 
-        // Clear forced tool ids if we're switching to a new chat session
-        // don't clear if this is the start of a new chat session
+        // Clear forced tool ids if and only if we're switching to a new chat session
         setForcedToolIds([]);
       }
     }

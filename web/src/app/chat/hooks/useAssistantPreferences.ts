@@ -24,11 +24,11 @@ export function useAssistantPreferences() {
 
   const setSpecificAssistantPreferences = async (
     assistantId: number,
-    assistantPreference: UserSpecificAssistantPreference
+    newAssistantPreference: UserSpecificAssistantPreference
   ) => {
     _setAssistantPreferences({
       ...assistantPreferences,
-      [assistantId]: assistantPreference,
+      [assistantId]: newAssistantPreference,
     });
 
     try {
@@ -39,7 +39,7 @@ export function useAssistantPreferences() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(assistantPreference),
+          body: JSON.stringify(newAssistantPreference),
         }
       );
 

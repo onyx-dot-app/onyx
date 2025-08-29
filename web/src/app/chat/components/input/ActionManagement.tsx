@@ -1,8 +1,11 @@
+"use client";
+
 import {
   SlidersVerticalIcon,
   SearchIcon,
   DisableIcon,
   IconProps,
+  MoreActionsIcon,
 } from "@/components/icons/icons";
 import React, { useState } from "react";
 import {
@@ -15,6 +18,7 @@ import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
+import { useUser } from "@/components/user/UserProvider";
 
 interface ActionItemProps {
   Icon: (iconProps: IconProps) => JSX.Element;
@@ -139,6 +143,8 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
     setForcedToolIds,
   } = useAssistantsContext();
 
+  const { isAdmin, isCurator } = useUser();
+
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
   const toggleToolForCurrentAssistant = (toolId: number) => {
@@ -187,6 +193,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
     >
       <PopoverTrigger asChild>
         <button
+          type="button"
           className="
             relative 
             cursor-pointer 
@@ -260,10 +267,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
         </div>
 
         {/* Options */}
-        <div className="pt-2 flex-1 overflow-y-auto border-b border-border mx-1 pb-2">
+        <div className="pt-2 flex-1 overflow-y-auto mx-1 pb-2">
           {filteredTools.length === 0 ? (
             <div className="text-center py-1 text-text-400">
-              No matching tools found
+              No matching actions found
             </div>
           ) : (
             filteredTools.map((tool) => (
@@ -282,9 +289,14 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
           )}
         </div>
 
-        {/* More Connectors & Actions */}
-        <button
-          className="
+        <div className="border-b border-border mx-3.5" />
+
+        {/* More Connectors & Actions. Only show if user is admin or curator, since
+        they are the only ones who can manage actions. */}
+        {(isAdmin || isCurator) && (
+          <Link href="/admin/actions">
+            <button
+              className="
             w-full 
             flex 
             items-center 
@@ -293,40 +305,28 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             text-sm
             mt-2.5
           "
-        >
-          <div
-            className="
+            >
+              <div
+                className="
               mx-2 
               mb-2 
               px-2 
               py-1.5 
               flex 
               items-center 
-              hover:bg-background-150
+              hover:bg-background-100
               hover:text-text-500
               transition-colors
               rounded-lg
               w-full
             "
-          >
-            <svg
-              className="w-4 h-4 text-default"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-              />
-            </svg>
-            <Link href="/admin/actions" className="ml-2">
-              More Connectors & Actions
-            </Link>
-          </div>
-        </button>
+              >
+                <MoreActionsIcon className="text-text-500" />
+                <div className="ml-2">More Actions</div>
+              </div>
+            </button>
+          </Link>
+        )}
       </PopoverContent>
     </Popover>
   );

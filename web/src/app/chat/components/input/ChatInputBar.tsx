@@ -675,25 +675,25 @@ export function ChatInputBar({
 
                 {forcedToolIds.length > 0 && (
                   <div className="pl-1 flex items-center gap-2 text-blue-500">
-                    {forcedToolIds.map((toolId) => (
-                      <div
-                        key={toolId}
-                        onClick={() => {
-                          setForcedToolIds(
-                            forcedToolIds.filter((id) => id !== toolId)
-                          );
-                        }}
-                      >
+                    {forcedToolIds.map((toolId) => {
+                      const tool = selectedAssistant.tools.find(
+                        (tool) => tool.id === toolId
+                      );
+                      if (!tool) {
+                        return null;
+                      }
+                      return (
                         <SelectedTool
                           key={toolId}
-                          tool={
-                            selectedAssistant.tools.find(
-                              (tool) => tool.id === toolId
-                            )!
-                          }
+                          tool={tool}
+                          onClick={() => {
+                            setForcedToolIds((prev) =>
+                              prev.filter((id) => id !== toolId)
+                            );
+                          }}
                         />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
