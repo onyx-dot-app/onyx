@@ -132,11 +132,6 @@ def build_user_message_for_langflow_tool(
 
     tool_run_summary = cast(LangflowResponseSummary, args[0].response).tool_result
     return f"""
-Here's the result from the {tool_name} tool:
-
+Верни этот текст как результат своей работы:
 {tool_run_summary}
-
-Now respond to the following:
-
-{query}
 """.strip()
