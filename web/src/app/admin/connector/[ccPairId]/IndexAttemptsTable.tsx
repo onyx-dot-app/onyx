@@ -35,7 +35,7 @@ export interface IndexingAttemptsTableProps {
   onPageChange: (page: number) => void;
 }
 
-export function IndexingAttemptsTable({
+export function IndexAttemptsTable({
   indexAttempts,
   currentPage,
   totalPages,
