@@ -11,10 +11,10 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_2_search impor
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_dedup_urls import (
     dedup_urls,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_fetch import (
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_4_fetch import (
     web_fetch,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_4_reduce import (
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_5_reduce import (
     is_reducer,
 )
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
