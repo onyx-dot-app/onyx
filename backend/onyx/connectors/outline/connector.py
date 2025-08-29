@@ -60,12 +60,14 @@ class OutlineConnector(LoadConnector, PollConnector):
     ) -> Document:
         url = outline_client.build_app_url(f"/collection/{collection.get('id')}")
         title = str(collection.get("name", ""))
-        text = collection.get("name", "") + "\n" + collection.get("description", "")
+        name = collection.get("name") or ""
+        description = collection.get("description") or ""
+        text = name + "\n" + description
         updated_at_str = (
             str(collection.get("updatedAt")) if collection.get("updatedAt") is not None else None
         )
         return Document(
-            id="collection__" + str(collection.get("id")),
+            id="outline_collection__" + str(collection.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
             source=DocumentSource.OUTLINE,
             semantic_identifier="Collection: " + title,
@@ -82,12 +84,14 @@ class OutlineConnector(LoadConnector, PollConnector):
     ) -> Document:
         url = outline_client.build_app_url(f"/doc/{document.get('id')}")
         title = str(document.get("title", ""))
-        text = document.get("title", "") + "\n" + document.get("text", "")
+        doc_title = document.get("title") or ""
+        doc_text = document.get("text") or ""
+        text = doc_title + "\n" + doc_text
         updated_at_str = (
             str(document.get("updatedAt")) if document.get("updatedAt") is not None else None
         )
         return Document(
-            id="document__" + str(document.get("id")),
+            id="outline_document__" + str(document.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
             source=DocumentSource.OUTLINE,
             semantic_identifier="Document: " + title,
@@ -111,6 +115,9 @@ class OutlineConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Outline")
 
         # Create time filter function for client-side filtering
+        # Note: Outline API does not support date-based filtering natively,
+        # so we implement client-side filtering after fetching documents.
+        # This is the only way to achieve time-based filtering with Outline's API.
         time_filter = None
         if start is not None or end is not None:
             def time_filter(doc: Document) -> bool:
