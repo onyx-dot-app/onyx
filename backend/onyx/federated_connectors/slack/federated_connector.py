@@ -112,7 +112,7 @@ class SlackFederatedConnector(FederatedConnector):
         # Build OAuth URL with proper parameters (no state - handled by API layer)
         params = {
             "client_id": self.slack_credentials.client_id,
-            "scope": " ".join(SCOPES),
+            "user_scope": " ".join(SCOPES),
             "redirect_uri": redirect_uri,
         }
 
