@@ -15,6 +15,9 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
 from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
     InternetSearchInput,
 )
+from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+    InternetSearchUpdate,
+)
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -33,7 +36,7 @@ def web_search(
     state: InternetSearchInput,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
-) -> InternetSearchInput:
+) -> InternetSearchUpdate:
     """
     LangGraph node to perform internet search and decide which URLs to fetch.
     """
@@ -112,11 +115,8 @@ def web_search(
         for i in agent_decision.urls_to_open_indices
         if i < len(search_results) and i >= 0
     ]
-    return InternetSearchInput(
+    return InternetSearchUpdate(
         urls_to_open=urls_to_open,
-        parallelization_nr=state.parallelization_nr,
-        branch_question=state.branch_question,
-        deduped_branch_question_to_urls=state.deduped_branch_question_to_urls,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="internet_search",
