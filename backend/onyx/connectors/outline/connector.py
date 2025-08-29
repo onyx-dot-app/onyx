@@ -118,7 +118,7 @@ class OutlineConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Outline")
 
         # Outline API does not support date-based filtering natively,
-        # so we implement client-side filtering with early termination optimization
+        # so we implement client-side filtering after fetching documents
         time_filter = None
         if start is not None or end is not None:
             def time_filter(doc: Document) -> bool:

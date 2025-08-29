@@ -52,11 +52,8 @@ class OutlineApiClient:
 
         try:
             response_json = response.json()
-        except (ValueError, json.JSONDecodeError) as e:
-            raise OutlineClientRequestFailedError(
-                response.status_code, 
-                f"Invalid JSON response: {e}"
-            ) from e
+        except Exception:
+            response_json = {}
 
         if response.status_code >= 300:
             error = response.reason
