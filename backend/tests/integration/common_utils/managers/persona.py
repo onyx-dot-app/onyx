@@ -27,7 +27,6 @@ class PersonaManager:
         llm_filter_extraction: bool = True,
         recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO,
         datetime_aware: bool = False,
-        prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
         llm_model_provider_override: str | None = None,
@@ -54,7 +53,6 @@ class PersonaManager:
             is_public=is_public,
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
-            prompt_ids=prompt_ids or [0],
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
@@ -85,7 +83,10 @@ class PersonaManager:
             is_public=is_public,
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
-            prompt_ids=prompt_ids or [],
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            include_citations=include_citations,
+            datetime_aware=datetime_aware,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
@@ -109,7 +110,6 @@ class PersonaManager:
         llm_filter_extraction: bool | None = None,
         recency_bias: RecencyBiasSetting | None = None,
         datetime_aware: bool = False,
-        prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
         llm_model_provider_override: str | None = None,
@@ -135,7 +135,6 @@ class PersonaManager:
             llm_filter_extraction=llm_filter_extraction
             or persona.llm_filter_extraction,
             recency_bias=recency_bias or persona.recency_bias,
-            prompt_ids=prompt_ids or persona.prompt_ids,
             document_set_ids=document_set_ids or persona.document_set_ids,
             tool_ids=tool_ids or persona.tool_ids,
             llm_model_provider_override=llm_model_provider_override
@@ -168,7 +167,11 @@ class PersonaManager:
             is_public=updated_persona_data["is_public"],
             llm_filter_extraction=updated_persona_data["llm_filter_extraction"],
             recency_bias=recency_bias or persona.recency_bias,
-            prompt_ids=[prompt["id"] for prompt in updated_persona_data["prompts"]],
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            include_citations=include_citations,
+            datetime_aware=datetime_aware,
+            is_default_prompt=updated_persona_data.get("is_default_prompt", False),
             document_set_ids=updated_persona_data["document_sets"],
             tool_ids=updated_persona_data["tools"],
             llm_model_provider_override=updated_persona_data[
@@ -237,8 +240,10 @@ class PersonaManager:
                     == persona.llm_model_provider_override
                     and fetched_persona.llm_model_version_override
                     == persona.llm_model_version_override
-                    and set([prompt.id for prompt in fetched_persona.prompts])
-                    == set(persona.prompt_ids)
+                    and fetched_persona.system_prompt == persona.system_prompt
+                    and fetched_persona.task_prompt == persona.task_prompt
+                    and fetched_persona.include_citations == persona.include_citations
+                    and fetched_persona.datetime_aware == persona.datetime_aware
                     and set(
                         [
                             document_set.id

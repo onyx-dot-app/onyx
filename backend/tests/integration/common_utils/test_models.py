@@ -129,7 +129,12 @@ class DATestPersona(BaseModel):
     is_public: bool
     llm_filter_extraction: bool
     recency_bias: RecencyBiasSetting
-    prompt_ids: list[int]
+    # Embedded prompt fields (no longer separate prompt_ids)
+    system_prompt: str | None = None
+    task_prompt: str | None = None
+    include_citations: bool = True
+    datetime_aware: bool = True
+    is_default_prompt: bool = False
     document_set_ids: list[int]
     tool_ids: list[int]
     llm_model_provider_override: str | None

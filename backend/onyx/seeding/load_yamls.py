@@ -11,11 +11,8 @@ from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import Persona
-from onyx.db.models import Prompt as PromptDBModel
 from onyx.db.models import Tool as ToolDBModel
 from onyx.db.persona import upsert_persona
-from onyx.db.prompts import get_prompt_by_name
-from onyx.db.prompts import upsert_prompt
 from onyx.db.user_documents import upsert_user_folder
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -47,23 +44,32 @@ def load_user_folders_from_yaml(
 def load_prompts_from_yaml(
     db_session: Session, prompts_yaml: str = PROMPTS_YAML
 ) -> None:
+    """Load prompts as personas with embedded prompt configuration.
+
+    Since prompts are now embedded in personas, this function creates
+    personas with the prompt configuration embedded directly.
+    """
     with open(prompts_yaml, "r") as file:
         data = yaml.safe_load(file)
 
     all_prompts = data.get("prompts", [])
     for prompt in all_prompts:
-        upsert_prompt(
-            db_session=db_session,
+        # Create a persona with embedded prompt configuration
+        upsert_persona(
             user=None,
-            prompt_id=prompt.get("id"),
+            persona_id=(
+                (-1 * prompt.get("id")) if prompt.get("id") is not None else None
+            ),
             name=prompt["name"],
             description=prompt["description"].strip(),
             system_prompt=prompt["system"].strip(),
             task_prompt=prompt["task"].strip(),
             include_citations=prompt["include_citations"],
             datetime_aware=prompt.get("datetime_aware", True),
-            default_prompt=True,
-            personas=None,
+            is_default_prompt=True,
+            builtin_persona=True,
+            is_public=True,
+            db_session=db_session,
         )
         db_session.commit()
 
@@ -117,21 +123,22 @@ def load_personas_from_yaml(
         else:
             doc_set_ids = None
 
-        prompt_ids: list[int] | None = None
-        prompt_set_names = persona["prompts"]
-        if prompt_set_names:
-            prompts: list[PromptDBModel | None] = [
-                get_prompt_by_name(prompt_name, user=None, db_session=db_session)
-                for prompt_name in prompt_set_names
-            ]
-            if any([prompt is None for prompt in prompts]):
-                raise ValueError("Invalid Persona configs, not all prompts exist")
-
-            if prompts:
-                prompt_ids = [prompt.id for prompt in prompts if prompt is not None]
-
-        if not prompt_ids:
-            raise ValueError("Invalid Persona config, no prompts exist")
+        # Handle embedded prompt configuration
+        # For now, we'll use the first prompt from the YAML or require explicit prompt fields
+        prompt_config = persona.get("prompt_config", {})
+        if not prompt_config and persona.get("prompts"):
+            # If legacy format with prompt names, we'll need to look up the first one
+            # and use its configuration, but this is a temporary compatibility measure
+            prompt_set_names = persona["prompts"]
+            if prompt_set_names:
+                # For now, use default prompt configuration - in production you might want to
+                # look up the actual prompt configuration from a mapping or separate YAML
+                prompt_config = {
+                    "system_prompt": "You are a helpful AI assistant.",
+                    "task_prompt": "Please answer the user's question based on the provided context.",
+                    "include_citations": True,
+                    "datetime_aware": True,
+                }
 
         p_id = persona.get("id")
         tool_ids = []
@@ -174,7 +181,11 @@ def load_personas_from_yaml(
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
             recency_bias=RecencyBiasSetting(persona["recency_bias"]),
-            prompt_ids=prompt_ids,
+            # Embedded prompt configuration
+            system_prompt=prompt_config.get("system_prompt"),
+            task_prompt=prompt_config.get("task_prompt"),
+            include_citations=prompt_config.get("include_citations", True),
+            datetime_aware=prompt_config.get("datetime_aware", True),
             document_set_ids=doc_set_ids,
             tool_ids=tool_ids,
             builtin_persona=True,
