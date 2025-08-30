@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onyx-cli"
+version = "0.1.0"
+description = "Onyx CLI for installing, running, and managing Onyx deployments."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Onyx Team", email = "founders@onyx.app" }
+]
+requires-python = ">=3.11"
+
+# Runtime dependencies
+dependencies = []
+
+[project.urls]
+Homepage = "https://onyx.app"
+Documentation = "https://docs.onyx.app"
+Repository = "https://github.com/onyx-dot-app/onyx"
+Issues = "https://github.com/onyx-dot-app/onyx/issues"
+Slack = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-39xiw9exz-hldDxOsuWKtr_s1ONS~3bg"
+Discord = "https://discord.gg/RvBDfSEN"
+
+[project.scripts]
+onyx = "cli.cli:main"
+
+[tool.setuptools]
+packages = ["cli"]
+
+[tool.setuptools.package-dir]
+cli = "cli"
