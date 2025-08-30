@@ -13,7 +13,9 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
     get_default_provider,
 )
-from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
+from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+    FetchInput,
+)
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import extract_document_citations
@@ -83,7 +85,9 @@ def _dummy_internet_content_from_url(url: str) -> InternetContent:
 
 
 def web_fetch(
-    state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
+    state: FetchInput,
+    config: RunnableConfig,
+    writer: StreamWriter = lambda _: None,
 ) -> BranchUpdate:
     """
     LangGraph node to fetch content from URLs and process the results.
@@ -153,7 +157,7 @@ def web_fetch(
 
     if research_type == ResearchType.DEEP:
         search_prompt = INTERNAL_SEARCH_PROMPTS[research_type].build(
-            search_query=state.branch_question or "",
+            search_query=state.branch_question,
             base_question=base_question,
             document_text=document_texts,
         )
@@ -197,7 +201,7 @@ def web_fetch(
                 tool_id=is_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
-                question=state.branch_question or "",
+                question=state.branch_question,
                 answer=answer_string,
                 claims=claims,
                 cited_documents=cited_documents,
