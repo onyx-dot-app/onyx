@@ -6,7 +6,6 @@ from typing import cast
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from mcp.types import Resource
-from pydantic import BaseModel
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.enums import MCPAuthenticationType
@@ -17,11 +16,11 @@ from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_resources_sync
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 
 logger = setup_logger()
 
@@ -44,6 +43,7 @@ class MCPTool(BaseTool):
         tool_id: int,
         mcp_server: MCPServer,  # TODO: these should be basemodels instead of db objects
         tool_name: str,
+        tool_description: str,
         tool_definition: dict[str, Any],
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
@@ -55,9 +55,7 @@ class MCPTool(BaseTool):
 
         self._name = tool_name
         self._tool_definition = tool_definition
-        self._description = tool_definition.get(
-            "description", f"MCP tool from {mcp_server.name}"
-        )
+        self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
 
     @property
@@ -258,17 +256,16 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
             # Return error as tool result
             yield ToolResponse(
                 id=MCP_TOOL_RESPONSE_ID,
-                response=MCPToolCallSummary(
+                response=CustomToolCallSummary(
                     tool_name=self._name,
-                    server_url=self.mcp_server.server_url,
+                    response_type="json",
                     tool_result=error_result,
-                    server_name=self.mcp_server.name,
                 ),
             )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         """Return the final result for storage in the database"""
-        response = cast(MCPToolCallSummary, args[0].response)
+        response = cast(CustomToolCallSummary, args[0].response)
         return response.tool_result
 
     def build_next_prompt(

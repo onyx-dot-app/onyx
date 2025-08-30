@@ -18,6 +18,7 @@ from onyx.prompts.dr_prompts import CUSTOM_TOOL_USE_PROMPT
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCP_TOOL_RESPONSE_ID
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -94,7 +95,7 @@ def custom_tool_act(
     # run the tool
     response_summary: CustomToolCallSummary | None = None
     for tool_response in custom_tool.run(**tool_args):
-        if tool_response.id == CUSTOM_TOOL_RESPONSE_ID:
+        if tool_response.id in {CUSTOM_TOOL_RESPONSE_ID, MCP_TOOL_RESPONSE_ID}:
             response_summary = cast(CustomToolCallSummary, tool_response.response)
             break
 

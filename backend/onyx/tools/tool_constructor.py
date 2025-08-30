@@ -382,6 +382,7 @@ def construct_tools(
                     tool_id=db_tool_model.id,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
+                    tool_description=saved_tool.description,
                     tool_definition=saved_tool.mcp_input_schema or {},
                     connection_config=connection_config,
                     user_email=user_email,

@@ -6,17 +6,14 @@ and handles connection initialization, session management, and protocol communic
 """
 
 import asyncio
-import subprocess
 from collections.abc import Awaitable
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
 from typing import Dict
-from typing import Optional
 from typing import TypeVar
 from urllib.parse import urlencode
 
-import aiohttp
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
 from mcp.types import CallToolResult
@@ -49,6 +46,16 @@ class MCPMessageType(str, Enum):
     NOTIFICATION = "notification"
 
 
+class ContentBlockTypes(str, Enum):
+    """MCP content block types"""  # Unfortunstely these aren't exposed by the mcp library
+
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    RESOURCE = "resource"
+    RESOURCE_LINK = "resource_link"
+
+
 class MCPMessage(BaseModel):
     """Base MCP message following JSON-RPC 2.0"""
 
@@ -79,6 +86,7 @@ class MCPMessage(BaseModel):
             msg["error"] = self.error
 
         return msg
+
 
 # TODO: in the future we should do things like manage sessions and handle errors better
 # using an abstraction like this. For now things are purely functional and we initialize
@@ -154,19 +162,23 @@ def _call_mcp_client_function(
         raise e
 
 
-def mcp_result_text(call_tool_result: CallToolResult) -> str:
+def process_mcp_result(call_tool_result: CallToolResult) -> str:
     """Flatten MCP CallToolResult->text (prefers text content blocks)."""
+    # TODO: use structured_content if available
     parts = []
-    for c in getattr(call_tool_result, "content", []) or []:
-        if getattr(c, "type", None) == "text":
-            parts.append(getattr(c, "text", "") or "")
-    return "\n".join(p for p in parts if p) or str(call_tool_result)
+    for content_block in call_tool_result.content:
+        if content_block.type == ContentBlockTypes.TEXT.value:
+            parts.append(content_block.text or "")
+        # TODO: handle other content block types
+
+    return "\n".join(p for p in parts if p) or str(call_tool_result.structuredContent)
 
 
-def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> MCPClientFunction[CallToolResult]:
-    async def call_tool(session: ClientSession) -> CallToolResult:
+def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> MCPClientFunction[str]:
+    async def call_tool(session: ClientSession) -> str:
         await session.initialize()
-        return await session.call_tool(tool_name, arguments)
+        result = await session.call_tool(tool_name, arguments)
+        return process_mcp_result(result)
 
     return call_tool
 
@@ -177,7 +189,7 @@ def call_mcp_tool(
     arguments: dict[str, Any],
     connection_headers: dict[str, Any] | None = None,
     transport: str = "streamable-http",
-) -> CallToolResult:
+) -> str:
     """Call a specific tool on the MCP server"""
     return _call_mcp_client_function(
         _call_mcp_tool(tool_name, arguments),
