@@ -4,7 +4,9 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import model_supports_temperature
 
 
 if TYPE_CHECKING:
@@ -157,6 +159,8 @@ class ModelConfigurationView(BaseModel):
     is_visible: bool | None = False
     max_input_tokens: int | None = None
     supports_image_input: bool
+    supports_reasoning: bool
+    supports_temperature: bool
 
     @classmethod
     def from_model(
@@ -172,6 +176,14 @@ class ModelConfigurationView(BaseModel):
                 model_name=model_configuration_model.name, model_provider=provider_name
             ),
             supports_image_input=model_supports_image_input(
+                model_name=model_configuration_model.name,
+                model_provider=provider_name,
+            ),
+            supports_reasoning=model_is_reasoning_model(
+                model_name=model_configuration_model.name,
+                model_provider=provider_name,
+            ),
+            supports_temperature=model_supports_temperature(
                 model_name=model_configuration_model.name,
                 model_provider=provider_name,
             ),

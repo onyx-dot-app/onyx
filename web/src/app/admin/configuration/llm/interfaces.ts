@@ -18,6 +18,8 @@ export interface ModelConfigurationUpsertRequest {
 
 export interface ModelConfiguration extends ModelConfigurationUpsertRequest {
   supports_image_input: boolean;
+  supports_reasoning?: boolean;
+  supports_temperature?: boolean;
 }
 
 export interface WellKnownLLMProviderDescriptor {

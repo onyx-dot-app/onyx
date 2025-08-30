@@ -42,6 +42,7 @@ import amazonSVG from "../../../public/Amazon.svg";
 import geminiSVG from "../../../public/Gemini.svg";
 import metaSVG from "../../../public/Meta.svg";
 import mistralSVG from "../../../public/Mistral.svg";
+import xaiSVG from "../../../public/Xai.svg";
 import qwenSVG from "../../../public/Qwen.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import litellmIcon from "../../../public/litellm.png";
@@ -1341,6 +1342,13 @@ export const MistralIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src={mistralSVG} />
+);
+
+export const XaiIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={xaiSVG} />
 );
 
 export const VoyageIconSVG = ({
