@@ -1,0 +1,24 @@
+{{- if and .Values.keda.enabled .Values.keda.apiServer .Values.keda.apiServer.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-api-server-scaledobject
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+    app: api-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx-stack.fullname" . }}-api-server
+  pollingInterval: {{ .Values.keda.apiServer.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.keda.apiServer.cooldownPeriod | default 300 }}
+  minReplicaCount: {{ .Values.keda.apiServer.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.keda.apiServer.maxReplicas | default 10 }}
+  triggers:
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: {{ .Values.keda.apiServer.cpuThreshold | default "70" | quote }}
+{{- end }}

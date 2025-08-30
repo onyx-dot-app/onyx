@@ -1,0 +1,31 @@
+{{- if and .Values.keda.enabled .Values.keda.modelServers.enabled }}
+{{- range $serverType, $serverConfig := .Values.keda.modelServers }}
+{{- if and (ne $serverType "enabled") $serverConfig.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" $ }}-{{ $serverType }}-model-server-scaledobject
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "onyx-stack.labels" $ | nindent 4 }}
+    app: {{ $serverType }}-model-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx-stack.fullname" $ }}-{{ $serverType }}-model-server
+  pollingInterval: {{ $serverConfig.pollingInterval | default 30 }}
+  cooldownPeriod: {{ $serverConfig.cooldownPeriod | default 300 }}
+  minReplicaCount: {{ $serverConfig.minReplicas | default 1 }}
+  maxReplicaCount: {{ $serverConfig.maxReplicas | default 5 }}
+  triggers:
+    {{- if $serverConfig.triggers }}
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: {{ $serverConfig.cpuThreshold | default "70" | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

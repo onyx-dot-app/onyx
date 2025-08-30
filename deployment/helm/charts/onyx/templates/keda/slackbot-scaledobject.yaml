@@ -1,0 +1,28 @@
+{{- if and .Values.keda.enabled .Values.keda.slackbot .Values.keda.slackbot.enabled }}
+# Note: This KEDA ScaledObject will conflict with HPA if slackbot.autoscaling.enabled is also true
+# Only one autoscaler should be active per deployment
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-slackbot-scaledobject
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+    app: slackbot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx-stack.fullname" . }}-slackbot
+  pollingInterval: {{ .Values.keda.slackbot.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.keda.slackbot.cooldownPeriod | default 300 }}
+  minReplicaCount: {{ .Values.keda.slackbot.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.keda.slackbot.maxReplicas | default 3 }}
+  triggers:
+    {{- if .Values.keda.slackbot.triggers }}
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: {{ .Values.keda.slackbot.cpuThreshold | default "70" | quote }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,51 @@
+{{- if and .Values.keda.enabled .Values.keda.celeryWorkers.enabled }}
+{{- range $workerType, $workerConfig := .Values.keda.celeryWorkers }}
+{{- if and (ne $workerType "enabled") $workerConfig.enabled (ne $workerType "docprocessing") (ne $workerType "docfetching") }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" $ }}-celery-worker-{{ $workerType }}-scaledobject
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "onyx-stack.labels" $ | nindent 4 }}
+    app: celery-worker-{{ $workerType }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx-stack.fullname" $ }}-celery-worker-{{ $workerType }}
+  pollingInterval: {{ $workerConfig.pollingInterval | default 30 }}
+  cooldownPeriod: {{ $workerConfig.cooldownPeriod | default 300 }}
+  minReplicaCount: {{ $workerConfig.minReplicas | default 1 }}
+  maxReplicaCount: {{ $workerConfig.maxReplicas | default 10 }}
+  triggers:
+    {{- if $workerConfig.triggers }}
+    # Default Prometheus-based trigger for Redis queue depth if none specified
+    # Scaling Logic:
+    # - When queue depth > 5: Scale up by factor of 2 (moderate scaling)
+    # - When queue depth <= 5: Scale down by factor of 0.5 (conservative scaling)
+    # - Threshold of 1 ensures scaling triggers when metric value > 1
+    - type: prometheus
+      metadata:
+        serverAddress: "http://prometheus-redis.monitoring.svc.cluster.local:9090"
+        metricName: "redis_key_size_sum"
+        metricType: "Value"
+        threshold: "1"
+        query: |
+          # Simplified scaling logic for generic celery workers
+          # Returns 2 when queue depth > 5, 0.5 when <= 5
+          # This creates a clear scaling decision boundary
+          (
+            (sum(redis_key_size{key=~"connector_{{ $workerType }}.*"}) > 5)
+              * 2
+          )
+          +
+          (
+            (sum(redis_key_size{key=~"connector_{{ $workerType }}.*"}) <= 5)
+              * 0.5
+          )
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
