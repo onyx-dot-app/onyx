@@ -198,6 +198,7 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
 
     IMAP = "imap"
+    BITBUCKET = "bitbucket"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -540,6 +541,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
+    DocumentSource.BITBUCKET: "bitbucket data",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
