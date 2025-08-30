@@ -205,7 +205,7 @@ def map_pr_to_document(pr: dict[str, Any], workspace: str, repo_slug: str) -> Do
         BasicExpertInfo(display_name=_get_user_name(r)) for r in reviewers
     ] or None
 
-    reviewers = [_get_user_name(r) for r in reviewers]
+    reviewer_names = [_get_user_name(r) for r in reviewers]
 
     # Create a concise summary of key PR info
     created_date = created_on.split("T")[0] if created_on else "N/A"
