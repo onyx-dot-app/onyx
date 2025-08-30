@@ -449,16 +449,6 @@ export function ChatPage({
     documentSidebarInitialWidth = Math.min(700, maxDocumentSidebarWidth);
   }
 
-  const continueGenerating = () => {
-    onSubmit({
-      message: "Continue Generating (pick up exactly where you left off)",
-      selectedFiles: [],
-      selectedFolders: [],
-      currentMessageFiles: [],
-      useAgentSearch: deepResearchEnabled,
-    });
-  };
-
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
   );
@@ -719,6 +709,36 @@ export function ChatPage({
         : [...prev, document]
     );
   };
+
+  // Memoized callbacks for ChatInputBar
+  const handleToggleDocSelection = useCallback(() => {
+    setToggleDocSelection(true);
+  }, []);
+
+  const handleShowApiKeyModal = useCallback(() => {
+    setShowApiKeyModal(true);
+  }, []);
+
+  const handleSetDeepResearchEnabled = useCallback(() => {
+    toggleDeepResearch();
+  }, [toggleDeepResearch]);
+
+  const handleChatInputSubmit = useCallback(() => {
+    onSubmit({
+      message: message,
+      selectedFiles: selectedFiles,
+      selectedFolders: selectedFolders,
+      currentMessageFiles: currentMessageFiles,
+      useAgentSearch: deepResearchEnabled,
+    });
+  }, [
+    onSubmit,
+    message,
+    selectedFiles,
+    selectedFolders,
+    currentMessageFiles,
+    deepResearchEnabled,
+  ]);
 
   // Determine whether to show the centered input (no messages yet)
   const showCenteredInput = useMemo(() => {
@@ -1274,35 +1294,21 @@ export function ChatPage({
                             )}
                             <ChatInputBar
                               deepResearchEnabled={deepResearchEnabled}
-                              setDeepResearchEnabled={() =>
-                                toggleDeepResearch()
+                              setDeepResearchEnabled={
+                                handleSetDeepResearchEnabled
                               }
                               toggleDocumentSidebar={toggleDocumentSidebar}
                               filterManager={filterManager}
                               llmManager={llmManager}
-                              removeDocs={() => {
-                                clearSelectedDocuments();
-                              }}
+                              removeDocs={clearSelectedDocuments}
                               retrievalEnabled={retrievalEnabled}
-                              toggleDocSelection={() =>
-                                setToggleDocSelection(true)
-                              }
-                              showConfigureAPIKey={() =>
-                                setShowApiKeyModal(true)
-                              }
+                              toggleDocSelection={handleToggleDocSelection}
+                              showConfigureAPIKey={handleShowApiKeyModal}
                               selectedDocuments={selectedDocuments}
                               message={message}
                               setMessage={setMessage}
                               stopGenerating={stopGenerating}
-                              onSubmit={() => {
-                                onSubmit({
-                                  message: message,
-                                  selectedFiles: selectedFiles,
-                                  selectedFolders: selectedFolders,
-                                  currentMessageFiles: currentMessageFiles,
-                                  useAgentSearch: deepResearchEnabled,
-                                });
-                              }}
+                              onSubmit={handleChatInputSubmit}
                               chatState={currentChatState}
                               selectedAssistant={
                                 selectedAssistant || liveAssistant

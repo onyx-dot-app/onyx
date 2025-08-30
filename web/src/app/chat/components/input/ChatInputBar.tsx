@@ -1,4 +1,11 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FiPlus, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
@@ -109,7 +116,7 @@ interface ChatInputBarProps {
   placeholder?: string;
 }
 
-export function ChatInputBar({
+export const ChatInputBar = React.memo(function ChatInputBar({
   toggleDocSelection,
   retrievalEnabled,
   removeDocs,
@@ -183,47 +190,6 @@ export function ChatInputBar({
   };
 
   const { llmProviders, inputPrompts } = useChatContext();
-
-  const suggestionsRef = useRef<HTMLDivElement | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
-  const interactionsRef = useRef<HTMLDivElement | null>(null);
-
-  const hideSuggestions = () => {
-    setShowSuggestions(false);
-    setTabbingIconIndex(0);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(event.target as Node) &&
-        (!interactionsRef.current ||
-          !interactionsRef.current.contains(event.target as Node))
-      ) {
-        hideSuggestions();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleAssistantInput = (text: string) => {
-    if (!text.startsWith("@")) {
-      hideSuggestions();
-    } else {
-      const match = text.match(/(?:\s|^)@(\w*)$/);
-      if (match) {
-        setShowSuggestions(true);
-      } else {
-        hideSuggestions();
-      }
-    }
-  };
-
   const [showPrompts, setShowPrompts] = useState(false);
 
   const hidePrompts = () => {
@@ -238,7 +204,7 @@ export function ChatInputBar({
     setMessage(`${prompt.content}`);
   };
 
-  const handlePromptInput = (text: string) => {
+  const handlePromptInput = useCallback((text: string) => {
     if (!text.startsWith("/")) {
       hidePrompts();
     } else {
@@ -249,24 +215,16 @@ export function ChatInputBar({
         hidePrompts();
       }
     }
-  };
+  }, []);
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = event.target.value;
-    setMessage(text);
-    handleAssistantInput(text);
-    handlePromptInput(text);
-  };
-
-  let startFilterAt = "";
-  if (message !== undefined) {
-    const message_segments = message
-      .slice(message.lastIndexOf("@") + 1)
-      .split(/\s/);
-    if (message_segments[0]) {
-      startFilterAt = message_segments[0].toLowerCase();
-    }
-  }
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const text = event.target.value;
+      setMessage(text);
+      handlePromptInput(text);
+    },
+    [setMessage, handlePromptInput]
+  );
 
   let startFilterSlash = "";
   if (message !== undefined) {
@@ -286,10 +244,7 @@ export function ChatInputBar({
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      (showSuggestions || showPrompts) &&
-      (e.key === "Tab" || e.key == "Enter")
-    ) {
+    if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
       e.preventDefault();
 
       if (tabbingIconIndex == filteredPrompts.length && showPrompts) {
@@ -307,13 +262,13 @@ export function ChatInputBar({
       }
     }
 
-    if (!showPrompts && !showSuggestions) {
+    if (!showPrompts) {
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setTabbingIconIndex((tabbingIconIndex) =>
-        Math.min(tabbingIconIndex + 1, showPrompts ? filteredPrompts.length : 0)
+        Math.min(tabbingIconIndex + 1, filteredPrompts.length)
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
@@ -375,10 +330,7 @@ export function ChatInputBar({
           "
         >
           {showPrompts && user?.preferences?.shortcut_enabled && (
-            <div
-              ref={suggestionsRef}
-              className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
-            >
+            <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
               <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
                 {filteredPrompts.map(
                   (currentPrompt: InputPrompt, index: number) => (
@@ -484,7 +436,6 @@ export function ChatInputBar({
                 if (
                   event.key === "Enter" &&
                   !showPrompts &&
-                  !showSuggestions &&
                   !event.shiftKey &&
                   !(event.nativeEvent as any).isComposing
                 ) {
@@ -750,4 +701,4 @@ export function ChatInputBar({
       </div>
     </div>
   );
-}
+});
