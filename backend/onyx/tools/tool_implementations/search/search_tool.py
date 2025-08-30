@@ -106,6 +106,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         full_doc: bool = False,
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
+        slack_context: dict[str, str] | None = None,  # Add Slack context parameter
     ) -> None:
         self.user = user
         self.persona = persona
@@ -120,6 +121,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.full_doc = full_doc
         self.bypass_acl = bypass_acl
         self.db_session = db_session
+        self.slack_context = slack_context
+
+        # Log Slack context in SearchTool constructor
+        if slack_context:
+            logger.info(f"SearchTool: Slack context captured: {slack_context}")
+        else:
+            logger.info("SearchTool: No Slack context provided")
 
         # Only used via API
         self.rerank_settings = rerank_settings
@@ -419,6 +427,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             prompt_config=self.prompt_config,
             retrieved_sections_callback=retrieved_sections_callback,
             contextual_pruning_config=self.contextual_pruning_config,
+            slack_context=self.slack_context,  # Pass Slack context
         )
 
         search_query_info = SearchQueryInfo(

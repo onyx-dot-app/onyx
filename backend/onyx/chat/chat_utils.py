@@ -66,6 +66,7 @@ def prepare_chat_message_request(
     db_session: Session,
     use_agentic_search: bool = False,
     skip_gen_ai_answer_generation: bool = False,
+    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -92,6 +93,7 @@ def prepare_chat_message_request(
         rerank_settings=rerank_settings,
         use_agentic_search=use_agentic_search,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+        slack_context=slack_context,  # Pass Slack context
     )
 
 

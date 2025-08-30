@@ -9,16 +9,18 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
 from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
+from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -35,11 +37,68 @@ def get_federated_retrieval_functions(
     user_id: UUID | None,
     source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
+    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> list[FederatedRetrievalInfo]:
+    logger.info(
+        f"get_federated_retrieval_functions called with document_set_names: {document_set_names}"
+    )
+
+    # Log Slack context received
+    if slack_context:
+        logger.info(
+            f"get_federated_retrieval_functions: Received Slack context: {slack_context}"
+        )
+    else:
+        logger.info("get_federated_retrieval_functions: No Slack context received")
+
+    # Check for Slack bot context first (regardless of user_id)
+    if slack_context:
+        logger.info("Slack context detected, checking for Slack bot setup...")
+
+        try:
+            logger.info("Fetching Slack bots...")
+            slack_bots = fetch_slack_bots(db_session)
+            tenant_slack_bot = next((bot for bot in slack_bots if bot.enabled), None)
+
+            if tenant_slack_bot and tenant_slack_bot.user_token:
+                # For Slack bot context, we'll determine search scope in slack_retrieval
+                # based on the current Slack event context
+
+                federated_retrieval_infos_slack = []
+
+                # Create a wrapper that properly handles session and context
+                def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
+                    result = slack_retrieval(
+                        query=query,
+                        access_token=tenant_slack_bot.user_token or "",
+                        db_session=get_session_with_current_tenant().__enter__(),
+                        limit=MAX_FEDERATED_CHUNKS,
+                        slack_event_context=slack_context,  # Captured from outer scope
+                        bot_token=tenant_slack_bot.bot_token,
+                    )
+                    return result
+
+                slack_retrieval_function = slack_wrapper
+
+                federated_retrieval_infos_slack.append(
+                    FederatedRetrievalInfo(
+                        retrieval_function=slack_retrieval_function,
+                        source=FederatedConnectorSource.FEDERATED_SLACK,
+                    )
+                )
+                logger.info(
+                    f"Added Slack federated search for bot, returning {len(federated_retrieval_infos_slack)} retrieval functions"
+                )
+                return federated_retrieval_infos_slack
+
+        except Exception as e:
+            logger.warning(f"Could not setup Slack bot federated search: {e}")
+            # Fall through to regular federated connector logic
+
     if user_id is None:
+        # No user ID provided and no Slack context, return empty
         logger.warning(
-            "No user ID provided, skipping federated retrieval. Federated retrieval not "
-            "supported with AUTH_TYPE=disabled."
+            "No user ID provided and no Slack context, returning empty retrieval functions"
         )
         return []
 
@@ -60,11 +119,12 @@ def get_federated_retrieval_functions(
             pair
         )
 
+    # At this point, user_id is guaranteed to be not None since we're in the else branch
+    assert user_id is not None
+
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
-        # if source filters are specified by the user, skip federated connectors that are
-        # not in the source_types
         if (
             source_types is not None
             and oauth_token.federated_connector.source.to_non_federated_source()
@@ -75,12 +135,6 @@ def get_federated_retrieval_functions(
         document_set_associations = federated_connector_id_to_document_sets[
             oauth_token.federated_connector_id
         ]
-
-        # if document set names are specified by the user, skip federated connectors that are
-        # not associated with any of the document sets
-        if document_set_names and not document_set_associations:
-            continue
-
         if document_set_associations:
             entities = document_set_associations[0].entities
         else:
@@ -90,6 +144,7 @@ def get_federated_retrieval_functions(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
+
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
                 retrieval_function=lambda query: connector.search(
@@ -101,4 +156,5 @@ def get_federated_retrieval_functions(
                 source=oauth_token.federated_connector.source,
             )
         )
+
     return federated_retrieval_infos

@@ -603,6 +603,7 @@ def stream_chat_message_objects(
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
             ),
+            slack_context=new_msg_req.slack_context,  # Pass Slack context from request
         )
 
         tools: list[Tool] = []

@@ -184,6 +184,7 @@ def construct_tools(
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
@@ -229,6 +230,7 @@ def construct_tools(
                     ),
                     rerank_settings=search_tool_config.rerank_settings,
                     bypass_acl=search_tool_config.bypass_acl,
+                    slack_context=slack_context,  # Pass the Slack context
                 )
                 tool_dict[db_tool_model.id] = [search_tool]
 

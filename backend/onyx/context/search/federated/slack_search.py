@@ -64,11 +64,39 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     ]
 
 
+def _is_public_channel(channel_info: dict[str, Any]) -> bool:
+    """Check if a channel is public based on its info"""
+    # The channel_info structure has a nested 'channel' object
+    channel = channel_info.get("channel", {})
+
+    is_channel = channel.get("is_channel", False)
+    is_private = channel.get("is_private", False)
+    is_group = channel.get("is_group", False)
+    is_mpim = channel.get("is_mpim", False)
+    is_im = channel.get("is_im", False)
+
+    # A public channel is: a channel that is NOT private, NOT a group, NOT mpim, NOT im
+    is_public = (
+        is_channel and not is_private and not is_group and not is_mpim and not is_im
+    )
+
+    # Add detailed logging for debugging
+    logger.debug(
+        f"Channel info: is_channel={is_channel}, is_private={is_private}, "
+        f"is_group={is_group}, is_mpim={is_mpim}, is_im={is_im}, is_public={is_public}"
+    )
+
+    return is_public
+
+
 def query_slack(
     query_string: str,
     original_query: SearchQuery,
     access_token: str,
     limit: int | None = None,
+    allowed_private_channel: str | None = None,  # Add allowed private channel parameter
+    bot_token: str | None = None,  # Add bot token parameter for channel info calls
+    include_dm: bool = False,  # Whether to include direct messages
 ) -> list[SlackMessage]:
     # query slack
     slack_client = WebClient(token=access_token)
@@ -79,12 +107,22 @@ def query_slack(
         response.validate()
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
-    except SlackApiError as e:
-        logger.error(f"Slack API error in query_slack: {e}")
+        logger.info(f"Successfully used search_messages, found {len(matches)} messages")
+    except SlackApiError as slack_error:
+        logger.error(f"Slack API error in search_messages: {slack_error}")
+        logger.error(
+            f"Slack API error details: status={slack_error.response.status_code}, "
+            f"error={slack_error.response.get('error')}, response={slack_error.response}"
+        )
+        if "not_allowed_token_type" in str(slack_error):
+            logger.error(
+                f"TOKEN TYPE ERROR: access_token starts with: {access_token[:10]}..."
+            )
         return []
 
     # convert matches to slack messages
     slack_messages: list[SlackMessage] = []
+    filtered_count = 0
     for match in matches:
         text: str | None = match.get("text")
         permalink: str | None = match.get("permalink")
@@ -92,6 +130,13 @@ def query_slack(
         channel_id: str | None = match.get("channel", {}).get("id")
         channel_name: str | None = match.get("channel", {}).get("name")
         username: str | None = match.get("username")
+        if not username:
+            # Fallback: try to get from user field if username is missing
+            user_info = match.get("user", "")
+            if isinstance(user_info, str) and user_info:
+                username = user_info  # Use user ID as fallback
+            else:
+                username = "unknown_user"
         score: float = match.get("score", 0.0)
         if (  # can't use any() because of type checking :(
             not text
@@ -102,6 +147,72 @@ def query_slack(
             or not username
         ):
             continue
+
+        # Apply channel filtering if needed
+        if allowed_private_channel is not None:
+            # Private channel context: only allow the specific private channel + public channels
+            if channel_id == allowed_private_channel:
+                # This is the allowed private channel - keep it
+                pass
+            else:
+                # Check if this is a public channel
+                try:
+                    # Use bot token if available (has full permissions), otherwise fall back to user token
+                    token_to_use = bot_token if bot_token else access_token
+                    channel_client = WebClient(token=token_to_use)
+                    channel_info = channel_client.conversations_info(channel=channel_id)
+
+                    if _is_public_channel(channel_info):
+                        # This is a public channel - keep it
+                        pass
+                    else:
+                        # This is another private channel - filter it out
+                        filtered_count += 1
+                        logger.debug(
+                            f"Skipping message from private channel {channel_id} "
+                            f"(not the allowed private channel: {allowed_private_channel})"
+                        )
+                        continue
+                except Exception as e:
+                    # If we can't get channel info, be conservative and filter it out
+                    logger.warning(
+                        f"Could not determine channel type for {channel_id}, filtering out: {e}"
+                    )
+                    filtered_count += 1
+                    continue
+        elif include_dm:
+            # Include direct messages - no filtering needed
+            pass
+        elif (
+            allowed_private_channel is None and not include_dm and bot_token is not None
+        ):
+            # Slack bot context (has bot_token but no specific channel context): apply default filtering (only public channels)
+            try:
+                # Use bot token if available (has full permissions), otherwise fall back to user token
+                token_to_use = bot_token if bot_token else access_token
+                channel_client = WebClient(token=token_to_use)
+                channel_info = channel_client.conversations_info(channel=channel_id)
+
+                if _is_public_channel(channel_info):
+                    # This is a public channel - keep it
+                    pass
+                else:
+                    # This is a private channel - filter it out
+                    filtered_count += 1
+                    logger.debug(
+                        f"Skipping message from private channel {channel_id} (only public channels allowed in Slack bot context)"
+                    )
+                    continue
+            except Exception as e:
+                # If we can't get channel info, be conservative and filter it out
+                logger.warning(
+                    f"Could not determine channel type for {channel_id}, filtering out: {e}"
+                )
+                filtered_count += 1
+                continue
+        else:
+            # Web chat federated search: no filtering - include all channels
+            pass
 
         # generate thread id and document id
         thread_id = (
@@ -153,6 +264,11 @@ def query_slack(
                 highlighted_texts=highlighted_texts,
                 slack_score=score,
             )
+        )
+
+    if filtered_count > 0:
+        logger.info(
+            f"Channel filtering applied: {filtered_count} messages filtered out, {len(slack_messages)} messages kept"
         )
 
     return slack_messages
@@ -291,31 +407,80 @@ def slack_retrieval(
     access_token: str,
     db_session: Session,
     limit: int | None = None,
+    slack_event_context: (
+        dict[str, str] | None
+    ) = None,  # Add Slack event context parameter
+    bot_token: str | None = None,  # Add bot token parameter
 ) -> list[InferenceChunk]:
     # query slack
     _, fast_llm = get_default_llms()
     query_strings = build_slack_queries(query, fast_llm)
 
-    results: list[list[SlackMessage]] = run_functions_tuples_in_parallel(
+    include_dm = False
+    allowed_private_channel = None
+
+    if slack_event_context:
+        channel_type = slack_event_context.get(
+            "channel_type"
+        )  # "im", "private_channel", "public_channel"
+        if channel_type == "im":  # DM with user
+            include_dm = True
+        if channel_type == "private_channel":
+            allowed_private_channel = slack_event_context.get("channel_id")
+            logger.info(
+                f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
+            )
+
+    results = run_functions_tuples_in_parallel(
         [
-            (query_slack, (query_string, query, access_token, limit))
+            (
+                query_slack,
+                (
+                    query_string,
+                    query,
+                    access_token,
+                    limit,
+                    allowed_private_channel,
+                    bot_token,
+                    include_dm,
+                ),
+            )
             for query_string in query_strings
         ]
     )
+
     slack_messages, docid_to_message = merge_slack_messages(results)
     slack_messages = slack_messages[: limit or len(slack_messages)]
+
+    # Debug: Log what Slack messages we have
+    logger.info(
+        f"slack_retrieval: Total Slack messages after merge: {len(slack_messages)}"
+    )
+    for i, msg in enumerate(slack_messages):
+        logger.info(
+            f"slack_retrieval: Message {i+1}: channel={msg.channel_id}, content={msg.text[:100]}..."
+        )
+
     if not slack_messages:
         return []
 
-    # contextualize the slack messages
-    thread_texts: list[str] = run_functions_tuples_in_parallel(
-        [
-            (get_contextualized_thread_text, (slack_message, access_token))
-            for slack_message in slack_messages
-        ]
-    )
-    for slack_message, thread_text in zip(slack_messages, thread_texts):
-        slack_message.text = thread_text
+    # Check if we're in a bot context by looking at the access token prefix
+    if access_token.startswith("xoxp-"):
+        # This is a user OAuth token, likely from bot context - skip thread context to avoid additional scope requirements
+        logger.info(
+            "Bot context detected (user OAuth token): skipping thread context to avoid additional scope requirements"
+        )
+        # Use original message text without thread context
+    else:
+        thread_texts: list[str] = run_functions_tuples_in_parallel(
+            [
+                (get_contextualized_thread_text, (slack_message, access_token))
+                for slack_message in slack_messages
+            ]
+        )
+        for slack_message, thread_text in zip(slack_messages, thread_texts):
+            slack_message.text = thread_text
+    # else: use original message text without thread context
 
     # get the highlighted texts from shortest to longest
     highlighted_texts: set[str] = set()
