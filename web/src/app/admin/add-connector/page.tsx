@@ -9,6 +9,7 @@ import Link from "next/link";
 import {
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -145,7 +146,9 @@ function SourceTileTooltipWrapper({
 export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [rawSearchTerm, setSearchTerm] = useState("");
+  const searchTerm = useDeferredValue(rawSearchTerm);
+
   const { data: federatedConnectors } = useFederatedConnectors();
   const settings = useContext(SettingsContext);
 
@@ -162,6 +165,7 @@ export default function Page() {
       searchInputRef.current.focus();
     }
   }, []);
+
   const filterSources = useCallback(
     (sources: SourceMetadata[]) => {
       if (!searchTerm) return sources;
@@ -279,7 +283,7 @@ export default function Page() {
         type="text"
         ref={searchInputRef}
         placeholder="Search connectors..."
-        value={searchTerm}
+        value={rawSearchTerm} // keep the input bound to immediate state
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -315,7 +319,9 @@ export default function Page() {
               {sources.map((source, sourceInd) => (
                 <SourceTileTooltipWrapper
                   preSelect={
-                    searchTerm.length > 0 && categoryInd == 0 && sourceInd == 0
+                    (searchTerm?.length ?? 0) > 0 &&
+                    categoryInd == 0 &&
+                    sourceInd == 0
                   }
                   key={source.internalName}
                   sourceMetadata={source}
