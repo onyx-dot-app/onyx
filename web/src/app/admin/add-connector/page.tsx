@@ -217,6 +217,21 @@ export default function Page() {
     settings?.settings?.show_extra_connectors,
   ]);
 
+  // When searching, dedupe Popular against whatever is already in results
+  const resultIds = useMemo(() => {
+    if (!searchTerm) return new Set<string>();
+    return new Set(
+      Object.values(categorizedSources)
+        .flat()
+        .map((s) => s.internalName)
+    );
+  }, [categorizedSources, searchTerm]);
+
+  const dedupedPopular = useMemo(() => {
+    if (!searchTerm) return popularSources;
+    return popularSources.filter((s) => !resultIds.has(s.internalName));
+  }, [popularSources, resultIds, searchTerm]);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const filteredCategories = Object.entries(categorizedSources).filter(
@@ -270,13 +285,13 @@ export default function Page() {
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
-      {popularSources.length > 0 && !searchTerm && (
+      {dedupedPopular.length > 0 && (
         <div className="mb-8">
           <div className="flex mt-8">
             <Title>Popular</Title>
           </div>
           <div className="flex flex-wrap gap-4 p-4">
-            {popularSources.map((source) => (
+            {dedupedPopular.map((source) => (
               <SourceTileTooltipWrapper
                 preSelect={false}
                 key={source.internalName}
