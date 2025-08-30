@@ -39,7 +39,7 @@ def test_bitbucket_full_ids_subset_of_slim_ids(
         all_full_doc_ids.update([doc.id for doc in doc_batch])
 
     # Get all doc IDs from the slim connector
-    all_slim_doc_ids = set()
+    all_slim_doc_ids: set[str] = set()
     for slim_doc_batch in bitbucket_connector_for_slim.retrieve_all_slim_documents():
         all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
 
