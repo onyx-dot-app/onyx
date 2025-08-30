@@ -25,8 +25,11 @@ from onyx.configs.app_configs import REDIS_REPLICA_HOST
 from onyx.configs.app_configs import REDIS_SSL
 from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
 from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
+from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.redis.iam_auth import configure_redis_iam_auth
+from onyx.redis.iam_auth import create_redis_ssl_context_if_iam
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 from shared_configs.contextvars import get_current_tenant_id
@@ -186,12 +189,41 @@ class RedisPool:
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
         ssl: bool = False,
     ) -> redis.BlockingConnectionPool:
-        """We use BlockingConnectionPool because it will block and wait for a connection
+        """
+        Create a Redis connection pool with appropriate SSL configuration.
+        SSL Configuration Priority:
+        1. IAM Authentication (USE_REDIS_IAM_AUTH=true): Uses system CA certificates
+        2. Regular SSL (REDIS_SSL=true): Uses custom SSL configuration
+        3. No SSL: Standard connection without encryption
+        Note: IAM authentication automatically enables SSL and takes precedence
+        over regular SSL configuration to ensure proper security.
+
+        We use BlockingConnectionPool because it will block and wait for a connection
         rather than error if max_connections is reached. This is far more deterministic
         behavior and aligned with how we want to use Redis."""
 
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
+
+        # Handle IAM authentication
+        if USE_REDIS_IAM_AUTH:
+            # For IAM authentication, we don't use password
+            # and ensure SSL is enabled with proper context
+            ssl_context = create_redis_ssl_context_if_iam()
+            return redis.BlockingConnectionPool(
+                host=host,
+                port=port,
+                db=db,
+                password=None,  # No password with IAM auth
+                max_connections=max_connections,
+                timeout=None,
+                health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
+                socket_keepalive=True,
+                socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
+                connection_class=redis.SSLConnection,
+                ssl_context=ssl_context,  # Use IAM auth SSL context
+            )
+
         if ssl:
             return redis.BlockingConnectionPool(
                 host=host,
@@ -363,7 +395,9 @@ async def get_async_redis_connection() -> aioredis.Redis:
                     "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 }
 
-                if REDIS_SSL:
+                if USE_REDIS_IAM_AUTH:
+                    configure_redis_iam_auth(connection_kwargs)
+                elif REDIS_SSL:
                     ssl_context = ssl.create_default_context()
 
                     if REDIS_SSL_CA_CERTS:
