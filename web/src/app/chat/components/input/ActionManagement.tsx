@@ -73,7 +73,12 @@ export function ActionItem({
           disabled ? "opacity-50" : ""
         } ${isForced && "text-blue-500"}`}
       >
-        <Icon size={16} className="text-text-500 dark:text-neutral-400" />
+        <Icon
+          size={16}
+          className={
+            isForced ? "text-blue-500" : "text-text-500 dark:text-neutral-400"
+          }
+        />
         <span
           className={`text-sm font-medium select-none ${
             disabled ? "line-through" : ""
@@ -139,9 +144,11 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
 
   const toggleForcedTool = (toolId: number) => {
     if (forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+      // If clicking on already forced tool, unforce it
+      setForcedToolIds([]);
     } else {
-      setForcedToolIds([...forcedToolIds, toolId]);
+      // If clicking on a new tool, replace any existing forced tools with just this one
+      setForcedToolIds([toolId]);
     }
   };
 
