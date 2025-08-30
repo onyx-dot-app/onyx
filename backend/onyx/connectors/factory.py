@@ -11,6 +11,7 @@ from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
+from onyx.connectors.outline.connector import OutlineConnector
 from onyx.connectors.clickup.connector import ClickupConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
@@ -87,6 +88,7 @@ def identify_connector_class(
         DocumentSource.GITBOOK: GitbookConnector,
         DocumentSource.GOOGLE_DRIVE: GoogleDriveConnector,
         DocumentSource.BOOKSTACK: BookstackConnector,
+        DocumentSource.OUTLINE: OutlineConnector,
         DocumentSource.CONFLUENCE: ConfluenceConnector,
         DocumentSource.JIRA: JiraConnector,
         DocumentSource.PRODUCTBOARD: ProductboardConnector,

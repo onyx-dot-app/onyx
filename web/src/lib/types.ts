@@ -441,6 +441,7 @@ export enum ValidSources {
   GoogleDrive = "google_drive",
   Gmail = "gmail",
   Bookstack = "bookstack",
+  Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
   Productboard = "productboard",
