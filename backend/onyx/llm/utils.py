@@ -685,3 +685,26 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             f"Failed to get model object for {model_provider}/{model_name}"
         )
         return False
+
+
+def model_supports_temperature(model_name: str, model_provider: str) -> bool:
+    try:
+        from litellm.utils import get_supported_openai_params
+        
+        params = get_supported_openai_params(
+            model=f"{model_provider}/{model_name}" if model_provider else model_name,
+            custom_llm_provider=model_provider
+        )
+        
+        # If params is None or empty, assume temperature is supported (default behavior)
+        if not params:
+            return True
+            
+        return "temperature" in params
+        
+    except Exception:
+        logger.warning(
+            f"Failed to get supported params for {model_provider}/{model_name}, assuming temperature is supported"
+        )
+        # Default to True to maintain backward compatibility
+        return True

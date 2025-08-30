@@ -144,3 +144,30 @@ export const modelSupportsImageInput = (
   );
   return modelConfiguration?.supports_image_input || false;
 };
+
+export const modelSupportsReasoning = (
+  llmProviders: LLMProviderDescriptor[],
+  modelName: string,
+  providerName: string | null = null
+): boolean => {
+  const modelConfiguration = findModelConfiguration(
+    llmProviders,
+    modelName,
+    providerName
+  );
+  return modelConfiguration?.supports_reasoning || false;
+};
+
+export const modelSupportsTemperature = (
+  llmProviders: LLMProviderDescriptor[],
+  modelName: string,
+  providerName: string | null = null
+): boolean => {
+  const modelConfiguration = findModelConfiguration(
+    llmProviders,
+    modelName,
+    providerName
+  );
+  // Default to true for backward compatibility if undefined
+  return modelConfiguration?.supports_temperature !== false;
+};
