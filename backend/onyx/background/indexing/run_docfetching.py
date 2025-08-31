@@ -578,7 +578,7 @@ def _run_indexing(
                     db_session=db_session,
                     tenant_id=tenant_id,
                     document_batch=doc_batch_cleaned,
-                    index_attempt_metadata=index_attempt_md,
+                    request_id=index_attempt_md.request_id,
                 )
 
                 batch_num += 1
