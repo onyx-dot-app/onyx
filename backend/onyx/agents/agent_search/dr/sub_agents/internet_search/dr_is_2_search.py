@@ -22,7 +22,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
-from onyx.prompts.dr_prompts import INTERNET_SEARCH_URL_SELECTION_PROMPT
+from onyx.prompts.dr_prompts import WEB_SEARCH_URL_SELECTION_PROMPT
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.utils.logger import setup_logger
 
@@ -97,7 +97,7 @@ def web_search(
             for i, result in enumerate(search_results)
         ]
     )
-    agent_decision_prompt = INTERNET_SEARCH_URL_SELECTION_PROMPT.build(
+    agent_decision_prompt = WEB_SEARCH_URL_SELECTION_PROMPT.build(
         search_query=search_query,
         base_question=base_question,
         search_results_text=search_results_text,

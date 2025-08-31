@@ -246,8 +246,6 @@ def closer(
     iteration_responses_string = aggregated_context.context
     all_cited_documents = aggregated_context.cited_documents
 
-    aggregated_context.is_internet_marker_dict
-
     num_closer_suggestions = state.num_closer_suggestions
 
     if (

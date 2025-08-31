@@ -19,9 +19,9 @@ _GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Res
 
 
 class InternetSearchTool(Tool[None]):
-    _NAME = "run_internet_search"
-    _DESCRIPTION = "Search the internet for information. Never call this tool."
-    _DISPLAY_NAME = "Internet Search"
+    _NAME = "run_web_search"
+    _DESCRIPTION = "Search the web for information. Never call this tool."
+    _DISPLAY_NAME = "Web Search"
 
     def __init__(self, tool_id: int) -> None:
         self._id = tool_id

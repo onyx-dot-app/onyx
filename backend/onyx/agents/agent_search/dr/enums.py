@@ -23,7 +23,7 @@ class DRPath(str, Enum):
     INTERNAL_SEARCH = "Internal Search"
     GENERIC_TOOL = "Generic Tool"
     KNOWLEDGE_GRAPH = "Knowledge Graph Search"
-    INTERNET_SEARCH = "Internet Search"
+    WEB_SEARCH = "Web Search"
     IMAGE_GENERATION = "Image Generation"
     GENERIC_INTERNAL_TOOL = "Generic Internal Tool"
     CLOSER = "Closer"

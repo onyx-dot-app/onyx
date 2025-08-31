@@ -19,14 +19,14 @@ def is_branch(
     state: SubAgentInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> LoggerUpdate:
     """
-    LangGraph node to perform a internet search as part of the DR process.
+    LangGraph node to perform a web search as part of the DR process.
     """
 
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
     current_step_nr = state.current_step_nr
 
-    logger.debug(f"Search start for Internet Search {iteration_nr} at {datetime.now()}")
+    logger.debug(f"Search start for Web Search {iteration_nr} at {datetime.now()}")
 
     write_custom_event(
         current_step_nr,

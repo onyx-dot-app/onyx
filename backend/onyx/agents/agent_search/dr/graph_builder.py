@@ -52,8 +52,8 @@ def dr_graph_builder() -> StateGraph:
     kg_search_graph = dr_kg_search_graph_builder().compile()
     graph.add_node(DRPath.KNOWLEDGE_GRAPH, kg_search_graph)
 
-    internet_search_graph = dr_is_graph_builder().compile()
-    graph.add_node(DRPath.INTERNET_SEARCH, internet_search_graph)
+    web_search_graph = dr_is_graph_builder().compile()
+    graph.add_node(DRPath.WEB_SEARCH, web_search_graph)
 
     image_generation_graph = dr_image_generation_graph_builder().compile()
     graph.add_node(DRPath.IMAGE_GENERATION, image_generation_graph)
@@ -77,7 +77,7 @@ def dr_graph_builder() -> StateGraph:
 
     graph.add_edge(start_key=DRPath.INTERNAL_SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.KNOWLEDGE_GRAPH, end_key=DRPath.ORCHESTRATOR)
-    graph.add_edge(start_key=DRPath.INTERNET_SEARCH, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(start_key=DRPath.WEB_SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.IMAGE_GENERATION, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_TOOL, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_INTERNAL_TOOL, end_key=DRPath.ORCHESTRATOR)

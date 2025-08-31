@@ -14,7 +14,7 @@ INSUFFICIENT_INFORMATION_STRING = "I do not have enough information"
 KNOWLEDGE_GRAPH = DRPath.KNOWLEDGE_GRAPH.value
 INTERNAL_SEARCH = DRPath.INTERNAL_SEARCH.value
 CLOSER = DRPath.CLOSER.value
-INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
+WEB_SEARCH = DRPath.WEB_SEARCH.value
 
 
 DONE_STANDARD: dict[str, str] = {}
@@ -53,15 +53,15 @@ The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL
 """
 
 TOOL_DESCRIPTION[
-    DRPath.INTERNET_SEARCH
+    DRPath.WEB_SEARCH
 ] = f"""\
 This tool is used to answer questions that can be answered using the information \
-that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
+that is public on the web. The {WEB_SEARCH} tool DOES support parallel calls of up to \
 {MAX_DR_PARALLEL_SEARCH} queries.
 USAGE HINTS:
-  - Since the {INTERNET_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
+  - Since the {WEB_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
 if questions of this type would be the actual goal, you should send questions to the \
-{INTERNET_SEARCH} tool of the type '... RECENT publications...', and trust that future language model \
+{WEB_SEARCH} tool of the type '... RECENT publications...', and trust that future language model \
 calls will be able to find the 'latest publication' from within the results.
 """
 
@@ -112,12 +112,12 @@ TOOL_DIFFERENTIATION_HINTS: dict[tuple[str, str], str] = {}
 TOOL_DIFFERENTIATION_HINTS[
     (
         DRPath.INTERNAL_SEARCH.value,
-        DRPath.INTERNET_SEARCH.value,
+        DRPath.WEB_SEARCH.value,
     )
 ] = f"""\
-- in general, you should use the {INTERNAL_SEARCH} tool first, and only use the {INTERNET_SEARCH} tool if the \
+- in general, you should use the {INTERNAL_SEARCH} tool first, and only use the {WEB_SEARCH} tool if the \
 {INTERNAL_SEARCH} tool result did not contain the information you need, or the user specifically asks or implies \
-the use of the {INTERNET_SEARCH} tool. Moreover, if the {INTERNET_SEARCH} tool result did not contain the \
+the use of the {WEB_SEARCH} tool. Moreover, if the {WEB_SEARCH} tool result did not contain the \
 information you need, you can switch to the {INTERNAL_SEARCH} tool the following iteration.
 """
 
@@ -140,17 +140,17 @@ whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE
 TOOL_DIFFERENTIATION_HINTS[
     (
         DRPath.KNOWLEDGE_GRAPH.value,
-        DRPath.INTERNET_SEARCH.value,
+        DRPath.WEB_SEARCH.value,
     )
 ] = f"""\
 - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{INTERNET_SEARCH}' \
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{WEB_SEARCH}' \
 MAY be an alternative, but only if the question pertains to public data. You may first want to consider \
-other tools that can query internet data, if available
+other tools that can query web data, if available
 - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-- also consider whether the user query implies whether a standard {INTERNET_SEARCH} query should be used or a \
-{KNOWLEDGE_GRAPH} query (assuming the data may be available both publicly and internally). \
-For example, 'use a simple internet search to find <xyz>' would refer to a standard {INTERNET_SEARCH} query, \
+- also consider whether the user query implies whether a standard {WEB_SEARCH} query should be used or a \
+{KNOWLEDGE_GRAPH} query (assuming relevant data may be available both publicly and internally). \
+For example, 'use a simple web search to find <xyz>' would refer to a standard {WEB_SEARCH} query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
 """
 
@@ -161,7 +161,7 @@ written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries
 If searching for multiple \
 aspects is required, you should split the question into multiple sub-questions.
 """,
-    DRPath.INTERNET_SEARCH.value: f"""if the tool is {INTERNET_SEARCH}, the question should be \
+    DRPath.WEB_SEARCH.value: f"""if the tool is {WEB_SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. So the \
 searches should be rather short and focus on one specific aspect. If searching for multiple \
 aspects is required, you should split the question into multiple sub-questions.
@@ -530,7 +530,7 @@ And here are the tools and tool calls that were determined to be needed:
 
 Please articulate the purpose of these tool calls in 1-2 sentences concisely. An \
 example could be "I am now trying to find more information about Nike and Puma using \
-Internet Search" (assuming that Internet Search is the chosen tool, the proper tool must \
+Web Search" (assuming that Web Search is the chosen tool, the proper tool must \
 be named here.)
 
 Note that there is ONE EXCEPTION: if the tool call/calls is the {CLOSER} tool, then you should \
@@ -1485,9 +1485,9 @@ to them.
 # best practice to reject them so that they can also be captured/monitored.
 # QUERY_EVALUATION_PROMPT = f"""
 
-INTERNET_SEARCH_URL_SELECTION_PROMPT = PromptTemplate(
+WEB_SEARCH_URL_SELECTION_PROMPT = PromptTemplate(
     f"""
-    You are tasked with gathering information from the internet with search query:
+    You are tasked with gathering information from the web with search query:
     {SEPARATOR_LINE}
     ---search_query---
     {SEPARATOR_LINE}

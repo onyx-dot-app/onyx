@@ -115,8 +115,8 @@ def _get_available_tools(
             raise ValueError(f"Tool {tool.name} is not found in the database")
 
         if isinstance(tool, InternetSearchTool):
-            llm_path = DRPath.INTERNET_SEARCH.value
-            path = DRPath.INTERNET_SEARCH
+            llm_path = DRPath.WEB_SEARCH.value
+            path = DRPath.WEB_SEARCH
         elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
