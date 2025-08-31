@@ -42,8 +42,9 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
 
   const handleClick = (e: React.MouseEvent<HTMLLabelElement>) => {
     e.preventDefault();
-    helpers.setValue(!field.value);
-    onChange?.(field.value);
+    const next = !field.value;
+    helpers.setValue(next);
+    onChange?.(next);
   };
 
   const checkboxContent = (
