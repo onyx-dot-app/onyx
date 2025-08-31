@@ -1,8 +1,8 @@
 """add project__userfile table and userfile column changes
 
-Revision ID: a0594b1466df
-Revises: bd7c3bf8beba
-Create Date: 2025-08-27 09:00:52.457443
+Revision ID: 85956d2f6eed
+Revises: b329d00a9ea6
+Create Date: 2025-08-30 18:30:22.439888
 
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql as psql
 
 # revision identifiers, used by Alembic.
-revision = "a0594b1466df"
-down_revision = "bd7c3bf8beba"
+revision = "85956d2f6eed"
+down_revision = "b329d00a9ea6"
 branch_labels = None
 depends_on = None
 
