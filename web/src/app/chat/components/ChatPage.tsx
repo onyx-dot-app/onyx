@@ -91,6 +91,7 @@ import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { HumanMessage } from "../message/HumanMessage";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
+import { MessagesDisplay } from "./MessagesDisplay";
 
 export function ChatPage({
   toggle,
@@ -105,20 +106,20 @@ export function ChatPage({
 }) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
-  // const renderCount = useRef(0);
-  // renderCount.current++;
-  // const renderStartTime = performance.now();
+  const renderCount = useRef(0);
+  renderCount.current++;
+  const renderStartTime = performance.now();
 
-  // useEffect(() => {
-  //   const renderTime = performance.now() - renderStartTime;
-  //   if (renderTime > 10) {
-  //     console.log(
-  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
-  //         2
-  //       )}ms`
-  //     );
-  //   }
-  // });
+  useEffect(() => {
+    const renderTime = performance.now() - renderStartTime;
+    if (renderTime > 10) {
+      console.log(
+        `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+          2
+        )}ms`
+      );
+    }
+  });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -690,28 +691,6 @@ export function ChatPage({
     [setIsChatSearchModalOpen]
   );
 
-  interface RegenerationRequest {
-    messageId: number;
-    parentMessage: Message;
-    forceSearch?: boolean;
-  }
-
-  function createRegenerator(regenerationRequest: RegenerationRequest) {
-    // Returns new function that only needs `modelOveride` to be specified when called
-    return async function (modelOverride: LlmDescriptor) {
-      return await onSubmit({
-        message: message,
-        selectedFiles: selectedFiles,
-        selectedFolders: selectedFolders,
-        currentMessageFiles: currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
-        modelOverride,
-        messageIdToResend: regenerationRequest.parentMessage.messageId,
-        regenerationRequest,
-        forceSearch: regenerationRequest.forceSearch,
-      });
-    };
-  }
   if (!user) {
     redirect("/auth/login");
   }
@@ -1114,171 +1093,44 @@ export function ChatPage({
                             </div>
                           )}
 
-                          {messageHistory.length === 0 &&
+                          {messageHistory.length !== 0 &&
                             !isFetchingChatMessages &&
                             !loadingError &&
-                            !submittedMessage &&
-                            null}
-                          <div
-                            style={{ overflowAnchor: "none" }}
-                            key={chatSessionId}
-                            className={
-                              (hasPerformedInitialScroll ? "" : " hidden ") +
-                              "desktop:-ml-4 w-full mx-auto " +
-                              "absolute mobile:top-0 desktop:top-0 left-0 " +
-                              (settings?.enterpriseSettings
-                                ?.two_lines_for_chat_header
-                                ? "pt-20 "
-                                : "pt-4 ")
-                            }
-                            // NOTE: temporarily removing this to fix the scroll bug
-                            // (hasPerformedInitialScroll ? "" : "invisible")
-                          >
-                            {messageHistory.map((message, i) => {
-                              const messageTree = completeMessageTree;
-
-                              const messageReactComponentKey = `message-${message.nodeId}`;
-                              const parentMessage = message.parentNodeId
-                                ? messageTree?.get(message.parentNodeId)
-                                : null;
-                              if (message.type === "user") {
-                                const nextMessage =
-                                  messageHistory.length > i + 1
-                                    ? messageHistory[i + 1]
-                                    : null;
-
-                                return (
-                                  <div
-                                    id={messageReactComponentKey}
-                                    key={messageReactComponentKey}
-                                  >
-                                    <HumanMessage
-                                      setPresentingDocument={
-                                        setPresentingDocument
-                                      }
-                                      disableSwitchingForStreaming={
-                                        (nextMessage &&
-                                          nextMessage.is_generating) ||
-                                        false
-                                      }
-                                      stopGenerating={stopGenerating}
-                                      content={message.message}
-                                      files={message.files}
-                                      messageId={message.messageId}
-                                      onEdit={(editedContent) => {
-                                        onSubmit({
-                                          message: editedContent,
-                                          messageIdToResend:
-                                            message.messageId || undefined,
-                                          // TODO: fix
-                                          selectedFiles: [],
-                                          selectedFolders: [],
-                                          currentMessageFiles: [],
-                                          useAgentSearch: deepResearchEnabled,
-                                        });
-                                      }}
-                                      otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenNodeIds || []
-                                      }
-                                      onMessageSelection={onMessageSelection}
-                                    />
-                                  </div>
-                                );
-                              } else if (message.type === "assistant") {
-                                const previousMessage =
-                                  i !== 0 ? messageHistory[i - 1] : null;
-
-                                if (
-                                  (uncaughtError || loadingError) &&
-                                  i === messageHistory.length - 1
-                                ) {
-                                  return (
-                                    <div
-                                      key={`error-${message.nodeId}`}
-                                      className="max-w-message-max mx-auto"
-                                    >
-                                      <ErrorBanner
-                                        resubmit={handleResubmitLastMessage}
-                                        error={
-                                          uncaughtError || loadingError || ""
-                                        }
-                                      />
-                                    </div>
-                                  );
+                            !submittedMessage && (
+                              <MessagesDisplay
+                                messageHistory={messageHistory}
+                                completeMessageTree={completeMessageTree}
+                                liveAssistant={liveAssistant}
+                                llmManager={llmManager}
+                                deepResearchEnabled={deepResearchEnabled}
+                                selectedFiles={selectedFiles}
+                                selectedFolders={selectedFolders}
+                                currentMessageFiles={currentMessageFiles}
+                                setPresentingDocument={setPresentingDocument}
+                                setCurrentFeedback={setCurrentFeedback}
+                                onSubmit={onSubmit}
+                                onMessageSelection={onMessageSelection}
+                                stopGenerating={stopGenerating}
+                                uncaughtError={uncaughtError}
+                                loadingError={loadingError}
+                                handleResubmitLastMessage={
+                                  handleResubmitLastMessage
                                 }
-
-                                return (
-                                  <div
-                                    className="text-text"
-                                    id={`message-${message.nodeId}`}
-                                    key={messageReactComponentKey}
-                                    ref={
-                                      i == messageHistory.length - 1
-                                        ? lastMessageRef
-                                        : null
-                                    }
-                                  >
-                                    <AIMessage
-                                      rawPackets={message.packets}
-                                      chatState={{
-                                        handleFeedback: (feedback) =>
-                                          setCurrentFeedback([
-                                            feedback,
-                                            message.messageId!,
-                                          ]),
-                                        assistant: liveAssistant,
-                                        docs: message.documents,
-                                        userFiles: [], // TODO: Extract user files from message context
-                                        citations: message.citations,
-                                        setPresentingDocument:
-                                          setPresentingDocument,
-                                        regenerate: createRegenerator({
-                                          messageId: message.messageId!,
-                                          parentMessage: previousMessage!,
-                                        }),
-                                        overriddenModel:
-                                          llmManager.currentLlm?.modelName,
-                                      }}
-                                      nodeId={message.nodeId}
-                                      otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenNodeIds || []
-                                      }
-                                      onMessageSelection={onMessageSelection}
-                                    />
-                                  </div>
-                                );
-                              }
-                            })}
-
-                            {((uncaughtError || loadingError) &&
-                              messageHistory[messageHistory.length - 1]
-                                ?.type === "user") ||
-                              (messageHistory[messageHistory.length - 1]
-                                ?.type === "error" && (
-                                <div className="max-w-message-max mx-auto">
-                                  <ErrorBanner
-                                    resubmit={handleResubmitLastMessage}
-                                    error={uncaughtError || loadingError || ""}
-                                  />
-                                </div>
-                              ))}
-
-                            {messageHistory.length > 0 && (
-                              <div
-                                style={{
-                                  height: !autoScrollEnabled
-                                    ? getContainerHeight()
-                                    : undefined,
-                                }}
+                                autoScrollEnabled={autoScrollEnabled}
+                                getContainerHeight={getContainerHeight}
+                                lastMessageRef={lastMessageRef}
+                                endPaddingRef={endPaddingRef}
+                                endDivRef={endDivRef}
+                                hasPerformedInitialScroll={
+                                  hasPerformedInitialScroll
+                                }
+                                chatSessionId={chatSessionId}
+                                enterpriseSettings={enterpriseSettings}
+                                settings={settings}
                               />
                             )}
-
-                            {/* Some padding at the bottom so the search bar has space at the bottom to not cover the last message*/}
-                            <div ref={endPaddingRef} className="h-[95px]" />
-
-                            <div ref={endDivRef} />
-                          </div>
                         </div>
+
                         <div
                           ref={inputRef}
                           className={`absolute pointer-events-none z-10 w-full ${
