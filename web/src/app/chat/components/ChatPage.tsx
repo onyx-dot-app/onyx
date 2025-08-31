@@ -105,20 +105,20 @@ export function ChatPage({
 }) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
-  const renderCount = useRef(0);
-  renderCount.current++;
-  const renderStartTime = performance.now();
+  // const renderCount = useRef(0);
+  // renderCount.current++;
+  // const renderStartTime = performance.now();
 
-  useEffect(() => {
-    const renderTime = performance.now() - renderStartTime;
-    if (renderTime > 10) {
-      console.log(
-        `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
-          2
-        )}ms`
-      );
-    }
-  });
+  // useEffect(() => {
+  //   const renderTime = performance.now() - renderStartTime;
+  //   if (renderTime > 10) {
+  //     console.log(
+  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+  //         2
+  //       )}ms`
+  //     );
+  //   }
+  // });
 
   const router = useRouter();
   const searchParams = useSearchParams();
