@@ -236,7 +236,7 @@ export function SharedChatDisplay({
                               regenerate: undefined, // No regeneration in shared chat
                               overriddenModel: message.overridden_model,
                             }}
-                            messageId={message.messageId}
+                            nodeId={message.nodeId}
                             otherMessagesCanSwitchTo={undefined}
                             onMessageSelection={undefined}
                           />
