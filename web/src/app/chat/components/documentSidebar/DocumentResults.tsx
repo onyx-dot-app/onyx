@@ -78,8 +78,8 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
       return null;
     }
 
-    const humanMessage = selectedMessage.parentMessageId
-      ? currentMessageTree.get(selectedMessage.parentMessageId)
+    const humanMessage = selectedMessage.parentNodeId
+      ? currentMessageTree.get(selectedMessage.parentNodeId)
       : null;
 
     const humanFileDescriptors = humanMessage?.files.filter(
