@@ -120,9 +120,6 @@ export function ChatPage({
   //   }
   // });
 
-  // Track specific sections
-  const beforeHooksTime = performance.now();
-
   const router = useRouter();
   const searchParams = useSearchParams();
 

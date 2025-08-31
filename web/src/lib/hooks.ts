@@ -446,34 +446,19 @@ export function useFilters(): FilterManager {
     setSelectedTags(newSelectedTags);
   }
 
-  return useMemo(
-    () => ({
-      clearFilters,
-      timeRange,
-      setTimeRange,
-      selectedSources,
-      setSelectedSources,
-      selectedDocumentSets,
-      setSelectedDocumentSets,
-      selectedTags,
-      setSelectedTags,
-      getFilterString,
-      buildFiltersFromQueryString,
-    }),
-    [
-      clearFilters,
-      timeRange,
-      setTimeRange,
-      selectedSources,
-      setSelectedSources,
-      selectedDocumentSets,
-      setSelectedDocumentSets,
-      selectedTags,
-      setSelectedTags,
-      getFilterString,
-      buildFiltersFromQueryString,
-    ]
-  );
+  return {
+    clearFilters,
+    timeRange,
+    setTimeRange,
+    selectedSources,
+    setSelectedSources,
+    selectedDocumentSets,
+    setSelectedDocumentSets,
+    selectedTags,
+    setSelectedTags,
+    getFilterString,
+    buildFiltersFromQueryString,
+  };
 }
 
 interface UseUsersParams {
