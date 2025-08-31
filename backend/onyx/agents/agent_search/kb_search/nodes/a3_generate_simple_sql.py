@@ -17,6 +17,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.configs.kg_configs import KG_MAX_DEEP_SEARCH_RESULTS
 from onyx.configs.kg_configs import KG_SQL_GENERATION_MAX_TOKENS
 from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT
@@ -34,6 +35,8 @@ from onyx.prompts.kg_prompts import SIMPLE_ENTITY_SQL_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_ERROR_FIX_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
+from onyx.prompts.kg_prompts import SQL_INSTRUCTIONS_ENTITY_PROMPT
+from onyx.prompts.kg_prompts import SQL_INSTRUCTIONS_RELATIONSHIP_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -287,6 +290,8 @@ def generate_simple_sql(
                 .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
                 .replace("---user_name---", f"EMPLOYEE:{user_name}")
             )
+
+            additional_sql_instruction_prompt = SQL_INSTRUCTIONS_ENTITY_PROMPT
         else:
             simple_sql_prompt = (
                 SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
@@ -305,12 +310,12 @@ def generate_simple_sql(
                 .replace("---user_name---", f"EMPLOYEE:{user_name}")
             )
 
-        # generate initial sql statement
-        msg = [
-            HumanMessage(
-                content=simple_sql_prompt,
-            )
-        ]
+            additional_sql_instruction_prompt = SQL_INSTRUCTIONS_RELATIONSHIP_PROMPT
+
+        msg = create_question_prompt(
+            additional_sql_instruction_prompt,
+            simple_sql_prompt,
+        )
 
         primary_llm = graph_config.tooling.primary_llm
         try:
@@ -414,6 +419,11 @@ def generate_simple_sql(
                 query_generation_error = "SQL query returned no results"
                 logger.warning(f"{query_generation_error}, retrying...")
         except Exception as e:
+            drop_views(
+                allowed_docs_view_name=doc_temp_view,
+                kg_relationships_view_name=rel_temp_view,
+                kg_entity_view_name=ent_temp_view,
+            )
             query_generation_error = str(e)
             logger.warning(f"Error executing SQL query: {e}, retrying...")
 
@@ -486,9 +496,19 @@ def generate_simple_sql(
         source_document_results = None
         if source_documents_sql is not None and source_documents_sql != sql_statement:
             # check source document sql, just in case
-            _raise_error_if_sql_fails_problem_test(
-                source_documents_sql, rel_temp_view, ent_temp_view
-            )
+            try:
+                _raise_error_if_sql_fails_problem_test(
+                    source_documents_sql, rel_temp_view, ent_temp_view
+                )
+            except ValueError as e:
+                logger.error(f"Error in source document sql: {e}")
+                # TODO: raise error on frontend
+                drop_views(
+                    allowed_docs_view_name=doc_temp_view,
+                    kg_relationships_view_name=rel_temp_view,
+                    kg_entity_view_name=ent_temp_view,
+                )
+                raise
 
             with get_db_readonly_user_session_with_current_tenant() as db_session:
                 try:

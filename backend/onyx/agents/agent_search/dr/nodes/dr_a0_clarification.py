@@ -310,7 +310,7 @@ _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
         "name": "run_any_knowledge_retrieval_and_any_action_tool",
         "description": "Use this tool to get ANY external information \
 that is relevant to the question, or for any action to be taken, including image generation. In fact, \
-ANY tool mentioned can be accessed through this generic tool.",
+ANY tool mentioned can be accessed through this generic tool. If in doubt, use this tool.",
         "parameters": {
             "type": "object",
             "properties": {
