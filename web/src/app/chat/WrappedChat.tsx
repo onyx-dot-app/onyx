@@ -16,24 +16,21 @@ export default function ChatLayout({
   const { sidebarInitiallyVisible } = useChatContext();
 
   const [sidebarVisible, setSidebarVisible] = useState(
-    sidebarInitiallyVisible || false
+    (sidebarInitiallyVisible && !defaultSidebarOff) ?? false
   );
 
-  const toggle = useCallback(
-    (value?: boolean) => {
-      setSidebarVisible((sidebarVisible) =>
-        value !== undefined ? value : !sidebarVisible
-      );
-    },
-    [sidebarVisible]
-  );
+  const toggle = useCallback((value?: boolean) => {
+    setSidebarVisible((sidebarVisiblePrevValue) =>
+      value !== undefined ? value : !sidebarVisiblePrevValue
+    );
+  }, []);
 
   return (
     <>
       <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
         <ChatPage
           toggle={toggle}
-          sidebarVisible={sidebarVisible && !defaultSidebarOff}
+          sidebarVisible={sidebarVisible}
           firstMessage={firstMessage}
         />
       </div>

@@ -592,7 +592,7 @@ export function ChatPage({
     );
 
     toggle();
-  }, [user?.is_anonymous_user, toggle]);
+  }, [user?.is_anonymous_user, toggle, sidebarVisible]);
 
   const removeToggle = useCallback(() => {
     setShowHistorySidebar(false);
@@ -744,10 +744,6 @@ export function ChatPage({
     setShowApiKeyModal(true);
   }, []);
 
-  const handleSetDeepResearchEnabled = useCallback(() => {
-    toggleDeepResearch();
-  }, [toggleDeepResearch]);
-
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
@@ -757,6 +753,7 @@ export function ChatPage({
       useAgentSearch: deepResearchEnabled,
     });
   }, [
+    message,
     onSubmit,
     selectedFiles,
     selectedFolders,
@@ -1321,9 +1318,7 @@ export function ChatPage({
                             )}
                             <ChatInputBar
                               deepResearchEnabled={deepResearchEnabled}
-                              setDeepResearchEnabled={
-                                handleSetDeepResearchEnabled
-                              }
+                              toggleDeepResearch={toggleDeepResearch}
                               toggleDocumentSidebar={toggleDocumentSidebar}
                               filterManager={filterManager}
                               llmManager={llmManager}

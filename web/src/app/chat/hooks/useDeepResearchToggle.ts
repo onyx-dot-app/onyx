@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface UseDeepResearchToggleProps {
   chatSessionId: string | null;
@@ -41,9 +41,9 @@ export function useDeepResearchToggle({
     setDeepResearchEnabled(false);
   }, [assistantId]);
 
-  const toggleDeepResearch = () => {
+  const toggleDeepResearch = useCallback(() => {
     setDeepResearchEnabled(!deepResearchEnabled);
-  };
+  }, [deepResearchEnabled]);
 
   return {
     deepResearchEnabled,

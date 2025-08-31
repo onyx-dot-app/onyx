@@ -375,7 +375,6 @@ export function getLastSuccessfulMessageId(
   chain?: Message[]
 ): number | null {
   const messageChain = chain || getLatestMessageChain(messages);
-  console.log("messageChain", messageChain);
   for (let i = messageChain.length - 1; i >= 0; i--) {
     const message = messageChain[i];
     if (!message) {
@@ -436,8 +435,9 @@ export const buildImmediateMessages = (
   initialUserNode: Message;
   initialAssistantNode: Message;
 } => {
-  const initialUserNode =
-    messageToResend ?? buildEmptyMessage("user", parentNodeId, userInput);
+  const initialUserNode = messageToResend
+    ? { ...messageToResend } // clone the message to avoid mutating the original
+    : buildEmptyMessage("user", parentNodeId, userInput);
   const initialAssistantNode = buildEmptyMessage(
     "assistant",
     initialUserNode.nodeId,

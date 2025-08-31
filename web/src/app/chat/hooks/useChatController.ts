@@ -711,12 +711,12 @@ export function useChatController({
               messages: [
                 {
                   ...initialUserNode,
-                  messageId: newUserMessageId!,
+                  messageId: newUserMessageId ?? undefined,
                   files: files,
                 },
                 {
                   ...initialAssistantNode,
-                  messageId: newAssistantMessageId!,
+                  messageId: newAssistantMessageId ?? undefined,
                   message: error || answer,
                   type: error ? "error" : "assistant",
                   retrievalType,

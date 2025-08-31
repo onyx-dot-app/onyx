@@ -109,7 +109,7 @@ interface ChatInputBarProps {
   filterManager: FilterManager;
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
-  setDeepResearchEnabled: (deepResearchEnabled: boolean) => void;
+  toggleDeepResearch: () => void;
   placeholder?: string;
 }
 
@@ -134,7 +134,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   textAreaRef,
   llmManager,
   deepResearchEnabled,
-  setDeepResearchEnabled,
+  toggleDeepResearch,
   placeholder,
 }: ChatInputBarProps) {
   const { user } = useUser();
@@ -201,18 +201,21 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     setMessage(`${prompt.content}`);
   };
 
-  const handlePromptInput = useCallback((text: string) => {
-    if (!text.startsWith("/")) {
-      hidePrompts();
-    } else {
-      const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
-      if (promptMatch) {
-        setShowPrompts(true);
-      } else {
+  const handlePromptInput = useCallback(
+    (text: string) => {
+      if (!text.startsWith("/")) {
         hidePrompts();
+      } else {
+        const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
+        if (promptMatch) {
+          setShowPrompts(true);
+        } else {
+          hidePrompts();
+        }
       }
-    }
-  }, []);
+    },
+    [hidePrompts]
+  );
 
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -624,7 +627,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                   settings?.settings.deep_research_enabled && (
                     <DeepResearchToggle
                       deepResearchEnabled={deepResearchEnabled}
-                      setDeepResearchEnabled={setDeepResearchEnabled}
+                      toggleDeepResearch={toggleDeepResearch}
                     />
                   )}
 

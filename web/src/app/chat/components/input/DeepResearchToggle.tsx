@@ -2,17 +2,13 @@ import React from "react";
 
 interface DeepResearchToggleProps {
   deepResearchEnabled: boolean;
-  setDeepResearchEnabled: (enabled: boolean) => void;
+  toggleDeepResearch: () => void;
 }
 
 export function DeepResearchToggle({
   deepResearchEnabled,
-  setDeepResearchEnabled,
+  toggleDeepResearch,
 }: DeepResearchToggleProps) {
-  const handleToggle = () => {
-    setDeepResearchEnabled(!deepResearchEnabled);
-  };
-
   return (
     <button
       className={`ml-auto py-1.5
@@ -30,7 +26,7 @@ export function DeepResearchToggle({
             : "text-input-text hover:text-neutral-900 hover:bg-background-chat-hover dark:hover:text-neutral-50"
         }
       `}
-      onClick={handleToggle}
+      onClick={toggleDeepResearch}
       role="switch"
       aria-checked={deepResearchEnabled}
     >
