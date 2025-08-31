@@ -72,13 +72,9 @@ const DocumentResultsComponent = (
     return citedDocumentIds;
   }, [idOfMessageToDisplay, selectedMessage?.packets.length]);
 
-  console.log("citedDocumentIds", citedDocumentIds);
-  console.log("idOfMessageToDisplay", idOfMessageToDisplay);
-  console.log("selectedMessage", selectedMessage);
-  console.log("currentMessageTree", currentMessageTree);
-
   // if these are missing for some reason, then nothing we can do. Just
   // don't render.
+  // TODO: improve this display
   if (!selectedMessage || !currentMessageTree) {
     return null;
   }
