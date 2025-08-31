@@ -55,7 +55,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
-import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 
 interface HistorySidebarProps {
   liveAssistant?: MinimalPersonaSnapshot | null;
