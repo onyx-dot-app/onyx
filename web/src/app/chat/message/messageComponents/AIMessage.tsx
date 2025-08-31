@@ -253,7 +253,7 @@ export function AIMessage({
                     >
                       {groupedPackets.length === 0 ? (
                         // Show blinking dot when no content yet but message is generating
-                        <BlinkingDot />
+                        <BlinkingDot addMargin />
                       ) : (
                         (() => {
                           // Simple split: tools vs non-tools
