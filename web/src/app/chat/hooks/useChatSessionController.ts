@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
 import {
   nameChatSession,
@@ -305,7 +305,7 @@ export function useChatSessionController({
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
 
-  const onMessageSelection = (nodeId: number) => {
+  const onMessageSelection = useCallback((nodeId: number) => {
     updateCurrentSelectedNodeForDocDisplay(nodeId);
     const currentMessageTree = useChatSessionStore
       .getState()
@@ -330,7 +330,7 @@ export function useChatSessionController({
         console.error("Message has no messageId", nodeId);
       }
     }
-  };
+  }, []);
 
   return {
     onMessageSelection,

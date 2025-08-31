@@ -14,6 +14,7 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
@@ -92,6 +93,79 @@ import { HumanMessage } from "../message/HumanMessage";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 
+// Memoized wrapper component for AI messages with stable props
+const MemoizedAIMessageWrapper = memo(function AIMessageWrapper({
+  message,
+  previousMessage,
+  liveAssistant,
+  llmModelName,
+  handleFeedback,
+  setPresentingDocument,
+  createRegenerator,
+  nodeId,
+  otherMessagesCanSwitchTo,
+  onMessageSelection,
+  isLast,
+  lastMessageRef,
+}: {
+  message: any;
+  previousMessage: any;
+  liveAssistant: any;
+  llmModelName?: string;
+  handleFeedback: (feedback: FeedbackType, messageId: number) => void;
+  setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
+  createRegenerator: (req: any) => any;
+  nodeId: number;
+  otherMessagesCanSwitchTo: number[];
+  onMessageSelection?: (nodeId: number) => void;
+  isLast: boolean;
+  lastMessageRef: React.RefObject<HTMLDivElement>;
+}) {
+  const chatState = useMemo(
+    () => ({
+      handleFeedback: (feedback: FeedbackType) =>
+        handleFeedback(feedback, message.messageId!),
+      assistant: liveAssistant,
+      docs: message.documents,
+      userFiles: [],
+      citations: message.citations,
+      setPresentingDocument,
+      regenerate: createRegenerator({
+        messageId: message.messageId!,
+        parentMessage: previousMessage!,
+      }),
+      overriddenModel: llmModelName,
+    }),
+    [
+      message.messageId,
+      message.documents,
+      message.citations,
+      liveAssistant,
+      llmModelName,
+      previousMessage?.messageId,
+      handleFeedback,
+      setPresentingDocument,
+      createRegenerator,
+    ]
+  );
+
+  return (
+    <div
+      className="text-text"
+      id={`message-${nodeId}`}
+      ref={isLast ? lastMessageRef : null}
+    >
+      <AIMessage
+        rawPackets={message.packets}
+        chatState={chatState}
+        nodeId={nodeId}
+        otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
+        onMessageSelection={onMessageSelection}
+      />
+    </div>
+  );
+});
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -105,20 +179,20 @@ export function ChatPage({
 }) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
-  // const renderCount = useRef(0);
-  // renderCount.current++;
-  // const renderStartTime = performance.now();
+  const renderCount = useRef(0);
+  renderCount.current++;
+  const renderStartTime = performance.now();
 
-  // useEffect(() => {
-  //   const renderTime = performance.now() - renderStartTime;
-  //   if (renderTime > 10) {
-  //     console.log(
-  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
-  //         2
-  //       )}ms`
-  //     );
-  //   }
-  // });
+  useEffect(() => {
+    const renderTime = performance.now() - renderStartTime;
+    if (renderTime > 10) {
+      console.log(
+        `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+          2
+        )}ms`
+      );
+    }
+  });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -696,22 +770,34 @@ export function ChatPage({
     forceSearch?: boolean;
   }
 
-  function createRegenerator(regenerationRequest: RegenerationRequest) {
-    // Returns new function that only needs `modelOveride` to be specified when called
-    return async function (modelOverride: LlmDescriptor) {
-      return await onSubmit({
-        message: message,
-        selectedFiles: selectedFiles,
-        selectedFolders: selectedFolders,
-        currentMessageFiles: currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
-        modelOverride,
-        messageIdToResend: regenerationRequest.parentMessage.messageId,
-        regenerationRequest,
-        forceSearch: regenerationRequest.forceSearch,
-      });
-    };
-  }
+  // Use useCallback to memoize the regenerator creator
+  // Note: We don't include messageHistory in deps to avoid re-renders
+  const createRegenerator = useCallback(
+    (regenerationRequest: RegenerationRequest) => {
+      // Returns new function that only needs `modelOveride` to be specified when called
+      return async function (modelOverride: LlmDescriptor) {
+        // Get the message directly from the regeneration request
+        return await onSubmit({
+          message: regenerationRequest.parentMessage.message || "",
+          selectedFiles: selectedFiles,
+          selectedFolders: selectedFolders,
+          currentMessageFiles: currentMessageFiles,
+          useAgentSearch: deepResearchEnabled,
+          modelOverride,
+          messageIdToResend: regenerationRequest.parentMessage.messageId,
+          regenerationRequest,
+          forceSearch: regenerationRequest.forceSearch,
+        });
+      };
+    },
+    [
+      onSubmit,
+      selectedFiles,
+      selectedFolders,
+      currentMessageFiles,
+      deepResearchEnabled,
+    ]
+  );
   if (!user) {
     redirect("/auth/login");
   }
@@ -772,6 +858,29 @@ export function ChatPage({
   const handleDesktopDocumentSidebarClose = useCallback(() => {
     setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
   }, [updateCurrentDocumentSidebarVisible]);
+
+  // Memoized callback for handling feedback
+  const handleFeedback = useCallback(
+    (feedback: FeedbackType, messageId: number) => {
+      setCurrentFeedback([feedback, messageId]);
+    },
+    []
+  );
+
+  // Memoized callback for handling message edits
+  const handleMessageEdit = useCallback(
+    (editedContent: string, messageId?: number | null) => {
+      onSubmit({
+        message: editedContent,
+        messageIdToResend: messageId || undefined,
+        selectedFiles: [],
+        selectedFolders: [],
+        currentMessageFiles: [],
+        useAgentSearch: deepResearchEnabled,
+      });
+    },
+    [onSubmit, deepResearchEnabled]
+  );
 
   // Determine whether to show the centered input (no messages yet)
   const showCenteredInput =
@@ -1165,18 +1274,12 @@ export function ChatPage({
                                       content={message.message}
                                       files={message.files}
                                       messageId={message.messageId}
-                                      onEdit={(editedContent) => {
-                                        onSubmit({
-                                          message: editedContent,
-                                          messageIdToResend:
-                                            message.messageId || undefined,
-                                          // TODO: fix
-                                          selectedFiles: [],
-                                          selectedFolders: [],
-                                          currentMessageFiles: [],
-                                          useAgentSearch: deepResearchEnabled,
-                                        });
-                                      }}
+                                      onEdit={(editedContent: string) =>
+                                        handleMessageEdit(
+                                          editedContent,
+                                          message.messageId
+                                        )
+                                      }
                                       otherMessagesCanSwitchTo={
                                         parentMessage?.childrenNodeIds || []
                                       }
@@ -1208,44 +1311,27 @@ export function ChatPage({
                                 }
 
                                 return (
-                                  <div
-                                    className="text-text"
-                                    id={`message-${message.nodeId}`}
+                                  <MemoizedAIMessageWrapper
                                     key={messageReactComponentKey}
-                                    ref={
-                                      i == messageHistory.length - 1
-                                        ? lastMessageRef
-                                        : null
+                                    message={message}
+                                    previousMessage={previousMessage}
+                                    liveAssistant={liveAssistant}
+                                    llmModelName={
+                                      llmManager.currentLlm?.modelName
                                     }
-                                  >
-                                    <AIMessage
-                                      rawPackets={message.packets}
-                                      chatState={{
-                                        handleFeedback: (feedback) =>
-                                          setCurrentFeedback([
-                                            feedback,
-                                            message.messageId!,
-                                          ]),
-                                        assistant: liveAssistant,
-                                        docs: message.documents,
-                                        userFiles: [], // TODO: Extract user files from message context
-                                        citations: message.citations,
-                                        setPresentingDocument:
-                                          setPresentingDocument,
-                                        regenerate: createRegenerator({
-                                          messageId: message.messageId!,
-                                          parentMessage: previousMessage!,
-                                        }),
-                                        overriddenModel:
-                                          llmManager.currentLlm?.modelName,
-                                      }}
-                                      nodeId={message.nodeId}
-                                      otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenNodeIds || []
-                                      }
-                                      onMessageSelection={onMessageSelection}
-                                    />
-                                  </div>
+                                    handleFeedback={handleFeedback}
+                                    setPresentingDocument={
+                                      setPresentingDocument
+                                    }
+                                    createRegenerator={createRegenerator}
+                                    nodeId={message.nodeId}
+                                    otherMessagesCanSwitchTo={
+                                      parentMessage?.childrenNodeIds || []
+                                    }
+                                    onMessageSelection={onMessageSelection}
+                                    isLast={i === messageHistory.length - 1}
+                                    lastMessageRef={lastMessageRef}
+                                  />
                                 );
                               }
                             })}

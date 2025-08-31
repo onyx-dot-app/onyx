@@ -16,7 +16,7 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, memo } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -37,7 +37,7 @@ import { useMessageSwitching } from "./hooks/useMessageSwitching";
 import MultiToolRenderer from "./MultiToolRenderer";
 import { RendererComponent } from "./renderMessageComponent";
 
-export function AIMessage({
+function AIMessageComponent({
   rawPackets,
   chatState,
   nodeId,
@@ -50,6 +50,8 @@ export function AIMessage({
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
 }) {
+  console.log("Rendering AIMessage");
+
   const markdownRef = useRef<HTMLDivElement>(null);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
@@ -462,3 +464,38 @@ export function AIMessage({
     </div>
   );
 }
+
+// Custom comparison function to prevent unnecessary re-renders
+const areEqual = (prevProps: any, nextProps: any) => {
+  // Only re-render if core data has changed
+  // Check nodeId
+  if (prevProps.nodeId !== nextProps.nodeId) {
+    console.log("AIMessage re-render: nodeId changed");
+    return false;
+  }
+
+  // Check if packets have actually changed content (not just reference)
+  if (prevProps.rawPackets?.length !== nextProps.rawPackets?.length) {
+    console.log("AIMessage re-render: packets length changed");
+    return false;
+  }
+
+  // For packets, do a deeper check on the last packet to see if streaming changed
+  if (prevProps.rawPackets?.length > 0 && nextProps.rawPackets?.length > 0) {
+    const prevLast = prevProps.rawPackets[prevProps.rawPackets.length - 1];
+    const nextLast = nextProps.rawPackets[nextProps.rawPackets.length - 1];
+    if (
+      prevLast?.type !== nextLast?.type ||
+      prevLast?.content !== nextLast?.content
+    ) {
+      console.log("AIMessage re-render: last packet changed");
+      return false;
+    }
+  }
+
+  // Ignore all other prop changes - they're likely just reference changes
+  // This includes chatState, onMessageSelection, otherMessagesCanSwitchTo
+  return true;
+};
+
+export const AIMessage = memo(AIMessageComponent, areEqual);

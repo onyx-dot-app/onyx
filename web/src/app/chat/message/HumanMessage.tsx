@@ -1,7 +1,7 @@
 "use client";
 
 import { FiEdit2 } from "react-icons/fi";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, memo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
@@ -103,7 +103,7 @@ function FileDisplay({
   );
 }
 
-export const HumanMessage = ({
+const HumanMessageComponent = ({
   content,
   files,
   messageId,
@@ -127,6 +127,8 @@ export const HumanMessage = ({
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  console.log("Rendering HumanMessage");
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -406,3 +408,36 @@ export const HumanMessage = ({
     </div>
   );
 };
+
+// Custom comparison function to prevent unnecessary re-renders
+const areEqual = (prevProps: any, nextProps: any) => {
+  // Only re-render if the actual message data has changed
+  if (prevProps.content !== nextProps.content) {
+    console.log("HumanMessage re-render: content changed");
+    return false;
+  }
+  if (prevProps.messageId !== nextProps.messageId) {
+    console.log("HumanMessage re-render: messageId changed");
+    return false;
+  }
+  if (
+    prevProps.disableSwitchingForStreaming !==
+    nextProps.disableSwitchingForStreaming
+  ) {
+    console.log("HumanMessage re-render: disableSwitchingForStreaming changed");
+    return false;
+  }
+
+  // Check files array - only if length changed
+  if (prevProps.files?.length !== nextProps.files?.length) {
+    console.log("HumanMessage re-render: files length changed");
+    return false;
+  }
+
+  // Ignore all other prop changes including functions and arrays
+  // that are just reference changes
+  return true;
+};
+
+export const HumanMessage = memo(HumanMessageComponent, areEqual);
+HumanMessage.displayName = "HumanMessage";
