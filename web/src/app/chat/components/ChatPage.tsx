@@ -49,7 +49,6 @@ import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
-import { Logo } from "@/components/logo/Logo";
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
@@ -104,6 +103,26 @@ export function ChatPage({
   sidebarVisible: boolean;
   firstMessage?: string;
 }) {
+  // Performance tracking
+  // Keeping this here in case we need to track down slow renders in the future
+  // const renderCount = useRef(0);
+  // renderCount.current++;
+  // const renderStartTime = performance.now();
+
+  // useEffect(() => {
+  //   const renderTime = performance.now() - renderStartTime;
+  //   if (renderTime > 10) {
+  //     console.log(
+  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+  //         2
+  //       )}ms`
+  //     );
+  //   }
+  // });
+
+  // Track specific sections
+  const beforeHooksTime = performance.now();
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -454,6 +473,7 @@ export function ChatPage({
   );
 
   // Access chat state directly from the store
+  const beforeZustandTime = performance.now();
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const submittedMessage = useSubmittedMessage();
@@ -480,6 +500,7 @@ export function ChatPage({
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
+  const afterZustandTime = performance.now();
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -544,26 +565,27 @@ export function ChatPage({
     };
   }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
     clearSelectedItems();
     // TODO: move this into useChatController
     // setLoadingError(null);
-  };
+  }, [setMessage, setCurrentMessageFiles, clearSelectedItems]);
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
 
-  const explicitlyUntoggle = () => {
+  const explicitlyUntoggle = useCallback(() => {
     setShowHistorySidebar(false);
 
     setUntoggled(true);
     setTimeout(() => {
       setUntoggled(false);
     }, 200);
-  };
-  const toggleSidebar = () => {
+  }, [setShowHistorySidebar, setUntoggled]);
+
+  const toggleSidebar = useCallback(() => {
     if (user?.is_anonymous_user) {
       return;
     }
@@ -573,11 +595,12 @@ export function ChatPage({
     );
 
     toggle();
-  };
-  const removeToggle = () => {
+  }, [user?.is_anonymous_user, toggle]);
+
+  const removeToggle = useCallback(() => {
     setShowHistorySidebar(false);
     toggle(false);
-  };
+  }, [setShowHistorySidebar, toggle]);
 
   const waitForScrollRef = useRef(false);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
@@ -663,13 +686,18 @@ export function ChatPage({
 
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
 
-  const toggleDocumentSidebar = () => {
+  const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
       updateCurrentDocumentSidebarVisible(true);
     } else {
       updateCurrentDocumentSidebarVisible(false);
     }
-  };
+  }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
+
+  const toggleChatSessionSearchModal = useCallback(
+    () => setIsChatSearchModalOpen((open) => !open),
+    [setIsChatSearchModalOpen]
+  );
 
   interface RegenerationRequest {
     messageId: number;
@@ -697,10 +725,10 @@ export function ChatPage({
     redirect("/auth/login");
   }
 
-  const clearSelectedDocuments = () => {
+  const clearSelectedDocuments = useCallback(() => {
     setSelectedDocuments([]);
     clearSelectedItems();
-  };
+  }, [clearSelectedItems]);
 
   const toggleDocumentSelection = (document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
@@ -733,35 +761,27 @@ export function ChatPage({
     });
   }, [
     onSubmit,
-    message,
     selectedFiles,
     selectedFolders,
     currentMessageFiles,
     deepResearchEnabled,
   ]);
 
-  // Determine whether to show the centered input (no messages yet)
-  const showCenteredInput = useMemo(() => {
-    return (
-      messageHistory.length === 0 &&
-      !isFetchingChatMessages &&
-      !loadingError &&
-      !submittedMessage
-    );
-  }, [
-    messageHistory.length,
-    isFetchingChatMessages,
-    loadingError,
-    submittedMessage,
-  ]);
+  // Memoized callbacks for Header
+  const handleToggleUserSettings = useCallback(() => {
+    setUserSettingsToggled(true);
+  }, []);
 
-  const inputContainerClasses = useMemo(() => {
-    return `absolute pointer-events-none z-10 w-full ${
-      showCenteredInput
-        ? "top-1/2 left-0 -translate-y-1/2"
-        : "bottom-0 left-0 translate-y-0"
-    }`;
-  }, [showCenteredInput]);
+  const handleHeaderReset = useCallback(() => {
+    setMessage("");
+  }, []);
+
+  // Determine whether to show the centered input (no messages yet)
+  const showCenteredInput =
+    messageHistory.length === 0 &&
+    !isFetchingChatMessages &&
+    !loadingError &&
+    !submittedMessage;
 
   // handle error case where no assistants are available
   if (noAssistants) {
@@ -926,10 +946,11 @@ export function ChatPage({
                 }`}
             >
               <div className="w-full relative">
+                {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function 
+                props are wrapped in useCallback. */}
                 <HistorySidebar
-                  toggleChatSessionSearchModal={() =>
-                    setIsChatSearchModalOpen((open) => !open)
-                  }
+                  toggleChatSessionSearchModal={toggleChatSessionSearchModal}
                   liveAssistant={liveAssistant}
                   setShowAssistantsModal={setShowAssistantsModal}
                   explicitlyUntoggle={explicitlyUntoggle}
@@ -1024,11 +1045,14 @@ export function ChatPage({
               id="scrollableContainer"
               className="flex h-full relative px-2 flex-col w-full"
             >
+              {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function 
+              props are wrapped in useCallback. */}
               {liveAssistant && (
                 <FunctionalHeader
-                  toggleUserSettings={() => setUserSettingsToggled(true)}
+                  toggleUserSettings={handleToggleUserSettings}
                   sidebarToggled={sidebarVisible}
-                  reset={() => setMessage("")}
+                  reset={handleHeaderReset}
                   page="chat"
                   setSharingModalVisible={
                     chatSessionId !== null ? setSharingModalVisible : undefined
@@ -1097,8 +1121,7 @@ export function ChatPage({
                               )}
                             </div>
                           )}
-                          {/* ChatBanner is a custom banner that displays a admin-specified message at 
-                      the top of the chat page. Only used in the EE version of the app. */}
+
                           {messageHistory.length === 0 &&
                             !isFetchingChatMessages &&
                             !loadingError &&
@@ -1122,9 +1145,9 @@ export function ChatPage({
                             {messageHistory.map((message, i) => {
                               const messageTree = completeMessageTree;
 
-                              const messageReactComponentKey = `message-${message.messageId}`;
-                              const parentMessage = message.parentMessageId
-                                ? messageTree?.get(message.parentMessageId)
+                              const messageReactComponentKey = `message-${message.nodeId}`;
+                              const parentMessage = message.parentNodeId
+                                ? messageTree?.get(message.parentNodeId)
                                 : null;
                               if (message.type === "user") {
                                 const nextMessage =
@@ -1163,7 +1186,7 @@ export function ChatPage({
                                         });
                                       }}
                                       otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenMessageIds || []
+                                        parentMessage?.childrenNodeIds || []
                                       }
                                       onMessageSelection={onMessageSelection}
                                     />
@@ -1179,7 +1202,7 @@ export function ChatPage({
                                 ) {
                                   return (
                                     <div
-                                      key={`error-${message.messageId}`}
+                                      key={`error-${message.nodeId}`}
                                       className="max-w-message-max mx-auto"
                                     >
                                       <ErrorBanner
@@ -1195,7 +1218,7 @@ export function ChatPage({
                                 return (
                                   <div
                                     className="text-text"
-                                    id={`message-${message.messageId}`}
+                                    id={`message-${message.nodeId}`}
                                     key={messageReactComponentKey}
                                     ref={
                                       i == messageHistory.length - 1
@@ -1209,7 +1232,7 @@ export function ChatPage({
                                         handleFeedback: (feedback) =>
                                           setCurrentFeedback([
                                             feedback,
-                                            message.messageId,
+                                            message.messageId!,
                                           ]),
                                         assistant: liveAssistant,
                                         docs: message.documents,
@@ -1218,7 +1241,7 @@ export function ChatPage({
                                         setPresentingDocument:
                                           setPresentingDocument,
                                         regenerate: createRegenerator({
-                                          messageId: message.messageId,
+                                          messageId: message.messageId!,
                                           parentMessage: previousMessage!,
                                         }),
                                         overriddenModel:
@@ -1226,7 +1249,7 @@ export function ChatPage({
                                       }}
                                       messageId={message.messageId}
                                       otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenMessageIds || []
+                                        parentMessage?.childrenNodeIds || []
                                       }
                                       onMessageSelection={onMessageSelection}
                                     />
@@ -1264,7 +1287,14 @@ export function ChatPage({
                             <div ref={endDivRef} />
                           </div>
                         </div>
-                        <div ref={inputRef} className={inputContainerClasses}>
+                        <div
+                          ref={inputRef}
+                          className={`absolute pointer-events-none z-10 w-full ${
+                            showCenteredInput
+                              ? "top-1/2 left-0 -translate-y-1/2"
+                              : "bottom-0 left-0 translate-y-0"
+                          }`}
+                        >
                           {!showCenteredInput && aboveHorizon && (
                             <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
                               <button

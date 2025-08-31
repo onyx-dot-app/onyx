@@ -3,7 +3,6 @@ import {
   PacketType,
   CitationDelta,
   SearchToolDelta,
-  ImageGenerationToolDelta,
   StreamingCitation,
 } from "../../services/streamingModels";
 import { FullChatState } from "./interfaces";

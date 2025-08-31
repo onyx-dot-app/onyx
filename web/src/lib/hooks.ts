@@ -349,7 +349,7 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = () => {
+  const getFilterString = useCallback(() => {
     const params = new URLSearchParams();
 
     if (timeRange) {
@@ -380,14 +380,14 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
-  };
+  }, [timeRange, selectedSources, selectedDocumentSets, selectedTags]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  };
+  }, []);
 
   function buildFiltersFromQueryString(
     filterString: string,
@@ -446,19 +446,34 @@ export function useFilters(): FilterManager {
     setSelectedTags(newSelectedTags);
   }
 
-  return {
-    clearFilters,
-    timeRange,
-    setTimeRange,
-    selectedSources,
-    setSelectedSources,
-    selectedDocumentSets,
-    setSelectedDocumentSets,
-    selectedTags,
-    setSelectedTags,
-    getFilterString,
-    buildFiltersFromQueryString,
-  };
+  return useMemo(
+    () => ({
+      clearFilters,
+      timeRange,
+      setTimeRange,
+      selectedSources,
+      setSelectedSources,
+      selectedDocumentSets,
+      setSelectedDocumentSets,
+      selectedTags,
+      setSelectedTags,
+      getFilterString,
+      buildFiltersFromQueryString,
+    }),
+    [
+      clearFilters,
+      timeRange,
+      setTimeRange,
+      selectedSources,
+      setSelectedSources,
+      selectedDocumentSets,
+      setSelectedDocumentSets,
+      selectedTags,
+      setSelectedTags,
+      getFilterString,
+      buildFiltersFromQueryString,
+    ]
+  );
 }
 
 interface UseUsersParams {

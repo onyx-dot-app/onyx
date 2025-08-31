@@ -108,17 +108,18 @@ export interface SearchSession {
 
 export interface Message {
   is_generating?: boolean;
-  messageId: number;
+  messageId?: number;
+  nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
   type: "user" | "assistant" | "system" | "error";
   retrievalType?: RetrievalType;
   query?: string | null;
   files: FileDescriptor[];
   toolCall: ToolCallMetadata | null;
-  // for rebuilding the message tree
-  parentMessageId: number | null;
-  childrenMessageIds?: number[];
-  latestChildMessageId?: number | null;
+  // for rebuilding the message tree - these now use nodeId
+  parentNodeId: number | null;
+  childrenNodeIds?: number[];
+  latestChildNodeId?: number | null;
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
   overridden_model?: string;

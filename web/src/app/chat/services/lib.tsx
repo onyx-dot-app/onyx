@@ -490,6 +490,9 @@ export function processRawChatHistory(
     }
 
     const message: Message = {
+      // for existing messages, use the message_id as the nodeId
+      // all that matters is that the nodeId is unique for a given chat session
+      nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
       message: messageInfo.message,
       type: messageInfo.message_type as "user" | "assistant",
@@ -509,9 +512,9 @@ export function processRawChatHistory(
           }
         : {}),
       toolCall: messageInfo.tool_call,
-      parentMessageId: messageInfo.parent_message,
-      childrenMessageIds: [],
-      latestChildMessageId: messageInfo.latest_child_message,
+      parentNodeId: messageInfo.parent_message,
+      childrenNodeIds: [],
+      latestChildNodeId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
     };
@@ -535,7 +538,7 @@ export function processRawChatHistory(
     childrenIds.sort((a, b) => a - b);
     const parentMesage = messages.get(parentId);
     if (parentMesage) {
-      parentMesage.childrenMessageIds = childrenIds;
+      parentMesage.childrenNodeIds = childrenIds;
     }
   });
 

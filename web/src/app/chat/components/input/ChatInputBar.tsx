@@ -3,10 +3,9 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { FiPlus, FiFilter } from "react-icons/fi";
+import { FiPlus } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -15,7 +14,7 @@ import { InputPrompt } from "@/app/chat/interfaces";
 
 import { FilterManager, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
-import { ChatFileType, FileDescriptor } from "../../interfaces";
+import { ChatFileType } from "../../interfaces";
 import {
   DocumentIcon2,
   FileIcon,
@@ -27,8 +26,6 @@ import { OnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
-import { FilterPopup } from "@/components/search/filtering/FilterPopup";
-import { DocumentSetSummary, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
@@ -226,21 +223,28 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     [setMessage, handlePromptInput]
   );
 
-  let startFilterSlash = "";
-  if (message !== undefined) {
-    const message_segments = message
-      .slice(message.lastIndexOf("/") + 1)
-      .split(/\s/);
-    if (message_segments[0]) {
-      startFilterSlash = message_segments[0].toLowerCase();
+  const startFilterSlash = useMemo(() => {
+    if (message !== undefined) {
+      const message_segments = message
+        .slice(message.lastIndexOf("/") + 1)
+        .split(/\s/);
+      if (message_segments[0]) {
+        return message_segments[0].toLowerCase();
+      }
     }
-  }
+    return "";
+  }, [message]);
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
-  const filteredPrompts = inputPrompts.filter(
-    (prompt) =>
-      prompt.active && prompt.prompt.toLowerCase().startsWith(startFilterSlash)
+  const filteredPrompts = useMemo(
+    () =>
+      inputPrompts.filter(
+        (prompt) =>
+          prompt.active &&
+          prompt.prompt.toLowerCase().startsWith(startFilterSlash)
+      ),
+    [inputPrompts, startFilterSlash]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
