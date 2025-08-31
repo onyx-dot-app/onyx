@@ -832,6 +832,9 @@ export function ChatPage({
             onOutsideClick={() => updateCurrentDocumentSidebarVisible(false)}
             title="Sources"
           >
+            {/* IMPORTANT: this is a memoized component, and it's very important
+            for performance reasons that this stays true. MAKE SURE that all function 
+            props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={true}
@@ -987,6 +990,9 @@ export function ChatPage({
                 }
             `}
           >
+            {/* IMPORTANT: this is a memoized component, and it's very important
+            for performance reasons that this stays true. MAKE SURE that all function 
+            props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={false}
@@ -1093,42 +1099,36 @@ export function ChatPage({
                             </div>
                           )}
 
-                          {messageHistory.length !== 0 &&
-                            !isFetchingChatMessages &&
-                            !loadingError &&
-                            !submittedMessage && (
-                              <MessagesDisplay
-                                messageHistory={messageHistory}
-                                completeMessageTree={completeMessageTree}
-                                liveAssistant={liveAssistant}
-                                llmManager={llmManager}
-                                deepResearchEnabled={deepResearchEnabled}
-                                selectedFiles={selectedFiles}
-                                selectedFolders={selectedFolders}
-                                currentMessageFiles={currentMessageFiles}
-                                setPresentingDocument={setPresentingDocument}
-                                setCurrentFeedback={setCurrentFeedback}
-                                onSubmit={onSubmit}
-                                onMessageSelection={onMessageSelection}
-                                stopGenerating={stopGenerating}
-                                uncaughtError={uncaughtError}
-                                loadingError={loadingError}
-                                handleResubmitLastMessage={
-                                  handleResubmitLastMessage
-                                }
-                                autoScrollEnabled={autoScrollEnabled}
-                                getContainerHeight={getContainerHeight}
-                                lastMessageRef={lastMessageRef}
-                                endPaddingRef={endPaddingRef}
-                                endDivRef={endDivRef}
-                                hasPerformedInitialScroll={
-                                  hasPerformedInitialScroll
-                                }
-                                chatSessionId={chatSessionId}
-                                enterpriseSettings={enterpriseSettings}
-                                settings={settings}
-                              />
-                            )}
+                          <MessagesDisplay
+                            messageHistory={messageHistory}
+                            completeMessageTree={completeMessageTree}
+                            liveAssistant={liveAssistant}
+                            llmManager={llmManager}
+                            deepResearchEnabled={deepResearchEnabled}
+                            selectedFiles={selectedFiles}
+                            selectedFolders={selectedFolders}
+                            currentMessageFiles={currentMessageFiles}
+                            setPresentingDocument={setPresentingDocument}
+                            setCurrentFeedback={setCurrentFeedback}
+                            onSubmit={onSubmit}
+                            onMessageSelection={onMessageSelection}
+                            stopGenerating={stopGenerating}
+                            uncaughtError={uncaughtError}
+                            loadingError={loadingError}
+                            handleResubmitLastMessage={
+                              handleResubmitLastMessage
+                            }
+                            autoScrollEnabled={autoScrollEnabled}
+                            getContainerHeight={getContainerHeight}
+                            lastMessageRef={lastMessageRef}
+                            endPaddingRef={endPaddingRef}
+                            endDivRef={endDivRef}
+                            hasPerformedInitialScroll={
+                              hasPerformedInitialScroll
+                            }
+                            chatSessionId={chatSessionId}
+                            enterpriseSettings={enterpriseSettings}
+                          />
                         </div>
 
                         <div

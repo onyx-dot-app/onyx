@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
 import {
   nameChatSession,
@@ -305,32 +305,36 @@ export function useChatSessionController({
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
 
-  const onMessageSelection = (nodeId: number) => {
-    updateCurrentSelectedNodeForDocDisplay(nodeId);
-    const currentMessageTree = useChatSessionStore
-      .getState()
-      .sessions.get(
-        useChatSessionStore.getState().currentSessionId || ""
-      )?.messageTree;
+  const onMessageSelection = useCallback(
+    (nodeId: number) => {
+      updateCurrentSelectedNodeForDocDisplay(nodeId);
+      const currentMessageTree = useChatSessionStore
+        .getState()
+        .sessions.get(
+          useChatSessionStore.getState().currentSessionId || ""
+        )?.messageTree;
 
-    if (currentMessageTree) {
-      const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);
-      const currentSessionId = useChatSessionStore.getState().currentSessionId;
-      if (currentSessionId) {
-        updateSessionMessageTree(currentSessionId, newMessageTree);
+      if (currentMessageTree) {
+        const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);
+        const currentSessionId =
+          useChatSessionStore.getState().currentSessionId;
+        if (currentSessionId) {
+          updateSessionMessageTree(currentSessionId, newMessageTree);
+        }
+
+        const message = currentMessageTree.get(nodeId);
+
+        if (message?.messageId) {
+          // Makes actual API call to set message as latest in the DB so we can
+          // edit this message and so it sticks around on page reload
+          patchMessageToBeLatest(nodeId);
+        } else {
+          console.error("Message has no messageId", nodeId);
+        }
       }
-
-      const message = currentMessageTree.get(nodeId);
-
-      if (message?.messageId) {
-        // Makes actual API call to set message as latest in the DB so we can
-        // edit this message and so it sticks around on page reload
-        patchMessageToBeLatest(nodeId);
-      } else {
-        console.error("Message has no messageId", nodeId);
-      }
-    }
-  };
+    },
+    [updateCurrentSelectedNodeForDocDisplay, updateSessionMessageTree]
+  );
 
   return {
     onMessageSelection,

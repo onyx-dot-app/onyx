@@ -1,8 +1,7 @@
-import React, { RefObject } from "react";
-import { Message } from "../interfaces";
+import React, { RefObject, useCallback, useMemo } from "react";
+import { CitationMap, Message } from "../interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { HumanMessage } from "../message/HumanMessage";
-import { AIMessage } from "../message/messageComponents/AIMessage";
+import { MemoizedHumanMessage } from "../message/MemoizedHumanMessage";
 import { ErrorBanner } from "../message/Resubmit";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -13,6 +12,7 @@ import {
 } from "@/app/chat/my-documents/DocumentsContext";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
+import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
 import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 
 interface MessagesDisplayProps {
@@ -57,9 +57,6 @@ interface MessagesDisplayProps {
   hasPerformedInitialScroll: boolean;
   chatSessionId: string | null;
   enterpriseSettings?: EnterpriseSettings | null;
-  settings?: {
-    isMobile?: boolean;
-  } | null;
 }
 
 export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
@@ -87,8 +84,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   hasPerformedInitialScroll,
   chatSessionId,
   enterpriseSettings,
-  settings,
 }) => {
+  // Stable fallbacks to avoid changing prop identities on each render
+  const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
+  const emptyChildrenIds = useMemo<number[]>(() => [], []);
   function createRegenerator(regenerationRequest: {
     messageId: number;
     parentMessage: Message;
@@ -108,6 +107,27 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       });
     };
   }
+
+  const handleFeedback = useCallback(
+    (feedback: FeedbackType, messageId: number) => {
+      setCurrentFeedback([feedback, messageId!]);
+    },
+    [setCurrentFeedback]
+  );
+
+  const handleEditWithMessageId = useCallback(
+    (editedContent: string, msgId: number | null | undefined) => {
+      onSubmit({
+        message: editedContent,
+        messageIdToResend: msgId || undefined,
+        selectedFiles: [],
+        selectedFolders: [],
+        currentMessageFiles: [],
+        useAgentSearch: deepResearchEnabled,
+      });
+    },
+    [onSubmit, deepResearchEnabled]
+  );
 
   return (
     <div
@@ -133,7 +153,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
 
           return (
             <div id={messageReactComponentKey} key={messageReactComponentKey}>
-              <HumanMessage
+              <MemoizedHumanMessage
                 setPresentingDocument={setPresentingDocument}
                 disableSwitchingForStreaming={
                   (nextMessage && nextMessage.is_generating) || false
@@ -142,17 +162,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 content={message.message}
                 files={message.files}
                 messageId={message.messageId}
-                onEdit={(editedContent) => {
-                  onSubmit({
-                    message: editedContent,
-                    messageIdToResend: message.messageId || undefined,
-                    selectedFiles: [],
-                    selectedFolders: [],
-                    currentMessageFiles: [],
-                    useAgentSearch: deepResearchEnabled,
-                  });
-                }}
-                otherMessagesCanSwitchTo={parentMessage?.childrenNodeIds || []}
+                handleEditWithMessageId={handleEditWithMessageId}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
                 onMessageSelection={onMessageSelection}
               />
             </div>
@@ -184,24 +197,21 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
               key={messageReactComponentKey}
               ref={i === messageHistory.length - 1 ? lastMessageRef : null}
             >
-              <AIMessage
+              <MemoizedAIMessage
                 rawPackets={message.packets}
-                chatState={{
-                  handleFeedback: (feedback) =>
-                    setCurrentFeedback([feedback, message.messageId!]),
-                  assistant: liveAssistant!,
-                  docs: message.documents,
-                  userFiles: [],
-                  citations: message.citations,
-                  setPresentingDocument: setPresentingDocument,
-                  regenerate: createRegenerator({
-                    messageId: message.messageId!,
-                    parentMessage: previousMessage!,
-                  }),
-                  overriddenModel: llmManager.currentLlm?.modelName,
-                }}
+                handleFeedbackWithMessageId={handleFeedback}
+                assistant={liveAssistant!}
+                docs={message.documents ?? emptyDocs}
+                citations={message.citations}
+                setPresentingDocument={setPresentingDocument}
+                createRegenerator={createRegenerator}
+                parentMessage={previousMessage!}
+                messageId={message.messageId}
+                overriddenModel={llmManager.currentLlm?.modelName}
                 nodeId={message.nodeId}
-                otherMessagesCanSwitchTo={parentMessage?.childrenNodeIds || []}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
                 onMessageSelection={onMessageSelection}
               />
             </div>
