@@ -1,5 +1,5 @@
 interface UseMessageSwitchingProps {
-  messageId?: number | null;
+  nodeId: number;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
 }
@@ -12,13 +12,13 @@ interface UseMessageSwitchingReturn {
 }
 
 export function useMessageSwitching({
-  messageId,
+  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: UseMessageSwitchingProps): UseMessageSwitchingReturn {
   // Calculate message switching state
-  const currentMessageInd = messageId
-    ? otherMessagesCanSwitchTo?.indexOf(messageId)
+  const currentMessageInd = nodeId
+    ? otherMessagesCanSwitchTo?.indexOf(nodeId)
     : undefined;
 
   const includeMessageSwitcher =

@@ -104,8 +104,8 @@ export function useChatSessionController({
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
-  const updateCurrentSelectedMessageForDocDisplay = useChatSessionStore(
-    (state) => state.updateCurrentSelectedMessageForDocDisplay
+  const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
+    (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
   const currentChatState = useChatSessionStore(
     (state) =>
@@ -210,13 +210,8 @@ export function useChatSessionController({
           currentChatState == "loading"
         )
       ) {
-        const latestMessageId =
-          newMessageHistory[newMessageHistory.length - 1]?.messageId;
-
-        updateCurrentSelectedMessageForDocDisplay(
-          latestMessageId !== undefined && latestMessageId !== null
-            ? latestMessageId
-            : null
+        updateCurrentSelectedNodeForDocDisplay(
+          newMessageHistory[newMessageHistory.length - 1]?.nodeId ?? null
         );
 
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
@@ -310,8 +305,8 @@ export function useChatSessionController({
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
 
-  const onMessageSelection = (messageId: number) => {
-    updateCurrentSelectedMessageForDocDisplay(messageId);
+  const onMessageSelection = (nodeId: number) => {
+    updateCurrentSelectedNodeForDocDisplay(nodeId);
     const currentMessageTree = useChatSessionStore
       .getState()
       .sessions.get(
@@ -319,16 +314,22 @@ export function useChatSessionController({
       )?.messageTree;
 
     if (currentMessageTree) {
-      const newMessageTree = setMessageAsLatest(currentMessageTree, messageId);
+      const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);
       const currentSessionId = useChatSessionStore.getState().currentSessionId;
       if (currentSessionId) {
         updateSessionMessageTree(currentSessionId, newMessageTree);
       }
-    }
 
-    // Makes actual API call to set message as latest in the DB so we can
-    // edit this message and so it sticks around on page reload
-    patchMessageToBeLatest(messageId);
+      const message = currentMessageTree.get(nodeId);
+
+      if (message?.messageId) {
+        // Makes actual API call to set message as latest in the DB so we can
+        // edit this message and so it sticks around on page reload
+        patchMessageToBeLatest(nodeId);
+      } else {
+        console.error("Message has no messageId", nodeId);
+      }
+    }
   };
 
   return {

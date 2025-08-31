@@ -105,20 +105,20 @@ export function ChatPage({
 }) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
-  // const renderCount = useRef(0);
-  // renderCount.current++;
-  // const renderStartTime = performance.now();
+  const renderCount = useRef(0);
+  renderCount.current++;
+  const renderStartTime = performance.now();
 
-  // useEffect(() => {
-  //   const renderTime = performance.now() - renderStartTime;
-  //   if (renderTime > 10) {
-  //     console.log(
-  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
-  //         2
-  //       )}ms`
-  //     );
-  //   }
-  // });
+  useEffect(() => {
+    const renderTime = performance.now() - renderStartTime;
+    if (renderTime > 10) {
+      console.log(
+        `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+          2
+        )}ms`
+      );
+    }
+  });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -491,13 +491,9 @@ export function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const updateCurrentSelectedMessageForDocDisplay = useChatSessionStore(
-    (state) => state.updateCurrentSelectedMessageForDocDisplay
-  );
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
-  const afterZustandTime = performance.now();
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -512,8 +508,6 @@ export function ChatPage({
       clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
-      setSelectedMessageForDocDisplay:
-        updateCurrentSelectedMessageForDocDisplay,
     });
 
   const { onMessageSelection } = useChatSessionController({
@@ -727,13 +721,13 @@ export function ChatPage({
     clearSelectedItems();
   }, [clearSelectedItems]);
 
-  const toggleDocumentSelection = (document: OnyxDocument) => {
+  const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
       prev.some((d) => d.document_id === document.document_id)
         ? prev.filter((d) => d.document_id !== document.document_id)
         : [...prev, document]
     );
-  };
+  }, []);
 
   // Memoized callbacks for ChatInputBar
   const handleToggleDocSelection = useCallback(() => {
@@ -769,6 +763,15 @@ export function ChatPage({
   const handleHeaderReset = useCallback(() => {
     setMessage("");
   }, []);
+
+  // Memoized callbacks for DocumentResults
+  const handleMobileDocumentSidebarClose = useCallback(() => {
+    updateCurrentDocumentSidebarVisible(false);
+  }, [updateCurrentDocumentSidebarVisible]);
+
+  const handleDesktopDocumentSidebarClose = useCallback(() => {
+    setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
+  }, [updateCurrentDocumentSidebarVisible]);
 
   // Determine whether to show the centered input (no messages yet)
   const showCenteredInput =
@@ -854,7 +857,7 @@ export function ChatPage({
               setPresentingDocument={setPresentingDocument}
               modal={true}
               ref={innerSidebarElementRef}
-              closeSidebar={() => updateCurrentDocumentSidebarVisible(false)}
+              closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -1009,12 +1012,7 @@ export function ChatPage({
               setPresentingDocument={setPresentingDocument}
               modal={false}
               ref={innerSidebarElementRef}
-              closeSidebar={() =>
-                setTimeout(
-                  () => updateCurrentDocumentSidebarVisible(false),
-                  300
-                )
-              }
+              closeSidebar={handleDesktopDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -1241,7 +1239,7 @@ export function ChatPage({
                                         overriddenModel:
                                           llmManager.currentLlm?.modelName,
                                       }}
-                                      messageId={message.messageId}
+                                      nodeId={message.nodeId}
                                       otherMessagesCanSwitchTo={
                                         parentMessage?.childrenNodeIds || []
                                       }

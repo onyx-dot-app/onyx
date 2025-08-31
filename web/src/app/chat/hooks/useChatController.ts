@@ -101,7 +101,6 @@ interface UseChatControllerProps {
 
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
-  setSelectedMessageForDocDisplay: (messageId: number | null) => void;
 }
 
 export function useChatController({
@@ -118,7 +117,6 @@ export function useChatController({
   setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
-  setSelectedMessageForDocDisplay,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -152,6 +150,9 @@ export function useChatController({
   const abortSession = useChatSessionStore((state) => state.abortSession);
   const updateSubmittedMessage = useChatSessionStore(
     (state) => state.updateSubmittedMessage
+  );
+  const updateSelectedNodeForDocDisplay = useChatSessionStore(
+    (state) => state.updateSelectedNodeForDocDisplay
   );
   const setUncaughtError = useChatSessionStore(
     (state) => state.setUncaughtError
@@ -695,7 +696,10 @@ export function useChatController({
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
                   documents = messageStart.final_documents;
-                  setSelectedMessageForDocDisplay(newAssistantMessageId);
+                  updateSelectedNodeForDocDisplay(
+                    frozenSessionId,
+                    initialAssistantNode.nodeId
+                  );
                 }
               }
             } else {
@@ -773,10 +777,6 @@ export function useChatController({
       updateChatStateAction(frozenSessionId, "input");
 
       if (isNewSession) {
-        if (finalMessage) {
-          setSelectedMessageForDocDisplay(finalMessage.message_id);
-        }
-
         if (!searchParamBasedChatSessionName) {
           await new Promise((resolve) => setTimeout(resolve, 200));
           await nameChatSession(currChatSessionId);
@@ -803,12 +803,6 @@ export function useChatController({
           }
         }
       }
-      if (
-        finalMessage?.context_docs &&
-        finalMessage.context_docs.top_documents.length > 0
-      ) {
-        setSelectedMessageForDocDisplay(finalMessage.message_id);
-      }
     },
     [
       filterManager,
@@ -822,7 +816,7 @@ export function useChatController({
       clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
-      setSelectedMessageForDocDisplay,
+      updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
       llmProviders,
