@@ -67,7 +67,7 @@ jobs:
             -i /local/openapi.json \
             -g python \
             -o /local/onyx_openapi_client \
-            --package-name onyx_openapi_client
+            --package-name onyx_openapi_client \
             --openapi-normalizer SIMPLIFY_ONEOF_ANYOF=true
             
       - name: Set up Docker Buildx
