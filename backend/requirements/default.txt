@@ -15,6 +15,7 @@ distributed==2023.8.1
 fastapi==0.115.12
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
+fastmcp==2.11.3
 filelock==3.15.4
 google-api-python-client==2.86.0
 google-cloud-aiplatform==1.58.0
