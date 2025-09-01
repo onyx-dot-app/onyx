@@ -113,12 +113,18 @@ router = APIRouter(prefix="/chat")
 def get_user_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
+    project_id: UUID | None = None,
+    only_non_project_chats: bool = True,
 ) -> ChatSessionsResponse:
     user_id = user.id if user is not None else None
 
     try:
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            project_id=project_id,
+            only_non_project_chats=only_non_project_chats,
         )
 
     except ValueError:
@@ -282,6 +288,9 @@ def create_new_chat_session(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
+    logger.info(
+        f"Creating chat session with request: {chat_session_creation_request.persona_id}"
+    )
     user_id = user.id if user is not None else None
     try:
         new_chat_session = create_chat_session(
@@ -290,6 +299,7 @@ def create_new_chat_session(
             or "",  # Leave the naming till later to prevent delay
             user_id=user_id,
             persona_id=chat_session_creation_request.persona_id,
+            project_id=chat_session_creation_request.project_id,
         )
     except Exception as e:
         logger.exception(e)

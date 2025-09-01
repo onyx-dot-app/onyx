@@ -7,6 +7,7 @@ export interface Project {
   description: string | null;
   created_at: string;
   user_id: string;
+  chat_sessions: ChatSession[];
 }
 
 export interface ProjectFile {
@@ -134,4 +135,23 @@ export async function getProjectDetails(
     throw new Error("Failed to fetch project details");
   }
   return response.json();
+}
+
+export async function moveChatSession(
+  projectId: number,
+  chatSessionId: string
+): Promise<boolean> {
+  const response = await fetch(
+    `/api/user/projects/${projectId}/move_chat_session`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_session_id: chatSessionId }),
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).detail || "Failed to move chat session");
+  }
+  return response.ok;
 }

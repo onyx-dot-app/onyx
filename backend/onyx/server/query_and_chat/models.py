@@ -19,6 +19,7 @@ from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
 from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -54,6 +55,7 @@ class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
     description: str | None = None
+    project_id: int | None = None
 
 
 class CreateChatSessionID(BaseModel):
@@ -196,6 +198,20 @@ class ChatSessionDetails(BaseModel):
     folder_id: int | None = None
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+
+    @classmethod
+    def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
+        return cls(
+            id=model.id,
+            name=model.description,
+            persona_id=model.persona_id,
+            time_created=model.time_created.isoformat(),
+            time_updated=model.time_updated.isoformat(),
+            shared_status=model.shared_status,
+            folder_id=model.folder_id,
+            current_alternate_model=model.current_alternate_model,
+            current_temperature_override=model.temperature_override,
+        )
 
 
 class ChatSessionsResponse(BaseModel):

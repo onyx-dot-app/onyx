@@ -12,12 +12,7 @@ import {
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import type { ChatSession } from "@/app/chat/interfaces";
-
-type ProjectItem = {
-  id: string;
-  name: string;
-  children?: ProjectItem[];
-};
+import { ChatSessionDisplay } from "./ChatSessionDisplay";
 
 interface ProjectsProps {
   onOpenProject?: (projectId: string) => void;
@@ -29,19 +24,23 @@ function CollapsibleFolder({
   defaultOpen = true,
   onToggle,
   onNameClick,
+  isSelected,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
   onToggle?: (open: boolean) => void;
   onNameClick?: () => void;
+  isSelected?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [hoveringIcon, setHoveringIcon] = useState(false);
-
+  console.log("isSelected", isSelected);
   return (
     <div className="w-full">
-      <div className="w-full flex items-center gap-x-2 px-2 rounded-md hover:bg-background-chat-hover">
+      <div
+        className={`w-full flex items-center gap-x-2 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
+      >
         <button
           type="button"
           aria-expanded={open}
@@ -71,7 +70,7 @@ function CollapsibleFolder({
         <button
           type="button"
           onClick={onNameClick}
-          className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1 px-2 rounded-md"
+          className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
         >
           <span className="truncate">{title}</span>
         </button>
@@ -92,11 +91,11 @@ function CollapsibleFolder({
 
 export default function Projects({ onOpenProject }: ProjectsProps) {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
-  const { createProject, projects } = useProjectsContext();
+  const { createProject, projects, currentProjectId } = useProjectsContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-
+  const chatSessionId = searchParams?.get("chatId");
   return (
     <div className="flex flex-col gap-y-2 mt-4">
       <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
@@ -110,23 +109,42 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
         </button>
       </div>
 
-      <div className="px-4 space-y-1">
+      <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
         {projects.map((p) => (
           <CollapsibleFolder
             key={p.id}
             title={p.name}
             defaultOpen={false}
+            isSelected={p.id == currentProjectId}
             onNameClick={() => {
               const params = new URLSearchParams(
                 searchParams?.toString() || ""
               );
+              // Set the new project ID and remove any assistant selection
               params.set("projectid", String(p.id));
+              if (params.has("assistantId")) {
+                params.delete("assistantId");
+              }
+              if (params.has("chatId")) {
+                params.delete("chatId");
+              }
               router.push(`${pathname}?${params.toString()}`);
             }}
           >
-            <div className="text-xs text-neutral-500 px-2 py-1">
-              This project doesn’t have any chats.
-            </div>
+            {p.chat_sessions && p.chat_sessions.length > 0 ? (
+              p.chat_sessions.map((chatSession) => (
+                <ChatSessionDisplay
+                  key={chatSession.id}
+                  chatSession={chatSession}
+                  isSelected={chatSession.id == chatSessionId}
+                  showDragHandle={false}
+                />
+              ))
+            ) : (
+              <div className="text-xs text-neutral-500 px-2 py-1">
+                This project doesn’t have any chats.
+              </div>
+            )}
           </CollapsibleFolder>
         ))}
         {projects.length === 0 && (

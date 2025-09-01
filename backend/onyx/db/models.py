@@ -2045,6 +2045,14 @@ class ChatSession(Base):
         String, nullable=True, default=None
     )
 
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+
+    project: Mapped["UserFolder"] = relationship(
+        "UserFolder", back_populates="chat_sessions", foreign_keys=[project_id]
+    )
+
     # the latest "overrides" specified by the user. These take precedence over
     # the attached persona. However, overrides specified directly in the
     # `send-message` call will take precedence over these.
@@ -3310,6 +3318,9 @@ class UserFolder(Base):
     )
     prompt_id: Mapped[int | None] = mapped_column(
         ForeignKey("prompt.id"), nullable=True
+    )
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession", back_populates="project"
     )
 
 

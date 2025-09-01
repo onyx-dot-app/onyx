@@ -150,6 +150,17 @@ def upgrade() -> None:
         ["prompt_id"],
         ["id"],
     )
+    op.add_column(
+        "chat_session",
+        sa.Column("project_id", sa.Integer(), nullable=True),
+    )
+    op.create_foreign_key(
+        "chat_session_project_id_fkey",
+        "chat_session",
+        "user_folder",
+        ["project_id"],
+        ["id"],
+    )
 
 
 def downgrade() -> None:
@@ -162,7 +173,7 @@ def downgrade() -> None:
 
     # Drop association table
     op.drop_table("project__user_file")
-
+    op.drop_column("chat_session", "project_id")
     # Recreate an integer PK (best-effort; original values aren’t retained)
     op.drop_constraint(
         "persona__user_file_user_file_id_fkey", "persona__user_file", type_="foreignkey"

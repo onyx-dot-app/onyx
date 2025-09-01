@@ -3,12 +3,14 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import Form
 from fastapi import HTTPException
+from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import ChatSession
 from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
@@ -182,3 +184,26 @@ def get_project_details(
     files = get_files_in_project(project_id, user, db_session)
     instructions = get_project_instructions(project_id, user, db_session)
     return ProjectPayload(project=project, files=files, instructions=instructions)
+
+
+class MoveChatSessionRequest(BaseModel):
+    chat_session_id: str
+
+
+@router.post("/{project_id}/move_chat_session")
+def move_chat_session(
+    project_id: int,
+    body: MoveChatSessionRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    chat_session = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user.id)
+        .one_or_none()
+    )
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    chat_session.project_id = project_id
+    db_session.commit()
+    return Response(status_code=204)

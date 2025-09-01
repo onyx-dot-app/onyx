@@ -172,7 +172,7 @@ export function ChatPage({
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
-  const { setCurrentProjectId } = useProjectsContext();
+  const { setCurrentProjectId, currentProjectId } = useProjectsContext();
 
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
@@ -212,6 +212,17 @@ export function ChatPage({
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
     useAssistantController({
       selectedChatSession,
+      onAssistantSelect: () => {
+        // Only remove project context if user explicitly selected an assistant
+        // (i.e., assistantId is present). Avoid clearing project when assistantId was removed.
+        const newSearchParams = new URLSearchParams(
+          searchParams?.toString() || ""
+        );
+        if (newSearchParams.has("assistantId")) {
+          newSearchParams.delete("projectid");
+          router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+        }
+      },
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -1060,6 +1071,13 @@ export function ChatPage({
                   hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
+              {currentProjectId !== null && (
+                <div
+                  className={`transition-all duration-300 ease-in-out ${sidebarVisible ? "ml-[200px]" : "ml-[0px]"}`}
+                >
+                  <ProjectContextPanel />
+                </div>
+              )}
 
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
@@ -1068,16 +1086,13 @@ export function ChatPage({
                     handleMessageSpecificFileUpload(acceptedFiles)
                   }
                   noClick
-                  noKeyboard
                 >
-                  {({ getRootProps, getInputProps }) => {
-                    const Content = () => (
-                      <div className="flex h-full w-full">
-                        <input {...getInputProps()} hidden />
-                        {!settings?.isMobile && (
-                          <div
-                            style={{ transition: "width 0.30s ease-out" }}
-                            className={`
+                  {({ getRootProps }) => (
+                    <div className="flex w-full h-full">
+                      {!settings?.isMobile && (
+                        <div
+                          style={{ transition: "width 0.30s ease-out" }}
+                          className={`
                           flex-none 
                           overflow-y-hidden 
                           bg-transparent
@@ -1088,25 +1103,24 @@ export function ChatPage({
                           h-full
                           ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
                       `}
-                          ></div>
-                        )}
+                        ></div>
+                      )}
 
+                      <div
+                        className={`h-full w-full relative flex-auto transition-margin duration-300 overflow-x-auto mobile:pb-12 desktop:pb-[100px]`}
+                        {...getRootProps()}
+                      >
                         <div
-                          className={`h-full w-full relative flex-auto transition-margin duration-300 overflow-x-auto mobile:pb-12 desktop:pb-[100px]`}
+                          onScroll={handleScroll}
+                          className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
+                          ref={scrollableDivRef}
                         >
-                          <div
-                            onScroll={handleScroll}
-                            className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
-                            ref={scrollableDivRef}
-                          >
-                            {liveAssistant && (
-                              <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
-                                {!settings?.isMobile && (
-                                  <div
-                                    style={{
-                                      transition: "width 0.30s ease-out",
-                                    }}
-                                    className={`
+                          {liveAssistant && (
+                            <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
+                              {!settings?.isMobile && (
+                                <div
+                                  style={{ transition: "width 0.30s ease-out" }}
+                                  className={`
                                   flex-none 
                                   overflow-y-hidden 
                                   transition-all 
@@ -1231,106 +1245,39 @@ export function ChatPage({
                                       });
                                     }}
                                   />
-                                  <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
-                                    {liveAssistant.name}
+                                </div>
+                              )}
+
+                            {enterpriseSettings &&
+                              enterpriseSettings.custom_lower_disclaimer_content && (
+                                <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
+                                  <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
+                                    <MinimalMarkdown
+                                      content={
+                                        enterpriseSettings.custom_lower_disclaimer_content
+                                      }
+                                    />
                                   </div>
                                 </div>
                               )}
-                              <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
-                                <ChatInputBar
-                                  deepResearchEnabled={deepResearchEnabled}
-                                  setDeepResearchEnabled={() =>
-                                    toggleDeepResearch()
-                                  }
-                                  toggleDocumentSidebar={toggleDocumentSidebar}
-                                  filterManager={filterManager}
-                                  llmManager={llmManager}
-                                  removeDocs={() => {
-                                    clearSelectedDocuments();
-                                  }}
-                                  retrievalEnabled={retrievalEnabled}
-                                  toggleDocSelection={() =>
-                                    setToggleDocSelection(true)
-                                  }
-                                  showConfigureAPIKey={() =>
-                                    setShowApiKeyModal(true)
-                                  }
-                                  selectedDocuments={selectedDocuments}
-                                  message={message}
-                                  setMessage={setMessage}
-                                  stopGenerating={stopGenerating}
-                                  onSubmit={() => {
-                                    onSubmit({
-                                      message: message,
-                                      selectedFiles: selectedFiles,
-                                      selectedFolders: selectedFolders,
-                                      currentMessageFiles: currentMessageFiles,
-                                      useAgentSearch: deepResearchEnabled,
-                                    });
-                                  }}
-                                  chatState={currentChatState}
-                                  selectedAssistant={
-                                    selectedAssistant || liveAssistant
-                                  }
-                                  handleFileUpload={
-                                    handleMessageSpecificFileUpload
-                                  }
-                                  textAreaRef={textAreaRef}
-                                />
-
-                                {liveAssistant.starter_messages &&
-                                  liveAssistant.starter_messages.length > 0 &&
-                                  messageHistory.length === 0 &&
-                                  showCenteredInput && (
-                                    <div className="mt-6">
-                                      <StarterMessageDisplay
-                                        starterMessages={
-                                          liveAssistant.starter_messages
-                                        }
-                                        onSelectStarterMessage={(message) => {
-                                          onSubmit({
-                                            message: message,
-                                            selectedFiles: selectedFiles,
-                                            selectedFolders: selectedFolders,
-                                            currentMessageFiles:
-                                              currentMessageFiles,
-                                            useAgentSearch: deepResearchEnabled,
-                                          });
-                                        }}
-                                      />
-                                    </div>
-                                  )}
-
-                                {enterpriseSettings &&
-                                  enterpriseSettings.custom_lower_disclaimer_content && (
-                                    <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
-                                      <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
-                                        <MinimalMarkdown
-                                          content={
-                                            enterpriseSettings.custom_lower_disclaimer_content
-                                          }
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                {enterpriseSettings &&
-                                  enterpriseSettings.use_custom_logotype && (
-                                    <div className="hidden lg:block absolute right-0 bottom-0">
-                                      <img
-                                        src="/api/enterprise-settings/logotype"
-                                        alt="logotype"
-                                        style={{ objectFit: "contain" }}
-                                        className="w-fit h-8"
-                                      />
-                                    </div>
-                                  )}
-                              </div>
-                            </div>
+                            {enterpriseSettings &&
+                              enterpriseSettings.use_custom_logotype && (
+                                <div className="hidden lg:block absolute right-0 bottom-0">
+                                  <img
+                                    src="/api/enterprise-settings/logotype"
+                                    alt="logotype"
+                                    style={{ objectFit: "contain" }}
+                                    className="w-fit h-8"
+                                  />
+                                </div>
+                              )}
                           </div>
+                        </div>
+                      </div>
 
-                          <div
-                            style={{ transition: "width 0.30s ease-out" }}
-                            className={`
+                      <div
+                        style={{ transition: "width 0.30s ease-out" }}
+                        className={`
                           flex-none 
                           overflow-y-hidden 
                           transition-all 
@@ -1344,17 +1291,9 @@ export function ChatPage({
                               : "w-[0px]"
                           }
                       `}
-                          />
-                        </div>
-                      </div>
-                    );
-                    const dropzoneProps = getRootProps();
-                    return (
-                      <div {...dropzoneProps}>
-                        <Content />
-                      </div>
-                    );
-                  }}
+                      />
+                    </div>
+                  )}
                 </Dropzone>
               ) : (
                 <div className="mx-auto h-full flex">
