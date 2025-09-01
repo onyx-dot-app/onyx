@@ -27,7 +27,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -55,7 +55,7 @@ jobs:
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
   prepare-build:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -114,18 +114,16 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Backend Docker image
-        uses: ./.github/actions/custom-build-and-push
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/arm64
           tags: onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -140,14 +138,10 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Model Server Docker image
-        uses: ./.github/actions/custom-build-and-push
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -156,8 +150,6 @@ jobs:
           push: true
           outputs: type=registry
           provenance: false
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
   build-integration-image:
     needs: prepare-build
@@ -179,18 +171,16 @@ jobs:
           path: backend/generated/
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push integration test Docker image
-        uses: ./.github/actions/custom-build-and-push
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/arm64
           tags: onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
   integration-tests-mit:
     needs:
