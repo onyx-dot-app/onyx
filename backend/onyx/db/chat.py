@@ -173,6 +173,8 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
+    project_id: UUID | None = None,
+    only_non_project_chats: bool = False,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
@@ -186,6 +188,11 @@ def get_chat_sessions_by_user(
 
     if limit:
         stmt = stmt.limit(limit)
+
+    if project_id is not None:
+        stmt = stmt.where(ChatSession.project_id == project_id)
+    elif only_non_project_chats:
+        stmt = stmt.where(ChatSession.project_id.is_(None))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()
@@ -260,6 +267,7 @@ def create_chat_session(
     prompt_override: PromptOverride | None = None,
     onyxbot_flow: bool = False,
     slack_thread_id: str | None = None,
+    project_id: int | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
         user_id=user_id,
@@ -269,6 +277,7 @@ def create_chat_session(
         prompt_override=prompt_override,
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
+        project_id=project_id,
     )
 
     db_session.add(chat_session)

@@ -8,6 +8,7 @@ from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.file_store.models import ChatFileType
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.server.query_and_chat.models import ChatSessionDetails
 
 
 class UserFileSnapshot(BaseModel):
@@ -44,6 +45,7 @@ class UserProjectSnapshot(BaseModel):
     description: str | None
     created_at: datetime
     user_id: UUID
+    chat_sessions: list[ChatSessionDetails]
 
     @classmethod
     def from_model(cls, model: UserFolder) -> "UserProjectSnapshot":
@@ -53,4 +55,7 @@ class UserProjectSnapshot(BaseModel):
             description=model.description,
             created_at=model.created_at,
             user_id=model.user_id,
+            chat_sessions=[
+                ChatSessionDetails.from_model(chat) for chat in model.chat_sessions
+            ],
         )

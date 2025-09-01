@@ -14,6 +14,7 @@ import {
   FiArrowRight,
   FiCheck,
   FiEdit2,
+  FiFolder,
   FiMoreHorizontal,
   FiShare2,
   FiTrash,
@@ -29,6 +30,9 @@ import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useChatContext } from "@/components/context/ChatContext";
 import { removeChatFromFolder } from "@/app/chat/components/folders/FolderManagement";
+import { DropdownItem, HoverDropdown } from "../HoverDropdown";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { moveChatSession as moveChatSessionService } from "@/app/chat/projects/projectsService";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -39,6 +43,7 @@ export function ChatSessionDisplay({
   showDeleteModal,
   isDragging,
   parentFolderName,
+  showDragHandle = true,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -48,7 +53,14 @@ export function ChatSessionDisplay({
   showDeleteModal?: (chatSession: ChatSession) => void;
   isDragging?: boolean;
   parentFolderName?: string;
+  showDragHandle?: boolean;
 }) {
+  const items: DropdownItem[] = [
+    { id: "1", label: "Understanding Vespa" },
+    { id: "2", label: "_Notes" },
+    { id: "3", label: "Sri Sneka" },
+    { id: "4", label: "Kubernetes" },
+  ];
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
   const [isRenamingChat, setIsRenamingChat] = useState(false);
@@ -60,8 +72,22 @@ export function ChatSessionDisplay({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
-
+  const [isMovingToProject, setIsMovingToProject] = useState(false);
   const { refreshChatSessions, refreshFolders } = useChatContext();
+  const { fetchProjects, projects } = useProjectsContext();
+
+  const handleMoveChatSession = useCallback(
+    async (item: DropdownItem) => {
+      const projectId = parseInt(item.id);
+      console.log(
+        `Moving chat session ${chatSession.id} to project ${projectId}`
+      );
+      await moveChatSessionService(projectId, chatSession.id);
+      await fetchProjects();
+      await refreshChatSessions();
+    },
+    [moveChatSessionService, fetchProjects, refreshChatSessions, chatSession.id]
+  );
 
   const isMobile = settings?.isMobile;
   const handlePopoverOpenChange = useCallback(
@@ -69,6 +95,7 @@ export function ChatSessionDisplay({
       setPopoverOpen(open);
       if (!open) {
         setIsDeleteModalOpen(false);
+        setIsMovingToProject(false);
       }
     },
     [isDeleteModalOpen]
@@ -223,14 +250,16 @@ export function ChatSessionDisplay({
           draggable={!isMobile}
           onDragStart={!isMobile ? handleDragStart : undefined}
         >
-          <div
-            className={`${
-              isMobile ? "visible" : "invisible group-hover:visible"
-            } flex-none`}
-            onTouchStart={isMobile ? handleTouchStart : undefined}
-          >
-            <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
-          </div>
+          {showDragHandle && (
+            <div
+              className={`${
+                isMobile ? "visible" : "invisible group-hover:visible"
+              } flex-none`}
+              onTouchStart={isMobile ? handleTouchStart : undefined}
+            >
+              <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
+            </div>
+          )}
           <BasicSelectable
             padding="extra"
             isHovered={isHovered}
@@ -380,6 +409,16 @@ export function ChatSessionDisplay({
                                       icon={FiTrash}
                                       onSelect={handleDeleteClick}
                                     />
+                                    {projects.length > 0 && (
+                                      <HoverDropdown
+                                        label="Move to Project"
+                                        items={projects.map((project) => ({
+                                          id: project.id,
+                                          label: project.name,
+                                        }))}
+                                        onItemClick={handleMoveChatSession}
+                                      />
+                                    )}
                                   </>
                                 ) : (
                                   <div className="p-3">

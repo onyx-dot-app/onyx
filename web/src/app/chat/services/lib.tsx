@@ -105,7 +105,8 @@ export async function updateTemperatureOverrideForChatSession(
 
 export async function createChatSession(
   personaId: number,
-  description: string | null
+  description: string | null,
+  projectId: number | null
 ): Promise<string> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
@@ -117,6 +118,7 @@ export async function createChatSession(
       body: JSON.stringify({
         persona_id: personaId,
         description,
+        project_id: projectId,
       }),
     }
   );
@@ -593,6 +595,8 @@ const PARAMS_TO_SKIP = [
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
   SEARCH_PARAM_NAMES.PERSONA_ID,
+  // do not persist project context in the URL after navigation
+  "projectid",
 ];
 
 export function buildChatUrl(
