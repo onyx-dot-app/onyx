@@ -91,6 +91,7 @@ import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
+import { FormErrorFocus } from "@/components/FormErrorHelpers";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -772,6 +773,7 @@ export function AssistantEditor({
                 />
               )}
               <Form className="w-full text-text-950 assistant-editor">
+                <FormErrorFocus />
                 {/* Refresh starter messages when name or description changes */}
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
@@ -1795,7 +1797,7 @@ export function AssistantEditor({
                       </Button>
                     )}
                   </div>
-                  <div className="flex gap-x-2">
+                  <div className="flex gap-x-4 items-center">
                     <Button
                       type="submit"
                       disabled={isSubmitting || isRequestSuccessful}
