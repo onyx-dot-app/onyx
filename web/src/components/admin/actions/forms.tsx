@@ -122,7 +122,7 @@ export function PerUserAuthTemplateConfig({
 
       <p className="text-sm text-text-800">
         Configure how users will authenticate with this MCP server. Define
-        headers with placeholders that will be filled in by each user's
+        headers with placeholders that will be filled in by each user&apos;s
         credentials.
       </p>
 
@@ -230,7 +230,9 @@ export function PerUserAuthTemplateConfig({
             • Their credentials will be validated against the server before
             being saved
           </p>
-          <p>• Each user's credentials are stored securely and separately</p>
+          <p>
+            • Each user&apos;s credentials are stored securely and separately
+          </p>
         </div>
       </div>
     </div>
@@ -304,8 +306,8 @@ export function OAuthConfig({
 
         <div className="text-xs text-text-600 space-y-1">
           <p>
-            <strong>Note:</strong> You'll need to register your application with
-            the MCP server provider to obtain these credentials.
+            <strong>Note:</strong> You&apos;ll need to register your application
+            with the MCP server provider to obtain these credentials.
           </p>
           <p>
             • The redirect URI should be set to:{" "}
@@ -316,7 +318,7 @@ export function OAuthConfig({
           </p>
           <p>
             • Make sure the OAuth app has the necessary scopes/permissions for
-            the MCP server's operations
+            the MCP server&apos;s operations
           </p>
         </div>
       </div>
