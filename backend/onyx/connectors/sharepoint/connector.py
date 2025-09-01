@@ -249,6 +249,22 @@ def _convert_driveitem_to_document_with_permissions(
                 response = requests.get(download_url, timeout=REQUEST_TIMEOUT)
                 response.raise_for_status()
                 content_bytes = response.content
+                # Handle zero-length downloads gracefully using header or content length
+                content_length_header = response.headers.get("Content-Length")
+                try:
+                    if (
+                        content_length_header is not None
+                        and content_length_header.isdigit()
+                        and int(content_length_header) == 0
+                    ) or len(content_bytes) == 0:
+                        logger.info(
+                            f"Downloaded zero-length content for '{driveitem.name}' via downloadUrl; skipping extraction."
+                        )
+                except Exception:
+                    if len(content_bytes) == 0:
+                        logger.info(
+                            f"Downloaded zero-length content for '{driveitem.name}' via downloadUrl; skipping extraction."
+                        )
             except Exception as e:
                 logger.warning(
                     f"Failed to download content via downloadUrl for '{driveitem.name}': {e}"
@@ -264,7 +280,11 @@ def _convert_driveitem_to_document_with_permissions(
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]
 
-    if "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+    if not content_bytes:
+        logger.warning(
+            f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
+        )
+    elif "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
