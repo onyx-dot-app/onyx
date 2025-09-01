@@ -5,12 +5,11 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
 from onyx.connectors.outline.connector import OutlineConnector
-from onyx.connectors.models import Document, ConnectorMissingCredentialError
-from onyx.connectors.exceptions import (
-    CredentialExpiredError,
-    ConnectorValidationError,
-)
 
 
 class TestOutlineConnector:
@@ -54,9 +53,9 @@ class TestOutlineConnector:
         assert result is None
         assert connector.outline_client is not None
         assert connector.outline_client.api_token == credentials["outline_api_token"]
-        assert connector.outline_client.base_url == credentials["outline_base_url"].rstrip(
-            "/"
-        )
+        assert connector.outline_client.base_url == credentials[
+            "outline_base_url"
+        ].rstrip("/")
 
     def test_outline_connector_basic(
         self, connector: OutlineConnector, credentials: dict[str, Any]
@@ -190,12 +189,15 @@ class TestOutlineConnector:
     def test_outline_connector_invalid_url(self) -> None:
         """Invalid URL should raise validation error during validation."""
         connector = OutlineConnector()
-        
+
         # Load credentials with invalid URL
         connector.load_credentials(
-            {"outline_base_url": "https://not-a-valid-url.invalid", "outline_api_token": "token"}
+            {
+                "outline_base_url": "https://not-a-valid-url.invalid",
+                "outline_api_token": "token",
+            }
         )
-        
+
         # Validation should catch invalid URL
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
