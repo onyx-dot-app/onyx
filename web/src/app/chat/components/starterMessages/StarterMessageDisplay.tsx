@@ -21,6 +21,7 @@ export function StarterMessageDisplay({
             px-2 
             py-2 
             hover:bg-background-100 
+            dark:hover:bg-neutral-800
             rounded-lg 
             cursor-pointer
             overflow-hidden

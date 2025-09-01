@@ -1130,8 +1130,8 @@ export function ChatPage({
                           ref={inputRef}
                           className={`absolute pointer-events-none z-10 w-full ${
                             showCenteredInput
-                              ? "top-1/2 left-0 -translate-y-1/2"
-                              : "bottom-0 left-0 translate-y-0"
+                              ? "inset-0"
+                              : "bottom-0 left-0 right-0 translate-y-0"
                           }`}
                         >
                           {!showCenteredInput && aboveHorizon && (
@@ -1145,11 +1145,17 @@ export function ChatPage({
                             </div>
                           )}
 
-                          <div className="pointer-events-auto w-[95%] mx-auto relative mb-8 text-text-600">
+                          <div
+                            className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
+                              showCenteredInput
+                                ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
+                                : "mb-8"
+                            }`}
+                          >
                             {showCenteredInput && (
                               <div
                                 data-testid="chat-intro"
-                                className="flex text-text-800 justify-center mb-6 transition-opacity duration-300"
+                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
                               >
                                 <AssistantIcon
                                   colorOverride="text-text-800"
@@ -1161,34 +1167,40 @@ export function ChatPage({
                                 </div>
                               </div>
                             )}
-                            <ChatInputBar
-                              deepResearchEnabled={deepResearchEnabled}
-                              toggleDeepResearch={toggleDeepResearch}
-                              toggleDocumentSidebar={toggleDocumentSidebar}
-                              filterManager={filterManager}
-                              llmManager={llmManager}
-                              removeDocs={clearSelectedDocuments}
-                              retrievalEnabled={retrievalEnabled}
-                              toggleDocSelection={handleToggleDocSelection}
-                              showConfigureAPIKey={handleShowApiKeyModal}
-                              selectedDocuments={selectedDocuments}
-                              message={message}
-                              setMessage={setMessage}
-                              stopGenerating={stopGenerating}
-                              onSubmit={handleChatInputSubmit}
-                              chatState={currentChatState}
-                              selectedAssistant={
-                                selectedAssistant || liveAssistant
-                              }
-                              handleFileUpload={handleMessageSpecificFileUpload}
-                              textAreaRef={textAreaRef}
-                            />
+                            <div
+                              className={showCenteredInput ? "row-start-2" : ""}
+                            >
+                              <ChatInputBar
+                                deepResearchEnabled={deepResearchEnabled}
+                                toggleDeepResearch={toggleDeepResearch}
+                                toggleDocumentSidebar={toggleDocumentSidebar}
+                                filterManager={filterManager}
+                                llmManager={llmManager}
+                                removeDocs={clearSelectedDocuments}
+                                retrievalEnabled={retrievalEnabled}
+                                toggleDocSelection={handleToggleDocSelection}
+                                showConfigureAPIKey={handleShowApiKeyModal}
+                                selectedDocuments={selectedDocuments}
+                                message={message}
+                                setMessage={setMessage}
+                                stopGenerating={stopGenerating}
+                                onSubmit={handleChatInputSubmit}
+                                chatState={currentChatState}
+                                selectedAssistant={
+                                  selectedAssistant || liveAssistant
+                                }
+                                handleFileUpload={
+                                  handleMessageSpecificFileUpload
+                                }
+                                textAreaRef={textAreaRef}
+                              />
+                            </div>
 
                             {liveAssistant.starter_messages &&
                               liveAssistant.starter_messages.length > 0 &&
                               messageHistory.length === 0 &&
                               showCenteredInput && (
-                                <div className="mt-6">
+                                <div className="mt-6 row-start-3">
                                   <StarterMessageDisplay
                                     starterMessages={
                                       liveAssistant.starter_messages
