@@ -40,6 +40,7 @@ from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.llm.utils import check_number_of_tokens
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
 from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
@@ -239,12 +240,17 @@ def closer(
         or "(No chat history yet available)"
     )
 
-    aggregated_context = aggregate_context(
+    aggregated_context_w_docs = aggregate_context(
         state.iteration_responses, include_documents=True
     )
 
-    iteration_responses_string = aggregated_context.context
-    all_cited_documents = aggregated_context.cited_documents
+    aggregated_context_wo_docs = aggregate_context(
+        state.iteration_responses, include_documents=False
+    )
+
+    iteration_responses_w_docs_string = aggregated_context_w_docs.context
+    iteration_responses_wo_docs_string = aggregated_context_wo_docs.context
+    all_cited_documents = aggregated_context_w_docs.cited_documents
 
     num_closer_suggestions = state.num_closer_suggestions
 
@@ -254,7 +260,7 @@ def closer(
     ):
         test_info_complete_prompt = TEST_INFO_COMPLETE_PROMPT.build(
             base_question=prompt_question,
-            questions_answers_claims=iteration_responses_string,
+            questions_answers_claims=iteration_responses_wo_docs_string,
             chat_history_string=chat_history_string,
             high_level_plan=(
                 state.plan_of_record.plan
@@ -309,6 +315,29 @@ def closer(
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
     else:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
+
+    estimated_final_answer_prompt_tokens = check_number_of_tokens(
+        final_answer_base_prompt.build(
+            base_question=prompt_question,
+            iteration_responses_string=iteration_responses_w_docs_string,
+            chat_history_string=chat_history_string,
+            uploaded_context=uploaded_context,
+        )
+    )
+
+    # for DR, rely only on sub-answers and claims to save tokens if context is too long
+    # TODO: consider compression step for Thoughtful mode if context istoo long.
+    # Should generally not be the case though.
+
+    max_allowed_input_tokens = graph_config.tooling.primary_llm.config.max_input_tokens
+
+    if (
+        estimated_final_answer_prompt_tokens > 0.8 * max_allowed_input_tokens
+        and research_type == ResearchType.DEEP
+    ):
+        iteration_responses_string = iteration_responses_wo_docs_string
+    else:
+        iteration_responses_string = iteration_responses_w_docs_string
 
     final_answer_prompt = final_answer_base_prompt.build(
         base_question=prompt_question,
