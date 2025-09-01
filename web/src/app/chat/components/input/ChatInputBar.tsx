@@ -43,6 +43,7 @@ import {
   ProjectFile,
   useProjectsContext,
 } from "../../projects/ProjectsContext";
+import { FileDescriptor } from "@/app/chat/interfaces";
 
 const MAX_INPUT_HEIGHT = 200;
 

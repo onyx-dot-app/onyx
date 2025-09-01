@@ -420,7 +420,7 @@ export const HistorySidebar = React.memo(
                   Explore Assistants
                 </button>
               </div>
-
+              <Projects />
               <PagesTab
                 toggleChatSessionSearchModal={toggleChatSessionSearchModal}
                 showDeleteModal={showDeleteModal}
@@ -431,16 +431,6 @@ export const HistorySidebar = React.memo(
                 folders={folders}
               />
             </div>
-            <Projects />
-            <PagesTab
-              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
-              showDeleteModal={showDeleteModal}
-              showShareModal={showShareModal}
-              closeSidebar={removeToggle}
-              existingChats={existingChats}
-              currentChatId={currentChatId}
-              folders={folders}
-            />
           </div>
         </>
       );

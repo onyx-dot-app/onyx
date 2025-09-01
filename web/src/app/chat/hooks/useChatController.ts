@@ -74,6 +74,12 @@ import {
   PacketType,
 } from "../services/streamingModels";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { Klee_One } from "next/font/google";
+import { useProjectsContext } from "../projects/ProjectsContext";
+
+const TEMP_USER_MESSAGE_ID = -1;
+const TEMP_ASSISTANT_MESSAGE_ID = -2;
+const SYSTEM_MESSAGE_ID = -3;
 
 interface RegenerationRequest {
   messageId: number;
@@ -326,6 +332,18 @@ export function useChatController({
       regenerationRequest?: RegenerationRequest | null;
       overrideFileDescriptors?: FileDescriptor[];
     }) => {
+      const projectId = searchParams?.get("projectid");
+      {
+        const params = new URLSearchParams(searchParams?.toString() || "");
+        if (params.has("projectid")) {
+          params.delete("projectid");
+          const newUrl = params.toString()
+            ? `${pathname}?${params.toString()}`
+            : pathname;
+          router.replace(newUrl, { scroll: false });
+        }
+      }
+
       updateSubmittedMessage(getCurrentSessionId(), message);
 
       navigatingAway.current = false;
@@ -416,11 +434,11 @@ export function useChatController({
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
-
       if (isNewSession) {
         currChatSessionId = await createChatSession(
           liveAssistant?.id || 0,
-          searchParamBasedChatSessionName
+          searchParamBasedChatSessionName,
+          projectId ? parseInt(projectId) : null
         );
       } else {
         currChatSessionId = existingChatSessionId as string;
