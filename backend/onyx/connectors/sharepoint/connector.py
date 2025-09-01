@@ -202,7 +202,7 @@ def _convert_driveitem_to_document_with_permissions(
                     f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
                     f"File size: {file_size} bytes. Skipping."
                 )
-                raise ValueError(
+                raise RuntimeError(
                     f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
                     f"File size: {file_size} bytes."
                 )
@@ -228,7 +228,38 @@ def _convert_driveitem_to_document_with_permissions(
     if isinstance(content.value, bytes):
         content_bytes = content.value
     else:
-        raise ValueError(f"Unsupported content type: {type(content.value)}")
+        # Fallback: attempt to use @microsoft.graph.downloadUrl to fetch content directly
+        download_url = None
+        try:
+            additional_data = getattr(driveitem, "additional_data", None)
+            if isinstance(additional_data, dict):
+                download_url = additional_data.get("@microsoft.graph.downloadUrl")
+        except Exception:
+            download_url = None
+
+        if not download_url:
+            try:
+                driveitem_json = driveitem.to_json()
+                download_url = driveitem_json.get("@microsoft.graph.downloadUrl")
+            except Exception:
+                download_url = None
+
+        if download_url:
+            try:
+                response = requests.get(download_url, timeout=REQUEST_TIMEOUT)
+                response.raise_for_status()
+                content_bytes = response.content
+            except Exception as e:
+                logger.warning(
+                    f"Failed to download content via downloadUrl for '{driveitem.name}': {e}"
+                )
+                raise ValueError(
+                    f"Unable to download content via downloadUrl for '{driveitem.name}'"
+                )
+        else:
+            raise ValueError(
+                f"Unsupported content type: {type(content.value)} and no downloadUrl available"
+            )
 
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]
