@@ -68,7 +68,7 @@ jobs:
             -g python \
             -o /local/onyx_openapi_client \
             --package-name onyx_openapi_client \
-            --openapi-normalizer SIMPLIFY_ONEOF_ANYOF=true
+            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
             
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
