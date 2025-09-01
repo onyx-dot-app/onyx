@@ -18,7 +18,7 @@ interface BaseMemoizedAIMessageProps {
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
-  regenerate: (modelOverRide: LlmDescriptor) => Promise<void>;
+  regenerate?: (modelOverride: LlmDescriptor) => Promise<void>;
   handleFeedback: (feedback: FeedbackType) => void;
 }
 
@@ -33,7 +33,7 @@ interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
     messageId: number
   ) => void;
   messageId: number | undefined;
-  parentMessage: Message;
+  parentMessage?: Message;
 }
 
 const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
@@ -84,17 +84,29 @@ export const MemoizedAIMessage = ({
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: MemoizedAIMessageProps) => {
-  const regenerate = useMemo(
-    () => (modelOverRide: LlmDescriptor) =>
-      createRegenerator({
-        messageId: messageId!,
+  const regenerate = useMemo(() => {
+    if (messageId === undefined) {
+      return undefined;
+    }
+
+    if (parentMessage === undefined) {
+      return undefined;
+    }
+
+    return (modelOverride: LlmDescriptor) => {
+      return createRegenerator({
+        messageId: messageId,
         parentMessage: parentMessage,
-      })(modelOverRide),
-    [messageId, parentMessage]
-  );
+      })(modelOverride);
+    };
+  }, [messageId, parentMessage, createRegenerator]);
 
   const handleFeedback = useCallback(
     (feedback: FeedbackType) => {
+      if (messageId === undefined) {
+        console.error("Message has no messageId", nodeId);
+        return;
+      }
       handleFeedbackWithMessageId(feedback, messageId!);
     },
     [handleFeedbackWithMessageId, messageId]

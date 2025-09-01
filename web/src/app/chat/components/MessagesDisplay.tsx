@@ -17,7 +17,7 @@ import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessag
 interface MessagesDisplayProps {
   messageHistory: Message[];
   completeMessageTree: Map<number, Message> | null | undefined;
-  liveAssistant: MinimalPersonaSnapshot | null;
+  liveAssistant: MinimalPersonaSnapshot;
   llmManager: { currentLlm: LlmDescriptor | null };
   deepResearchEnabled: boolean;
   selectedFiles: FileResponse[];
@@ -87,25 +87,34 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
-  function createRegenerator(regenerationRequest: {
-    messageId: number;
-    parentMessage: Message;
-    forceSearch?: boolean;
-  }) {
-    return async function (modelOverride: LlmDescriptor) {
-      return await onSubmit({
-        message: regenerationRequest.parentMessage.message,
-        selectedFiles,
-        selectedFolders,
-        currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
-        modelOverride,
-        messageIdToResend: regenerationRequest.parentMessage.messageId,
-        regenerationRequest,
-        forceSearch: regenerationRequest.forceSearch,
-      });
-    };
-  }
+  const createRegenerator = useCallback(
+    (regenerationRequest: {
+      messageId: number;
+      parentMessage: Message;
+      forceSearch?: boolean;
+    }) => {
+      return async function (modelOverride: LlmDescriptor) {
+        return await onSubmit({
+          message: regenerationRequest.parentMessage.message,
+          selectedFiles,
+          selectedFolders,
+          currentMessageFiles,
+          useAgentSearch: deepResearchEnabled,
+          modelOverride,
+          messageIdToResend: regenerationRequest.parentMessage.messageId,
+          regenerationRequest,
+          forceSearch: regenerationRequest.forceSearch,
+        });
+      };
+    },
+    [
+      onSubmit,
+      deepResearchEnabled,
+      selectedFiles,
+      selectedFolders,
+      currentMessageFiles,
+    ]
+  );
 
   const handleFeedback = useCallback(
     (feedback: FeedbackType, messageId: number) => {
@@ -170,8 +179,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             </div>
           );
         } else if (message.type === "assistant") {
-          const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
-
           if (
             (uncaughtError || loadingError) &&
             i === messageHistory.length - 1
@@ -189,6 +196,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             );
           }
 
+          // NOTE: it's fine to use the previous entry in messageHistory
+          // since this is a "parsed" version of the message tree
+          // so the previous message is guaranteed to be the parent of the current message
+          const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
           return (
             <div
               className="text-text"
@@ -199,7 +210,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
               <MemoizedAIMessage
                 rawPackets={message.packets}
                 handleFeedbackWithMessageId={handleFeedback}
-                assistant={liveAssistant!}
+                assistant={liveAssistant}
                 docs={message.documents ?? emptyDocs}
                 citations={message.citations}
                 setPresentingDocument={setPresentingDocument}
@@ -218,7 +229,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
         }
       })}
 
-      {((uncaughtError || loadingError) &&
+      {((uncaughtError !== null || loadingError !== null) &&
         messageHistory[messageHistory.length - 1]?.type === "user") ||
         (messageHistory[messageHistory.length - 1]?.type === "error" && (
           <div className="max-w-message-max mx-auto">

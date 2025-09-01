@@ -327,7 +327,7 @@ export function useChatSessionController({
         if (message?.messageId) {
           // Makes actual API call to set message as latest in the DB so we can
           // edit this message and so it sticks around on page reload
-          patchMessageToBeLatest(nodeId);
+          patchMessageToBeLatest(message.messageId);
         } else {
           console.error("Message has no messageId", nodeId);
         }
