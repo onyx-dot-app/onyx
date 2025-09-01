@@ -16,13 +16,12 @@ from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_resources_sync
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
-from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 
 logger = setup_logger()
 

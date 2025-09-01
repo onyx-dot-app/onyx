@@ -1,13 +1,10 @@
 import html
 import time
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.outline.client import OutlineApiClient
-from onyx.connectors.outline.client import OutlineClientRequestFailedError
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -19,12 +16,15 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
+from onyx.connectors.outline.client import OutlineApiClient
+from onyx.connectors.outline.client import OutlineClientRequestFailedError
 
 
 class OutlineConnector(LoadConnector, PollConnector):
     """Connector for Outline knowledge base. Handles authentication, document loading and polling.
     Implements both LoadConnector for initial state loading and PollConnector for incremental updates.
     """
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -37,7 +37,7 @@ class OutlineConnector(LoadConnector, PollConnector):
         for key in required_keys:
             if key not in credentials:
                 raise ConnectorMissingCredentialError("Outline")
-        
+
         self.outline_client = OutlineApiClient(
             api_token=credentials["outline_api_token"],
             base_url=credentials["outline_base_url"],
@@ -72,7 +72,9 @@ class OutlineConnector(LoadConnector, PollConnector):
         description = collection.get("description") or ""
         text = name + "\n" + description
         updated_at_str = (
-            str(collection.get("updatedAt")) if collection.get("updatedAt") is not None else None
+            str(collection.get("updatedAt"))
+            if collection.get("updatedAt") is not None
+            else None
         )
         return Document(
             id="outline_collection__" + str(collection.get("id")),
@@ -96,7 +98,9 @@ class OutlineConnector(LoadConnector, PollConnector):
         doc_text = document.get("text") or ""
         text = doc_title + "\n" + doc_text
         updated_at_str = (
-            str(document.get("updatedAt")) if document.get("updatedAt") is not None else None
+            str(document.get("updatedAt"))
+            if document.get("updatedAt") is not None
+            else None
         )
         return Document(
             id="outline_document__" + str(document.get("id")),
@@ -159,13 +163,13 @@ class OutlineConnector(LoadConnector, PollConnector):
                     transformer=transform,
                     start_ind=start_ind,
                 )
-                
+
                 # Apply time filtering if specified
                 filtered_batch = []
                 for doc in doc_batch:
                     if time_filter is None or time_filter(doc):
                         filtered_batch.append(doc)
-                
+
                 start_ind += num_results
                 if filtered_batch:
                     yield filtered_batch

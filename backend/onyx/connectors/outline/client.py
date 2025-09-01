@@ -1,26 +1,25 @@
-import json
 from typing import Any
 
 import requests
+from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.exceptions import Timeout
-from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 
 
 class OutlineClientRequestFailedError(ConnectionError):
     """Custom error class for handling failed requests to the Outline API with status code and error message"""
+
     def __init__(self, status: int, error: str) -> None:
         self.status_code = status
         self.error = error
-        super().__init__(
-            f"Outline Client request failed with status {status}: {error}"
-        )
+        super().__init__(f"Outline Client request failed with status {status}: {error}")
 
 
 class OutlineApiClient:
     """Client for interacting with the Outline API. Handles authentication and making HTTP requests."""
+
     def __init__(
         self,
         api_token: str,
@@ -34,21 +33,22 @@ class OutlineApiClient:
             data = {}
         url: str = self._build_url(endpoint)
         headers = self._build_headers()
-        
+
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT_SECONDS)
+            response = requests.post(
+                url, headers=headers, json=data, timeout=REQUEST_TIMEOUT_SECONDS
+            )
         except Timeout:
             raise OutlineClientRequestFailedError(
-                408, f"Request timed out - server did not respond within {REQUEST_TIMEOUT_SECONDS} seconds"
+                408,
+                f"Request timed out - server did not respond within {REQUEST_TIMEOUT_SECONDS} seconds",
             )
         except RequestsConnectionError as e:
             raise OutlineClientRequestFailedError(
                 -1, f"Connection error - unable to reach Outline server: {e}"
             )
         except RequestException as e:
-            raise OutlineClientRequestFailedError(
-                -1, f"Network error occurred: {e}"
-            )
+            raise OutlineClientRequestFailedError(-1, f"Network error occurred: {e}")
 
         if response.status_code >= 300:
             error = response.reason
@@ -68,8 +68,8 @@ class OutlineApiClient:
             return response.json()
         except Exception:
             raise OutlineClientRequestFailedError(
-                response.status_code, 
-                f"Response was successful but contained invalid JSON: {response.text}"
+                response.status_code,
+                f"Response was successful but contained invalid JSON: {response.text}",
             )
 
     def _build_headers(self) -> dict[str, str]:

@@ -17,9 +17,9 @@ from urllib.parse import urlencode
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
 from mcp.types import CallToolResult
-from mcp.types import Tool as MCPLibTool
 from mcp.types import InitializeResult
 from mcp.types import ListResourcesResult
+from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
 from onyx.utils.logger import setup_logger

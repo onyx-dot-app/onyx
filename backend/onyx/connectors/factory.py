@@ -11,7 +11,6 @@ from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
-from onyx.connectors.outline.connector import OutlineConnector
 from onyx.connectors.clickup.connector import ClickupConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
@@ -48,6 +47,7 @@ from onyx.connectors.mediawiki.wiki import MediaWikiConnector
 from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
+from onyx.connectors.outline.connector import OutlineConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector

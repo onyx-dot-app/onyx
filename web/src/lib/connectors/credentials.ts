@@ -464,7 +464,8 @@ export const credentialDisplayNames: Record<string, string> = {
   bookstack_api_token_secret: "Bookstack API Token Secret",
 
   // Outline
-  outline_base_url: "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
+  outline_base_url:
+    "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
   outline_api_token: "Outline API Token",
 
   // Confluence
