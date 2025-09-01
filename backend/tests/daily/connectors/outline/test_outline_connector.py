@@ -155,7 +155,9 @@ class TestOutlineConnector:
 
             for doc in docs:
                 if doc.metadata["type"] == "document":
-                    assert any(s.text.strip() for s in doc.sections)
+                    assert any(
+                        (s.text.strip() if s.text else None) for s in doc.sections
+                    )
                 elif doc.metadata["type"] == "collection":
                     assert len(doc.sections) >= 1
 
