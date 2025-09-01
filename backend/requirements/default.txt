@@ -29,7 +29,7 @@ httpx[http2]==0.28.1
 httpx-oauth==0.15.1
 huggingface-hub==0.29.0
 inflection==0.5.1
-jira==3.5.1
+jira==3.10.5
 jsonref==1.1.0
 trafilatura==1.12.2
 langchain==0.3.23
