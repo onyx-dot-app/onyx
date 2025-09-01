@@ -126,7 +126,6 @@ export const HumanMessage = ({
   disableSwitchingForStreaming?: boolean;
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
-  console.log("Rendering HumanMessage");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isHovered, setIsHovered] = useState(false);
