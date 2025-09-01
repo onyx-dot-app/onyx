@@ -311,7 +311,7 @@ export function OAuthConfig({
             • The redirect URI should be set to:{" "}
             <code className="bg-background-200 px-1 rounded">
               {typeof window !== "undefined" ? window.location.origin : ""}
-              /api/mcp/oauth/callback
+              /mcp/oauth/callback
             </code>
           </p>
           <p>

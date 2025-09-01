@@ -41,12 +41,7 @@ export function ToolList({
     serverId
   );
 
-  const clearListingState = () => {
-    const params = new URLSearchParams(searchParams);
-    params.delete("listing_tools");
-    router.push(`?${params.toString()}`, { scroll: false });
-    setShowToolList(false);
-  };
+  console.log(tools);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -111,13 +106,7 @@ export function ToolList({
       const newServerId = serverResult.server_id;
       setCurrentServerId(newServerId);
 
-      // Update URL with server ID and listing state
-      const params = new URLSearchParams(searchParams);
-      params.set("server_id", newServerId.toString());
-      params.set("listing_tools", "true");
-      router.push(`?${params.toString()}`, { scroll: false });
-
-      // Step 2: List available tools from the saved server
+      // List available tools from the saved server
       const promises: Promise<Response>[] = [
         fetch(`/api/admin/mcp/server/${newServerId}/tools`, {
           method: "GET",
@@ -134,10 +123,12 @@ export function ToolList({
       ];
 
       const responses = await Promise.all(promises);
+      const toolResponse = await responses[0]?.json();
+      console.log(toolResponse);
 
       // Check if list-tools request failed
       if (!responses[0]?.ok) {
-        const errorData = await responses[0]?.json();
+        const errorData = await toolResponse;
         setPopup({
           message: `Failed to list tools: ${errorData?.detail || "Unknown error"}`,
           type: "error",
@@ -146,8 +137,10 @@ export function ToolList({
         return;
       }
 
+      setShowToolList(true);
+      setCurrentPage(1);
       // Process available tools
-      const toolsData: ToolListResponse = await responses[0]?.json();
+      const toolsData: ToolListResponse = toolResponse;
       setTools(toolsData.tools);
 
       // Pre-populate selected tools from existing database tools
@@ -161,8 +154,7 @@ export function ToolList({
         setSelectedTools(new Set());
       }
 
-      setShowToolList(true);
-      setCurrentPage(1);
+      // Tool list is already shown; nothing else to do
     } catch (error) {
       console.error("Error listing tools:", error);
       setPopup({
@@ -283,6 +275,7 @@ export function ToolList({
       handleSelectAllFiltered();
     }
   };
+  console.log(filteredTools);
 
   return !showToolList ? (
     <div className="flex gap-2">

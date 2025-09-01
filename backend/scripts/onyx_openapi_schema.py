@@ -10,14 +10,10 @@ from fastapi.openapi.utils import get_openapi
 
 from onyx.main import app as app_fn
 
-# TODO: remove this once openapi fixes the anyof/none issues
-OPENAPI_VERSION = "3.0.3"
-
 
 def go(filename: str) -> None:
     with open(filename, "w") as f:
         app: FastAPI = app_fn()
-        app.openapi_version = OPENAPI_VERSION
         json.dump(
             get_openapi(
                 title=app.title,

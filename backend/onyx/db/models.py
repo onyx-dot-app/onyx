@@ -3469,7 +3469,7 @@ class ResearchAgentIterationSubStep(Base):
     )
     sub_step_instructions: Mapped[str | None] = mapped_column(String, nullable=True)
     sub_step_tool_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool.id"), nullable=True
+        ForeignKey("tool.id", ondelete="SET NULL"), nullable=True
     )
 
     # for all step-types

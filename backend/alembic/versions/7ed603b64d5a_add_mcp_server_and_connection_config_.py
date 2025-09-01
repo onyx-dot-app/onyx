@@ -59,7 +59,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("mcp_server_id", sa.Integer(), nullable=True),
         sa.Column("user_email", sa.String(), nullable=False, default=""),
-        sa.Column("config", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("config", sa.LargeBinary(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -166,11 +166,45 @@ def upgrade() -> None:
         ondelete="CASCADE",
     )
 
+    # 7. Update research_agent_iteration_sub_step foreign key to SET NULL on delete
+    # This ensures that when a tool is deleted, the sub_step_tool_id is set to NULL
+    # instead of causing a foreign key constraint violation
+    op.drop_constraint(
+        "research_agent_iteration_sub_step_sub_step_tool_id_fkey",
+        "research_agent_iteration_sub_step",
+        type_="foreignkey",
+    )
+    op.create_foreign_key(
+        "research_agent_iteration_sub_step_sub_step_tool_id_fkey",
+        "research_agent_iteration_sub_step",
+        "tool",
+        ["sub_step_tool_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+
 
 def downgrade() -> None:
     """Drop all MCP-related tables / columns"""
 
-    # 0. Restore original persona__tool foreign keys (without CASCADE)
+    # # # 1. Drop FK & columns from tool
+    # op.drop_constraint("tool_mcp_server_fk", "tool", type_="foreignkey")
+    op.execute("DELETE FROM tool WHERE mcp_server_id IS NOT NULL")
+
+    op.drop_constraint(
+        "research_agent_iteration_sub_step_sub_step_tool_id_fkey",
+        "research_agent_iteration_sub_step",
+        type_="foreignkey",
+    )
+    op.create_foreign_key(
+        "research_agent_iteration_sub_step_sub_step_tool_id_fkey",
+        "research_agent_iteration_sub_step",
+        "tool",
+        ["sub_step_tool_id"],
+        ["id"],
+    )
+
+    # Restore original persona__tool foreign keys (without CASCADE)
     op.drop_constraint(
         "persona__tool_persona_id_fkey", "persona__tool", type_="foreignkey"
     )
@@ -192,10 +226,6 @@ def downgrade() -> None:
         ["tool_id"],
         ["id"],
     )
-
-    # # 1. Drop FK & columns from tool
-    op.drop_constraint("tool_mcp_server_fk", "tool", type_="foreignkey")
-    op.execute("DELETE FROM tool WHERE mcp_server_id IS NOT NULL")
     op.drop_column("tool", "mcp_input_schema")
     op.drop_column("tool", "mcp_server_id")
 
