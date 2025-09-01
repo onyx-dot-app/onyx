@@ -5,7 +5,6 @@ from typing import cast
 
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-from mcp.types import Resource
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.enums import MCPAuthenticationType
@@ -19,7 +18,6 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
-from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_resources_sync
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -286,45 +284,3 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
             tool_responses,
             using_tool_calling_llm,
         )
-
-
-def discover_mcp_resources(
-    mcp_server: MCPServer, connection_config: MCPConnectionConfig | None = None
-) -> list[Resource]:
-    """Discover available resources from an MCP server"""
-
-    try:
-        # TODO: extract shared code with tool discovery
-        # Build headers from connection config
-        headers: dict[str, str] = {}
-        if connection_config and connection_config.config:
-            cfg = connection_config.config
-            if isinstance(cfg, dict):
-                if "headers" in cfg and isinstance(cfg["headers"], dict):
-                    headers = {k: str(v) for k, v in cfg["headers"].items()}
-                elif "headers" in cfg and isinstance(cfg["headers"], list):
-                    for h in cfg["headers"]:
-                        name = h.get("name")
-                        value = h.get("value")
-                        if name and value is not None:
-                            headers[str(name)] = str(value)
-                elif "api_key" in cfg:
-                    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
-
-        # Use the new MCP client to discover resources
-        resources = discover_mcp_resources_sync(
-            server_url=mcp_server.server_url,
-            connection_headers=headers,
-            transport="streamable-http",  # Default to streamable HTTP
-        ).resources
-
-        logger.info(
-            f"Discovered {len(resources)} resources from MCP server '{mcp_server.name}'"
-        )
-        return resources
-
-    except Exception as e:
-        logger.error(
-            f"Failed to discover resources from MCP server '{mcp_server.name}': {e}"
-        )
-        return []

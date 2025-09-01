@@ -22,7 +22,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import create_connection_config
-from onyx.db.mcp import create_mcp_server
+from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
 from onyx.db.mcp import delete_user_connection_configs_for_server
@@ -33,13 +33,13 @@ from onyx.db.mcp import get_mcp_servers_for_persona
 from onyx.db.mcp import get_server_auth_template
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.mcp import update_connection_config
-from onyx.db.mcp import update_mcp_server
+from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.mcp import upsert_user_connection_config
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
-from onyx.db.tools import delete_tool
+from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.standard_oauth import _OAUTH_STATE_EXPIRATION_SECONDS
@@ -943,7 +943,7 @@ def _db_mcp_server_to_api_mcp_server(
     )
 
 
-@router.get("/servers/{assistant_id}", response_model=MCPServersResponse)
+@router.get("/servers/persona/{assistant_id}", response_model=MCPServersResponse)
 def get_mcp_servers_for_assistant(
     assistant_id: str,
     db: Session = Depends(get_session),
@@ -1009,24 +1009,6 @@ def get_mcp_servers_for_assistant(
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
 
 
-@admin_router.get("/server/{server_id}/tools")
-def admin_list_mcp_tools_by_id(
-    server_id: int,
-    db: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
-) -> MCPToolListResponse:
-    return _list_mcp_tools_by_id(server_id, db, True, user)
-
-
-@router.get("/server/{server_id}/tools")
-def user_list_mcp_tools_by_id(
-    server_id: int,
-    db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
-) -> MCPToolListResponse:
-    return _list_mcp_tools_by_id(server_id, db, False, user)
-
-
 def _get_connection_config(
     mcp_server: DbMCPServer, is_admin: bool, user: User | None, db_session: Session
 ) -> MCPConnectionConfig | None:
@@ -1053,6 +1035,24 @@ def _get_connection_config(
         )
 
     return connection_config
+
+
+@admin_router.get("/server/{server_id}/tools")
+def admin_list_mcp_tools_by_id(
+    server_id: int,
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_admin_user),
+) -> MCPToolListResponse:
+    return _list_mcp_tools_by_id(server_id, db, True, user)
+
+
+@router.get("/server/{server_id}/tools")
+def user_list_mcp_tools_by_id(
+    server_id: int,
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> MCPToolListResponse:
+    return _list_mcp_tools_by_id(server_id, db, False, user)
 
 
 def _list_mcp_tools_by_id(
@@ -1138,7 +1138,7 @@ def _upsert_mcp_server(
                 )
 
         # Update the server with new values
-        mcp_server = update_mcp_server(
+        mcp_server = update_mcp_server__no_commit(
             server_id=request.existing_server_id,
             db_session=db_session,
             name=request.name,
@@ -1172,7 +1172,7 @@ def _upsert_mcp_server(
             )
 
         # Create new MCP server
-        mcp_server = create_mcp_server(
+        mcp_server = create_mcp_server__no_commit(
             owner_email=user.email if user else "",
             name=request.name,
             description=request.description,
@@ -1254,12 +1254,13 @@ def _upsert_mcp_server(
 
     # Update server with config IDs
     if admin_connection_config_id is not None:
-        mcp_server = update_mcp_server(
+        mcp_server = update_mcp_server__no_commit(
             server_id=mcp_server.id,
             db_session=db_session,
             admin_connection_config_id=admin_connection_config_id,
         )
 
+    db_session.commit()
     return mcp_server
 
 
@@ -1496,7 +1497,7 @@ def update_mcp_server_with_tools(
         if tool.name in selected_names:
             keep_tool_names.add(tool.name)
         else:
-            delete_tool(tool.id, db_session)
+            delete_tool__no_commit(tool.id, db_session)
             updated_tools += 1
     # If selected_tools is provided, create individual tools for each
 
@@ -1520,16 +1521,16 @@ def update_mcp_server_with_tools(
 @admin_router.delete("/server/{server_id}")
 def delete_mcp_server_admin(
     server_id: int,
-    db: Session = Depends(get_session),
+    db_session: Session = Depends(get_session),
     user: User | None = Depends(current_admin_user),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
     try:
         # Ensure it exists
-        server = get_mcp_server_by_id(server_id, db)
+        server = get_mcp_server_by_id(server_id, db_session)
 
         # Log tools that will be deleted for debugging
-        tools_to_delete = get_tools_by_mcp_server_id(server_id, db)
+        tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
         logger.info(
             f"Deleting MCP server {server_id} ({server.name}) with {len(tools_to_delete)} tools"
         )
@@ -1537,10 +1538,10 @@ def delete_mcp_server_admin(
             logger.debug(f"  - Tool to delete: {tool.name} (ID: {tool.id})")
 
         # Cascade behavior handled by FK ondelete in DB
-        delete_mcp_server(server_id, db)
+        delete_mcp_server(server_id, db_session)
 
         # Verify tools were deleted
-        remaining_tools = get_tools_by_mcp_server_id(server_id, db)
+        remaining_tools = get_tools_by_mcp_server_id(server_id, db_session)
         if remaining_tools:
             logger.error(
                 f"WARNING: {len(remaining_tools)} tools still exist after deleting MCP server {server_id}"
@@ -1550,8 +1551,8 @@ def delete_mcp_server_admin(
                 logger.info(
                     f"Manually deleting orphaned tool: {tool.name} (ID: {tool.id})"
                 )
-                delete_tool(tool.id, db)
-            db.commit()
+                delete_tool__no_commit(tool.id, db_session)
+        db_session.commit()
 
         return {"success": True}
     except ValueError:

@@ -1,4 +1,3 @@
-from typing import Any
 from typing import cast
 from uuid import UUID
 
@@ -84,7 +83,7 @@ def get_mcp_servers_accessible_to_user(
     return user_servers
 
 
-def create_mcp_server(
+def create_mcp_server__no_commit(
     owner_email: str,
     name: str,
     description: str | None,
@@ -107,7 +106,7 @@ def create_mcp_server(
     return new_server
 
 
-def update_mcp_server(
+def update_mcp_server__no_commit(
     server_id: int,
     db_session: Session,
     name: str | None = None,
@@ -137,11 +136,6 @@ def update_mcp_server(
 def delete_mcp_server(server_id: int, db_session: Session) -> None:
     """Delete an MCP server and all associated tools (via CASCADE)"""
     server = get_mcp_server_by_id(server_id, db_session)
-
-    # Log for debugging
-    from onyx.utils.logger import setup_logger
-
-    logger = setup_logger()
 
     # Count tools that will be deleted
     tools_count = db_session.query(Tool).filter(Tool.mcp_server_id == server_id).count()
@@ -223,58 +217,6 @@ def get_user_connection_config(
             )
         )
     )
-
-
-def refresh_oauth_token(
-    server_url: str,
-    config: dict[str, Any],
-    client_id: str | None = None,
-    client_secret: str | None = None,
-    redirect_uri: str | None = None,
-) -> dict[str, Any] | None:
-    """Refresh OAuth token if refresh_token present. Returns new token payload or None.
-
-    If client credentials are not provided, attempts to use credentials stored in config.
-    """
-    import httpx
-    import os
-
-    refresh_token = config.get("refresh_token")
-    if not refresh_token:
-        return None
-
-    # Use provided credentials or try to get from config
-    if not client_id:
-        client_id = config.get("client_id") or os.getenv(
-            "MCP_OAUTH_CLIENT_ID", "test-client-id"
-        )
-    if not client_secret:
-        client_secret = config.get("client_secret") or os.getenv(
-            "MCP_OAUTH_CLIENT_SECRET", "test-client-secret"
-        )
-    if not redirect_uri:
-        redirect_uri = os.getenv(
-            "MCP_OAUTH_REDIRECT_URI",
-            "http://localhost:3000/api/chat/mcp/oauth/callback",
-        )
-
-    token_url = (
-        os.getenv("MCP_OAUTH_TOKEN_URL") or f"{server_url.rstrip('/')}/oauth/token"
-    )
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "redirect_uri": redirect_uri,
-    }
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.post(token_url, data=data)
-            resp.raise_for_status()
-            return resp.json()
-    except Exception:
-        return None
 
 
 def get_user_connection_configs_for_server(

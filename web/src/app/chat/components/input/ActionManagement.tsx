@@ -465,7 +465,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
 
       try {
         const response = await fetch(
-          `/api/mcp/servers/${selectedAssistant.id}`
+          `/api/mcp/servers/persona/${selectedAssistant.id}`
         );
         if (response.ok) {
           const data = await response.json();

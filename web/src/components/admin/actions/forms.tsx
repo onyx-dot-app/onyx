@@ -17,13 +17,15 @@ export function PerUserAuthTemplateConfig({
   errors,
   touched,
 }: PerUserAuthTemplateConfigProps) {
-  // Initialize auth template if not exists
-  if (!values.auth_template) {
-    setFieldValue("auth_template", {
-      headers: { Authorization: "Bearer {api_key}" },
-      required_fields: ["api_key"],
-    });
-  }
+  useEffect(() => {
+    // Initialize auth template if not exists
+    if (!values.auth_template) {
+      setFieldValue("auth_template", {
+        headers: { Authorization: "Bearer {api_key}" },
+        required_fields: ["api_key"],
+      });
+    }
+  }, [values.auth_template, setFieldValue]);
 
   const addHeader = () => {
     const currentHeaders = values.auth_template?.headers || {};

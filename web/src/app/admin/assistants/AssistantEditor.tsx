@@ -431,8 +431,6 @@ export function AssistantEditor({
         const data = await response.json();
         setMcpServers(data.mcp_servers || []);
       }
-      console.log("mcpServers", mcpServers);
-      console.log("response", response);
     };
 
     fetchMcpServers();

@@ -3565,9 +3565,11 @@ class MCPServer(Base):
 class MCPServer__User(Base):
     __tablename__ = "mcp_server__user"
     mcp_server_id: Mapped[int] = mapped_column(
-        ForeignKey("mcp_server.id"), primary_key=True
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
     )
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class MCPServer__UserGroup(Base):
@@ -3605,7 +3607,7 @@ class MCPConnectionConfig(Base):
     #   "registration_client_uri": "<uri>",  # For managing registration
     # }
     config: Mapped[MCPConnectionData] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=dict
+        EncryptedJson(), nullable=False, default=dict
     )
 
     created_at: Mapped[datetime.datetime] = mapped_column(

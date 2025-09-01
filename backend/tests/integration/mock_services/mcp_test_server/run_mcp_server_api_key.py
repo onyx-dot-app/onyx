@@ -29,7 +29,7 @@ if __name__ == "__main__":
         api_key = "dev-api-key-123"
     auth = StaticTokenVerifier(
         tokens={
-            "dev-api-key-123": {"client_id": "evan", "scopes": ["mcp:use"]},
+            api_key: {"client_id": "evan", "scopes": ["mcp:use"]},
         },
         required_scopes=["mcp:use"],
     )

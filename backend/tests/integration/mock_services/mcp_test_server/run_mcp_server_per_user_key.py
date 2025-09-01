@@ -54,10 +54,10 @@ class ApiKeyVerifier(TokenVerifier):
         self.api_key_dict = api_key_dict
 
     async def verify_token(self, token: str) -> Optional[AccessToken]:
-        print(f"Verifying token: {token}")
+        # print(f"Verifying token: {token}")
         try:
             prefix, key_id, secret = token.split("-")
-            print(f"Prefix: {prefix}, Key ID: {key_id}, Secret: {secret}")
+            # print(f"Prefix: {prefix}, Key ID: {key_id}, Secret: {secret}")
             if prefix not in ("mcp_live", "mcp_test"):
                 return None
         except ValueError:

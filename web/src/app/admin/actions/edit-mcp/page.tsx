@@ -6,8 +6,8 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ToolIcon, SearchIcon } from "@/components/icons/icons";
-import { FiInfo, FiPlus, FiX, FiLink, FiCheck } from "react-icons/fi";
+import { ToolIcon } from "@/components/icons/icons";
+import { FiLink, FiCheck } from "react-icons/fi";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
-  MCPTransportType,
 } from "@/lib/tools/interfaces";
 import {
   PerUserAuthTemplateConfig,
@@ -48,28 +45,35 @@ const validationSchema = Yup.object().shape({
     .url("Must be a valid URL")
     .required("Server URL is required"),
   auth_type: Yup.string()
-    .oneOf(["none", "api_token", "oauth"])
+    .oneOf([
+      MCPAuthenticationType.NONE,
+      MCPAuthenticationType.API_TOKEN,
+      MCPAuthenticationType.OAUTH,
+    ])
     .required("Authentication type is required"),
   auth_performer: Yup.string().when("auth_type", {
-    is: (auth_type: string) => auth_type !== "none",
+    is: (auth_type: string) => auth_type !== MCPAuthenticationType.NONE,
     then: (schema) =>
       schema
-        .oneOf(["admin", "per_user"])
+        .oneOf([
+          MCPAuthenticationPerformer.ADMIN,
+          MCPAuthenticationPerformer.PER_USER,
+        ])
         .required("Authentication performer is required"),
     otherwise: (schema) => schema.notRequired(),
   }),
   api_token: Yup.string().when("auth_type", {
-    is: "api_token",
+    is: MCPAuthenticationType.API_TOKEN,
     then: (schema) => schema.required("API token is required"),
     otherwise: (schema) => schema.notRequired(),
   }),
   oauth_client_id: Yup.string().when("auth_type", {
-    is: "oauth",
+    is: MCPAuthenticationType.OAUTH,
     then: (schema) => schema.required("OAuth client ID is required"),
     otherwise: (schema) => schema.notRequired(),
   }),
   oauth_client_secret: Yup.string().when("auth_type", {
-    is: "oauth",
+    is: MCPAuthenticationType.OAUTH,
     then: (schema) => schema.required("OAuth client secret is required"),
     otherwise: (schema) => schema.notRequired(),
   }),

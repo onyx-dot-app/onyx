@@ -97,7 +97,7 @@ def update_tool(
     return tool
 
 
-def delete_tool(tool_id: int, db_session: Session) -> None:
+def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")

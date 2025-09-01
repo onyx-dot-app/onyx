@@ -150,12 +150,15 @@ export function MCPApiKeyModal({
     }));
   };
 
+  const credsType = isTemplateMode ? "Credentials" : "API Key";
   return (
     <Modal
       title={
         <div className="flex items-center space-x-2">
           <FiKey className="h-5 w-5" />
-          <span>{isAuthenticated ? "Manage API Key" : "Enter API Key"}</span>
+          <span>
+            {isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}
+          </span>
         </div>
       }
       onOutsideClick={handleClose}
@@ -165,19 +168,13 @@ export function MCPApiKeyModal({
         <div>
           <p className="text-sm text-subtle mb-2">
             {isAuthenticated
-              ? isTemplateMode
-                ? `Update your credentials for ${serverName}.`
-                : `Update your API key for ${serverName}.`
-              : isTemplateMode
-                ? `Enter your credentials for ${serverName} to enable authentication.`
-                : `Enter your API key for ${serverName} to enable authentication.`}
+              ? `Update your ${credsType} for ${serverName}.`
+              : `Enter your ${credsType} for ${serverName} to enable authentication.`}
           </p>
           <p className="text-xs text-subtle">
             {isAuthenticated
               ? "Changes will be validated against the server before being saved."
-              : isTemplateMode
-                ? "Your credentials will be validated against the server and stored securely."
-                : "This key will be stored securely and used only for this MCP server."}
+              : `Your ${credsType} will be validated against the server and stored securely.`}
           </p>
         </div>
 
@@ -227,14 +224,14 @@ export function MCPApiKeyModal({
           ) : (
             // Legacy API key field
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
+              <Label htmlFor="apiKey">{credsType}</Label>
               <div className="relative">
                 <Input
                   id="apiKey"
                   type={showApiKey ? "text" : "password"}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Enter your API key"
+                  placeholder={`Enter your ${credsType}`}
                   className="pr-10"
                   required
                 />
@@ -276,12 +273,8 @@ export function MCPApiKeyModal({
               {isSubmitting
                 ? "Saving..."
                 : isAuthenticated
-                  ? isTemplateMode
-                    ? "Update Credentials"
-                    : "Update API Key"
-                  : isTemplateMode
-                    ? "Save Credentials"
-                    : "Save API Key"}
+                  ? `Update ${credsType}`
+                  : `Save ${credsType}`}
             </Button>
           </div>
         </form>

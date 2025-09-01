@@ -12,7 +12,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
-from onyx.db.tools import delete_tool
+from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import update_tool
@@ -106,7 +106,7 @@ def delete_custom_tool(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     try:
-        delete_tool(tool_id, db_session)
+        delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

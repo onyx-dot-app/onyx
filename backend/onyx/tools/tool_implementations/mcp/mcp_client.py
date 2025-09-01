@@ -127,13 +127,14 @@ class MCPMessage(BaseModel):
 def _call_mcp_client_function(
     function: Callable[[ClientSession], Awaitable[T]],
     server_url: str,
-    connection_headers: dict[str, Any] | None = None,
+    connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.HTTP_STREAM,
     **kwargs: Any,
 ) -> T:
     auth_headers = connection_headers or {}
+    sep = "?" if "?" not in server_url else "&"
     server_url = (
-        server_url.rstrip("/") + "?" + urlencode({"transportType": transport.value})
+        server_url.rstrip("/") + sep + urlencode({"transportType": transport.value})
     )
 
     async def run_client_function() -> T:
@@ -147,6 +148,8 @@ def _call_mcp_client_function(
 
     try:
         # Run the async function in a new event loop
+        # TODO: We should use asyncio.get_event_loop() instead,
+        # but not sure whether closing the loop is safe
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -156,10 +159,10 @@ def _call_mcp_client_function(
     except Exception as e:
         logger.error(f"Failed to call MCP client function: {e}")
         if isinstance(e, ExceptionGroup):
-            err = e
+            original_exception = e
             for err in e.exceptions:
                 logger.error(err)
-            raise err
+            raise original_exception
         raise e
 
 
@@ -188,7 +191,7 @@ def call_mcp_tool(
     server_url: str,
     tool_name: str,
     arguments: dict[str, Any],
-    connection_headers: dict[str, Any] | None = None,
+    connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
 ) -> str:
     """Call a specific tool on the MCP server"""
@@ -202,7 +205,7 @@ def call_mcp_tool(
 
 def initialize_mcp_client(
     server_url: str,
-    connection_headers: dict[str, Any] | None = None,
+    connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
 ) -> InitializeResult:
     return _call_mcp_client_function(
@@ -245,7 +248,7 @@ async def _discover_mcp_resources(session: ClientSession) -> ListResourcesResult
 
 def discover_mcp_resources_sync(
     server_url: str,
-    connection_headers: dict[str, Any] | None = None,
+    connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
 ) -> ListResourcesResult:
     """

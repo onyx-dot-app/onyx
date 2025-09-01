@@ -8,7 +8,6 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
 import CreateButton from "@/components/ui/createButton";
-import { Button } from "@/components/ui/button";
 import { FiPlusCircle, FiHelpCircle } from "react-icons/fi";
 import {
   Tooltip,
@@ -16,7 +15,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Link from "next/link";
 
 export default async function Page() {
   // Fetch both tools and MCP servers

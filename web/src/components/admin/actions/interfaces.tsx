@@ -8,7 +8,7 @@ export interface MCPTool {
   name: string;
   description?: string;
   displayName?: string;
-  inputSchema?: any;
+  inputSchema?: Record<string, any>;
 }
 
 export interface ToolListResponse {
@@ -48,7 +48,7 @@ export interface MCPServerDetail {
   name: string;
   server_url: string;
   auth_type: MCPAuthenticationType;
-  auth_performer: MCPAuthenticationPerformer | null;
+  auth_performer: MCPAuthenticationPerformer;
   description: string | null;
   is_authenticated: boolean;
   auth_template: MCPAuthTemplate | null;

@@ -107,7 +107,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["mcp_server_id"], ["mcp_server.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(["user_id"], ["user.id"]),
+        sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
     )
 
     op.create_table(

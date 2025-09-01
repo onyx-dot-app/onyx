@@ -1,5 +1,4 @@
 import os
-import sys
 from collections.abc import Awaitable
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -143,15 +142,7 @@ class WWWAuthenticateMiddleware(BaseHTTPMiddleware):
 
 
 if __name__ == "__main__":
-    # Streamable HTTP transport (recommended)
-    # Accept only these tokens (treat them like API keys) and require a scope
-    if len(sys.argv) > 1:
-        api_key = sys.argv[1]
-    else:
-        api_key = "dev-api-key-123"
 
-    client_id = os.getenv("MCP_OAUTH_CLIENT_ID", "test-client-id")
-    client_secret = os.getenv("MCP_OAUTH_CLIENT_SECRET", "test-client-secret")
     audience = os.getenv("MCP_OAUTH_AUDIENCE", "api://mcp")
     issuer = os.getenv(
         "MCP_OAUTH_ISSUER", "https://test-domain.okta.com/oauth2/default"
