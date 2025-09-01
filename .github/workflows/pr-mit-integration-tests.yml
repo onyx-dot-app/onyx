@@ -23,7 +23,7 @@ env:
   PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
-  PLATFORM_PAIR: linux-arm64
+  PLATFORM_PAIR: linux-amd64
 
 jobs:
   discover-test-dirs:
@@ -102,7 +102,7 @@ jobs:
           path: backend/generated/
 
   build-backend-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -121,12 +121,12 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           tags: onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
 
   build-model-server-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -145,7 +145,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
+          platforms: linux/amd64
           tags: onyxdotapp/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
           outputs: type=registry
@@ -153,7 +153,7 @@ jobs:
 
   build-integration-image:
     needs: prepare-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -178,7 +178,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           tags: onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
 
@@ -191,7 +191,7 @@ jobs:
         build-integration-image,
       ]
     # See https://runs-on.com/runners/linux/
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-8vcpu-ubuntu-2404
 
     strategy:
       fail-fast: false
