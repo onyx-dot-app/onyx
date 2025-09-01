@@ -105,7 +105,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=16cpu-linux-arm64,
+        runner=blacksmith-16vcpu-ubuntu-2404-arm,
         disk=large,
         "run-id=${{ github.run_id }}",
       ]
@@ -137,7 +137,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=16cpu-linux-arm64,
+        runner=blacksmith-16vcpu-ubuntu-2404-arm,
         disk=large,
         "run-id=${{ github.run_id }}",
       ]
@@ -176,7 +176,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=16cpu-linux-arm64,
+        runner=blacksmith-16vcpu-ubuntu-2404-arm,
         disk=large,
         "run-id=${{ github.run_id }}",
       ]
@@ -222,7 +222,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=8cpu-linux-arm64,
+        runner=blacksmith-8vcpu-ubuntu-2404-arm,
         disk=large,
         "run-id=${{ github.run_id }}",
       ]
