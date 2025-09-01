@@ -17,12 +17,7 @@ import {
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
-import {
-  LlmDescriptor,
-  useFederatedConnectors,
-  useFilters,
-  useLlmManager,
-} from "@/lib/hooks";
+import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
@@ -86,9 +81,7 @@ import {
   useChatSessionSharedStatus,
   useHasSentLocalUserMessage,
 } from "../stores/useChatSessionStore";
-import { AIMessage } from "../message/messageComponents/AIMessage";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
-import { HumanMessage } from "../message/HumanMessage";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 import { MessagesDisplay } from "./MessagesDisplay";
@@ -106,20 +99,20 @@ export function ChatPage({
 }) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
-  const renderCount = useRef(0);
-  renderCount.current++;
-  const renderStartTime = performance.now();
+  // const renderCount = useRef(0);
+  // renderCount.current++;
+  // const renderStartTime = performance.now();
 
-  useEffect(() => {
-    const renderTime = performance.now() - renderStartTime;
-    if (renderTime > 10) {
-      console.log(
-        `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
-          2
-        )}ms`
-      );
-    }
-  });
+  // useEffect(() => {
+  //   const renderTime = performance.now() - renderStartTime;
+  //   if (renderTime > 10) {
+  //     console.log(
+  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+  //         2
+  //       )}ms`
+  //     );
+  //   }
+  // });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -361,15 +354,15 @@ export function ChatPage({
     }, 100);
   };
 
-  const resetInputBar = () => {
+  const resetInputBar = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
-  };
+  }, [setMessage, setCurrentMessageFiles]);
 
-  const clientScrollToBottom = (fast?: boolean) => {
+  const clientScrollToBottom = useCallback((fast?: boolean) => {
     waitForScrollRef.current = true;
 
     setTimeout(() => {
@@ -390,7 +383,9 @@ export function ChatPage({
       });
 
       if (chatSessionIdRef.current) {
-        updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
+        useChatSessionStore
+          .getState()
+          .updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
       }
     }, 50);
 
@@ -398,7 +393,7 @@ export function ChatPage({
     setTimeout(() => {
       waitForScrollRef.current = false;
     }, 1500);
-  };
+  }, []);
 
   const debounceNumber = 100; // time for debouncing
 
@@ -471,7 +466,6 @@ export function ChatPage({
   );
 
   // Access chat state directly from the store
-  const beforeZustandTime = performance.now();
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const submittedMessage = useSubmittedMessage();

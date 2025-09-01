@@ -1,7 +1,6 @@
 import React, { useCallback } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
-import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 import { HumanMessage } from "./HumanMessage";
 
 interface BaseMemoizedHumanMessageProps {
@@ -40,19 +39,6 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   setPresentingDocument,
   onEdit,
 }: InternalMemoizedHumanMessageProps) {
-  useWhyDidYouUpdate("HumanMessage", {
-    content,
-    files,
-    messageId,
-    otherMessagesCanSwitchTo,
-    onMessageSelection,
-    shared,
-    stopGenerating,
-    disableSwitchingForStreaming,
-    setPresentingDocument,
-    onEdit,
-  });
-
   return (
     <HumanMessage
       content={content}

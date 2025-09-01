@@ -13,7 +13,6 @@ import {
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
-import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];

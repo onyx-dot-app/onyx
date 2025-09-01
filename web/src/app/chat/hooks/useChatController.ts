@@ -74,11 +74,6 @@ import {
   PacketType,
 } from "../services/streamingModels";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
-import { Klee_One } from "next/font/google";
-
-const TEMP_USER_MESSAGE_ID = -1;
-const TEMP_ASSISTANT_MESSAGE_ID = -2;
-const SYSTEM_MESSAGE_ID = -3;
 
 interface RegenerationRequest {
   messageId: number;
@@ -748,8 +743,7 @@ export function useChatController({
         const newMessageDetails = upsertToCompleteMessageTree({
           messages: [
             {
-              messageId: TEMP_USER_MESSAGE_ID,
-              nodeId: TEMP_USER_MESSAGE_ID,
+              nodeId: initialUserNode.nodeId,
               message: currMessage,
               type: "user",
               files: currentMessageFiles,
@@ -758,13 +752,12 @@ export function useChatController({
               packets: [],
             },
             {
-              messageId: TEMP_ASSISTANT_MESSAGE_ID,
-              nodeId: TEMP_ASSISTANT_MESSAGE_ID,
+              nodeId: initialAssistantNode.nodeId,
               message: errorMsg,
               type: "error",
               files: aiMessageImages || [],
               toolCall: null,
-              parentNodeId: TEMP_USER_MESSAGE_ID,
+              parentNodeId: initialUserNode.nodeId,
               packets: [],
             },
           ],
@@ -805,8 +798,14 @@ export function useChatController({
       }
     },
     [
-      filterManager,
-      llmManager,
+      // Narrow to stable fields from managers to avoid re-creation
+      filterManager.selectedSources,
+      filterManager.selectedDocumentSets,
+      filterManager.selectedTags,
+      filterManager.timeRange,
+      llmManager.currentLlm,
+      llmManager.temperature,
+      // Others that affect logic
       liveAssistant,
       availableAssistants,
       existingChatSessionId,

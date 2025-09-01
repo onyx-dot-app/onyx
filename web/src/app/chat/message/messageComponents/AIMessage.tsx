@@ -36,7 +36,6 @@ import {
 import { useMessageSwitching } from "./hooks/useMessageSwitching";
 import MultiToolRenderer from "./MultiToolRenderer";
 import { RendererComponent } from "./renderMessageComponent";
-import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 
 export function AIMessage({
   rawPackets,

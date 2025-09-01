@@ -2,7 +2,6 @@ import React, { useCallback, useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { FeedbackType, Message, CitationMap } from "../../interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { useWhyDidYouUpdate } from "@/lib/hooks/useWhyDidYouUpdate";
 import { AIMessage } from "./AIMessage";
 import { LlmDescriptor } from "@/lib/hooks";
 
@@ -50,20 +49,6 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: InternalMemoizedAIMessageProps) {
-  console.log("Rendering AIMessage");
-  useWhyDidYouUpdate("AIMessage", {
-    rawPackets,
-    handleFeedback,
-    assistant,
-    docs,
-    citations,
-    setPresentingDocument,
-    regenerate,
-    overriddenModel,
-    nodeId,
-    otherMessagesCanSwitchTo,
-    onMessageSelection,
-  });
   return (
     <AIMessage
       rawPackets={rawPackets}
