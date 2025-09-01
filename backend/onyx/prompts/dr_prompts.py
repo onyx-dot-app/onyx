@@ -320,11 +320,13 @@ asked, c) the proper information is gathered, so that the final answer is well-r
 and shows a deep understanding of the problem. As an example, if a question pertains to \
 positioning a solution in some market, the plan should include understanding the market in full, \
 including the types of customers and user personas, the competitors and their positioning, etc.
+   - BE CURIOUS! Put questions/steps in your plan that make sure that interesting areas are \
+being investigated later!
    - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
 For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
    --
-   1) identify the main problem that Nike has
-   2) find jiras that address the problem identified in step 1
+   1) identify the main problems that Nike has
+   2) find jiras that address the problems identified in step 1
    3) generate the final answer
    --
    - the last step should be something like 'generate the final answer' or maybe something more specific.
@@ -622,6 +624,8 @@ DIFFERENTIATION/RELATION BETWEEN TOOLS:
 MISCELLANEOUS HINTS:
    - it is CRITICAL to look at the high-level plan and try to evaluate which steps seem to be \
 satisfactorily answered, or which areas need more research/information.
+   - BE CURIOUS! Consider interesting questions that would help to deepen the understanding of \
+the information you need to answer the original question.
    - if you think a) you can answer the question with the information you already have AND b) \
 the information from the high-level plan has been sufficiently answered in enough detail, then \
 you can use the "{CLOSER}" tool.
