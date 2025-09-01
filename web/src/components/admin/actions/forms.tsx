@@ -52,7 +52,8 @@ export function PerUserAuthTemplateConfig({
 
   const renameHeader = (oldName: string, newName: string) => {
     if (oldName === newName) return;
-    const currentHeaders: Record<string, string> = values.auth_template?.headers || {};
+    const currentHeaders: Record<string, string> =
+      values.auth_template?.headers || {};
     // Preserve insertion order while renaming the key
     const newHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(currentHeaders)) {
