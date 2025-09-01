@@ -109,8 +109,6 @@ export function PerUserAuthTemplateConfig({
     }
   }, []); // Empty dependency array - only run on mount
 
-  console.log(headers, requiredFields, adminCredentials);
-
   return (
     <div className="space-y-4 p-4 bg-background-100 border border-border-strong rounded-lg">
       <div className="flex items-center space-x-2">
