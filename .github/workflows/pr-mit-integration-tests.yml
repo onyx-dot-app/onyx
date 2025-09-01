@@ -102,13 +102,7 @@ jobs:
           path: backend/generated/
 
   build-backend-image:
-    runs-on:
-      [
-        runs-on,
-        runner=blacksmith-16vcpu-ubuntu-2404-arm,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -134,13 +128,7 @@ jobs:
           cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
   build-model-server-image:
-    runs-on:
-      [
-        runs-on,
-        runner=blacksmith-16vcpu-ubuntu-2404-arm,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -173,13 +161,7 @@ jobs:
 
   build-integration-image:
     needs: prepare-build
-    runs-on:
-      [
-        runs-on,
-        runner=blacksmith-16vcpu-ubuntu-2404-arm,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -219,13 +201,7 @@ jobs:
         build-integration-image,
       ]
     # See https://runs-on.com/runners/linux/
-    runs-on:
-      [
-        runs-on,
-        runner=blacksmith-8vcpu-ubuntu-2404-arm,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
 
     strategy:
       fail-fast: false
