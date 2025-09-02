@@ -5,7 +5,16 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "@/lib/utils";
 
-const TooltipProvider = TooltipPrimitive.Provider;
+// Default the provider delay to a snappier, consistent value
+const TooltipProvider: React.FC<
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>
+> = ({ delayDuration = 300, skipDelayDuration = 200, ...props }) => (
+  <TooltipPrimitive.Provider
+    delayDuration={delayDuration}
+    skipDelayDuration={skipDelayDuration}
+    {...props}
+  />
+);
 
 const Tooltip = TooltipPrimitive.Root;
 

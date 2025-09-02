@@ -974,7 +974,7 @@ export function AssistantEditor({
                                 Knowledge
                               </p>
                               <div className="flex items-center">
-                                <TooltipProvider delayDuration={0}>
+                                <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <div
@@ -1399,7 +1399,7 @@ export function AssistantEditor({
 
                       <div className="min-h-[100px]">
                         <div className="flex items-center mb-2">
-                          <TooltipProvider delayDuration={0}>
+                          <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div>
