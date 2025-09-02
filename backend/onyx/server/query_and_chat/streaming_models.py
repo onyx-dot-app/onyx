@@ -70,6 +70,13 @@ class ImageGenerationToolDelta(BaseObj):
     images: list[GeneratedImage]
 
 
+class ImageGenerationToolHeartbeat(BaseObj):
+    type: Literal["image_generation_tool_heartbeat"] = "image_generation_tool_heartbeat"
+
+    status: str = "generating"
+    heartbeat_count: int = 0
+
+
 class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = "custom_tool_start"
 
@@ -171,6 +178,7 @@ PacketObj = Annotated[
         SearchToolDelta,
         ImageGenerationToolStart,
         ImageGenerationToolDelta,
+        ImageGenerationToolHeartbeat,
         CustomToolStart,
         CustomToolDelta,
         ReasoningStart,
