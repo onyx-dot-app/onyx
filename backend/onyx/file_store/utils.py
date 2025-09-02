@@ -102,7 +102,7 @@ def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFi
     return [load_user_file(file.id, db_session) for file in user_files]
 
 
-def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
+def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = ChatFileType.USER_KNOWLEDGE
     status = "not_loaded"
 
@@ -159,8 +159,7 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
 
 
 def load_in_memory_chat_files(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     db_session: Session,
 ) -> list[InMemoryChatFile]:
     """
@@ -169,7 +168,6 @@ def load_in_memory_chat_files(
 
     Args:
         user_file_ids: A list of specific UserFile IDs to load.
-        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be loaded.
         db_session: The SQLAlchemy database session.
 
     Returns:
@@ -182,19 +180,12 @@ def load_in_memory_chat_files(
         run_functions_tuples_in_parallel(
             # 1. Load files specified by individual IDs
             [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
-        )
-        # 2. Load all files within specified folders
-        + [
-            file
-            for folder_id in user_folder_ids
-            for file in load_user_folder(folder_id, db_session)
-        ],
+        ),
     )
 
 
 def get_user_files(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     db_session: Session,
 ) -> list[UserFile]:
     """
@@ -202,7 +193,6 @@ def get_user_files(
 
     Args:
         user_file_ids: A list of specific UserFile IDs to fetch.
-        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be fetched.
         db_session: The SQLAlchemy database session.
 
     Returns:
@@ -222,43 +212,28 @@ def get_user_files(
         if user_file is not None:
             user_files.append(user_file)
 
-    # 2. Fetch UserFile records for all files within specified folder IDs
-    for user_folder_id in user_folder_ids:
-        # Query the database for all UserFiles belonging to the current folder ID
-        # and extend the list with the results
-        user_files.extend(
-            db_session.query(UserFile)
-            .filter(UserFile.folder_id == user_folder_id)
-            .all()
-        )
-
     # 3. Return the combined list of UserFile database objects
     return user_files
 
 
 def get_user_files_as_user(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,
 ) -> list[UserFile]:
     """
     Fetches all UserFile database records for a given user.
     """
-    user_files = get_user_files(user_file_ids, user_folder_ids, db_session)
+    user_files = get_user_files(user_file_ids, db_session)
     current_user_files = []
     for user_file in user_files:
         # Note: if user_id is None, then all files should be None as well
         # (since auth must be disabled in this case)
-        if user_file.folder_id == RECENT_FOLDER_ID:
-            if user_file.user_id == user_id:
-                current_user_files.append(user_file)
-        else:
-            if user_file.user_id != user_id:
-                raise ValueError(
-                    f"User {user_id} does not have access to file {user_file.id}"
-                )
-            current_user_files.append(user_file)
+        if user_file.user_id != user_id:
+            raise ValueError(
+                f"User {user_id} does not have access to file {user_file.id}"
+            )
+        current_user_files.append(user_file)
 
     return current_user_files
 

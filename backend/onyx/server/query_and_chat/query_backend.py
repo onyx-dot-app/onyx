@@ -161,7 +161,6 @@ def get_user_search_sessions(
                 time_created=search.time_created.isoformat(),
                 time_updated=search.time_updated.isoformat(),
                 shared_status=search.shared_status,
-                folder_id=search.folder_id,
                 current_alternate_model=search.current_alternate_model,
             )
             for search in search_sessions

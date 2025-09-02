@@ -175,9 +175,7 @@ def get_user_file_indexing_status(
     return status_dict
 
 
-def calculate_user_files_token_count(
-    file_ids: list[int], folder_ids: list[int], db_session: Session
-) -> int:
+def calculate_user_files_token_count(file_ids: list[str], db_session: Session) -> int:
     """Calculate total token count for specified files and folders"""
     total_tokens = 0
 
@@ -191,38 +189,7 @@ def calculate_user_files_token_count(
         )
         total_tokens += file_tokens
 
-    # Get tokens from folders
-    if folder_ids:
-        folder_files_tokens = (
-            db_session.query(func.sum(UserFile.token_count))
-            .filter(UserFile.folder_id.in_(folder_ids))
-            .scalar()
-            or 0
-        )
-        total_tokens += folder_files_tokens
-
     return total_tokens
-
-
-def load_all_user_files(
-    file_ids: list[int], folder_ids: list[int], db_session: Session
-) -> list[UserFile]:
-    """Load all user files from specified file IDs and folder IDs"""
-    result = []
-
-    # Get individual files
-    if file_ids:
-        files = db_session.query(UserFile).filter(UserFile.id.in_(file_ids)).all()
-        result.extend(files)
-
-    # Get files from folders
-    if folder_ids:
-        folder_files = (
-            db_session.query(UserFile).filter(UserFile.folder_id.in_(folder_ids)).all()
-        )
-        result.extend(folder_files)
-
-    return result
 
 
 def get_user_files_from_folder(folder_id: int, db_session: Session) -> list[UserFile]:

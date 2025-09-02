@@ -14,8 +14,6 @@ from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -173,9 +171,7 @@ def build_vespa_filters(
     filter_str += _build_or_filters(DOCUMENT_SETS, filters.document_set)
 
     # New: user_file_ids as integer filters
-    filter_str += _build_int_or_filters(USER_FILE, filters.user_file_ids)
-
-    filter_str += _build_int_or_filters(USER_FOLDER, filters.user_folder_ids)
+    filter_str += _build_or_filters(DOCUMENT_ID, filters.user_file_ids)
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)

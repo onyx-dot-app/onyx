@@ -1,6 +1,7 @@
 import base64
 from enum import Enum
 from typing import NotRequired
+from uuid import UUID
 from typing_extensions import TypedDict  # noreorder
 
 from pydantic import BaseModel
@@ -35,6 +36,7 @@ class FileDescriptor(TypedDict):
     id: str
     type: ChatFileType
     name: NotRequired[str | None]
+    user_file_id: NotRequired[UUID | None]
 
 
 class InMemoryChatFile(BaseModel):
@@ -56,4 +58,5 @@ class InMemoryChatFile(BaseModel):
             "id": str(self.file_id),
             "type": self.file_type,
             "name": self.filename,
+            "user_file_id": str(self.file_id),
         }

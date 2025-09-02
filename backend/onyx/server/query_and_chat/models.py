@@ -95,9 +95,8 @@ class CreateChatMessageRequest(ChunkContext):
     # New message contents
     message: str
     # Files that we should attach to this message
-    file_descriptors: list[FileDescriptor]
-    user_file_ids: list[int] = []
-    user_folder_ids: list[int] = []
+    file_descriptors: list[FileDescriptor] = []
+    current_message_files: list[FileDescriptor] = []
 
     # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, then retrieval options are unused

@@ -161,7 +161,7 @@ export type PacketType =
 export interface SendMessageParams {
   regenerate: boolean;
   message: string;
-  fileDescriptors: FileDescriptor[];
+  fileDescriptors?: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: Filters | null;
@@ -175,8 +175,7 @@ export interface SendMessageParams {
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
-  userFileIds?: number[];
-  userFolderIds?: number[];
+  currentMessageFiles?: FileDescriptor[];
   useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
@@ -186,8 +185,7 @@ export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
-  userFileIds,
-  userFolderIds,
+  currentMessageFiles,
   parentMessageId,
   chatSessionId,
   filters,
@@ -218,8 +216,7 @@ export async function* sendMessage({
     prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
-    user_file_ids: userFileIds,
-    user_folder_ids: userFolderIds,
+    current_message_files: currentMessageFiles,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
