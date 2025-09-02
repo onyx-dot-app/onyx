@@ -18,8 +18,8 @@ from onyx.db.models import UserFolder
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.prompts import upsert_prompt
 from onyx.server.features.persona.models import PromptSnapshot
-from onyx.server.projects.models import UserFileSnapshot
-from onyx.server.projects.models import UserProjectSnapshot
+from onyx.server.features.projects.models import UserFileSnapshot
+from onyx.server.features.projects.models import UserProjectSnapshot
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
