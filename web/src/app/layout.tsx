@@ -31,7 +31,7 @@ import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
-import { GlobalTooltipProvider } from "@/components/providers/GlobalTooltipProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -129,9 +129,9 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <div className="text-text min-h-screen bg-background">
-            <GlobalTooltipProvider>
+            <TooltipProvider>
               <PHProvider>{content}</PHProvider>
-            </GlobalTooltipProvider>
+            </TooltipProvider>
           </div>
         </ThemeProvider>
       </body>
