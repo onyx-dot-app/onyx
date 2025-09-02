@@ -17,7 +17,6 @@ import {
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/components/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -62,7 +61,6 @@ interface HistorySidebarProps {
   page: pageType;
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
-  folders?: Folder[];
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
@@ -182,7 +180,6 @@ export const HistorySidebar = React.memo(
         page,
         existingChats,
         currentChatSession,
-        folders,
         explicitlyUntoggle,
         toggleSidebar,
         removeToggle,
@@ -428,7 +425,6 @@ export const HistorySidebar = React.memo(
                 closeSidebar={removeToggle}
                 existingChats={existingChats}
                 currentChatId={currentChatId}
-                folders={folders}
               />
             </div>
           </div>

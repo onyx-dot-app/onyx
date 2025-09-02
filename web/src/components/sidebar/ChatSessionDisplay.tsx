@@ -14,7 +14,6 @@ import {
   FiArrowRight,
   FiCheck,
   FiEdit2,
-  FiFolder,
   FiMoreHorizontal,
   FiShare2,
   FiTrash,
@@ -73,7 +72,7 @@ export function ChatSessionDisplay({
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
   const [isMovingToProject, setIsMovingToProject] = useState(false);
-  const { refreshChatSessions, refreshFolders } = useChatContext();
+  const { refreshChatSessions } = useChatContext();
   const { fetchProjects, projects } = useProjectsContext();
 
   const handleMoveChatSession = useCallback(
@@ -121,11 +120,10 @@ export function ChatSessionDisplay({
       }
       await deleteChatSession(chatSession.id);
       await refreshChatSessions();
-      await refreshFolders();
       setIsDeleteModalOpen(false);
       setPopoverOpen(false);
     },
-    [chatSession, showDeleteModal, refreshChatSessions, refreshFolders]
+    [chatSession, showDeleteModal, refreshChatSessions]
   );
 
   const handleMoveOutOfFolder = useCallback(async () => {
