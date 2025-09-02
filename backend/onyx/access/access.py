@@ -133,7 +133,7 @@ def get_access_for_user_files(
 ) -> dict[str, DocumentAccess]:
     user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
     return {
-        user_file.id: DocumentAccess.build(
+        str(user_file.id): DocumentAccess.build(
             user_emails=[user_file.user.email],
             user_groups=[],
             is_public=False,

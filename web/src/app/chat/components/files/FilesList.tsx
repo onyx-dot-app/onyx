@@ -18,7 +18,7 @@ import { ProjectFile } from "../../projects/ProjectsContext";
 interface FilesListProps {
   className?: string;
   recentFiles: ProjectFile[];
-  onPickRecent?: (fileId: string) => void;
+  onPickRecent?: (file: ProjectFile) => void;
 }
 
 const kindIcon = (kind: string, status?: string) => {
@@ -74,7 +74,7 @@ export default function FilesList({
                 "flex items-center justify-between gap-3 text-left rounded-md px-2 py-2",
                 "hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50"
               )}
-              onClick={() => onPickRecent && onPickRecent(f.id)}
+              onClick={() => onPickRecent && onPickRecent(f)}
             >
               <div className="flex items-center gap-3 min-w-0">
                 {kindIcon(f.file_type, (f as any).status)}

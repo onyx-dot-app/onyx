@@ -302,7 +302,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         retrieved_sections_callback = None
         skip_query_analysis = False
         user_file_ids = None
-        user_folder_ids = None
         document_sources = None
         time_cutoff = None
         expanded_queries = None
@@ -323,7 +322,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 override_kwargs.skip_query_analysis, False
             )
             user_file_ids = override_kwargs.user_file_ids
-            user_folder_ids = override_kwargs.user_folder_ids
             document_sources = override_kwargs.document_sources
             time_cutoff = override_kwargs.time_cutoff
             expanded_queries = override_kwargs.expanded_queries
@@ -378,7 +376,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     retrieval_options.filters if retrieval_options else None
                 ),
                 user_file_filters=UserFileFilters(
-                    user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
+                    user_file_ids=user_file_ids,
                 ),
                 persona=self.persona,
                 offset=(retrieval_options.offset if retrieval_options else None),
