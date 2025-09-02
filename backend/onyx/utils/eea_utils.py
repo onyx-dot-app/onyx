@@ -116,11 +116,12 @@ def add_metadata_to_llm(llm, generation, user, user_message, chat_session):
         user_id = user.email
     if user_id.startswith(DANSWER_API_KEY_PREFIX.lower()):
         user_id = user_id.split("@")[0].split(DANSWER_API_KEY_PREFIX.lower())[1]
+    final_user_id = f"{user_id} - {chat_session.persona.name}"
     llm._model_kwargs={
         'metadata':{
             "debug_langfuse": True,
             "generation_name": generation,
-            "user_id":user_id,
+            "user_id":final_user_id,
             "session_id": str(chat_session.id),
             "trace_name": user_message.message[:200],
             "trace_id": str(user_message.id)
