@@ -65,6 +65,7 @@ SLIM_BATCH_SIZE = 1000
 
 ASPX_EXTENSION = ".aspx"
 REQUEST_TIMEOUT = 10
+SHAREPOINT_DOWNLOAD_URL_REQUEST_TIMEOUT = 60
 
 
 class SiteDescriptor(BaseModel):
@@ -246,11 +247,37 @@ def _convert_driveitem_to_document_with_permissions(
 
         if download_url:
             try:
-                response = requests.get(download_url, timeout=REQUEST_TIMEOUT)
+                # First make a HEAD request to check the size
+                head_response = requests.head(download_url, timeout=REQUEST_TIMEOUT)
+                head_response.raise_for_status()
+                content_length_header = head_response.headers.get("Content-Length")
+
+                if (
+                    content_length_header is not None
+                    and content_length_header.isdigit()
+                ):
+                    file_size = int(content_length_header)
+                    if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
+                        logger.warning(
+                            f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
+                            f"File size: {file_size} bytes. Skipping."
+                        )
+                        raise RuntimeError(
+                            f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
+                            f"File size: {file_size} bytes."
+                        )
+                else:
+                    logger.warning(
+                        f"Could not determine file size from download URL for '{driveitem.name}'. Proceeding with download."
+                    )
+
+                # If size check passes, proceed with download
+                response = requests.get(
+                    download_url, timeout=SHAREPOINT_DOWNLOAD_URL_REQUEST_TIMEOUT
+                )
                 response.raise_for_status()
                 content_bytes = response.content
                 # Handle zero-length downloads gracefully using header or content length
-                content_length_header = response.headers.get("Content-Length")
                 try:
                     if (
                         content_length_header is not None
@@ -265,6 +292,12 @@ def _convert_driveitem_to_document_with_permissions(
                         logger.info(
                             f"Downloaded zero-length content for '{driveitem.name}' via downloadUrl; skipping extraction."
                         )
+            except requests.exceptions.RequestException as e:
+                status = e.response.status_code if e.response is not None else -1
+                logger.warning(
+                    f"Failed to download via downloadUrl for '{driveitem.name}': "
+                    f"(status={status})"
+                )
             except Exception as e:
                 logger.warning(
                     f"Failed to download content via downloadUrl for '{driveitem.name}': {e}"
