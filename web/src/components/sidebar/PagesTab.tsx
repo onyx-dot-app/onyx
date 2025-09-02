@@ -326,7 +326,7 @@ export function PagesTab({
         <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
           <p>Chats</p>
 
-          <TooltipProvider delayDuration={1000}>
+          <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

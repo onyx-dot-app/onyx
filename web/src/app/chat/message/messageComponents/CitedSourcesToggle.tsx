@@ -11,14 +11,14 @@ interface SourcesToggleProps {
     document_id: string;
   }>;
   documentMap: Map<string, OnyxDocument>;
-  messageId: number;
-  onToggle: (messageId: number) => void;
+  nodeId: number;
+  onToggle: (toggledNodeId: number) => void;
 }
 
 export const CitedSourcesToggle = ({
   citations,
   documentMap,
-  messageId,
+  nodeId,
   onToggle,
 }: SourcesToggleProps) => {
   // If no citations but we have documents, use the first 2 documents as fallback
@@ -118,7 +118,7 @@ export const CitedSourcesToggle = ({
         items-center 
         gap-1
       "
-      onClick={() => onToggle(messageId)}
+      onClick={() => onToggle(nodeId)}
     >
       <div className="flex items-center">
         {uniqueIcons.map((icon, index) => (

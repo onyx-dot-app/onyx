@@ -47,6 +47,7 @@ from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -181,7 +182,6 @@ def save_iteration(
 
         research_agent_iteration_sub_step = ResearchAgentIterationSubStep(
             primary_question_id=message_id,
-            parent_question_id=None,
             iteration_nr=iteration_answer.iteration_nr,
             iteration_sub_step_nr=iteration_answer.parallelization_nr,
             sub_step_instructions=iteration_answer.question,
@@ -339,7 +339,7 @@ def closer(
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
                 timeout_override=60,
-                answer_piece="message_delta",
+                answer_piece=StreamingType.MESSAGE_DELTA.value,
                 ind=current_step_nr,
                 context_docs=all_context_llmdocs,
                 replace_citations=True,

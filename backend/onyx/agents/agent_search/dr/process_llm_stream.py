@@ -8,7 +8,9 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import CitationResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import (
@@ -74,7 +76,7 @@ def process_llm_stream(
 
                 # only stream out answer parts
                 if (
-                    hasattr(response_part, "answer_piece")
+                    isinstance(response_part, (OnyxAnswerPiece, AgentAnswerPiece))
                     and generate_final_answer
                     and response_part.answer_piece
                 ):

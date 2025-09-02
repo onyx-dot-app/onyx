@@ -61,6 +61,11 @@ export interface BookstackCredentialJson {
   bookstack_api_token_secret: string;
 }
 
+export interface OutlineCredentialJson {
+  outline_base_url: string;
+  outline_api_token: string;
+}
+
 export interface ConfluenceCredentialJson {
   confluence_username: string;
   confluence_access_token: string;
@@ -268,6 +273,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bookstack_api_token_id: "",
     bookstack_api_token_secret: "",
   } as BookstackCredentialJson,
+  outline: {
+    outline_base_url: "",
+    outline_api_token: "",
+  } as OutlineCredentialJson,
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
@@ -453,6 +462,11 @@ export const credentialDisplayNames: Record<string, string> = {
   bookstack_base_url: "Bookstack Base URL",
   bookstack_api_token_id: "Bookstack API Token ID",
   bookstack_api_token_secret: "Bookstack API Token Secret",
+
+  // Outline
+  outline_base_url:
+    "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
+  outline_api_token: "Outline API Token",
 
   // Confluence
   confluence_username: "Confluence Username",

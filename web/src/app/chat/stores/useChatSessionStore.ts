@@ -21,7 +21,7 @@ interface ChatSessionData {
   submittedMessage: string;
   maxTokens: number;
   chatSessionSharedStatus: ChatSessionSharedStatus;
-  selectedMessageForDocDisplay: number | null;
+  selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
   hasPerformedInitialScroll: boolean;
   documentSidebarVisible: boolean;
@@ -29,7 +29,6 @@ interface ChatSessionData {
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
-  agenticGenerating: boolean;
   uncaughtError: string | null;
   loadingError: string | null;
   isReady: boolean;
@@ -73,7 +72,7 @@ interface ChatSessionStore {
   ) => void;
   updateCanContinue: (sessionId: string, canContinue: boolean) => void;
   updateSubmittedMessage: (sessionId: string, message: string) => void;
-  updateSelectedMessageForDocDisplay: (
+  updateSelectedNodeForDocDisplay: (
     sessionId: string,
     selectedMessageForDocDisplay: number | null
   ) => void;
@@ -97,8 +96,8 @@ interface ChatSessionStore {
   ) => void;
 
   // Convenience functions that automatically use current session ID
-  updateCurrentSelectedMessageForDocDisplay: (
-    selectedMessageForDocDisplay: number | null
+  updateCurrentSelectedNodeForDocDisplay: (
+    selectedNodeForDocDisplay: number | null
   ) => void;
   updateCurrentChatSessionSharedStatus: (
     chatSessionSharedStatus: ChatSessionSharedStatus
@@ -112,7 +111,6 @@ interface ChatSessionStore {
 
   // Actions - Session-specific State (previously global)
   setIsFetchingChatMessages: (sessionId: string, fetching: boolean) => void;
-  setAgenticGenerating: (sessionId: string, generating: boolean) => void;
   setUncaughtError: (sessionId: string, error: string | null) => void;
   setLoadingError: (sessionId: string, error: string | null) => void;
   setIsReady: (sessionId: string, ready: boolean) => void;
@@ -142,7 +140,7 @@ const createInitialSessionData = (
   submittedMessage: "",
   maxTokens: 128_000,
   chatSessionSharedStatus: ChatSessionSharedStatus.Private,
-  selectedMessageForDocDisplay: null,
+  selectedNodeIdForDocDisplay: null,
   abortController: new AbortController(),
   hasPerformedInitialScroll: true,
   documentSidebarVisible: false,
@@ -150,7 +148,6 @@ const createInitialSessionData = (
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
-  agenticGenerating: false,
   uncaughtError: null,
   loadingError: null,
   isReady: true,
@@ -279,11 +276,13 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { submittedMessage });
   },
 
-  updateSelectedMessageForDocDisplay: (
+  updateSelectedNodeForDocDisplay: (
     sessionId: string,
     selectedMessageForDocDisplay: number | null
   ) => {
-    get().updateSessionData(sessionId, { selectedMessageForDocDisplay });
+    get().updateSessionData(sessionId, {
+      selectedNodeIdForDocDisplay: selectedMessageForDocDisplay,
+    });
   },
 
   updateHasPerformedInitialScroll: (
@@ -328,14 +327,14 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   },
 
   // Convenience functions that automatically use current session ID
-  updateCurrentSelectedMessageForDocDisplay: (
-    selectedMessageForDocDisplay: number | null
+  updateCurrentSelectedNodeForDocDisplay: (
+    selectedNodeForDocDisplay: number | null
   ) => {
     const { currentSessionId } = get();
     if (currentSessionId) {
-      get().updateSelectedMessageForDocDisplay(
+      get().updateSelectedNodeForDocDisplay(
         currentSessionId,
-        selectedMessageForDocDisplay
+        selectedNodeForDocDisplay
       );
     }
   },
@@ -385,10 +384,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     isFetchingChatMessages: boolean
   ) => {
     get().updateSessionData(sessionId, { isFetchingChatMessages });
-  },
-
-  setAgenticGenerating: (sessionId: string, agenticGenerating: boolean) => {
-    get().updateSessionData(sessionId, { agenticGenerating });
   },
 
   setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
@@ -569,15 +564,6 @@ export const useAbortControllers = () => {
 };
 
 // Session-specific state hooks (previously global)
-export const useAgenticGenerating = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.agenticGenerating || false;
-  });
-
 export const useIsFetching = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -641,13 +627,13 @@ export const useDocumentSidebarVisible = () =>
     return currentSession?.documentSidebarVisible || false;
   });
 
-export const useSelectedMessageForDocDisplay = () =>
+export const useSelectedNodeForDocDisplay = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
     const currentSession = currentSessionId
       ? sessions.get(currentSessionId)
       : null;
-    return currentSession?.selectedMessageForDocDisplay || null;
+    return currentSession?.selectedNodeIdForDocDisplay || null;
   });
 
 export const useChatSessionSharedStatus = () =>

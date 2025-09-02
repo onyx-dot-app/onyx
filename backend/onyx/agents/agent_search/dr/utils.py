@@ -186,15 +186,10 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
     """
     # get past max_messages USER, ASSISTANT message pairs
     past_messages = chat_history[-max_messages * 2 :]
-    return (
-        "...\n"
-        if len(chat_history) > len(past_messages)
-        else ""
-        "\n".join(
-            ("user" if isinstance(msg, HumanMessage) else "you")
-            + f": {str(msg.content).strip()}"
-            for msg in past_messages
-        )
+    return ("...\n" if len(chat_history) > len(past_messages) else "") + "\n".join(
+        ("user" if isinstance(msg, HumanMessage) else "you")
+        + f": {str(msg.content).strip()}"
+        for msg in past_messages
     )
 
 

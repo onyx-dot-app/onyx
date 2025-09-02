@@ -3,7 +3,6 @@ import {
   PacketType,
   CitationDelta,
   SearchToolDelta,
-  ImageGenerationToolDelta,
   StreamingCitation,
 } from "../../services/streamingModels";
 import { FullChatState } from "./interfaces";
@@ -21,7 +20,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
-  useSelectedMessageForDocDisplay,
+  useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
 import { copyAll, handleCopy } from "../copyingUtils";
 import RegenerateOption from "../../components/RegenerateOption";
@@ -41,15 +40,15 @@ import { RendererComponent } from "./renderMessageComponent";
 export function AIMessage({
   rawPackets,
   chatState,
-  messageId,
+  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: {
   rawPackets: Packet[];
   chatState: FullChatState;
-  messageId?: number | null;
+  nodeId: number;
   otherMessagesCanSwitchTo?: number[];
-  onMessageSelection?: (messageId: number) => void;
+  onMessageSelection?: (nodeId: number) => void;
 }) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
@@ -104,7 +103,7 @@ export function AIMessage({
   };
   useEffect(() => {
     resetState();
-  }, [messageId]);
+  }, [nodeId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
   if (lastProcessedIndexRef.current > rawPackets.length) {
@@ -192,12 +191,12 @@ export function AIMessage({
 
   // Use store for document sidebar
   const documentSidebarVisible = useDocumentSidebarVisible();
-  const selectedMessageForDocDisplay = useSelectedMessageForDocDisplay();
+  const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const updateCurrentSelectedMessageForDocDisplay = useChatSessionStore(
-    (state) => state.updateCurrentSelectedMessageForDocDisplay
+  const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
+    (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
 
   // Calculate unique source count
@@ -221,7 +220,7 @@ export function AIMessage({
     getPreviousMessage,
     getNextMessage,
   } = useMessageSwitching({
-    messageId,
+    nodeId,
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
@@ -230,7 +229,11 @@ export function AIMessage({
 
   // Return a list of rendered message components, one for each ind
   return (
-    <div className="py-5 ml-4 lg:px-5 relative flex">
+    <div
+      // for e2e tests
+      data-testid={displayComplete ? "onyx-ai-message" : undefined}
+      className="py-5 ml-4 lg:px-5 relative flex"
+    >
       <div className="mx-auto w-[90%] max-w-message-max">
         <div className="lg:mr-12 mobile:ml-0 md:ml-8">
           <div className="flex items-start">
@@ -250,7 +253,7 @@ export function AIMessage({
                     >
                       {groupedPackets.length === 0 ? (
                         // Show blinking dot when no content yet but message is generating
-                        <BlinkingDot />
+                        <BlinkingDot addMargin />
                       ) : (
                         (() => {
                           // Simple split: tools vs non-tools
@@ -404,7 +407,7 @@ export function AIMessage({
                               </CustomTooltip>
                             )}
 
-                            {messageId &&
+                            {nodeId &&
                               (citations.length > 0 ||
                                 documentMap.size > 0) && (
                                 <>
@@ -419,23 +422,23 @@ export function AIMessage({
                                     <CitedSourcesToggle
                                       citations={citations}
                                       documentMap={documentMap}
-                                      messageId={messageId}
-                                      onToggle={(messageId) => {
+                                      nodeId={nodeId}
+                                      onToggle={(toggledNodeId) => {
                                         // Toggle sidebar if clicking on the same message
                                         if (
                                           selectedMessageForDocDisplay ===
-                                            messageId &&
+                                            toggledNodeId &&
                                           documentSidebarVisible
                                         ) {
                                           updateCurrentDocumentSidebarVisible(
                                             false
                                           );
-                                          updateCurrentSelectedMessageForDocDisplay(
+                                          updateCurrentSelectedNodeForDocDisplay(
                                             null
                                           );
                                         } else {
-                                          updateCurrentSelectedMessageForDocDisplay(
-                                            messageId
+                                          updateCurrentSelectedNodeForDocDisplay(
+                                            toggledNodeId
                                           );
                                           updateCurrentDocumentSidebarVisible(
                                             true

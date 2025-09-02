@@ -121,7 +121,7 @@ export const MessageTextRenderer: MessageRenderer<
       content.length > 0 || packets.length > 0 ? (
         renderedContent
       ) : (
-        <BlinkingDot />
+        <BlinkingDot addMargin />
       ),
   });
 };

@@ -45,6 +45,10 @@ class OrchestrationClarificationInfo(BaseModel):
     clarification_response: str | None = None
 
 
+class WebSearchAnswer(BaseModel):
+    urls_to_open_indices: list[int]
+
+
 class SearchAnswer(BaseModel):
     reasoning: str
     answer: str

@@ -35,13 +35,12 @@ def get_dr_prompt_orchestration_templates(
         f"{tool_name}: {tool.cost}" for tool_name, tool in available_tools.items()
     )
 
-    tool_differentiations: list[str] = []
-    for tool_1 in available_tools:
-        for tool_2 in available_tools:
-            if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS:
-                tool_differentiations.append(
-                    TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
-                )
+    tool_differentiations: list[str] = [
+        TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
+        for tool_1 in available_tools
+        for tool_2 in available_tools
+        if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS
+    ]
     tool_differentiation_hint_string = (
         "\n".join(tool_differentiations) or "(No differentiating hints available)"
     )
@@ -56,14 +55,13 @@ def get_dr_prompt_orchestration_templates(
         or "(No examples available)"
     )
 
-    if DRPath.KNOWLEDGE_GRAPH.value in available_tools:
-        if not entity_types_string or not relationship_types_string:
-            raise ValueError(
-                "Entity types and relationship types must be provided if the Knowledge Graph is used."
-            )
+    if DRPath.KNOWLEDGE_GRAPH.value in available_tools and (
+        entity_types_string or relationship_types_string
+    ):
+
         kg_types_descriptions = KG_TYPES_DESCRIPTIONS.build(
-            possible_entities=entity_types_string,
-            possible_relationships=relationship_types_string,
+            possible_entities=entity_types_string or "",
+            possible_relationships=relationship_types_string or "",
         )
     else:
         kg_types_descriptions = "(The Knowledge Graph is not used.)"

@@ -3,6 +3,15 @@ import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
+export interface UserSpecificAssistantPreference {
+  disabled_tool_ids?: number[];
+}
+
+export type UserSpecificAssistantPreferences = Record<
+  number,
+  UserSpecificAssistantPreference
+>;
+
 interface UserPreferences {
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -432,6 +441,7 @@ export enum ValidSources {
   GoogleDrive = "google_drive",
   Gmail = "gmail",
   Bookstack = "bookstack",
+  Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
   Productboard = "productboard",
@@ -488,6 +498,7 @@ export const federatedSourceToRegularSource = (
 
 export const validAutoSyncSources = [
   ValidSources.Confluence,
+  ValidSources.Jira,
   ValidSources.GoogleDrive,
   ValidSources.Gmail,
   ValidSources.Slack,

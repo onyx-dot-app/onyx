@@ -62,6 +62,7 @@ from onyx.db.enums import (
     IndexingMode,
     SyncType,
     SyncStatus,
+    MCPAuthenticationType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -81,6 +82,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.kg.models import KGStage
+from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -231,6 +233,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+    # MCP servers accessible to this user
+    accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer", secondary="mcp_server__user", back_populates="users"
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -389,8 +395,12 @@ class Document__Tag(Base):
 class Persona__Tool(Base):
     __tablename__ = "persona__tool"
 
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    tool_id: Mapped[int] = mapped_column(ForeignKey("tool.id"), primary_key=True)
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class StandardAnswer__StandardAnswerCategory(Base):
@@ -2507,6 +2517,10 @@ class Tool(Base):
     openapi_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP tool input schema. Only applies to MCP tools.
+    mcp_input_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -2516,6 +2530,10 @@ class Tool(Base):
     )
     # whether to pass through the user's OAuth token as Authorization header
     passthrough_auth: Mapped[bool] = mapped_column(Boolean, default=False)
+    # MCP server this tool is associated with (null for non-MCP tools)
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
@@ -2523,6 +2541,10 @@ class Tool(Base):
         "Persona",
         secondary=Persona__Tool.__table__,
         back_populates="tools",
+    )
+    # MCP server relationship
+    mcp_server: Mapped["MCPServer | None"] = relationship(
+        "MCPServer", back_populates="current_actions"
     )
 
 
@@ -2658,6 +2680,7 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
@@ -2698,6 +2721,20 @@ class PersonaLabel(Base):
         back_populates="labels",
         cascade="all, delete-orphan",
         single_parent=True,
+    )
+
+
+class Assistant__UserSpecificConfig(Base):
+    __tablename__ = "assistant__user_specific_config"
+
+    assistant_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    disabled_tool_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False
     )
 
 
@@ -3042,6 +3079,10 @@ class UserGroup(Base):
     credentials: Mapped[list[Credential]] = relationship(
         "Credential",
         secondary=Credential__UserGroup.__table__,
+    )
+    # MCP servers accessible to this user group
+    accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer", secondary="mcp_server__user_group", back_populates="user_groups"
     )
 
 
@@ -3419,13 +3460,8 @@ class ResearchAgentIterationSubStep(Base):
     __tablename__ = "research_agent_iteration_sub_step"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    primary_question_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
-    )
-    parent_question_id: Mapped[int | None] = mapped_column(
-        ForeignKey("research_agent_iteration_sub_step.id", ondelete="CASCADE"),
-        nullable=True,
-    )
+    primary_question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
     iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
     iteration_sub_step_nr: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -3433,7 +3469,7 @@ class ResearchAgentIterationSubStep(Base):
     )
     sub_step_instructions: Mapped[str | None] = mapped_column(String, nullable=True)
     sub_step_tool_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool.id"), nullable=True
+        ForeignKey("tool.id", ondelete="SET NULL"), nullable=True
     )
 
     # for all step-types
@@ -3455,16 +3491,7 @@ class ResearchAgentIterationSubStep(Base):
     )
 
     # Relationships
-    primary_message: Mapped["ChatMessage"] = relationship(
-        "ChatMessage",
-        foreign_keys=[primary_question_id],
-    )
-
-    parent_sub_step: Mapped["ResearchAgentIterationSubStep"] = relationship(
-        "ResearchAgentIterationSubStep",
-        foreign_keys=[parent_question_id],
-        remote_side="ResearchAgentIterationSubStep.id",
-    )
+    # Note: ChatMessage can be accessed via iteration.primary_message
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -3475,4 +3502,134 @@ class ResearchAgentIterationSubStep(Base):
             ],
             ondelete="CASCADE",
         ),
+    )
+
+
+class MCPServer(Base):
+    """Model for storing MCP server configurations"""
+
+    __tablename__ = "mcp_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Owner email of user who configured this server
+    owner: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    server_url: Mapped[str] = mapped_column(String, nullable=False)
+    # Auth type: "none", "api_token", or "oauth"
+    auth_type: Mapped[MCPAuthenticationType] = mapped_column(
+        Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    )
+    # Admin connection config - used for the config page
+    # and (when applicable) admin-managed auth
+    # and (when applicable) per-user auth
+    admin_connection_config_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_connection_config.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
+        "MCPConnectionConfig",
+        foreign_keys=[admin_connection_config_id],
+        back_populates="admin_servers",
+    )
+
+    user_connection_configs: Mapped[list["MCPConnectionConfig"]] = relationship(
+        "MCPConnectionConfig",
+        foreign_keys="MCPConnectionConfig.mcp_server_id",
+        back_populates="mcp_server",
+    )
+    current_actions: Mapped[list["Tool"]] = relationship(
+        "Tool", back_populates="mcp_server", cascade="all, delete-orphan"
+    )
+    # Many-to-many relationships for access control
+    users: Mapped[list["User"]] = relationship(
+        "User", secondary="mcp_server__user", back_populates="accessible_mcp_servers"
+    )
+    user_groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="mcp_server__user_group",
+        back_populates="accessible_mcp_servers",
+    )
+
+
+class MCPServer__User(Base):
+    __tablename__ = "mcp_server__user"
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class MCPServer__UserGroup(Base):
+    __tablename__ = "mcp_server__user_group"
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id"), primary_key=True
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class MCPConnectionConfig(Base):
+    """Model for storing MCP connection configurations (credentials, auth data)"""
+
+    __tablename__ = "mcp_connection_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Server this config is for (nullable for template configs)
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
+    )
+    # User email this config is for (empty for admin configs and templates)
+    user_email: Mapped[str] = mapped_column(String, nullable=False, default="")
+    # Config data stored as JSON
+    # Format: {
+    #   "refresh_token": "<token>",  # OAuth only
+    #   "access_token": "<token>",   # OAuth only
+    #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
+    #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
+    #   "client_id": "<id>",  # For dynamically registered OAuth clients
+    #   "client_secret": "<secret>",  # For confidential clients
+    #   "registration_access_token": "<token>",  # For managing registration
+    #   "registration_client_uri": "<uri>",  # For managing registration
+    # }
+    config: Mapped[MCPConnectionData] = mapped_column(
+        EncryptedJson(), nullable=False, default=dict
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    mcp_server: Mapped["MCPServer | None"] = relationship(
+        "MCPServer",
+        foreign_keys=[mcp_server_id],
+        back_populates="user_connection_configs",
+    )
+    admin_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer",
+        foreign_keys="MCPServer.admin_connection_config_id",
+        back_populates="admin_connection_config",
+    )
+
+    __table_args__ = (
+        Index("ix_mcp_connection_config_user_email", "user_email"),
+        Index("ix_mcp_connection_config_server_user", "mcp_server_id", "user_email"),
     )

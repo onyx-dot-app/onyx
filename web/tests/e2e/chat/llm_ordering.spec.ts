@@ -6,6 +6,7 @@ import {
   verifyCurrentModel,
   switchModel,
   startNewChat,
+  verifyAssistantIsChosen,
 } from "../utils/chatActions";
 
 test("LLM Ordering and Model Switching", async ({ page }) => {
@@ -29,17 +30,13 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   // Test Art Assistant: Should use its own model (GPT 4o)
   await page.reload();
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-3]",
-    "Assistant for generating"
-  );
+  await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
   await sendMessage(page, "Sample message");
   await verifyCurrentModel(page, "GPT 4o");
 
   // Test new chat: Should use Art Assistant's model initially
   await startNewChat(page);
-  await expect(page.getByText("Assistant for generating")).toBeVisible();
+  await verifyAssistantIsChosen(page, "Art");
   await verifyCurrentModel(page, "GPT 4o");
 
   // Test another new chat: Should use user's default model (o3 Mini)
@@ -73,10 +70,6 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyCurrentModel(page, "o3 Mini");
 
   // Switch back to Art Assistant and verify its model
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-3]",
-    "Assistant for generating"
-  );
+  await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
   await verifyCurrentModel(page, "GPT 4o");
 });

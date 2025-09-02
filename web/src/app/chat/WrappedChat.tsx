@@ -1,9 +1,10 @@
 "use client";
+
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPage } from "./components/ChatPage";
-import FunctionalWrapper from "../../components/chat/FunctionalWrapper";
+import { useCallback, useState } from "react";
 
-export default function WrappedChat({
+export default function ChatLayout({
   firstMessage,
   defaultSidebarOff,
 }: {
@@ -14,16 +15,25 @@ export default function WrappedChat({
 }) {
   const { sidebarInitiallyVisible } = useChatContext();
 
+  const [sidebarVisible, setSidebarVisible] = useState(
+    (sidebarInitiallyVisible && !defaultSidebarOff) ?? false
+  );
+
+  const toggle = useCallback((value?: boolean) => {
+    setSidebarVisible((sidebarVisiblePrevValue) =>
+      value !== undefined ? value : !sidebarVisiblePrevValue
+    );
+  }, []);
+
   return (
-    <FunctionalWrapper
-      initiallyVisible={sidebarInitiallyVisible && !defaultSidebarOff}
-      content={(sidebarVisible, toggle) => (
+    <>
+      <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
         <ChatPage
           toggle={toggle}
           sidebarVisible={sidebarVisible}
           firstMessage={firstMessage}
         />
-      )}
-    />
+      </div>
+    </>
   );
 }

@@ -20,8 +20,8 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.threadpool_concurrency import run_with_timeout
-
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
@@ -91,7 +91,7 @@ def stream_llm_answer(
 
         start_stream_token = datetime.now()
 
-        if answer_piece == "message_delta":
+        if answer_piece == StreamingType.MESSAGE_DELTA.value:
             if ind is None:
                 raise ValueError("index is required when answer_piece is message_delta")
 
@@ -108,18 +108,18 @@ def stream_llm_answer(
 
             write_custom_event(
                 ind,
-                MessageDelta(content=content, type="message_delta"),
+                MessageDelta(content=content),
                 writer,
             )
 
-        elif answer_piece == "reasoning_delta":
+        elif answer_piece == StreamingType.REASONING_DELTA.value:
             if ind is None:
                 raise ValueError(
                     "index is required when answer_piece is reasoning_delta"
                 )
             write_custom_event(
                 ind,
-                ReasoningDelta(reasoning=content, type="reasoning_delta"),
+                ReasoningDelta(reasoning=content),
                 writer,
             )
 

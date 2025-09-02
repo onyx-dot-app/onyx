@@ -34,6 +34,7 @@ import {
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
+import outlinePNG from "../../../public/Outline.png";
 import jiraSVG from "../../../public/Jira.svg";
 import confluenceSVG from "../../../public/Confluence.svg";
 import deepseekSVG from "../../../public/Deepseek.svg";
@@ -390,6 +391,121 @@ export const PlusCircleIcon = ({
         d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75s9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z"
         clipRule="evenodd"
       />
+    </svg>
+  );
+};
+
+export const AppSearchIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <path
+        d="M1.00261 7.5H2.5M1 4H3.25M1.00261 11H3.25M15 13L12.682 10.682M12.682 10.682C13.4963 9.86764 14 8.74264 14 7.5C14 5.01472 11.9853 3 9.49999 3C7.01472 3 5 5.01472 5 7.5C5 9.98528 7.01472 12 9.49999 12C10.7426 12 11.8676 11.4963 12.682 10.682Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+export const DisableIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <g clipPath="url(#clip0_295_7943)">
+        <path
+          d="M3.28659 3.28665L12.7133 12.7133M14.6666 7.99998C14.6666 11.6819 11.6818 14.6666 7.99992 14.6666C4.31802 14.6666 1.33325 11.6819 1.33325 7.99998C1.33325 4.31808 4.31802 1.33331 7.99992 1.33331C11.6818 1.33331 14.6666 4.31808 14.6666 7.99998Z"
+          stroke="currentColor"
+          strokeOpacity="0.4"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </g>
+      <defs>
+        <clipPath id="clip0_295_7943">
+          <rect width="16" height="16" fill="white" />
+        </clipPath>
+      </defs>
+    </svg>
+  );
+};
+
+export const MoreActionsIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <path
+        d="M3.06 6.24449L5.12 4.12225L3.06 2.00001M11.5501 14L14 11.5501M14 11.5501L11.5501 9.10017M14 11.5501H9.75552M4.12224 9.09889L6.24448 10.3242V12.7747L4.12224 14L2 12.7747V10.3242L4.12224 9.09889ZM14 4.12225C14 5.29433 13.0498 6.24449 11.8778 6.24449C10.7057 6.24449 9.75552 5.29433 9.75552 4.12225C9.75552 2.95017 10.7057 2.00001 11.8778 2.00001C13.0498 2.00001 14 2.95017 14 4.12225Z"
+        stroke="currentColor"
+        strokeOpacity="0.4"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+export const SlidersVerticalIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <g clipPath="url(#clip0_16_2627)">
+        <path
+          d="M2.66666 14V9.33333M2.66666 6.66667V2M7.99999 14V8M7.99999 5.33333V2M13.3333 14V10.6667M13.3333 8V2M0.666656 9.33333H4.66666M5.99999 5.33333H9.99999M11.3333 10.6667H15.3333"
+          stroke="currentColor"
+          strokeOpacity="0.8"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </g>
+      <defs>
+        <clipPath id="clip0_16_2627">
+          <rect width="16" height="16" fill="white" />
+        </clipPath>
+      </defs>
     </svg>
   );
 };
@@ -1147,6 +1263,17 @@ export const BookstackIcon = ({
 }: IconProps) => {
   return <SiBookstack size={size} className={className} />;
 };
+
+export const OutlineIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon
+    size={size + 4}
+    className={`${className} -m-0.5`}
+    src={outlinePNG}
+  />
+);
 
 export const ConfluenceIcon = ({
   size = 16,

@@ -36,7 +36,9 @@ export function Checkbox({
         className="mr-2 w-3.5 h-3.5 my-auto"
       />
       <div>
-        <Label small>{label}</Label>
+        <span className="block font-medium text-text-700 dark:text-neutral-100 text-sm">
+          {label}
+        </span>
         {sublabel && <SubLabel>{sublabel}</SubLabel>}
       </div>
     </label>

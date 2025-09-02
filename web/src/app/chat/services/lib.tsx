@@ -176,6 +176,8 @@ export interface SendMessageParams {
   userFileIds?: number[];
   userFolderIds?: number[];
   useAgentSearch?: boolean;
+  enabledToolIds?: number[];
+  forcedToolIds?: number[];
 }
 
 export async function* sendMessage({
@@ -198,6 +200,8 @@ export async function* sendMessage({
   alternateAssistantId,
   signal,
   useAgentSearch,
+  enabledToolIds,
+  forcedToolIds,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
@@ -238,6 +242,8 @@ export async function* sendMessage({
         : null,
     use_existing_user_message: useExistingUserMessage,
     use_agentic_search: useAgentSearch ?? false,
+    allowed_tool_ids: enabledToolIds,
+    forced_tool_ids: forcedToolIds,
   });
 
   const response = await fetch(`/api/chat/send-message`, {
@@ -484,6 +490,9 @@ export function processRawChatHistory(
     }
 
     const message: Message = {
+      // for existing messages, use the message_id as the nodeId
+      // all that matters is that the nodeId is unique for a given chat session
+      nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
       message: messageInfo.message,
       type: messageInfo.message_type as "user" | "assistant",
@@ -503,9 +512,9 @@ export function processRawChatHistory(
           }
         : {}),
       toolCall: messageInfo.tool_call,
-      parentMessageId: messageInfo.parent_message,
-      childrenMessageIds: [],
-      latestChildMessageId: messageInfo.latest_child_message,
+      parentNodeId: messageInfo.parent_message,
+      childrenNodeIds: [],
+      latestChildNodeId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
     };
@@ -529,7 +538,7 @@ export function processRawChatHistory(
     childrenIds.sort((a, b) => a - b);
     const parentMesage = messages.get(parentId);
     if (parentMesage) {
-      parentMesage.childrenMessageIds = childrenIds;
+      parentMesage.childrenNodeIds = childrenIds;
     }
   });
 

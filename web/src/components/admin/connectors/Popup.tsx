@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
@@ -85,7 +85,7 @@ export const usePopup = () => {
   const [popup, setPopup] = useState<PopupSpec | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const setPopupWithExpiration = (popupSpec: PopupSpec | null) => {
+  const setPopupWithExpiration = useCallback((popupSpec: PopupSpec | null) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -97,7 +97,7 @@ export const usePopup = () => {
         setPopup(null);
       }, 4000);
     }
-  };
+  }, []);
 
   return {
     popup: popup && <Popup {...popup} />,

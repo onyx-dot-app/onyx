@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from collections.abc import Mapping
+from enum import Enum
 from typing import Annotated
 from typing import Literal
 from typing import Union
@@ -189,3 +190,18 @@ class Packet(BaseModel):
 class EndStepPacketList(BaseModel):
     end_step_nr: int
     packet_list: list[Packet]
+
+
+class StreamingType(Enum):
+    MESSAGE_START = "message_start"
+    MESSAGE_DELTA = "message_delta"
+    INTERNAL_SEARCH_TOOL_START = "internal_search_tool_start"
+    INTERNAL_SEARCH_TOOL_DELTA = "internal_search_tool_delta"
+    IMAGE_GENERATION_TOOL_START = "image_generation_tool_start"
+    IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta"
+    REASONING_START = "reasoning_start"
+    REASONING_DELTA = "reasoning_delta"
+    CITATION_START = "citation_start"
+    CITATION_DELTA = "citation_delta"
+    CUSTOM_TOOL_START = "custom_tool_start"
+    CUSTOM_TOOL_DELTA = "custom_tool_delta"

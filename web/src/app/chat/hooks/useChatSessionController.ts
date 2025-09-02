@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
 import {
   nameChatSession,
@@ -25,6 +25,7 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { getCitations } from "../services/packetUtils";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -103,14 +104,15 @@ export function useChatSessionController({
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
-  const updateCurrentSelectedMessageForDocDisplay = useChatSessionStore(
-    (state) => state.updateCurrentSelectedMessageForDocDisplay
+  const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
+    (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
   const currentChatState = useChatSessionStore(
     (state) =>
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
+  const { setForcedToolIds } = useAssistantsContext();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -142,6 +144,9 @@ export function useChatSessionController({
         if (existingChatSessionId) {
           updateHasPerformedInitialScroll(existingChatSessionId, false);
         }
+
+        // Clear forced tool ids if and only if we're switching to a new chat session
+        setForcedToolIds([]);
       }
     }
 
@@ -205,13 +210,8 @@ export function useChatSessionController({
           currentChatState == "loading"
         )
       ) {
-        const latestMessageId =
-          newMessageHistory[newMessageHistory.length - 1]?.messageId;
-
-        updateCurrentSelectedMessageForDocDisplay(
-          latestMessageId !== undefined && latestMessageId !== null
-            ? latestMessageId
-            : null
+        updateCurrentSelectedNodeForDocDisplay(
+          newMessageHistory[newMessageHistory.length - 1]?.nodeId ?? null
         );
 
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
@@ -305,26 +305,36 @@ export function useChatSessionController({
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
 
-  const onMessageSelection = (messageId: number) => {
-    updateCurrentSelectedMessageForDocDisplay(messageId);
-    const currentMessageTree = useChatSessionStore
-      .getState()
-      .sessions.get(
-        useChatSessionStore.getState().currentSessionId || ""
-      )?.messageTree;
+  const onMessageSelection = useCallback(
+    (nodeId: number) => {
+      updateCurrentSelectedNodeForDocDisplay(nodeId);
+      const currentMessageTree = useChatSessionStore
+        .getState()
+        .sessions.get(
+          useChatSessionStore.getState().currentSessionId || ""
+        )?.messageTree;
 
-    if (currentMessageTree) {
-      const newMessageTree = setMessageAsLatest(currentMessageTree, messageId);
-      const currentSessionId = useChatSessionStore.getState().currentSessionId;
-      if (currentSessionId) {
-        updateSessionMessageTree(currentSessionId, newMessageTree);
+      if (currentMessageTree) {
+        const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);
+        const currentSessionId =
+          useChatSessionStore.getState().currentSessionId;
+        if (currentSessionId) {
+          updateSessionMessageTree(currentSessionId, newMessageTree);
+        }
+
+        const message = currentMessageTree.get(nodeId);
+
+        if (message?.messageId) {
+          // Makes actual API call to set message as latest in the DB so we can
+          // edit this message and so it sticks around on page reload
+          patchMessageToBeLatest(message.messageId);
+        } else {
+          console.error("Message has no messageId", nodeId);
+        }
       }
-    }
-
-    // Makes actual API call to set message as latest in the DB so we can
-    // edit this message and so it sticks around on page reload
-    patchMessageToBeLatest(messageId);
-  };
+    },
+    [updateCurrentSelectedNodeForDocDisplay, updateSessionMessageTree]
+  );
 
   return {
     onMessageSelection,

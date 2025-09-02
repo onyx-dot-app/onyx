@@ -37,6 +37,7 @@ from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import SUFFICIENT_INFORMATION_STRING
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -163,7 +164,6 @@ def orchestrator(
     all_relationship_types = get_relationship_types_str(active=True)
 
     # default to closer
-    next_tool = DRPath.CLOSER.value
     query_list = ["Answer the question with the information you have."]
     decision_prompt = None
 
@@ -212,7 +212,7 @@ def orchestrator(
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
                     timeout_override=60,
-                    answer_piece="reasoning_delta",
+                    answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                     # max_tokens=None,
                 ),
@@ -253,7 +253,7 @@ def orchestrator(
                     ],
                 )
 
-        # for Thoightful mode, we force a tool if requested an available
+        # for Thoughtful mode, we force a tool if requested an available
         available_tools_for_decision = available_tools
         force_use_tool = graph_config.tooling.force_use_tool
         if iteration_nr == 1 and force_use_tool and force_use_tool.force_use:
@@ -310,7 +310,16 @@ def orchestrator(
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool].cost
+            if next_tool_name in available_tools.keys():
+                remaining_time_budget -= available_tools[next_tool_name].cost
+            else:
+                logger.warning(f"Tool {next_tool_name} not found in available tools")
+                remaining_time_budget -= 1.0
+
+        else:
+            reasoning_result = "Time to wrap up."
+            next_tool_name = DRPath.CLOSER.value
+
     else:
         if iteration_nr == 1 and not plan_of_record:
             # by default, we start a new iteration, but if there is a feedback request,
@@ -348,9 +357,7 @@ def orchestrator(
 
             write_custom_event(
                 current_step_nr,
-                ReasoningStart(
-                    type="reasoning_start",
-                ),
+                ReasoningStart(),
                 writer,
             )
 
@@ -371,22 +378,13 @@ def orchestrator(
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
                     timeout_override=60,
-                    answer_piece="reasoning_delta",
+                    answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                 ),
             )
 
             end_time = datetime.now()
             logger.debug(f"Time taken for plan streaming: {end_time - start_time}")
-
-            # write_custom_event(
-            #     current_step_nr,
-            #     ReasoningDelta(
-            #         reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
-            #         type="reasoning_delta",
-            #     ),
-            #     writer,
-            # )
 
             write_custom_event(
                 current_step_nr,
@@ -434,8 +432,6 @@ def orchestrator(
                 next_step = orchestrator_action.next_step
                 next_tool_name = next_step.tool
 
-                next_tool = available_tools[next_tool_name].path
-
                 query_list = [q for q in (next_step.questions or [])]
                 reasoning_result = orchestrator_action.reasoning
 
@@ -444,9 +440,14 @@ def orchestrator(
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool_name].cost
+            if next_tool_name in available_tools.keys():
+                remaining_time_budget -= available_tools[next_tool_name].cost
+            else:
+                logger.warning(f"Tool {next_tool_name} not found in available tools")
+                remaining_time_budget -= 1.0
         else:
             reasoning_result = "Time to wrap up."
+            next_tool_name = DRPath.CLOSER.value
 
         write_custom_event(
             current_step_nr,
@@ -469,19 +470,11 @@ def orchestrator(
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
                 timeout_override=60,
-                answer_piece="reasoning_delta",
+                answer_piece=StreamingType.REASONING_DELTA.value,
                 ind=current_step_nr,
                 # max_tokens=None,
             ),
         )
-
-        # write_custom_event(
-        #     current_step_nr,
-        #     ReasoningDelta(
-        #         reasoning=reasoning_result,
-        #     ),
-        #     writer,
-        # )
 
         write_custom_event(
             current_step_nr,
@@ -528,7 +521,7 @@ def orchestrator(
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
                 timeout_override=60,
-                answer_piece="reasoning_delta",
+                answer_piece=StreamingType.REASONING_DELTA.value,
                 ind=current_step_nr,
                 # max_tokens=None,
             ),
