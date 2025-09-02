@@ -11,6 +11,7 @@ import {
 import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
 import {
+  FiArrowRight,
   FiCheck,
   FiEdit2,
   FiMoreHorizontal,
@@ -27,6 +28,7 @@ import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useChatContext } from "@/components/context/ChatContext";
+import { removeChatFromFolder } from "@/app/chat/components/folders/FolderManagement";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -36,6 +38,7 @@ export function ChatSessionDisplay({
   showShareModal,
   showDeleteModal,
   isDragging,
+  parentFolderName,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -44,6 +47,7 @@ export function ChatSessionDisplay({
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
   isDragging?: boolean;
+  parentFolderName?: string;
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
@@ -96,6 +100,23 @@ export function ChatSessionDisplay({
     },
     [chatSession, showDeleteModal, refreshChatSessions, refreshFolders]
   );
+
+  const handleMoveOutOfFolder = useCallback(async () => {
+    try {
+      if (chatSession.folder_id == null) return;
+      await removeChatFromFolder(chatSession.folder_id, chatSession.id);
+      await refreshChatSessions();
+      await refreshFolders();
+      setPopoverOpen(false);
+    } catch (e) {
+      console.error("Failed to move chat out of folder", e);
+    }
+  }, [
+    chatSession.folder_id,
+    chatSession.id,
+    refreshChatSessions,
+    refreshFolders,
+  ]);
 
   const onRename = useCallback(
     async (e?: React.MouseEvent) => {
@@ -326,7 +347,7 @@ export function ChatSessionDisplay({
                             popover={
                               <div
                                 className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                                  isDeleteModalOpen ? "w-64" : "w-32"
+                                  isDeleteModalOpen ? "w-64" : "w-50"
                                 }`}
                               >
                                 {!isDeleteModalOpen ? (
@@ -345,6 +366,13 @@ export function ChatSessionDisplay({
                                         name="Rename"
                                         icon={FiEdit2}
                                         onSelect={() => setIsRenamingChat(true)}
+                                      />
+                                    )}
+                                    {chatSession.folder_id !== null && (
+                                      <DefaultDropdownElement
+                                        name={`Move out of ${parentFolderName ?? "group"}?`}
+                                        icon={FiArrowRight}
+                                        onSelect={handleMoveOutOfFolder}
                                       />
                                     )}
                                     <DefaultDropdownElement
