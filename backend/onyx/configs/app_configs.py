@@ -717,3 +717,20 @@ FLOWISE_BASE_URL = os.environ.get("REACT_APP_FLOWISE_URL")
 RESUME_BASE_URL = os.environ.get("REACT_APP_FLOWISE_URL")
 
 FLOWISE_API_KEY = os.environ.get("FLOWISE_API_KEY")
+
+# Applicable for OIDC Auth
+OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL", "")
+
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass

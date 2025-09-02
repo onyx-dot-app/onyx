@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -45,6 +46,8 @@ from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import OPENID_CONFIG_URL
+from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine import SqlEngine
@@ -450,6 +453,43 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         include_auth_router_with_prefix(
             application,
             fastapi_users.get_logout_router(auth_backend),
+            prefix="/auth",
+        )
+
+    if AUTH_TYPE == AuthType.OIDC:
+        # Ensure we request offline_access for refresh tokens
+        try:
+            oidc_scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+            if "offline_access" not in oidc_scopes:
+                oidc_scopes.append("offline_access")
+        except Exception as e:
+            logger.warning(f"Error configuring OIDC scopes: {e}")
+            # Fall back to default scopes if there's an error
+            oidc_scopes = BASE_SCOPES
+
+        include_auth_router_with_prefix(
+            application,
+            create_onyx_oauth_router(
+                OpenID(
+                    OAUTH_CLIENT_ID,
+                    OAUTH_CLIENT_SECRET,
+                    OPENID_CONFIG_URL,
+                    # Use the configured scopes
+                    base_scopes=oidc_scopes,
+                ),
+                auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+            ),
+            prefix="/auth/oidc",
+        )
+
+        # need basic auth router for `logout` endpoint
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
         )
 
