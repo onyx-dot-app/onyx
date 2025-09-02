@@ -2,10 +2,8 @@
 
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
 import {
-  ClipboardIcon,
   NotebookIconSkeleton,
   ConnectorIconSkeleton,
-  ThumbsUpIconSkeleton,
   ToolIconSkeleton,
   CpuIconSkeleton,
   UsersIconSkeleton,
@@ -15,7 +13,6 @@ import {
   DatabaseIconSkeleton,
   SettingsIconSkeleton,
   PaintingIconSkeleton,
-  ZoomInIconSkeleton,
   SlackIconSkeleton,
   DocumentSetIconSkeleton,
   AssistantsIconSkeleton,
@@ -65,35 +62,7 @@ const connectors_items = () => [
   },
 ];
 
-const document_management_items = () => [
-  {
-    name: (
-      <div className="flex">
-        <DocumentSetIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Document Sets</div>
-      </div>
-    ),
-    link: "/admin/documents/sets",
-  },
-  {
-    name: (
-      <div className="flex">
-        <ZoomInIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Explorer</div>
-      </div>
-    ),
-    link: "/admin/documents/explorer",
-  },
-  {
-    name: (
-      <div className="flex">
-        <ThumbsUpIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Feedback</div>
-      </div>
-    ),
-    link: "/admin/documents/feedback",
-  },
-];
+// Document Management group removed; Document Sets moved under Assistants
 
 const custom_assistants_items = (
   isCurator: boolean,
@@ -108,6 +77,15 @@ const custom_assistants_items = (
         </div>
       ),
       link: "/admin/assistants",
+    },
+    {
+      name: (
+        <div className="flex">
+          <DocumentSetIconSkeleton className="text-text-700" size={18} />
+          <div className="ml-1">Document Sets</div>
+        </div>
+      ),
+      link: "/admin/documents/sets",
     },
   ];
 
@@ -134,17 +112,7 @@ const custom_assistants_items = (
     );
   }
 
-  if (enableEnterprise) {
-    items.push({
-      name: (
-        <div className="flex">
-          <ClipboardIcon className="text-text-700" size={18} />
-          <div className="ml-1">Standard Answers</div>
-        </div>
-      ),
-      link: "/admin/standard-answer",
-    });
-  }
+  // Standard Answers removed from sidebar
 
   return items;
 };
@@ -160,10 +128,6 @@ const collections = (
   {
     name: "Connectors",
     items: connectors_items(),
-  },
-  {
-    name: "Document Management",
-    items: document_management_items(),
   },
   {
     name: "Custom Assistants",
@@ -427,7 +391,14 @@ export function ClientLayout({
   }
 
   return (
-    <div className="h-screen w-screen flex overflow-y-hidden">
+    <div
+      className="h-screen w-screen flex overflow-y-hidden"
+      style={{
+        ["--background-input-background" as any]: "#FAFAFA",
+        ["--background" as any]: "#FAFAFA",
+        ["--background-chatbar-sidebar" as any]: "#F0F0F1",
+      }}
+    >
       {popup}
 
       {userSettingsOpen && (
@@ -472,7 +443,7 @@ export function ClientLayout({
           )}
         />
       </div>
-      <div className="overflow-y-scroll w-full">
+      <div className="overflow-y-scroll w-full bg-background">
         <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 mb-auto w-full items-start flex justify-end">
           <UserDropdown toggleUserSettings={toggleUserSettings} />
         </div>

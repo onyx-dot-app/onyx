@@ -28,12 +28,12 @@ export default function SourceTile({
               w-40
               cursor-pointer
               shadow-md
-              hover:bg-accent-background-hovered
+              hover:bg-background-settings-hover/50
               relative
               ${
                 preSelect
-                  ? "bg-accent-background-hovered subtle-pulse"
-                  : "bg-accent-background"
+                  ? "bg-background-settings-hover subtle-pulse"
+                  : "bg-background-sidebar"
               }
             `}
       href={navigationUrl}

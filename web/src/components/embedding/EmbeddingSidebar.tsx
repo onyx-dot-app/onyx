@@ -24,13 +24,12 @@ export default function EmbeddingSidebar() {
         className={`flex-none
                   h-screen
                   transition-all
-                  bg-opacity-80
                   duration-300
                   ease-in-out
                   w-[250px]
                   `}
       >
-        <div className="fixed h-full left-0 top-0 bg- w-[250px]">
+        <div className="fixed h-full left-0 top-0 w-[250px] bg-background-sidebar">
           <div className="ml-4 mr-3 flex flex gap-x-1 items-center mt-2 my-auto text-text-700 text-xl">
             <div className="mr-1 my-auto h-6 w-6">
               <Logo height={24} width={24} />

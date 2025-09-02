@@ -75,7 +75,7 @@ export function Modal({
           }
         }}
         className={`
-          bg-neutral-50 dark:bg-neutral-800
+          bg-[#FAFAFA] dark:bg-neutral-800
           text-neutral-950 dark:text-neutral-50
           rounded
           shadow-2xl
