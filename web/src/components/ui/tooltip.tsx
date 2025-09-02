@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 // Default the provider delay to a snappier, consistent value
 const TooltipProvider: React.FC<
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>
-> = ({ delayDuration = 300, skipDelayDuration = 200, ...props }) => (
+> = ({ delayDuration = 400, skipDelayDuration = 200, ...props }) => (
   <TooltipPrimitive.Provider
     delayDuration={delayDuration}
     skipDelayDuration={skipDelayDuration}
