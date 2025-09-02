@@ -139,7 +139,6 @@ def get_user_chat_sessions(
                 time_created=chat.time_created.isoformat(),
                 time_updated=chat.time_updated.isoformat(),
                 shared_status=chat.shared_status,
-                folder_id=chat.folder_id,
                 current_alternate_model=chat.current_alternate_model,
                 current_temperature_override=chat.temperature_override,
             )
@@ -868,7 +867,6 @@ async def search_chats(
             persona_id=session.persona_id,
             time_created=session.time_created,
             shared_status=session.shared_status,
-            folder_id=session.folder_id,
             current_alternate_model=session.current_alternate_model,
             current_temperature_override=session.temperature_override,
         )

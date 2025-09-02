@@ -241,7 +241,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     if (shouldPoll && pollIntervalRef.current === null) {
       // Kick once immediately, then start interval
       runRefresh();
-      pollIntervalRef.current = window.setInterval(runRefresh, 1000);
+      pollIntervalRef.current = window.setInterval(runRefresh, 3000);
     }
 
     if (!shouldPoll && pollIntervalRef.current !== null) {

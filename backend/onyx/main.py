@@ -65,7 +65,6 @@ from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
 )
 from onyx.server.features.document_set.api import router as document_set_router
-from onyx.server.features.folder.api import router as folder_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
@@ -356,7 +355,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, cc_pair_router)
     include_router_with_global_prefix_prepended(application, user_documents_router)
     include_router_with_global_prefix_prepended(application, projects_router)
-    include_router_with_global_prefix_prepended(application, folder_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(

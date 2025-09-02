@@ -210,9 +210,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
     )
-    chat_folders: Mapped[list["ChatFolder"]] = relationship(
-        "ChatFolder", back_populates="user"
-    )
 
     input_prompts: Mapped[list["InputPrompt"]] = relationship(
         "InputPrompt", back_populates="user"
@@ -2035,9 +2032,6 @@ class ChatSession(Base):
         Enum(ChatSessionSharedStatus, native_enum=False),
         default=ChatSessionSharedStatus.PRIVATE,
     )
-    folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_folder.id"), nullable=True
-    )
 
     current_alternate_model: Mapped[str | None] = mapped_column(String, default=None)
 
@@ -2078,9 +2072,6 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
-    folder: Mapped["ChatFolder"] = relationship(
-        "ChatFolder", back_populates="chat_sessions"
-    )
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
     )
@@ -2182,33 +2173,6 @@ class ChatMessage(Base):
     research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
         Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
-
-
-class ChatFolder(Base):
-    """For organizing chat sessions"""
-
-    __tablename__ = "chat_folder"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Only null if auth is off
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    name: Mapped[str | None] = mapped_column(String, nullable=True)
-    display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
-
-    user: Mapped[User] = relationship("User", back_populates="chat_folders")
-    chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        "ChatSession", back_populates="folder"
-    )
-
-    def __lt__(self, other: Any) -> bool:
-        if not isinstance(other, ChatFolder):
-            return NotImplemented
-        if self.display_priority == other.display_priority:
-            # Bigger ID (created later) show earlier
-            return self.id > other.id
-        return self.display_priority < other.display_priority
 
 
 class AgentSubQuestion(Base):
