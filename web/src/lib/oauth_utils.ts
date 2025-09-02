@@ -5,6 +5,8 @@ import {
   OAuthPrepareAuthorizationResponse,
   OAuthSlackCallbackResponse,
 } from "./types";
+import i18n from "@/i18n/init";
+import k from "../i18n/keys";
 
 // server side handler to help initiate the oauth authorization request
 export async function prepareOAuthAuthorizationRequest(
@@ -81,16 +83,22 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Не удалось обработать ответ авторизации OAuth Slack: ${response.status}`;
+    let errorDetails = `${i18n.t(k.OAUTH_FAILED_TO_PROCESS_SLACK)}: ${
+      response.status
+    }`;
 
     try {
-      const responseBody = await response.text(); // Прочитать тело как текст
-      errorDetails += `\nТело ответа: ${responseBody}`;
+      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
+      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
+          err.message
+        }`;
       } else {
-        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
+          k.OAUTH_UNKNOWN_ERROR_TYPE
+        )}`;
       }
     }
 
@@ -159,16 +167,22 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Не удалось обработать ответ авторизации OAuth Confluence: ${response.status}`;
+    let errorDetails = `${i18n.t(k.OAUTH_FAILED_TO_PROCESS_CONFLUENCE)}: ${
+      response.status
+    }`;
 
     try {
-      const responseBody = await response.text(); // Прочитать тело как текст
-      errorDetails += `\nТело ответа: ${responseBody}`;
+      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
+      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
+          err.message
+        }`;
       } else {
-        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
+          k.OAUTH_UNKNOWN_ERROR_TYPE
+        )}`;
       }
     }
 
@@ -208,16 +222,22 @@ export async function handleOAuthConfluencePrepareFinalization(
   });
 
   if (!response.ok) {
-    let errorDetails = `Не удалось обработать ответ завершения подготовки OAuth Confluence: ${response.status}`;
+    let errorDetails = `${i18n.t(
+      k.OAUTH_FAILED_TO_PROCESS_CONFLUENCE_SETUP
+    )}: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Прочитать тело как текст
-      errorDetails += `\nТело ответа: ${responseBody}`;
+      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
+      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
+          err.message
+        }`;
       } else {
-        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
+        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
+          k.OAUTH_UNKNOWN_ERROR_TYPE
+        )}`;
       }
     }
 

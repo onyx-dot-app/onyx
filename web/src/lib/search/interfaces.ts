@@ -1,6 +1,8 @@
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { Tag, ValidSources } from "../types";
 import { Persona } from "@/app/admin/assistants/interfaces";
+import i18n from "@/i18n/init";
+import k from "../../i18n/keys";
 
 export const FlowType = {
   SEARCH: "search",
@@ -181,8 +183,8 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
-  AppConnection = "Подключиться к приложениям",
-  ImportedKnowledge = "Импорт знаний",
+  AppConnection = Number(i18n.t(k.CONNECT_TO_APPS)),
+  ImportedKnowledge = Number(i18n.t(k.IMPORT_KNOWLEDGE)),
 }
 
 export interface SourceMetadata {

@@ -84,7 +84,7 @@ export function SharedChatDisplay({
     return (
       <div className="min-h-full w-full">
         <div className="mx-auto w-fit pt-8">
-          <Callout type="danger" title="Общий чат не найден">
+          <Callout type="danger" title={i18n.t(k.SHARED_CHAT_NOT_FOUND)}>
             {i18n.t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
           </Callout>
         </div>

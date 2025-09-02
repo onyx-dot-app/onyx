@@ -1,4 +1,6 @@
 import { User } from "./types";
+import i18n from "@/i18n/init";
+import k from "../i18n/keys";
 
 const conditionallyAddPlural = (solo: string, noun: string, cnt: number) => {
   if (cnt > 1) {
@@ -20,63 +22,63 @@ export const timeAgo = (
 
   if (secondsDiff < 60) {
     return `${secondsDiff} ${conditionallyAddPlural(
-      "секунду",
-      "секунд",
+      i18n.t(k.TIME_SECOND),
+      i18n.t(k.TIME_SECONDS),
       secondsDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
     return `${minutesDiff} ${conditionallyAddPlural(
-      "минуту",
-      "минут",
+      i18n.t(k.TIME_MINUTE),
+      i18n.t(k.TIME_MINUTES),
       secondsDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
   if (hoursDiff < 24) {
     return `${hoursDiff} ${conditionallyAddPlural(
-      "час",
-      "часов",
+      i18n.t(k.TIME_HOUR),
+      i18n.t(k.TIME_HOURS),
       hoursDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const daysDiff = Math.floor(hoursDiff / 24);
   if (daysDiff < 30) {
     return `${daysDiff} ${conditionallyAddPlural(
-      "день",
-      "дней",
+      i18n.t(k.TIME_DAY),
+      i18n.t(k.TIME_DAYS),
       daysDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const weeksDiff = Math.floor(daysDiff / 7);
   if (weeksDiff < 4) {
     return `${weeksDiff} ${conditionallyAddPlural(
-      "неделя",
-      "недель",
+      i18n.t(k.TIME_WEEK),
+      i18n.t(k.TIME_WEEKS),
       weeksDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const monthsDiff = Math.floor(daysDiff / 30);
   if (monthsDiff < 12) {
     return `${monthsDiff} ${conditionallyAddPlural(
-      "месяц",
-      "месяцев",
+      i18n.t(k.TIME_MONTH),
+      i18n.t(k.TIME_MONTHS),
       monthsDiff
-    )} назад`;
+    )} ${i18n.t(k.TIME_AGO)}`;
   }
 
   const yearsDiff = Math.floor(monthsDiff / 12);
   return `${yearsDiff} ${conditionallyAddPlural(
-    "год",
-    "лет",
+    i18n.t(k.TIME_YEAR),
+    i18n.t(k.TIME_YEARS),
     yearsDiff
-  )} назад`;
+  )} ${i18n.t(k.TIME_AGO)}`;
 };
 
 export function localizeAndPrettify(dateString: string) {
