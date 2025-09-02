@@ -1,5 +1,5 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "../interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { useSearchParams } from "next/navigation";
@@ -50,26 +50,29 @@ export function useAssistantController({
     [selectedAssistant, pinnedAssistants, availableAssistants]
   );
 
-  const setSelectedAssistantFromId = (
-    assistantId: number | null | undefined
-  ) => {
-    // NOTE: also intentionally look through available assistants here, so that
-    // even if the user has hidden an assistant they can still go back to it
-    // for old chats
-    let newAssistant =
-      assistantId !== null
-        ? availableAssistants.find((assistant) => assistant.id === assistantId)
-        : undefined;
+  const setSelectedAssistantFromId = useCallback(
+    (assistantId: number | null | undefined) => {
+      // NOTE: also intentionally look through available assistants here, so that
+      // even if the user has hidden an assistant they can still go back to it
+      // for old chats
+      let newAssistant =
+        assistantId !== null
+          ? availableAssistants.find(
+              (assistant) => assistant.id === assistantId
+            )
+          : undefined;
 
-    // if no assistant was passed in / found, use the default assistant
-    if (!newAssistant && defaultAssistantId !== undefined) {
-      newAssistant = availableAssistants.find(
-        (assistant) => assistant.id === defaultAssistantId
-      );
-    }
+      // if no assistant was passed in / found, use the default assistant
+      if (!newAssistant && defaultAssistantId !== undefined) {
+        newAssistant = availableAssistants.find(
+          (assistant) => assistant.id === defaultAssistantId
+        );
+      }
 
-    setSelectedAssistant(newAssistant);
-  };
+      setSelectedAssistant(newAssistant);
+    },
+    [availableAssistants, defaultAssistantId]
+  );
 
   return {
     // main assistant selection

@@ -169,7 +169,6 @@ def create_message_packets(
         Packet(
             ind=step_nr,
             obj=MessageDelta(
-                type="message_delta",
                 content=adjusted_message_text,
             ),
         ),
@@ -195,9 +194,7 @@ def create_citation_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=CitationStart(
-                type="citation_start",
-            ),
+            obj=CitationStart(),
         )
     )
 
@@ -205,7 +202,6 @@ def create_citation_packets(
         Packet(
             ind=step_nr,
             obj=CitationDelta(
-                type="citation_delta",
                 citations=citation_info_list,
             ),
         )
@@ -229,9 +225,7 @@ def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
     packets.append(
         Packet(
             ind=step_nr,
-            obj=ReasoningStart(
-                type="reasoning_start",
-            ),
+            obj=ReasoningStart(),
         )
     )
 
@@ -239,7 +233,6 @@ def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
         Packet(
             ind=step_nr,
             obj=ReasoningDelta(
-                type="reasoning_delta",
                 reasoning=reasoning_text,
             ),
         ),
@@ -265,16 +258,14 @@ def create_image_generation_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=ImageGenerationToolStart(type="image_generation_tool_start"),
+            obj=ImageGenerationToolStart(),
         )
     )
 
     packets.append(
         Packet(
             ind=step_nr,
-            obj=ImageGenerationToolDelta(
-                type="image_generation_tool_delta", images=images
-            ),
+            obj=ImageGenerationToolDelta(images=images),
         ),
     )
 
@@ -302,7 +293,7 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=CustomToolStart(type="custom_tool_start", tool_name=tool_name),
+            obj=CustomToolStart(tool_name=tool_name),
         )
     )
 
@@ -310,7 +301,6 @@ def create_custom_tool_packets(
         Packet(
             ind=step_nr,
             obj=CustomToolDelta(
-                type="custom_tool_delta",
                 tool_name=tool_name,
                 response_type=response_type,
                 # For non-file responses
@@ -1183,6 +1173,16 @@ def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | N
     return search_doc
 
 
+def get_db_search_doc_by_document_id(
+    document_id: str, db_session: Session
+) -> DBSearchDoc | None:
+    """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
+    search_doc = (
+        db_session.query(SearchDoc).filter(SearchDoc.document_id == document_id).first()
+    )
+    return search_doc
+
+
 def create_search_doc_from_user_file(
     db_user_file: UserFile, associated_chat_file: InMemoryChatFile, db_session: Session
 ) -> SearchDoc:
@@ -1391,6 +1391,7 @@ def translate_db_message_to_packets(
                     )
                 )
 
+        research_iterations = []
         if chat_message.research_type in [
             ResearchType.THOUGHTFUL,
             ResearchType.DEEP,
@@ -1541,6 +1542,25 @@ def translate_db_message_to_packets(
             )
         )
         step_nr += 1
+
+        # Stream Search results in case there were no substeps (example: legacy agentic and legacy search)
+        if len(citation_info_list) > 0 and len(research_iterations) == 0:
+
+            saved_search_docs = []
+            for citation_info in citation_info_list:
+                cited_doc = get_db_search_doc_by_document_id(
+                    citation_info.document_id, db_session
+                )
+                if cited_doc:
+                    saved_search_docs.append(
+                        translate_db_search_doc_to_server_search_doc(cited_doc)
+                    )
+
+            packet_list.extend(
+                create_search_packets([], saved_search_docs, False, step_nr)
+            )
+
+            step_nr += 1
 
         packet_list.extend(create_citation_packets(citation_info_list, step_nr))
 

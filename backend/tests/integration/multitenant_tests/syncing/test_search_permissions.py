@@ -11,6 +11,7 @@ from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import ToolName
 
 
 def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:
@@ -103,14 +104,16 @@ def test_tenant1_can_access_own_documents(reset_multitenant: None) -> None:
     # User 1 sends a message and gets a response
     response1 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
 
-    # Assert that the search tool was used
-    assert response1.tool_name == "run_search"
+    # Assert that only the internal search tool was used
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response1.used_tools
+    )
 
-    response_doc_ids = {doc["document_id"] for doc in response1.tool_result or []}
+    response_doc_ids = {doc.document_id for doc in response1.used_tools[0].documents}
     assert test_data["tenant1_doc_ids"].issubset(
         response_doc_ids
     ), "Not all Tenant 1 document IDs are in the response"
@@ -120,8 +123,8 @@ def test_tenant1_can_access_own_documents(reset_multitenant: None) -> None:
 
     # Assert that the contents are correct
     assert any(
-        doc["content"] == "Tenant 1 Document Content"
-        for doc in response1.tool_result or []
+        doc.blurb == "Tenant 1 Document Content"
+        for doc in response1.used_tools[0].documents
     ), "Tenant 1 Document Content not found in any document"
 
 
@@ -132,15 +135,17 @@ def test_tenant2_can_access_own_documents(reset_multitenant: None) -> None:
     # User 2 sends a message and gets a response
     response2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
 
     # Assert that the search tool was used
-    assert response2.tool_name == "run_search"
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response2.used_tools
+    )
 
     # Assert that the tool_result contains Tenant 2's documents
-    response_doc_ids = {doc["document_id"] for doc in response2.tool_result or []}
+    response_doc_ids = {doc.document_id for doc in response2.used_tools[0].documents}
     assert test_data["tenant2_doc_ids"].issubset(
         response_doc_ids
     ), "Not all Tenant 2 document IDs are in the response"
@@ -150,8 +155,8 @@ def test_tenant2_can_access_own_documents(reset_multitenant: None) -> None:
 
     # Assert that the contents are correct
     assert any(
-        doc["content"] == "Tenant 2 Document Content"
-        for doc in response2.tool_result or []
+        doc.blurb == "Tenant 2 Document Content"
+        for doc in response2.used_tools[0].documents
     ), "Tenant 2 Document Content not found in any document"
 
 
@@ -162,15 +167,19 @@ def test_tenant1_cannot_access_tenant2_documents(reset_multitenant: None) -> Non
     # User 1 tries to access Tenant 2's documents
     response_cross = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
 
     # Assert that the search tool was used
-    assert response_cross.tool_name == "run_search"
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response_cross.used_tools
+    )
 
     # Assert that the tool_result is empty or does not contain Tenant 2's documents
-    response_doc_ids = {doc["document_id"] for doc in response_cross.tool_result or []}
+    response_doc_ids = {
+        doc.document_id for doc in response_cross.used_tools[0].documents
+    }
 
     # Ensure none of Tenant 2's document IDs are in the response
     assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"])
@@ -183,15 +192,20 @@ def test_tenant2_cannot_access_tenant1_documents(reset_multitenant: None) -> Non
     # User 2 tries to access Tenant 1's documents
     response_cross2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
 
     # Assert that the search tool was used
-    assert response_cross2.tool_name == "run_search"
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH
+        for tool in response_cross2.used_tools
+    )
 
     # Assert that the tool_result is empty or does not contain Tenant 1's documents
-    response_doc_ids = {doc["document_id"] for doc in response_cross2.tool_result or []}
+    response_doc_ids = {
+        doc.document_id for doc in response_cross2.used_tools[0].documents
+    }
 
     # Ensure none of Tenant 1's document IDs are in the response
     assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"])
@@ -204,41 +218,54 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # User 1 sends a message and gets a response with only Tenant 1's documents
     response1 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
-    assert response1.tool_name == "run_search"
-    response_doc_ids = {doc["document_id"] for doc in response1.tool_result or []}
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response1.used_tools
+    )
+    response_doc_ids = {doc.document_id for doc in response1.used_tools[0].documents}
     assert test_data["tenant1_doc_ids"].issubset(response_doc_ids)
     assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"])
 
     # User 2 sends a message and gets a response with only Tenant 2's documents
     response2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
-    assert response2.tool_name == "run_search"
-    response_doc_ids = {doc["document_id"] for doc in response2.tool_result or []}
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response2.used_tools
+    )
+    response_doc_ids = {doc.document_id for doc in response2.used_tools[0].documents}
     assert test_data["tenant2_doc_ids"].issubset(response_doc_ids)
     assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"])
 
     # User 1 tries to access Tenant 2's documents and fails
     response_cross = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session1"].id,
-        message="What is in Tenant 2's documents?",
+        message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
-    assert response_cross.tool_name == "run_search"
-    response_doc_ids = {doc["document_id"] for doc in response_cross.tool_result or []}
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response_cross.used_tools
+    )
+    response_doc_ids = {
+        doc.document_id for doc in response_cross.used_tools[0].documents
+    }
     assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"])
 
     # User 2 tries to access Tenant 1's documents and fails
     response_cross2 = ChatSessionManager.send_message(
         chat_session_id=test_data["chat_session2"].id,
-        message="What is in Tenant 1's documents?",
+        message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
-    assert response_cross2.tool_name == "run_search"
-    response_doc_ids = {doc["document_id"] for doc in response_cross2.tool_result or []}
+    assert all(
+        tool.tool_name == ToolName.INTERNAL_SEARCH
+        for tool in response_cross2.used_tools
+    )
+    response_doc_ids = {
+        doc.document_id for doc in response_cross2.used_tools[0].documents
+    }
     assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"])

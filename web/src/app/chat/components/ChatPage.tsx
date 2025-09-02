@@ -17,19 +17,12 @@ import {
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
-import {
-  LlmDescriptor,
-  useFederatedConnectors,
-  useFilters,
-  useLlmManager,
-} from "@/lib/hooks";
+import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
-import { ChatIntro } from "./ChatIntro";
-import { StarterMessages } from "../../../components/assistants/StarterMessage";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
@@ -78,7 +71,6 @@ import {
 import {
   useCurrentChatState,
   useSubmittedMessage,
-  useAgenticGenerating,
   useLoadingError,
   useIsReady,
   useIsFetching,
@@ -89,9 +81,10 @@ import {
   useChatSessionSharedStatus,
   useHasSentLocalUserMessage,
 } from "../stores/useChatSessionStore";
-import { AIMessage } from "../message/messageComponents/AIMessage";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
-import { HumanMessage } from "../message/HumanMessage";
+import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
+import { MessagesDisplay } from "./MessagesDisplay";
 
 export function ChatPage({
   toggle,
@@ -104,6 +97,23 @@ export function ChatPage({
   sidebarVisible: boolean;
   firstMessage?: string;
 }) {
+  // Performance tracking
+  // Keeping this here in case we need to track down slow renders in the future
+  // const renderCount = useRef(0);
+  // renderCount.current++;
+  // const renderStartTime = performance.now();
+
+  // useEffect(() => {
+  //   const renderTime = performance.now() - renderStartTime;
+  //   if (renderTime > 10) {
+  //     console.log(
+  //       `[ChatPage] Slow render #${renderCount.current}: ${renderTime.toFixed(
+  //         2
+  //       )}ms`
+  //     );
+  //   }
+  // });
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -115,7 +125,6 @@ export function ChatPage({
     llmProviders,
     folders,
     shouldShowWelcomeModal,
-    proSearchToggled,
     refreshChatSessions,
   } = useChatContext();
 
@@ -345,44 +354,13 @@ export function ChatPage({
     }, 100);
   };
 
-  const resetInputBar = () => {
+  const resetInputBar = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
-  };
-
-  const clientScrollToBottom = (fast?: boolean) => {
-    waitForScrollRef.current = true;
-
-    setTimeout(() => {
-      if (!endDivRef.current || !scrollableDivRef.current) {
-        console.error("endDivRef or scrollableDivRef not found");
-        return;
-      }
-
-      const rect = endDivRef.current.getBoundingClientRect();
-      const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-
-      if (isVisible) return;
-
-      // Check if all messages are currently rendered
-      // If all messages are already rendered, scroll immediately
-      endDivRef.current.scrollIntoView({
-        behavior: fast ? "auto" : "smooth",
-      });
-
-      if (chatSessionIdRef.current) {
-        updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
-      }
-    }, 50);
-
-    // Reset waitForScrollRef after 1.5 seconds
-    setTimeout(() => {
-      waitForScrollRef.current = false;
-    }, 1500);
-  };
+  }, [setMessage, setCurrentMessageFiles]);
 
   const debounceNumber = 100; // time for debouncing
 
@@ -450,16 +428,6 @@ export function ChatPage({
     documentSidebarInitialWidth = Math.min(700, maxDocumentSidebarWidth);
   }
 
-  const continueGenerating = () => {
-    onSubmit({
-      message: "Continue Generating (pick up exactly where you left off)",
-      selectedFiles: [],
-      selectedFolders: [],
-      currentMessageFiles: [],
-      useAgentSearch: deepResearchEnabled,
-    });
-  };
-
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
   );
@@ -468,7 +436,6 @@ export function ChatPage({
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const submittedMessage = useSubmittedMessage();
-  const agenticGenerating = useAgenticGenerating();
   const loadingError = useLoadingError();
   const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
@@ -486,11 +453,42 @@ export function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const updateCurrentSelectedMessageForDocDisplay = useChatSessionStore(
-    (state) => state.updateCurrentSelectedMessageForDocDisplay
-  );
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
+  );
+
+  const clientScrollToBottom = useCallback(
+    (fast?: boolean) => {
+      waitForScrollRef.current = true;
+
+      setTimeout(() => {
+        if (!endDivRef.current || !scrollableDivRef.current) {
+          console.error("endDivRef or scrollableDivRef not found");
+          return;
+        }
+
+        const rect = endDivRef.current.getBoundingClientRect();
+        const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+        if (isVisible) return;
+
+        // Check if all messages are currently rendered
+        // If all messages are already rendered, scroll immediately
+        endDivRef.current.scrollIntoView({
+          behavior: fast ? "auto" : "smooth",
+        });
+
+        if (chatSessionIdRef.current) {
+          updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
+        }
+      }, 50);
+
+      // Reset waitForScrollRef after 1.5 seconds
+      setTimeout(() => {
+        waitForScrollRef.current = false;
+      }, 1500);
+    },
+    [updateHasPerformedInitialScroll]
   );
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
@@ -506,8 +504,6 @@ export function ChatPage({
       clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
-      setSelectedMessageForDocDisplay:
-        updateCurrentSelectedMessageForDocDisplay,
     });
 
   const { onMessageSelection } = useChatSessionController({
@@ -531,8 +527,7 @@ export function ChatPage({
     onSubmit,
   });
 
-  const autoScrollEnabled =
-    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
+  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
   useScrollonStream({
     chatState: currentChatState,
@@ -557,26 +552,27 @@ export function ChatPage({
     };
   }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
     clearSelectedItems();
     // TODO: move this into useChatController
     // setLoadingError(null);
-  };
+  }, [setMessage, setCurrentMessageFiles, clearSelectedItems]);
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
 
-  const explicitlyUntoggle = () => {
+  const explicitlyUntoggle = useCallback(() => {
     setShowHistorySidebar(false);
 
     setUntoggled(true);
     setTimeout(() => {
       setUntoggled(false);
     }, 200);
-  };
-  const toggleSidebar = () => {
+  }, [setShowHistorySidebar, setUntoggled]);
+
+  const toggleSidebar = useCallback(() => {
     if (user?.is_anonymous_user) {
       return;
     }
@@ -586,11 +582,12 @@ export function ChatPage({
     );
 
     toggle();
-  };
-  const removeToggle = () => {
+  }, [user?.is_anonymous_user, toggle, sidebarVisible]);
+
+  const removeToggle = useCallback(() => {
     setShowHistorySidebar(false);
     toggle(false);
-  };
+  }, [setShowHistorySidebar, toggle]);
 
   const waitForScrollRef = useRef(false);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
@@ -676,60 +673,96 @@ export function ChatPage({
 
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
 
-  const toggleDocumentSidebar = () => {
+  const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
       updateCurrentDocumentSidebarVisible(true);
     } else {
       updateCurrentDocumentSidebarVisible(false);
     }
-  };
+  }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  interface RegenerationRequest {
-    messageId: number;
-    parentMessage: Message;
-    forceSearch?: boolean;
-  }
+  const toggleChatSessionSearchModal = useCallback(
+    () => setIsChatSearchModalOpen((open) => !open),
+    [setIsChatSearchModalOpen]
+  );
 
-  function createRegenerator(regenerationRequest: RegenerationRequest) {
-    // Returns new function that only needs `modelOveride` to be specified when called
-    return async function (modelOverride: LlmDescriptor) {
-      return await onSubmit({
-        message: message,
-        selectedFiles: selectedFiles,
-        selectedFolders: selectedFolders,
-        currentMessageFiles: currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
-        modelOverride,
-        messageIdToResend: regenerationRequest.parentMessage.messageId,
-        regenerationRequest,
-        forceSearch: regenerationRequest.forceSearch,
-      });
-    };
-  }
   if (!user) {
     redirect("/auth/login");
   }
 
-  if (noAssistants)
+  const clearSelectedDocuments = useCallback(() => {
+    setSelectedDocuments([]);
+    clearSelectedItems();
+  }, [clearSelectedItems]);
+
+  const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
+    setSelectedDocuments((prev) =>
+      prev.some((d) => d.document_id === document.document_id)
+        ? prev.filter((d) => d.document_id !== document.document_id)
+        : [...prev, document]
+    );
+  }, []);
+
+  // Memoized callbacks for ChatInputBar
+  const handleToggleDocSelection = useCallback(() => {
+    setToggleDocSelection(true);
+  }, []);
+
+  const handleShowApiKeyModal = useCallback(() => {
+    setShowApiKeyModal(true);
+  }, []);
+
+  const handleChatInputSubmit = useCallback(() => {
+    onSubmit({
+      message: message,
+      selectedFiles: selectedFiles,
+      selectedFolders: selectedFolders,
+      currentMessageFiles: currentMessageFiles,
+      useAgentSearch: deepResearchEnabled,
+    });
+  }, [
+    message,
+    onSubmit,
+    selectedFiles,
+    selectedFolders,
+    currentMessageFiles,
+    deepResearchEnabled,
+  ]);
+
+  // Memoized callbacks for Header
+  const handleToggleUserSettings = useCallback(() => {
+    setUserSettingsToggled(true);
+  }, []);
+
+  const handleHeaderReset = useCallback(() => {
+    setMessage("");
+  }, []);
+
+  // Memoized callbacks for DocumentResults
+  const handleMobileDocumentSidebarClose = useCallback(() => {
+    updateCurrentDocumentSidebarVisible(false);
+  }, [updateCurrentDocumentSidebarVisible]);
+
+  const handleDesktopDocumentSidebarClose = useCallback(() => {
+    setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
+  }, [updateCurrentDocumentSidebarVisible]);
+
+  // Determine whether to show the centered input (no messages yet)
+  const showCenteredInput =
+    messageHistory.length === 0 &&
+    !isFetchingChatMessages &&
+    !loadingError &&
+    !submittedMessage;
+
+  // handle error case where no assistants are available
+  if (noAssistants) {
     return (
       <>
         <HealthCheckBanner />
         <NoAssistantModal isAdmin={isAdmin} />
       </>
     );
-
-  const clearSelectedDocuments = () => {
-    setSelectedDocuments([]);
-    clearSelectedItems();
-  };
-
-  const toggleDocumentSelection = (document: OnyxDocument) => {
-    setSelectedDocuments((prev) =>
-      prev.some((d) => d.document_id === document.document_id)
-        ? prev.filter((d) => d.document_id !== document.document_id)
-        : [...prev, document]
-    );
-  };
+  }
 
   return (
     <>
@@ -794,11 +827,14 @@ export function ChatPage({
             onOutsideClick={() => updateCurrentDocumentSidebarVisible(false)}
             title="Sources"
           >
+            {/* IMPORTANT: this is a memoized component, and it's very important
+            for performance reasons that this stays true. MAKE SURE that all function 
+            props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={true}
               ref={innerSidebarElementRef}
-              closeSidebar={() => updateCurrentDocumentSidebarVisible(false)}
+              closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -884,10 +920,11 @@ export function ChatPage({
                 }`}
             >
               <div className="w-full relative">
+                {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function 
+                props are wrapped in useCallback. */}
                 <HistorySidebar
-                  toggleChatSessionSearchModal={() =>
-                    setIsChatSearchModalOpen((open) => !open)
-                  }
+                  toggleChatSessionSearchModal={toggleChatSessionSearchModal}
                   liveAssistant={liveAssistant}
                   setShowAssistantsModal={setShowAssistantsModal}
                   explicitlyUntoggle={explicitlyUntoggle}
@@ -948,16 +985,14 @@ export function ChatPage({
                 }
             `}
           >
+            {/* IMPORTANT: this is a memoized component, and it's very important
+            for performance reasons that this stays true. MAKE SURE that all function 
+            props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={false}
               ref={innerSidebarElementRef}
-              closeSidebar={() =>
-                setTimeout(
-                  () => updateCurrentDocumentSidebarVisible(false),
-                  300
-                )
-              }
+              closeSidebar={handleDesktopDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -982,11 +1017,14 @@ export function ChatPage({
               id="scrollableContainer"
               className="flex h-full relative px-2 flex-col w-full"
             >
+              {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function 
+              props are wrapped in useCallback. */}
               {liveAssistant && (
                 <FunctionalHeader
-                  toggleUserSettings={() => setUserSettingsToggled(true)}
+                  toggleUserSettings={handleToggleUserSettings}
                   sidebarToggled={sidebarVisible}
-                  reset={() => setMessage("")}
+                  reset={handleHeaderReset}
                   page="chat"
                   setSharingModalVisible={
                     chatSessionId !== null ? setSharingModalVisible : undefined
@@ -1055,194 +1093,48 @@ export function ChatPage({
                               )}
                             </div>
                           )}
-                          {/* ChatBanner is a custom banner that displays a admin-specified message at 
-                      the top of the chat page. Only used in the EE version of the app. */}
-                          {messageHistory.length === 0 &&
-                            !isFetchingChatMessages &&
-                            !loadingError &&
-                            !submittedMessage && (
-                              <div className="h-full w-[95%] mx-auto flex flex-col justify-center items-center">
-                                <ChatIntro selectedPersona={liveAssistant} />
 
-                                <StarterMessages
-                                  currentPersona={liveAssistant}
-                                  onSubmit={(messageOverride) =>
-                                    onSubmit({
-                                      message: messageOverride,
-                                      selectedFiles: selectedFiles,
-                                      selectedFolders: selectedFolders,
-                                      currentMessageFiles: currentMessageFiles,
-                                      useAgentSearch: deepResearchEnabled,
-                                    })
-                                  }
-                                />
-                              </div>
-                            )}
-                          <div
-                            style={{ overflowAnchor: "none" }}
-                            key={chatSessionId}
-                            className={
-                              (hasPerformedInitialScroll ? "" : " hidden ") +
-                              "desktop:-ml-4 w-full mx-auto " +
-                              "absolute mobile:top-0 desktop:top-0 left-0 " +
-                              (settings?.enterpriseSettings
-                                ?.two_lines_for_chat_header
-                                ? "pt-20 "
-                                : "pt-4 ")
+                          <MessagesDisplay
+                            messageHistory={messageHistory}
+                            completeMessageTree={completeMessageTree}
+                            liveAssistant={liveAssistant}
+                            llmManager={llmManager}
+                            deepResearchEnabled={deepResearchEnabled}
+                            selectedFiles={selectedFiles}
+                            selectedFolders={selectedFolders}
+                            currentMessageFiles={currentMessageFiles}
+                            setPresentingDocument={setPresentingDocument}
+                            setCurrentFeedback={setCurrentFeedback}
+                            onSubmit={onSubmit}
+                            onMessageSelection={onMessageSelection}
+                            stopGenerating={stopGenerating}
+                            uncaughtError={uncaughtError}
+                            loadingError={loadingError}
+                            handleResubmitLastMessage={
+                              handleResubmitLastMessage
                             }
-                            // NOTE: temporarily removing this to fix the scroll bug
-                            // (hasPerformedInitialScroll ? "" : "invisible")
-                          >
-                            {messageHistory.map((message, i) => {
-                              const messageTree = completeMessageTree;
-
-                              const messageReactComponentKey = `message-${message.messageId}`;
-                              const parentMessage = message.parentMessageId
-                                ? messageTree?.get(message.parentMessageId)
-                                : null;
-                              if (message.type === "user") {
-                                const nextMessage =
-                                  messageHistory.length > i + 1
-                                    ? messageHistory[i + 1]
-                                    : null;
-
-                                return (
-                                  <div
-                                    id={messageReactComponentKey}
-                                    key={messageReactComponentKey}
-                                  >
-                                    <HumanMessage
-                                      setPresentingDocument={
-                                        setPresentingDocument
-                                      }
-                                      disableSwitchingForStreaming={
-                                        (nextMessage &&
-                                          nextMessage.is_generating) ||
-                                        false
-                                      }
-                                      stopGenerating={stopGenerating}
-                                      content={message.message}
-                                      files={message.files}
-                                      messageId={message.messageId}
-                                      onEdit={(editedContent) => {
-                                        onSubmit({
-                                          message: editedContent,
-                                          messageIdToResend:
-                                            message.messageId || undefined,
-                                          // TODO: fix
-                                          selectedFiles: [],
-                                          selectedFolders: [],
-                                          currentMessageFiles: [],
-                                          useAgentSearch: deepResearchEnabled,
-                                        });
-                                      }}
-                                      otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenMessageIds || []
-                                      }
-                                      onMessageSelection={onMessageSelection}
-                                    />
-                                  </div>
-                                );
-                              } else if (message.type === "assistant") {
-                                const previousMessage =
-                                  i !== 0 ? messageHistory[i - 1] : null;
-
-                                if (
-                                  (uncaughtError || loadingError) &&
-                                  i === messageHistory.length - 1
-                                ) {
-                                  return (
-                                    <div
-                                      key={`error-${message.messageId}`}
-                                      className="max-w-message-max mx-auto"
-                                    >
-                                      <ErrorBanner
-                                        resubmit={handleResubmitLastMessage}
-                                        error={
-                                          uncaughtError || loadingError || ""
-                                        }
-                                      />
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div
-                                    className="text-text"
-                                    id={`message-${message.messageId}`}
-                                    key={messageReactComponentKey}
-                                    ref={
-                                      i == messageHistory.length - 1
-                                        ? lastMessageRef
-                                        : null
-                                    }
-                                  >
-                                    <AIMessage
-                                      rawPackets={message.packets}
-                                      chatState={{
-                                        handleFeedback: (feedback) =>
-                                          setCurrentFeedback([
-                                            feedback,
-                                            message.messageId,
-                                          ]),
-                                        assistant: liveAssistant,
-                                        docs: message.documents,
-                                        userFiles: [], // TODO: Extract user files from message context
-                                        citations: message.citations,
-                                        setPresentingDocument:
-                                          setPresentingDocument,
-                                        regenerate: createRegenerator({
-                                          messageId: message.messageId,
-                                          parentMessage: previousMessage!,
-                                        }),
-                                        overriddenModel:
-                                          llmManager.currentLlm?.modelName,
-                                      }}
-                                      messageId={message.messageId}
-                                      otherMessagesCanSwitchTo={
-                                        parentMessage?.childrenMessageIds || []
-                                      }
-                                      onMessageSelection={onMessageSelection}
-                                    />
-                                  </div>
-                                );
-                              }
-                            })}
-
-                            {((uncaughtError || loadingError) &&
-                              messageHistory[messageHistory.length - 1]
-                                ?.type === "user") ||
-                              (messageHistory[messageHistory.length - 1]
-                                ?.type === "error" && (
-                                <div className="max-w-message-max mx-auto">
-                                  <ErrorBanner
-                                    resubmit={handleResubmitLastMessage}
-                                    error={uncaughtError || loadingError || ""}
-                                  />
-                                </div>
-                              ))}
-
-                            {messageHistory.length > 0 && (
-                              <div
-                                style={{
-                                  height: !autoScrollEnabled
-                                    ? getContainerHeight()
-                                    : undefined,
-                                }}
-                              />
-                            )}
-
-                            {/* Some padding at the bottom so the search bar has space at the bottom to not cover the last message*/}
-                            <div ref={endPaddingRef} className="h-[95px]" />
-
-                            <div ref={endDivRef} />
-                          </div>
+                            autoScrollEnabled={autoScrollEnabled}
+                            getContainerHeight={getContainerHeight}
+                            lastMessageRef={lastMessageRef}
+                            endPaddingRef={endPaddingRef}
+                            endDivRef={endDivRef}
+                            hasPerformedInitialScroll={
+                              hasPerformedInitialScroll
+                            }
+                            chatSessionId={chatSessionId}
+                            enterpriseSettings={enterpriseSettings}
+                          />
                         </div>
+
                         <div
                           ref={inputRef}
-                          className="absolute pointer-events-none bottom-0 z-10 w-full"
+                          className={`absolute pointer-events-none z-10 w-full ${
+                            showCenteredInput
+                              ? "inset-0"
+                              : "bottom-0 left-0 right-0 translate-y-0"
+                          }`}
                         >
-                          {aboveHorizon && (
+                          {!showCenteredInput && aboveHorizon && (
                             <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
                               <button
                                 onClick={() => clientScrollToBottom()}
@@ -1253,49 +1145,80 @@ export function ChatPage({
                             </div>
                           )}
 
-                          <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
-                            <ChatInputBar
-                              deepResearchEnabled={deepResearchEnabled}
-                              setDeepResearchEnabled={() =>
-                                toggleDeepResearch()
-                              }
-                              toggleDocumentSidebar={toggleDocumentSidebar}
-                              availableSources={sources}
-                              availableDocumentSets={documentSets}
-                              availableTags={tags}
-                              filterManager={filterManager}
-                              llmManager={llmManager}
-                              removeDocs={() => {
-                                clearSelectedDocuments();
-                              }}
-                              retrievalEnabled={retrievalEnabled}
-                              toggleDocSelection={() =>
-                                setToggleDocSelection(true)
-                              }
-                              showConfigureAPIKey={() =>
-                                setShowApiKeyModal(true)
-                              }
-                              selectedDocuments={selectedDocuments}
-                              message={message}
-                              setMessage={setMessage}
-                              stopGenerating={stopGenerating}
-                              onSubmit={() => {
-                                onSubmit({
-                                  message: message,
-                                  selectedFiles: selectedFiles,
-                                  selectedFolders: selectedFolders,
-                                  currentMessageFiles: currentMessageFiles,
-                                  useAgentSearch: deepResearchEnabled,
-                                });
-                              }}
-                              chatState={currentChatState}
-                              selectedAssistant={
-                                selectedAssistant || liveAssistant
-                              }
-                              setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleMessageSpecificFileUpload}
-                              textAreaRef={textAreaRef}
-                            />
+                          <div
+                            className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
+                              showCenteredInput
+                                ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
+                                : "mb-8"
+                            }`}
+                          >
+                            {showCenteredInput && (
+                              <div
+                                data-testid="chat-intro"
+                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
+                              >
+                                <AssistantIcon
+                                  colorOverride="text-text-800"
+                                  assistant={liveAssistant}
+                                  size="large"
+                                />
+                                <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
+                                  {liveAssistant.name}
+                                </div>
+                              </div>
+                            )}
+                            <div
+                              className={showCenteredInput ? "row-start-2" : ""}
+                            >
+                              <ChatInputBar
+                                deepResearchEnabled={deepResearchEnabled}
+                                toggleDeepResearch={toggleDeepResearch}
+                                toggleDocumentSidebar={toggleDocumentSidebar}
+                                filterManager={filterManager}
+                                llmManager={llmManager}
+                                removeDocs={clearSelectedDocuments}
+                                retrievalEnabled={retrievalEnabled}
+                                toggleDocSelection={handleToggleDocSelection}
+                                showConfigureAPIKey={handleShowApiKeyModal}
+                                selectedDocuments={selectedDocuments}
+                                message={message}
+                                setMessage={setMessage}
+                                stopGenerating={stopGenerating}
+                                onSubmit={handleChatInputSubmit}
+                                chatState={currentChatState}
+                                selectedAssistant={
+                                  selectedAssistant || liveAssistant
+                                }
+                                handleFileUpload={
+                                  handleMessageSpecificFileUpload
+                                }
+                                textAreaRef={textAreaRef}
+                              />
+                            </div>
+
+                            {liveAssistant.starter_messages &&
+                              liveAssistant.starter_messages.length > 0 &&
+                              messageHistory.length === 0 &&
+                              showCenteredInput && (
+                                <div className="mt-6 row-start-3">
+                                  <StarterMessageDisplay
+                                    starterMessages={
+                                      liveAssistant.starter_messages
+                                    }
+                                    onSelectStarterMessage={(message) => {
+                                      onSubmit({
+                                        message: message,
+                                        selectedFiles: selectedFiles,
+                                        selectedFolders: selectedFolders,
+                                        currentMessageFiles:
+                                          currentMessageFiles,
+                                        useAgentSearch: deepResearchEnabled,
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              )}
+
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
                                 <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">

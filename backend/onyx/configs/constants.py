@@ -160,6 +160,7 @@ class DocumentSource(str, Enum):
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"
+    OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
     SLAB = "slab"
@@ -226,9 +227,6 @@ class BlobType(str, Enum):
     S3 = "s3"
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
-
-    # Special case, for internet search
-    NOT_APPLICABLE = "not_applicable"
 
 
 class DocumentIndexType(str, Enum):
@@ -545,6 +543,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITLAB: "gitlab data",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
+    DocumentSource.OUTLINE: "outline data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
     DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
     DocumentSource.SLAB: "slab data",

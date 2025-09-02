@@ -5,6 +5,7 @@ import React, {
   forwardRef,
   useContext,
   useCallback,
+  useEffect,
 } from "react";
 import Link from "next/link";
 import {
@@ -169,97 +170,98 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
   );
 };
 
-export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
-  (
-    {
-      liveAssistant,
-      reset = () => null,
-      setShowAssistantsModal = () => null,
-      toggled,
-      page,
-      existingChats,
-      currentChatSession,
-      folders,
-      explicitlyUntoggle,
-      toggleSidebar,
-      removeToggle,
-      showShareModal,
-      toggleChatSessionSearchModal,
-      showDeleteModal,
-    },
-    ref: ForwardedRef<HTMLDivElement>
-  ) => {
-    const searchParams = useSearchParams();
-    const router = useRouter();
-    const { user, toggleAssistantPinnedStatus } = useUser();
-    const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
-      useAssistantsContext();
-
-    const currentChatId = currentChatSession?.id;
-
-    const sensors = useSensors(
-      useSensor(PointerSensor, {
-        activationConstraint: {
-          distance: 8,
-        },
-      }),
-      useSensor(KeyboardSensor, {
-        coordinateGetter: sortableKeyboardCoordinates,
-      })
-    );
-
-    const handleDragEnd = useCallback(
-      (event: DragEndEvent) => {
-        const { active, over } = event;
-
-        if (active.id !== over?.id) {
-          setPinnedAssistants((prevAssistants: MinimalPersonaSnapshot[]) => {
-            const oldIndex = prevAssistants.findIndex(
-              (a: MinimalPersonaSnapshot) =>
-                (a.id === 0 ? "assistant-0" : a.id) === active.id
-            );
-            const newIndex = prevAssistants.findIndex(
-              (a: MinimalPersonaSnapshot) =>
-                (a.id === 0 ? "assistant-0" : a.id) === over?.id
-            );
-
-            const newOrder = arrayMove(prevAssistants, oldIndex, newIndex);
-
-            // Ensure we're sending the correct IDs to the API
-            const reorderedIds = newOrder.map(
-              (a: MinimalPersonaSnapshot) => a.id
-            );
-            reorderPinnedAssistants(reorderedIds);
-
-            return newOrder;
-          });
-        }
+export const HistorySidebar = React.memo(
+  forwardRef<HTMLDivElement, HistorySidebarProps>(
+    (
+      {
+        liveAssistant,
+        reset = () => null,
+        setShowAssistantsModal = () => null,
+        toggled,
+        page,
+        existingChats,
+        currentChatSession,
+        folders,
+        explicitlyUntoggle,
+        toggleSidebar,
+        removeToggle,
+        showShareModal,
+        toggleChatSessionSearchModal,
+        showDeleteModal,
       },
-      [setPinnedAssistants, reorderPinnedAssistants]
-    );
+      ref: ForwardedRef<HTMLDivElement>
+    ) => {
+      const searchParams = useSearchParams();
+      const router = useRouter();
+      const { user, toggleAssistantPinnedStatus } = useUser();
+      const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
+        useAssistantsContext();
 
-    const combinedSettings = useContext(SettingsContext);
-    if (!combinedSettings) {
-      return null;
-    }
+      const currentChatId = currentChatSession?.id;
 
-    const handleNewChat = () => {
-      reset();
-      console.log("currentChatSession", currentChatSession);
+      const sensors = useSensors(
+        useSensor(PointerSensor, {
+          activationConstraint: {
+            distance: 8,
+          },
+        }),
+        useSensor(KeyboardSensor, {
+          coordinateGetter: sortableKeyboardCoordinates,
+        })
+      );
 
-      const newChatUrl =
-        `/${page}` +
-        (currentChatSession
-          ? `?assistantId=${currentChatSession.persona_id}`
-          : "");
-      router.push(newChatUrl);
-    };
+      const handleDragEnd = useCallback(
+        (event: DragEndEvent) => {
+          const { active, over } = event;
 
-    return (
-      <>
-        <div
-          ref={ref}
-          className={`
+          if (active.id !== over?.id) {
+            setPinnedAssistants((prevAssistants: MinimalPersonaSnapshot[]) => {
+              const oldIndex = prevAssistants.findIndex(
+                (a: MinimalPersonaSnapshot) =>
+                  (a.id === 0 ? "assistant-0" : a.id) === active.id
+              );
+              const newIndex = prevAssistants.findIndex(
+                (a: MinimalPersonaSnapshot) =>
+                  (a.id === 0 ? "assistant-0" : a.id) === over?.id
+              );
+
+              const newOrder = arrayMove(prevAssistants, oldIndex, newIndex);
+
+              // Ensure we're sending the correct IDs to the API
+              const reorderedIds = newOrder.map(
+                (a: MinimalPersonaSnapshot) => a.id
+              );
+              reorderPinnedAssistants(reorderedIds);
+
+              return newOrder;
+            });
+          }
+        },
+        [setPinnedAssistants, reorderPinnedAssistants]
+      );
+
+      const combinedSettings = useContext(SettingsContext);
+      if (!combinedSettings) {
+        return null;
+      }
+
+      const handleNewChat = () => {
+        reset();
+        console.log("currentChatSession", currentChatSession);
+
+        const newChatUrl =
+          `/${page}` +
+          (currentChatSession
+            ? `?assistantId=${currentChatSession.persona_id}`
+            : "");
+        router.push(newChatUrl);
+      };
+
+      return (
+        <>
+          <div
+            ref={ref}
+            className={`
             flex
             flex-none
             gap-y-4
@@ -276,157 +278,162 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             pt-2
             transition-transform 
             `}
-        >
-          <div className="px-4 pl-2">
-            <LogoWithText
-              showArrow={true}
-              toggled={toggled}
-              page={page}
-              toggleSidebar={toggleSidebar}
-              explicitlyUntoggle={explicitlyUntoggle}
-            />
-          </div>
-          {page == "chat" && (
-            <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
-              <Link
-                className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
-                href={
-                  `/${page}` +
-                  (currentChatSession
-                    ? `?assistantId=${currentChatSession?.persona_id}`
-                    : "")
-                }
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    return;
-                  }
-                  if (handleNewChat) {
-                    handleNewChat();
-                  }
-                }}
-              >
-                <NewChatIcon size={20} className="flex-none" />
-                <p className="my-auto flex font-normal  items-center ">
-                  New Chat
-                </p>
-              </Link>
-              <Link
-                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                href="/chat/my-documents"
-              >
-                <KnowledgeGroupIcon
-                  size={20}
-                  className="flex-none text-text-history-sidebar-button"
-                />
-                <p className="my-auto flex font-normal items-center text-base">
-                  My Documents
-                </p>
-              </Link>
-              {user?.preferences?.shortcut_enabled && (
+          >
+            <div className="px-4 pl-2">
+              <LogoWithText
+                showArrow={true}
+                toggled={toggled}
+                page={page}
+                toggleSidebar={toggleSidebar}
+                explicitlyUntoggle={explicitlyUntoggle}
+              />
+            </div>
+            {page == "chat" && (
+              <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
                 <Link
-                  className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href="/chat/input-prompts"
+                  className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
+                  href={
+                    `/${page}` +
+                    (currentChatSession
+                      ? `?assistantId=${currentChatSession?.persona_id}`
+                      : "")
+                  }
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey) {
+                      return;
+                    }
+                    if (handleNewChat) {
+                      handleNewChat();
+                    }
+                  }}
                 >
-                  <DocumentIcon2
+                  <NewChatIcon size={20} className="flex-none" />
+                  <p className="my-auto flex font-normal  items-center ">
+                    New Chat
+                  </p>
+                </Link>
+                <Link
+                  className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                  href="/chat/my-documents"
+                >
+                  <KnowledgeGroupIcon
                     size={20}
                     className="flex-none text-text-history-sidebar-button"
                   />
                   <p className="my-auto flex font-normal items-center text-base">
-                    Prompt Shortcuts
+                    My Documents
                   </p>
                 </Link>
-              )}
-            </div>
-          )}
-          <div className="h-full  relative overflow-x-hidden overflow-y-auto">
-            <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
-              Assistants
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis]}
-            >
-              <SortableContext
-                items={pinnedAssistants.map((a) =>
-                  a.id === 0 ? "assistant-0" : a.id
+                {user?.preferences?.shortcut_enabled && (
+                  <Link
+                    className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
+                    href="/chat/input-prompts"
+                  >
+                    <DocumentIcon2
+                      size={20}
+                      className="flex-none text-text-history-sidebar-button"
+                    />
+                    <p className="my-auto flex font-normal items-center text-base">
+                      Prompt Shortcuts
+                    </p>
+                  </Link>
                 )}
-                strategy={verticalListSortingStrategy}
+              </div>
+            )}
+            <div className="h-full  relative overflow-x-hidden overflow-y-auto">
+              <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
+                Assistants
+              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+                modifiers={[restrictToVerticalAxis]}
               >
-                <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
-                  {pinnedAssistants.map((assistant: MinimalPersonaSnapshot) => (
+                <SortableContext
+                  items={pinnedAssistants.map((a) =>
+                    a.id === 0 ? "assistant-0" : a.id
+                  )}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
+                    {pinnedAssistants.map(
+                      (assistant: MinimalPersonaSnapshot) => (
+                        <SortableAssistant
+                          key={
+                            assistant.id === 0 ? "assistant-0" : assistant.id
+                          }
+                          assistant={assistant}
+                          active={assistant.id === liveAssistant?.id}
+                          onClick={() => {
+                            router.push(
+                              buildChatUrl(searchParams, null, assistant.id)
+                            );
+                          }}
+                          onPinAction={async (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            await toggleAssistantPinnedStatus(
+                              pinnedAssistants.map((a) => a.id),
+                              assistant.id,
+                              false
+                            );
+                            await refreshAssistants();
+                          }}
+                        />
+                      )
+                    )}
+                  </div>
+                </SortableContext>
+              </DndContext>
+              {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
+                liveAssistant && (
+                  <div className="w-full mt-1 pr-4">
                     <SortableAssistant
-                      key={assistant.id === 0 ? "assistant-0" : assistant.id}
-                      assistant={assistant}
-                      active={assistant.id === liveAssistant?.id}
+                      pinned={false}
+                      assistant={liveAssistant}
+                      active={liveAssistant.id === liveAssistant?.id}
                       onClick={() => {
                         router.push(
-                          buildChatUrl(searchParams, null, assistant.id)
+                          buildChatUrl(searchParams, null, liveAssistant.id)
                         );
                       }}
                       onPinAction={async (e: React.MouseEvent) => {
                         e.stopPropagation();
                         await toggleAssistantPinnedStatus(
-                          pinnedAssistants.map((a) => a.id),
-                          assistant.id,
-                          false
+                          [...pinnedAssistants.map((a) => a.id)],
+                          liveAssistant.id,
+                          true
                         );
                         await refreshAssistants();
                       }}
                     />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-            {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
-              liveAssistant && (
-                <div className="w-full mt-1 pr-4">
-                  <SortableAssistant
-                    pinned={false}
-                    assistant={liveAssistant}
-                    active={liveAssistant.id === liveAssistant?.id}
-                    onClick={() => {
-                      router.push(
-                        buildChatUrl(searchParams, null, liveAssistant.id)
-                      );
-                    }}
-                    onPinAction={async (e: React.MouseEvent) => {
-                      e.stopPropagation();
-                      await toggleAssistantPinnedStatus(
-                        [...pinnedAssistants.map((a) => a.id)],
-                        liveAssistant.id,
-                        true
-                      );
-                      await refreshAssistants();
-                    }}
-                  />
-                </div>
-              )}
+                  </div>
+                )}
 
-            <div className="w-full px-4">
-              <button
-                aria-label="Explore Assistants"
-                onClick={() => setShowAssistantsModal(true)}
-                className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-              >
-                Explore Assistants
-              </button>
+              <div className="w-full px-4">
+                <button
+                  aria-label="Explore Assistants"
+                  onClick={() => setShowAssistantsModal(true)}
+                  className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
+                >
+                  Explore Assistants
+                </button>
+              </div>
+
+              <PagesTab
+                toggleChatSessionSearchModal={toggleChatSessionSearchModal}
+                showDeleteModal={showDeleteModal}
+                showShareModal={showShareModal}
+                closeSidebar={removeToggle}
+                existingChats={existingChats}
+                currentChatId={currentChatId}
+                folders={folders}
+              />
             </div>
-
-            <PagesTab
-              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
-              showDeleteModal={showDeleteModal}
-              showShareModal={showShareModal}
-              closeSidebar={removeToggle}
-              existingChats={existingChats}
-              currentChatId={currentChatId}
-              folders={folders}
-            />
           </div>
-        </div>
-      </>
-    );
-  }
+        </>
+      );
+    }
+  )
 );
 HistorySidebar.displayName = "HistorySidebar";

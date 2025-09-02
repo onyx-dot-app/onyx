@@ -119,14 +119,13 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
-  Storage = "Storage",
-  Wiki = "Wiki",
-  CustomerSupport = "Customer Support",
-  CustomerRelationshipManagement = "Customer Relationship Management",
+  Wiki = "Knowledge Base & Wikis",
+  Storage = "Cloud Storage",
+  TicketingAndTaskManagement = "Ticketing & Task Management",
   Messaging = "Messaging",
-  ProjectManagement = "Project Management",
+  Sales = "Sales",
   CodeRepository = "Code Repository",
-  Other = "Other",
+  Other = "Others",
 }
 
 export interface SourceMetadata {
@@ -136,6 +135,7 @@ export interface SourceMetadata {
   shortDescription?: string;
   internalName: ValidSources;
   adminUrl: string;
+  isPopular?: boolean;
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;

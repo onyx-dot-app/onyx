@@ -40,6 +40,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.db.connector import fetch_unique_document_sources
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Tool
 from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
@@ -60,6 +61,7 @@ from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -115,15 +117,15 @@ def _get_available_tools(
         if isinstance(tool, InternetSearchTool):
             llm_path = DRPath.INTERNET_SEARCH.value
             path = DRPath.INTERNET_SEARCH
-        elif isinstance(tool, SearchTool) and len(active_source_types) > 0:
-            # tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
+        elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
-        elif (
-            isinstance(tool, KnowledgeGraphTool)
-            and include_kg
-            and len(active_source_types) > 0
-        ):
+        elif isinstance(tool, KnowledgeGraphTool) and include_kg:
+            if len(active_source_types) == 0:
+                logger.error(
+                    "No active source types found, skipping Knowledge Graph tool"
+                )
+                continue
             llm_path = DRPath.KNOWLEDGE_GRAPH.value
             path = DRPath.KNOWLEDGE_GRAPH
         elif isinstance(tool, ImageGenerationTool):
@@ -375,8 +377,13 @@ def clarifier(
         [tool.description for tool in available_tools.values()]
     )
 
-    all_entity_types = get_entity_types_str(active=True)
-    all_relationship_types = get_relationship_types_str(active=True)
+    kg_config = get_kg_config_settings()
+    if kg_config.KG_ENABLED and kg_config.KG_EXPOSED:
+        all_entity_types = get_entity_types_str(active=True)
+        all_relationship_types = get_relationship_types_str(active=True)
+    else:
+        all_entity_types = ""
+        all_relationship_types = ""
 
     # if not active_source_types:
     #    raise ValueError("No active source types found")
@@ -490,7 +497,7 @@ def clarifier(
                         ),
                         event_name="basic_response",
                         writer=writer,
-                        answer_piece="message_delta",
+                        answer_piece=StreamingType.MESSAGE_DELTA.value,
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
@@ -676,19 +683,11 @@ def clarifier(
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
                         timeout_override=60,
-                        answer_piece="message_delta",
+                        answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
                         # max_tokens=None,
                     ),
                 )
-                # write_custom_event(
-                #     0,
-                #     MessageDelta(
-                #         content=clarification_response.clarification_question,
-                #         type="message_delta",
-                #     ),
-                #     writer,
-                # )
 
                 write_custom_event(
                     current_step_nr,

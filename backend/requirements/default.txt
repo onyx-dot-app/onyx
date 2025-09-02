@@ -15,6 +15,7 @@ distributed==2023.8.1
 fastapi==0.115.12
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
+fastmcp==2.11.3
 filelock==3.15.4
 google-api-python-client==2.86.0
 google-cloud-aiplatform==1.58.0
@@ -28,7 +29,7 @@ httpx[http2]==0.28.1
 httpx-oauth==0.15.1
 huggingface-hub==0.29.0
 inflection==0.5.1
-jira==3.5.1
+jira==3.10.5
 jsonref==1.1.0
 trafilatura==1.12.2
 langchain==0.3.23
@@ -46,6 +47,7 @@ lxml==5.3.0
 lxml_html_clean==0.2.2
 Mako==1.2.4
 markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2
+mcp[cli]==1.12.4
 msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
@@ -87,7 +89,7 @@ timeago==1.0.16
 transformers==4.49.0
 unstructured==0.15.1
 unstructured-client==0.25.4
-uvicorn==0.21.1
+uvicorn==0.35.0
 zulip==0.8.2
 hubspot-api-client==8.1.0
 asana==5.0.8
@@ -104,4 +106,4 @@ prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
 voyageai==0.2.3
 cohere==5.6.1
-exa_py==1.15.3
+exa_py==1.15.4

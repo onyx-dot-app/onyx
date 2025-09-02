@@ -4,7 +4,7 @@ import {
   navigateToAssistantInHistorySidebar,
   sendMessage,
   startNewChat,
-  switchModel,
+  verifyAssistantIsChosen,
 } from "../utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
@@ -16,25 +16,17 @@ test("Chat workflow", async ({ page }) => {
   await page.goto("http://localhost:3000/chat");
 
   // Test interaction with the Art assistant
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-3]",
-    "Assistant for generating"
-  );
+  await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
   await sendMessage(page, "Hi");
 
   // Start a new chat session
   await startNewChat(page);
 
   // Verify the presence of the expected text
-  await expect(page.getByText("Assistant for generating")).toBeVisible();
+  await verifyAssistantIsChosen(page, "Art");
 
   // Test interaction with the General assistant
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-1]",
-    "Assistant with no search"
-  );
+  await navigateToAssistantInHistorySidebar(page, "[-1]", "General");
 
   // Verify the URL after selecting the General assistant
   await expect(page).toHaveURL("http://localhost:3000/chat?assistantId=-1");
@@ -51,18 +43,14 @@ test("Chat workflow", async ({ page }) => {
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify the successful creation of the new assistant
-  await expect(page.getByText("Test Assistant Description")).toBeVisible({
-    timeout: 5000,
-  });
+  await verifyAssistantIsChosen(page, "Test Assistant");
 
   // Start another new chat session
   await startNewChat(page);
 
   // Verify the presence of the default assistant text
   try {
-    await expect(page.getByText("Assistant with access to")).toBeVisible({
-      timeout: 5000,
-    });
+    await verifyAssistantIsChosen(page, "Search");
   } catch (error) {
     console.error("Live Assistant final page content:");
     console.error(await page.content());

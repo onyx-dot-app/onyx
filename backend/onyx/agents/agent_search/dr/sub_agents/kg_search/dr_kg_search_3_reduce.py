@@ -97,7 +97,7 @@ def kg_search_reducer(
         )
         write_custom_event(
             current_step_nr,
-            ReasoningDelta(reasoning=kg_display_answer, type="reasoning_delta"),
+            ReasoningDelta(reasoning=kg_display_answer),
             writer,
         )
         write_custom_event(

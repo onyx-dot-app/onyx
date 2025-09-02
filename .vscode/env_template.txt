@@ -67,3 +67,6 @@ S3_ENDPOINT_URL=http://localhost:9004
 S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket
 S3_AWS_ACCESS_KEY_ID=minioadmin
 S3_AWS_SECRET_ACCESS_KEY=minioadmin
+
+# Show extra/uncommon connectors
+SHOW_EXTRA_CONNECTORS=True

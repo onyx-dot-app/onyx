@@ -58,13 +58,16 @@ export function Label({
   children,
   small,
   className,
+  htmlFor,
 }: {
   children: string | JSX.Element;
   small?: boolean;
   className?: string;
+  htmlFor?: string;
 }) {
   return (
     <label
+      {...(htmlFor ? { htmlFor } : {})}
       className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
         small ? "text-sm" : "text-base"
       }`}
@@ -96,21 +99,21 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
   // If children is a string, use RichTextSubtext to parse and render links
   if (typeof children === "string") {
     return (
-      <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+      <span className="block text-sm text-neutral-600 dark:text-neutral-300 mb-2">
         <RichTextSubtext
           text={children}
           className={hasNewlines ? "whitespace-pre-wrap" : ""}
         />
-      </div>
+      </span>
     );
   }
 
   return (
-    <div
-      className={`text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
+    <span
+      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
     >
       {children}
-    </div>
+    </span>
   );
 }
 
@@ -705,14 +708,18 @@ export const BooleanFormField = ({
     [disabled, name, setFieldValue, onChange]
   );
 
+  // Generate a stable, valid id from the field name for label association
+  const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
   return (
     <div>
-      <label className="flex items-center text-sm cursor-pointer">
+      <div className="flex items-center text-sm">
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger asChild>
               <CheckboxField
                 name={name}
+                id={checkboxId}
                 size="sm"
                 className={`
                   ${disabled ? "opacity-50" : ""}
@@ -732,16 +739,21 @@ export const BooleanFormField = ({
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
-              <Label small={small}>{`${label}${
-                optional ? " (Optional)" : ""
-              }`}</Label>
+              <Label
+                htmlFor={checkboxId}
+                small={small}
+                className="cursor-pointer"
+              >{`${label}${optional ? " (Optional)" : ""}`}</Label>
               {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
             </div>
-
-            {subtext && <SubLabel>{subtext}</SubLabel>}
+            {subtext && (
+              <label htmlFor={checkboxId} className="cursor-pointer">
+                <SubLabel>{subtext}</SubLabel>
+              </label>
+            )}
           </div>
         )}
-      </label>
+      </div>
 
       <ErrorMessage
         name={name}

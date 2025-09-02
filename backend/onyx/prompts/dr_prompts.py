@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -49,7 +47,7 @@ You generally should not need to ask clarification questions about the topics be
 by the {INTERNAL_SEARCH} tool, as the retrieved documents will likely provide you with more context.
 Each request to the {INTERNAL_SEARCH} tool should largely be written as a SEARCH QUERY, and NOT as a question \
 or an instruction! Also, \
-The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. \
+The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
 TOOL_DESCRIPTION[
@@ -57,7 +55,12 @@ TOOL_DESCRIPTION[
 ] = f"""\
 This tool is used to answer questions that can be answered using the information \
 that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
-{MAX_DR_PARALLEL_SEARCH} queries. \
+{MAX_DR_PARALLEL_SEARCH} queries.
+USAGE HINTS:
+  - Since the {INTERNET_SEARCH} tool is not well suited for time-ordered questions (e.g., '...latest publication...', \
+if questions of this type would be the actual goal, you should send questions to the \
+{INTERNET_SEARCH} tool of the type '... RECENT publications...', and trust that future language model \
+calls will be able to find the 'latest publication' from within the results.
 """
 
 TOOL_DESCRIPTION[
@@ -884,7 +887,7 @@ Here is the base question that ultimately needs to be answered:
 ---base_question---
 {SEPARATOR_LINE}
 
-Here is the tool response:
+Here is the tool, its description, and the results that it returned:
 {SEPARATOR_LINE}
 ---tool_response---
 {SEPARATOR_LINE}
@@ -893,6 +896,7 @@ Notes:
    - clearly state in your answer if the tool response did not provide relevant information, \
 or the response does not apply to this specific context. Do not make up information!
    - It is critical to avoid hallucinations as well as taking information out of context.
+   - Make sure you consider the tool description as context for the provided result.
    - clearly indicate any assumptions you make in your answer.
    - while the base question is important, really focus on answering the specific task query. \
 That is your task.
@@ -992,8 +996,8 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1017,7 +1021,7 @@ ANSWER:
 FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS = PromptTemplate(
     f"""
 You are great at answering a user question based \
-a list of documents that were retrieved in response to subh-questions, and possibly also \
+a list of documents that were retrieved in response to sub-questions, and possibly also \
 corresponding sub-answers  (note, a given subquestion may or may not have a corresponding sub-answer).
 
 Here is the question that needs to be answered:
@@ -1046,8 +1050,8 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers (if available) mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers (if available) do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1097,8 +1101,8 @@ GUIDANCE:
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
-was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explicitly \
+was explicitly mentioned! If you cannot reliably use that information to construct your answer, \
+you MUST qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
@@ -1246,7 +1250,6 @@ whether there is a time filter implied in the query, and to rewrite the \
 query into a query that is much better suited for a search query against the predicted \
 document types.
 
-
 Here is the initial search query:
 {SEPARATOR_LINE}
 ---branch_query---
@@ -1258,17 +1261,17 @@ Here is the list of document types that are available for the search:
 {SEPARATOR_LINE}
 To interpret what the document types refer to, please refer to your own knowledge.
 
-And today is {datetime.now().strftime("%Y-%m-%d")}.
+And the current time is ---current_time---.
 
 With this, please try to identify mentioned source types and time filters, and \
 rewrite the query.
 
 Guidelines:
  - if one or more source types have been identified in 'specified_source_types', \
-they MUST NOT be part of the rewritten search query... take it out in that case! \
+they MUST NOT be part of the rewritten search query! Take it out in that case! \
 Particularly look for expressions like '...in our Google docs...', '...in our \
-Google calls', etc., in which case the source type is 'google_drive' or 'gong' \
-should not be included in the rewritten query!
+Google calls...', etc., in which case the source type is 'google_drive' or 'gong', \
+those should not be included in the rewritten query!
  - if a time filter has been identified in 'time_filter', it MUST NOT be part of \
 the rewritten search query... take it out in that case! Look for expressions like \
 '...of this year...', '...of this month...', etc., in which case the time filter \
@@ -1304,7 +1307,7 @@ EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING = """
 You are great at 1) determining whether a question can be answered \
 by you directly using your knowledge alone and the chat history (if any), and 2) actually \
 answering the question/request, \
-if the request DOES NOT require or would strongly benefit from ANY external tool \
+if the request DOES NOT require nor would strongly benefit from ANY external tool \
 (any kind of search [internal, web search, etc.], action taking, etc.) or from external knowledge.
 """
 
@@ -1321,7 +1324,7 @@ doubt, do not use the information or at minimum communicate that you are not sur
 GENERAL_DR_ANSWER_PROMPT = PromptTemplate(
     f"""\
 Below you see a user question and potentially an earlier chat history that can be referred to \
-for context. Also, today is {datetime.now().strftime("%Y-%m-%d")}.
+for context. Also, the current time is ---current_time---.
 Please answer it directly, again pointing out any uncertainties \
 you may have.
 

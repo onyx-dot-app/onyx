@@ -1,5 +1,11 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlusCircle, FiPlus, FiFilter } from "react-icons/fi";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { FiPlus } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -8,7 +14,7 @@ import { InputPrompt } from "@/app/chat/interfaces";
 
 import { FilterManager, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
-import { ChatFileType, FileDescriptor } from "../../interfaces";
+import { ChatFileType } from "../../interfaces";
 import {
   DocumentIcon2,
   FileIcon,
@@ -17,27 +23,21 @@ import {
   StopGeneratingIcon,
 } from "@/components/icons/icons";
 import { OnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
-import { FilterPopup } from "@/components/search/filtering/FilterPopup";
-import { DocumentSetSummary, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { DeepResearchToggle } from "./DeepResearchToggle";
+import { ActionToggle } from "./ActionManagement";
+import { SelectedTool } from "./SelectedTool";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -105,19 +105,16 @@ interface ChatInputBarProps {
   selectedAssistant: MinimalPersonaSnapshot;
 
   toggleDocumentSidebar: () => void;
-  setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
-  availableSources: SourceMetadata[];
-  availableDocumentSets: DocumentSetSummary[];
-  availableTags: Tag[];
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
-  setDeepResearchEnabled: (deepResearchEnabled: boolean) => void;
+  toggleDeepResearch: () => void;
+  placeholder?: string;
 }
 
-export function ChatInputBar({
+export const ChatInputBar = React.memo(function ChatInputBar({
   toggleDocSelection,
   retrievalEnabled,
   removeDocs,
@@ -134,15 +131,12 @@ export function ChatInputBar({
   // assistants
   selectedAssistant,
 
-  setFiles,
   handleFileUpload,
   textAreaRef,
-  availableSources,
-  availableDocumentSets,
-  availableTags,
   llmManager,
   deepResearchEnabled,
-  setDeepResearchEnabled,
+  toggleDeepResearch,
+  placeholder,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const {
@@ -153,6 +147,8 @@ export function ChatInputBar({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
 
   // Create a Set of IDs from currentMessageFiles for efficient lookup
   // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
@@ -191,50 +187,7 @@ export function ChatInputBar({
     }
   };
 
-  const { finalAssistants: assistantOptions } = useAssistantsContext();
-
   const { llmProviders, inputPrompts } = useChatContext();
-
-  const suggestionsRef = useRef<HTMLDivElement | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
-  const interactionsRef = useRef<HTMLDivElement | null>(null);
-
-  const hideSuggestions = () => {
-    setShowSuggestions(false);
-    setTabbingIconIndex(0);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(event.target as Node) &&
-        (!interactionsRef.current ||
-          !interactionsRef.current.contains(event.target as Node))
-      ) {
-        hideSuggestions();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleAssistantInput = (text: string) => {
-    if (!text.startsWith("@")) {
-      hideSuggestions();
-    } else {
-      const match = text.match(/(?:\s|^)@(\w*)$/);
-      if (match) {
-        setShowSuggestions(true);
-      } else {
-        hideSuggestions();
-      }
-    }
-  };
-
   const [showPrompts, setShowPrompts] = useState(false);
 
   const hidePrompts = () => {
@@ -249,58 +202,57 @@ export function ChatInputBar({
     setMessage(`${prompt.content}`);
   };
 
-  const handlePromptInput = (text: string) => {
-    if (!text.startsWith("/")) {
-      hidePrompts();
-    } else {
-      const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
-      if (promptMatch) {
-        setShowPrompts(true);
-      } else {
+  const handlePromptInput = useCallback(
+    (text: string) => {
+      if (!text.startsWith("/")) {
         hidePrompts();
+      } else {
+        const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
+        if (promptMatch) {
+          setShowPrompts(true);
+        } else {
+          hidePrompts();
+        }
+      }
+    },
+    [hidePrompts]
+  );
+
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const text = event.target.value;
+      setMessage(text);
+      handlePromptInput(text);
+    },
+    [setMessage, handlePromptInput]
+  );
+
+  const startFilterSlash = useMemo(() => {
+    if (message !== undefined) {
+      const message_segments = message
+        .slice(message.lastIndexOf("/") + 1)
+        .split(/\s/);
+      if (message_segments[0]) {
+        return message_segments[0].toLowerCase();
       }
     }
-  };
-
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = event.target.value;
-    setMessage(text);
-    handleAssistantInput(text);
-    handlePromptInput(text);
-  };
-
-  let startFilterAt = "";
-  if (message !== undefined) {
-    const message_segments = message
-      .slice(message.lastIndexOf("@") + 1)
-      .split(/\s/);
-    if (message_segments[0]) {
-      startFilterAt = message_segments[0].toLowerCase();
-    }
-  }
-
-  let startFilterSlash = "";
-  if (message !== undefined) {
-    const message_segments = message
-      .slice(message.lastIndexOf("/") + 1)
-      .split(/\s/);
-    if (message_segments[0]) {
-      startFilterSlash = message_segments[0].toLowerCase();
-    }
-  }
+    return "";
+  }, [message]);
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
-  const filteredPrompts = inputPrompts.filter(
-    (prompt) =>
-      prompt.active && prompt.prompt.toLowerCase().startsWith(startFilterSlash)
+  const filteredPrompts = useMemo(
+    () =>
+      inputPrompts.filter(
+        (prompt) =>
+          prompt.active &&
+          prompt.prompt.toLowerCase().startsWith(startFilterSlash)
+      ),
+    [inputPrompts, startFilterSlash]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      (showSuggestions || showPrompts) &&
-      (e.key === "Tab" || e.key == "Enter")
-    ) {
+    if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
       e.preventDefault();
 
       if (tabbingIconIndex == filteredPrompts.length && showPrompts) {
@@ -318,13 +270,13 @@ export function ChatInputBar({
       }
     }
 
-    if (!showPrompts && !showSuggestions) {
+    if (!showPrompts) {
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setTabbingIconIndex((tabbingIconIndex) =>
-        Math.min(tabbingIconIndex + 1, showPrompts ? filteredPrompts.length : 0)
+        Math.min(tabbingIconIndex + 1, filteredPrompts.length)
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
@@ -386,10 +338,7 @@ export function ChatInputBar({
           "
         >
           {showPrompts && user?.preferences?.shortcut_enabled && (
-            <div
-              ref={suggestionsRef}
-              className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
-            >
+            <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
               <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
                 {filteredPrompts.map(
                   (currentPrompt: InputPrompt, index: number) => (
@@ -486,13 +435,15 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`How can ${selectedAssistant.name} help you today`}
+              placeholder={
+                placeholder ||
+                `How can ${selectedAssistant.name} help you today`
+              }
               value={message}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
                   !showPrompts &&
-                  !showSuggestions &&
                   !event.shiftKey &&
                   !(event.nativeEvent as any).isComposing
                 ) {
@@ -659,7 +610,7 @@ export function ChatInputBar({
             )}
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
-              <div className="space-x-1 flex  px-4 ">
+              <div className="space-x-1 flex px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
                   Icon={FileUploadIcon}
@@ -669,33 +620,43 @@ export function ChatInputBar({
                   tooltipContent={"Upload files and attach user files"}
                 />
 
-                {retrievalEnabled && (
-                  <FilterPopup
-                    availableSources={availableSources}
-                    availableDocumentSets={
-                      selectedAssistant.document_sets &&
-                      selectedAssistant.document_sets.length > 0
-                        ? selectedAssistant.document_sets
-                        : availableDocumentSets
-                    }
-                    availableTags={availableTags}
-                    filterManager={filterManager}
-                    trigger={{
-                      name: "Filters",
-                      Icon: FiFilter,
-                      tooltipContent: "Filter your search",
-                    }}
-                  />
+                {selectedAssistant.tools.length > 0 && (
+                  <ActionToggle selectedAssistant={selectedAssistant} />
                 )}
 
                 {retrievalEnabled &&
                   settings?.settings.deep_research_enabled && (
                     <DeepResearchToggle
                       deepResearchEnabled={deepResearchEnabled}
-                      setDeepResearchEnabled={setDeepResearchEnabled}
+                      toggleDeepResearch={toggleDeepResearch}
                     />
                   )}
+
+                {forcedToolIds.length > 0 && (
+                  <div className="pl-1 flex items-center gap-2 text-blue-500">
+                    {forcedToolIds.map((toolId) => {
+                      const tool = selectedAssistant.tools.find(
+                        (tool) => tool.id === toolId
+                      );
+                      if (!tool) {
+                        return null;
+                      }
+                      return (
+                        <SelectedTool
+                          key={toolId}
+                          tool={tool}
+                          onClick={() => {
+                            setForcedToolIds((prev) =>
+                              prev.filter((id) => id !== toolId)
+                            );
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center my-auto gap-x-2">
                 <LLMPopover
                   llmProviders={llmProviders}
@@ -748,4 +709,4 @@ export function ChatInputBar({
       </div>
     </div>
   );
-}
+});
