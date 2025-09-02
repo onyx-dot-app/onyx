@@ -103,7 +103,7 @@ export function ChatSessionDisplay({
 
   const handleMoveOutOfFolder = useCallback(async () => {
     try {
-      if (chatSession.folder_id == null) return;
+      if (chatSession.folder_id === null) return;
       await removeChatFromFolder(chatSession.folder_id, chatSession.id);
       await refreshChatSessions();
       await refreshFolders();
