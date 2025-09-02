@@ -482,6 +482,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 associate_by_email=True,
                 is_verified_by_default=True,
                 redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+                code_challenge="test",
+                code_challenge_method="plain",
             ),
             prefix="/auth/oidc",
         )

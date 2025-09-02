@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from typing import Any
+from typing import Any, Literal
 from typing import cast
 from typing import Dict
 from typing import List
@@ -1170,6 +1170,8 @@ def create_onyx_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[Literal["plain", "S256"]] = None,
 ) -> APIRouter:
     return get_oauth_router(
         oauth_client,
@@ -1179,6 +1181,8 @@ def create_onyx_oauth_router(
         redirect_url,
         associate_by_email,
         is_verified_by_default,
+        code_challenge,
+        code_challenge_method,
     )
 
 
@@ -1190,6 +1194,8 @@ def get_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[Literal["plain", "S256"]] = None,
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1235,6 +1241,8 @@ def get_oauth_router(
             authorize_redirect_url,
             state,
             scopes,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
         )
 
         # For Google OAuth, add parameters to request refresh tokens
