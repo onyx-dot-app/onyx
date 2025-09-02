@@ -407,7 +407,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_with_tenant(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id)
+            #verify_email_in_whitelist(account_email, tenant_id)
             verify_email_domain(account_email)
 
             if MULTI_TENANT:
@@ -450,11 +450,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    user_count = await get_user_count()
+                    if (
+                        user_count == 0
+                        or account_email in get_default_admin_user_emails()
+                    ):
+                        role = UserRole.ADMIN
+                    else:
+                        role = UserRole.BASIC
                     password = self.password_helper.generate()
                     user_dict = {
                         "email": account_email,
                         "hashed_password": self.password_helper.hash(password),
                         "is_verified": is_verified_by_default,
+                        "role": role,
                     }
 
                     user = await self.user_db.create(user_dict)
