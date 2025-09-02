@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
@@ -31,6 +32,7 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.user_documents import calculate_user_files_token_count
+from onyx.db.user_documents import create_file_connector_credential
 from onyx.db.user_documents import create_user_files
 from onyx.db.user_documents import get_user_file_indexing_status
 from onyx.db.user_documents import share_file_with_assistant
@@ -163,6 +165,44 @@ def upload_user_files(
     except Exception as e:
         logger.error(f"Error uploading files: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
+
+
+@router.get('/user/force_reindex_file')
+def force_reindex(
+    user_file_id: str | None = None,
+    user: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+):
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == user_file_id)
+        .first()
+    )
+
+    cc_pair = create_file_connector_credential(user_file, user, db_session)
+    user_file.cc_pair_id = cc_pair.data
+
+    db_session.commit()
+
+    return "reindex triggered"
+
+@router.get('/user/force_reindex_all_files')
+def force_reindex_all(
+    user_file_id: str | None = None,
+    user: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+):
+    user_files = (
+        db_session.query(UserFile)
+        .all()
+    )
+    for user_file in user_files:
+        cc_pair = create_file_connector_credential(user_file, user, db_session)
+        user_file.cc_pair_id = cc_pair.data
+
+        db_session.commit()
+
+    return "reindex triggered"
 
 
 class FolderUpdateRequest(BaseModel):
