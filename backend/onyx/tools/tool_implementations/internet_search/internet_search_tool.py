@@ -19,7 +19,7 @@ _GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Res
 
 
 class InternetSearchTool(Tool[None]):
-    _NAME = "run_web_search"
+    _NAME = "run_internet_search"  # TODO: change to run_web_search along with the remaning changes to 'web'
     _DESCRIPTION = "Search the web for information. Never call this tool."
     _DISPLAY_NAME = "Web Search"
 

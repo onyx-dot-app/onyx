@@ -24,7 +24,7 @@ logger = setup_logger()
 
 def dr_image_generation_graph_builder() -> StateGraph:
     """
-    LangGraph graph builder for Web Search Sub-Agent
+    LangGraph graph builder for Image Generation Sub-Agent
     """
 
     graph = StateGraph(state_schema=SubAgentMainState, input=SubAgentInput)

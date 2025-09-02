@@ -58,11 +58,11 @@ def downgrade() -> None:
         ),
     )
 
-    # Restore the foreign key constraint pointing to research_agent_iteration.id
+    # Restore the foreign key constraint pointing to research_agent_iteration_sub_step.id
     op.create_foreign_key(
         "research_agent_iteration_sub_step_parent_question_id_fkey",
         "research_agent_iteration_sub_step",
-        "research_agent_iteration",
+        "research_agent_iteration_sub_step",
         ["parent_question_id"],
         ["id"],
         ondelete="CASCADE",

@@ -313,6 +313,7 @@ def construct_tools(
                 # skip the knowledge graph tool if KG is not enabled/exposed
                 kg_config = get_kg_config_settings()
                 if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
+                    logger.debug("Knowledge Graph Tool is not enabled/exposed")
                     continue
 
                 if persona.name != TMP_DRALPHA_PERSONA_NAME:

@@ -326,7 +326,7 @@ def closer(
     )
 
     # for DR, rely only on sub-answers and claims to save tokens if context is too long
-    # TODO: consider compression step for Thoughtful mode if context istoo long.
+    # TODO: consider compression step for Thoughtful mode if context is too long.
     # Should generally not be the case though.
 
     max_allowed_input_tokens = graph_config.tooling.primary_llm.config.max_input_tokens
