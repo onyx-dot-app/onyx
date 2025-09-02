@@ -487,6 +487,8 @@ export interface LlmManager {
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
+  reasoningLevel: "low" | "medium" | "high";
+  updateReasoningLevel: (level: "low" | "medium" | "high") => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -716,12 +718,16 @@ export function useLlmManager(
     }
   };
 
+  const [reasoningLevel, setReasoningLevel] = useState<"low" | "medium" | "high">("medium");
+
   return {
     updateModelOverrideBasedOnChatSession,
     currentLlm,
     updateCurrentLlm,
     temperature,
     updateTemperature,
+    reasoningLevel,
+    updateReasoningLevel: setReasoningLevel,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAssistant: liveAssistant ?? null,
@@ -813,18 +819,23 @@ export const fetchConnectorIndexingStatus = async (
 
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
+  "gpt-5": "GPT 5",
+  "gpt-5-mini": "GPT 5 Mini",
+  "gpt-5-nano": "GPT 5 Nano",
+  "gpt-5-chat": "GPT 5 Chat",
+  "gpt-4.1": "GPT 4.1",
+  "gpt-4.1-mini": "GPT 4.1 Mini",
+  "gpt-4.1-nano": "GPT 4.1 Nano",
+  "gpt-4.5-preview": "GPT 4.5 Preview",
   "o1-2025-12-17": "o1 (December 2025)",
+  "o4-mini": "o4 Mini",
+  "o3": "o3",
   "o3-mini": "o3 Mini",
   "o1-mini": "o1 Mini",
   "o1-preview": "o1 Preview",
-  o1: "o1",
-  "gpt-5": "GPT 5",
-  "gpt-5-mini": "GPT 5 Mini",
-  "gpt-4.1": "GPT 4.1",
+  "o1": "o1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
-  "o4-mini": "o4 Mini",
-  o3: "o3",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
   "gpt-4o-mini": "GPT 4o Mini",
   "gpt-4-0314": "GPT 4 (March 2023)",
@@ -851,6 +862,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "llama-3.2-90b-vision-instruct": "Llama 3.2 90B",
   "llama-3.2-11b-vision-instruct": "Llama 3.2 11B",
   "llama-3.3-70b-instruct": "Llama 3.3 70B",
+  "llama-4-maverick": "Llama 4 Maverick",
+  "Llama-4-Maverick-17B-128E-Instruct-FP8": "Llama 4 Maverick",
+  "llama-4-scout": "Llama 4 Scout",
+  "Llama-4-Scout-17B-16E-Instruct": "Llama 4 Scout",
 
   // Microsoft models
   "phi-3.5-mini-instruct": "Phi 3.5 Mini",
@@ -860,6 +875,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // Deepseek Models
   "deepseek-r1": "DeepSeek R1",
+  "deepseek-r1-0528": "DeepSeek R1 (0528)",
+  "deepseek-v3": "DeepSeek V3",
+  "deepseek-v3-0324": "DeepSeek V3 (0324)",
 
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
@@ -878,6 +896,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
+  "claude-opus-4@20250514": "Claude 4 Opus",
+  "claude-sonnet-4@20250514": "Claude 4 Sonnet",
+  "claude-opus-4-1@20250805": "Claude 4.1 Opus",
 
   // Google Models
 
@@ -885,7 +906,6 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-2.5-pro": "Gemini 2.5 Pro",
   "gemini-2.5-flash": "Gemini 2.5 Flash",
   "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
-  // "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
 
   // 2.0 flash lite models
   "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
@@ -918,7 +938,13 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // Mistral Models
   "mistral-large-2411": "Mistral Large 24.11",
   "mistral-large@2411": "Mistral Large 24.11",
+  "mistral-medium-2505": "Mistral Medium 25.05",
+  "mistral-medium@2505": "Mistral Medium 25.05",
   "ministral-3b": "Ministral 3B",
+
+  // xAI Models
+  "grok-3": "Grok 3",
+  "grok-3-mini": "Grok 3 Mini",
 
   // Bedrock models
   "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",

@@ -10,6 +10,8 @@ import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
+import TemperatureToggle from "./TemperatureToggle";
+import ReasoningToggle from "./ReasoningToggle";
 import { InputPrompt } from "@/app/chat/interfaces";
 
 import { FilterManager, LlmManager } from "@/lib/hooks";
@@ -658,6 +660,14 @@ export const ChatInputBar = React.memo(function ChatInputBar({
               </div>
 
               <div className="flex items-center my-auto gap-x-2">
+                <TemperatureToggle
+                  llmManager={llmManager}
+                  llmProviders={llmProviders}
+                />
+                <ReasoningToggle
+                  llmManager={llmManager}
+                  llmProviders={llmProviders}
+                />
                 <LLMPopover
                   llmProviders={llmProviders}
                   llmManager={llmManager}
