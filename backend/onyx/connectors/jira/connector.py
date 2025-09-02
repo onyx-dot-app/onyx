@@ -202,6 +202,11 @@ def process_jira_issue(
 
 
 class JiraConnectorCheckpoint(ConnectorCheckpoint):
+    # used for v3 (cloud) endpoint
+    all_issue_ids: list[str] | None = None
+    cursor: str | None = None
+    # deprecated
+    # Used for v2 endpoint (server/data center)
     offset: int | None = None
 
 
