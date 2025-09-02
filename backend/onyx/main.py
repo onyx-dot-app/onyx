@@ -67,8 +67,6 @@ from onyx.server.features.input_prompt.api import (
 from onyx.server.features.input_prompt.api import (
     basic_router as input_prompt_router,
 )
-from onyx.server.features.mcp.api import admin_router as mcp_admin_router
-from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
@@ -99,6 +97,7 @@ from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
 from onyx.server.query_and_chat.chat_backend import router as chat_router
+from onyx.server.query_and_chat.chat_backend_v0 import router as chat_v0_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
 )
@@ -332,6 +331,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, chat_v0_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)
@@ -354,8 +354,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
-    include_router_with_global_prefix_prepended(application, mcp_router)
-    include_router_with_global_prefix_prepended(application, mcp_admin_router)
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, onyx_api_router)
     include_router_with_global_prefix_prepended(application, gpts_router)
