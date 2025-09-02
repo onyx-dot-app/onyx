@@ -6,6 +6,7 @@ from telebot.types import Message
 from onyx.db.telegram import check_api_token, edit_telegram_user_id_by_api_key, get_user_telegram_settings, \
     init_user_telegram_settings
 from telegram.utils.database import with_session
+from telegram.keyboard.settings import create_main_menu_keyboard
 
 
 def handler(bot: AsyncTeleBot):
@@ -24,15 +25,9 @@ def handler(bot: AsyncTeleBot):
                     init_user_telegram_settings(message.from_user.id, session)
 
                 await bot.send_message(message.from_user.id, "Вы успешно авторизовались!")
+            await bot.send_message(
+                message.from_user.id,
+                "Добро пожаловать! Воспользуйтесь меню для навигации:",
+                reply_markup=create_main_menu_keyboard()
+            )
 
-    @bot.message_handler(commands=["menu"])
-    async def user_menu(message: Message, state: StateContext):
-        await bot.send_message(message.from_user.id, """/start - Кнопка “Старт”. Запуск механизма взаимодействия с ботом (перезапуск бота)
-
-/menu - Кнопка “Меню”. Получение списка команд
-
-/assistant - Выбор ЦП
-
-/model - Выбор модели LLM
-
-/restart - Новая чат сессия""")

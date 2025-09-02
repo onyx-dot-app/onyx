@@ -7,12 +7,15 @@ from onyx.db.llm import fetch_existing_llm_providers_for_user
 from onyx.db.persona import get_personas_for_user
 from onyx.db.telegram import get_user_by_telegram_user_id, \
     edit_user_telegram_settings_persona, edit_user_telegram_settings_model
-from telegram.keyboard.settings import settings_constructor_for_personas, settings_constructor_for_llm_providers
+from telegram.keyboard.settings import MENU_BUTTONS_TXT, settings_constructor_for_personas, settings_constructor_for_llm_providers
 from telegram.utils.database import with_session
 
 
 def handler(bot: AsyncTeleBot):
-    @bot.message_handler(commands=["model"], auth=True)
+    @bot.message_handler(
+        func=lambda msg: msg.text in ["/model", MENU_BUTTONS_TXT.edit_model.value],
+        auth=True
+    )
     @with_session
     async def handle_edit_model(message: Message, session: Session, state: StateContext):
         user_by_token = get_user_by_telegram_user_id(message.from_user.id, session)
@@ -23,7 +26,10 @@ def handler(bot: AsyncTeleBot):
 
         await bot.send_message(chat_id=message.from_user.id, text="Выберите Модель: ", reply_markup=keyboard)
 
-    @bot.message_handler(commands=["assistant"], auth=True)
+    @bot.message_handler(
+        func=lambda msg: msg.text in ["/assistant", MENU_BUTTONS_TXT.edit_persona.value],
+        auth=True
+    )
     @with_session
     async def handle_edit_persona(message: Message, session: Session, state: StateContext):
         user_by_token = get_user_by_telegram_user_id(message.from_user.id, session)
@@ -34,7 +40,10 @@ def handler(bot: AsyncTeleBot):
 
         await bot.send_message(chat_id=message.from_user.id, text="Выберите Ассистента: ", reply_markup=keyboard)
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("persona_"), auth=True)
+    @bot.callback_query_handler(
+        func=lambda call: call.data.startswith("persona_"),
+        auth=True
+    )
     @with_session
     async def change_persona(call: CallbackQuery, session: Session, state: StateContext):
         persona_id = int(call.data.split("_")[1])
@@ -44,7 +53,10 @@ def handler(bot: AsyncTeleBot):
 
         await bot.send_message(call.from_user.id, "Вы успешно сменили ассистента!")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("model_"), auth=True)
+    @bot.callback_query_handler(
+        func=lambda call: call.data.startswith("model_"),
+        auth=True
+    )
     @with_session
     async def change_model(call: CallbackQuery, session: Session, state: StateContext):
         model = {
