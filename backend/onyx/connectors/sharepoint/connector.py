@@ -225,6 +225,7 @@ def _convert_driveitem_to_document_with_permissions(
         logger.warning(f"Could not access content for '{driveitem.name}'")
         raise ValueError(f"Could not access content for '{driveitem.name}'")
 
+    content_bytes = None
     # Handle different content types
     if isinstance(content.value, bytes):
         content_bytes = content.value
