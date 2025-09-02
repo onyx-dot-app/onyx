@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Persona
 from onyx.db.models import UserFile
+from onyx.db.projects import get_user_files_from_project
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import get_user_files_as_user
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -15,11 +16,11 @@ logger = setup_logger()
 
 
 def parse_user_files(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     db_session: Session,
     persona: Persona,
     actual_user_input: str,
+    project_id: int,
     # should only be None if auth is disabled
     user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
@@ -29,10 +30,10 @@ def parse_user_files(
 
     Args:
         user_file_ids: List of user file IDs to load
-        user_folder_ids: List of user folder IDs to load
         db_session: Database session
         persona: Persona to calculate available tokens
         actual_user_input: User's input message for token calculation
+        project_id: Project ID to validate file ownership
         user_id: User ID to validate file ownership
 
     Returns:
@@ -44,19 +45,27 @@ def parse_user_files(
         )
     """
     # Return empty results if no files or folders specified
-    if not user_file_ids and not user_folder_ids:
+    if not user_file_ids and not project_id:
         return [], [], None
+
+    project_user_file_ids = []
+
+    if project_id and user_id:
+        project_user_file_ids.extend(
+            [
+                file.id
+                for file in get_user_files_from_project(project_id, user_id, db_session)
+            ]
+        )
 
     # Load user files from the database into memory
     user_files = load_in_memory_chat_files(
-        user_file_ids or [],
-        user_folder_ids or [],
+        user_file_ids + project_user_file_ids or [],
         db_session,
     )
 
     user_file_models = get_user_files_as_user(
-        user_file_ids or [],
-        user_folder_ids or [],
+        user_file_ids + project_user_file_ids or [],
         user_id,
         db_session,
     )
@@ -69,8 +78,7 @@ def parse_user_files(
     )
 
     total_tokens = calculate_user_files_token_count(
-        user_file_ids or [],
-        user_folder_ids or [],
+        user_file_ids + project_user_file_ids or [],
         db_session,
     )
 
@@ -88,7 +96,7 @@ def parse_user_files(
 
     # If we have enough tokens and no folders, we don't need search
     # we can just pass them into the prompt directly
-    if have_enough_tokens and not user_folder_ids:
+    if have_enough_tokens and False:
         # No search tool override needed - files can be passed directly
         return user_files, user_file_models, None
 
@@ -98,8 +106,7 @@ def parse_user_files(
         alternate_db_session=None,
         retrieved_sections_callback=None,
         skip_query_analysis=have_enough_tokens,
-        user_file_ids=user_file_ids,
-        user_folder_ids=user_folder_ids,
+        user_file_ids=user_file_ids + project_user_file_ids or [],
     )
 
     return user_files, user_file_models, override_kwargs

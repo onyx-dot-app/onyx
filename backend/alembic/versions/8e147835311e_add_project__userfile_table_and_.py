@@ -21,6 +21,31 @@ def upgrade() -> None:
     # 0) Ensure UUID generator exists
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
+    # Drop folder related tables and columns
+    # First try to drop the foreign key constraint if it exists
+    try:
+        # TODO(subash): do proper deletion on constraints
+        op.drop_constraint(
+            "chat_session_folder_id_fkey", "chat_session", type_="foreignkey"
+        )
+    except Exception:
+        # Constraint might not exist, that's okay
+        pass
+
+    # Then drop the folder_id column if it exists
+    try:
+        op.drop_column("chat_session", "folder_id")
+    except Exception:
+        # Column might not exist, that's okay
+        pass
+
+    # Finally drop the chat_folder table if it exists
+    try:
+        op.drop_table("chat_folder")
+    except Exception:
+        # Table might not exist, that's okay
+        pass
+
     # 1) Add transitional UUID column on user_file + UNIQUE so FKs can reference it
     op.add_column(
         "user_file",
@@ -164,6 +189,38 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Recreate folder related tables and columns
+    # First create the chat_folder table
+    op.create_table(
+        "chat_folder",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("user_id", psql.UUID(as_uuid=True), nullable=True),
+        sa.Column("name", sa.String(), nullable=True),
+        sa.Column("display_priority", sa.Integer(), nullable=True, default=0),
+    )
+    # Add foreign key for user_id after table creation
+    op.create_foreign_key(
+        "chat_folder_user_id_fkey",
+        "chat_folder",
+        "user",
+        ["user_id"],
+        ["id"],
+    )
+
+    # Add folder_id column to chat_session
+    op.add_column(
+        "chat_session",
+        sa.Column("folder_id", sa.Integer(), nullable=True),
+    )
+    # Create foreign key constraint after both tables exist
+    op.create_foreign_key(
+        "chat_session_folder_id_fkey",
+        "chat_session",
+        "chat_folder",
+        ["folder_id"],
+        ["id"],
+    )
+
     # Drop extra columns
     op.drop_column("user_file", "last_accessed_at")
     op.drop_column("user_file", "boost")

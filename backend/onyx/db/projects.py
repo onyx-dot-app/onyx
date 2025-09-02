@@ -1,6 +1,7 @@
 import datetime
 import uuid
 from typing import List
+from uuid import UUID
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.models import UserFolder
 from onyx.server.documents.connector import upload_files
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -84,3 +86,29 @@ def upload_files_to_user_files_with_indexing(
         )
 
     return user_files
+
+
+def check_project_ownership(
+    project_id: int, user_id: UUID, db_session: Session
+) -> bool:
+    return (
+        db_session.query(UserFolder)
+        .filter(UserFolder.id == project_id, UserFolder.user_id == user_id)
+        .first()
+        is not None
+    )
+
+
+def get_user_files_from_project(
+    project_id: int, user_id: UUID, db_session: Session
+) -> list[UserFile]:
+    # First check if the user owns the project
+    if not check_project_ownership(project_id, user_id, db_session):
+        return []
+
+    return (
+        db_session.query(UserFile)
+        .join(Project__UserFile)
+        .filter(Project__UserFile.project_id == project_id)
+        .all()
+    )

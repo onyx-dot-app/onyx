@@ -39,11 +39,9 @@ import { ActionToggle } from "./ActionManagement";
 import { SelectedTool } from "./SelectedTool";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import FilePicker from "../files/FilePicker";
-import {
-  ProjectFile,
-  useProjectsContext,
-} from "../../projects/ProjectsContext";
+import { useProjectsContext } from "../../projects/ProjectsContext";
 import { FileDescriptor } from "@/app/chat/interfaces";
+import { ProjectFile } from "@/app/chat/projects/projectsService";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -171,10 +169,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       );
       const messageFiles: FileDescriptor[] = uploadedMessageFiles.map(
         (file) => ({
-          id: file.id,
+          id: file.file_id,
           name: file.name,
           type: file.chat_file_type,
-          isUploading: true,
+          isUploading: false,
+          user_file_id: file.id,
         })
       );
       setCurrentMessageFiles(messageFiles);
@@ -654,8 +653,24 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                   tooltipContent={"Upload files and attach user files"}
                 />
                 <FilePicker
-                  onPickRecent={(fileId: string) => {
-                    console.log("Picked recent", fileId);
+                  onPickRecent={(file: ProjectFile) => {
+                    // Check if file with same ID already exists
+                    if (
+                      !currentMessageFiles.some(
+                        (existingFile) => existingFile.id === file.file_id
+                      )
+                    ) {
+                      const fileDescriptor: FileDescriptor = {
+                        id: file.file_id,
+                        type: file.chat_file_type,
+                        name: file.name,
+                        user_file_id: file.id,
+                      };
+                      setCurrentMessageFiles([
+                        ...currentMessageFiles,
+                        fileDescriptor,
+                      ]);
+                    }
                   }}
                   recentFiles={recentFiles}
                   handleUploadChange={handleUploadChange}

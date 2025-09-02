@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -119,8 +120,7 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    user_file_ids: list[int] | None = None
-    user_folder_ids: list[int] | None = None
+    user_file_ids: list[UUID] | None = None
 
 
 class IndexFilters(BaseFilters, UserFileFilters):

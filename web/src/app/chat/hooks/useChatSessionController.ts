@@ -57,8 +57,6 @@ interface UseChatSessionControllerProps {
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
-    selectedFiles: FileResponse[];
-    selectedFolders: FolderResponse[];
     currentMessageFiles: FileDescriptor[];
     useAgentSearch: boolean;
     isSeededChat?: boolean;
@@ -167,8 +165,6 @@ export function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
-            selectedFiles: [],
-            selectedFolders: [],
             currentMessageFiles: [],
             useAgentSearch: false,
           });
@@ -261,8 +257,6 @@ export function useChatSessionController({
         await onSubmit({
           message: seededMessage,
           isSeededChat: true,
-          selectedFiles: [],
-          selectedFolders: [],
           currentMessageFiles: [],
           useAgentSearch: false,
         });

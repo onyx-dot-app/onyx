@@ -60,6 +60,7 @@ from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.projects import check_project_ownership
 from onyx.db.user_documents import create_user_files
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
@@ -290,6 +291,12 @@ def create_new_chat_session(
     logger.info(
         f"Creating chat session with request: {chat_session_creation_request.persona_id}"
     )
+    project_id = chat_session_creation_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user.id, db_session):
+            raise HTTPException(
+                status_code=403, detail="User does not have access to project"
+            )
     user_id = user.id if user is not None else None
     try:
         new_chat_session = create_chat_session(

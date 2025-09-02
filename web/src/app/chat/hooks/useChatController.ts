@@ -124,6 +124,7 @@ export function useChatController({
   const searchParams = useSearchParams();
   const { refreshChatSessions, llmProviders } = useChatContext();
   const { assistantPreferences, forcedToolIds } = useAssistantsContext();
+  const { fetchProjects } = useProjectsContext();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -303,8 +304,6 @@ export function useChatController({
   const onSubmit = useCallback(
     async ({
       message,
-      selectedFiles,
-      selectedFolders,
       currentMessageFiles,
       useAgentSearch,
       messageIdToResend,
@@ -316,11 +315,10 @@ export function useChatController({
       overrideFileDescriptors,
     }: {
       message: string;
-      // from MyDocuments
-      selectedFiles: FileResponse[];
-      selectedFolders: FolderResponse[];
-      // from the chat bar???
+      //from chat input bar
       currentMessageFiles: FileDescriptor[];
+      // from the chat bar???
+
       useAgentSearch: boolean;
 
       // optional params
@@ -569,7 +567,7 @@ export function useChatController({
           signal: controller.signal,
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
-          fileDescriptors: overrideFileDescriptors || currentMessageFiles,
+          fileDescriptors: overrideFileDescriptors,
           parentMessageId:
             regenerationRequest?.parentMessage.messageId ||
             messageToResendParent?.messageId ||
@@ -590,11 +588,7 @@ export function useChatController({
             .map((document) => document.db_doc_id as number),
           queryOverride,
           forceSearch,
-          userFolderIds: selectedFolders.map((folder) => folder.id),
-          userFileIds: selectedFiles
-            .filter((file) => file.id !== undefined && file.id !== null)
-            .map((file) => file.id),
-
+          currentMessageFiles: currentMessageFiles,
           regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -792,6 +786,7 @@ export function useChatController({
           await new Promise((resolve) => setTimeout(resolve, 200));
           await nameChatSession(currChatSessionId);
           refreshChatSessions();
+          fetchProjects();
         }
 
         // NOTE: don't switch pages if the user has navigated away from the chat
@@ -811,6 +806,7 @@ export function useChatController({
 
           if (pathname == "/chat" && !navigatingAway.current) {
             router.push(newUrl, { scroll: false });
+            fetchProjects();
           }
         }
       }
@@ -837,6 +833,7 @@ export function useChatController({
       currentMessageTree,
       currentChatState,
       llmProviders,
+      fetchProjects,
     ]
   );
 

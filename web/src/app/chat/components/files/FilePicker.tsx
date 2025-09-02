@@ -24,7 +24,7 @@ import { ProjectFile } from "../../projects/projectsService";
 
 type FilePickerProps = {
   className?: string;
-  onPickRecent?: (fileId: string) => void;
+  onPickRecent?: (file: ProjectFile) => void;
   recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isUploading: boolean;
@@ -96,7 +96,7 @@ export default function FilePicker({
                     key={f.id}
                     onClick={() =>
                       onPickRecent
-                        ? onPickRecent(f.id)
+                        ? onPickRecent(f)
                         : console.log("Picked recent", f)
                     }
                     className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
