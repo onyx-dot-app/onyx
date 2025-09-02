@@ -12,7 +12,8 @@ ARG ONYX_VERSION=0.0.0-dev
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
-    DO_NOT_TRACK="true"
+    DO_NOT_TRACK="true" \
+    PLAYWRIGHT_BROWSERS_PATH=/app/.cache/playwright
 
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
