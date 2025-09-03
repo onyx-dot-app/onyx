@@ -395,7 +395,6 @@ def create_temporary_persona(
                 description=p.description,
                 system_prompt=p.system_prompt,
                 task_prompt=p.task_prompt,
-                include_citations=p.include_citations,
                 datetime_aware=p.datetime_aware,
             )
             for p in persona_config.prompts

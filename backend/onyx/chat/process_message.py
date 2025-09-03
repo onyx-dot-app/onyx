@@ -557,9 +557,6 @@ def stream_chat_message_objects(
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0
                 ].datetime_aware,
-                include_citations=new_msg_req.persona_override_config.prompts[
-                    0
-                ].include_citations,
             )
         elif prompt_override:
             if not final_msg.prompt:

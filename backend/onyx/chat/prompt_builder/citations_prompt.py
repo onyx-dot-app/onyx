@@ -110,8 +110,8 @@ def build_citations_system_message(
     prompt_config: PromptConfig,
 ) -> SystemMessage:
     system_prompt = prompt_config.system_prompt.strip()
-    if prompt_config.include_citations:
-        system_prompt += REQUIRE_CITATION_STATEMENT
+    # Citations are always enabled
+    system_prompt += REQUIRE_CITATION_STATEMENT
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt, prompt_config, add_additional_info_if_no_tag=True
     )

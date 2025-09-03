@@ -170,7 +170,6 @@ class PromptOverrideConfig(BaseModel):
     description: str = ""
     system_prompt: str
     task_prompt: str = ""
-    include_citations: bool = True
     datetime_aware: bool = True
 
 
@@ -268,7 +267,6 @@ class PromptConfig(BaseModel):
     system_prompt: str
     task_prompt: str
     datetime_aware: bool
-    include_citations: bool
 
     @classmethod
     def from_model(
@@ -283,7 +281,6 @@ class PromptConfig(BaseModel):
             system_prompt=override_system_prompt or model.system_prompt,
             task_prompt=override_task_prompt or model.task_prompt,
             datetime_aware=model.datetime_aware,
-            include_citations=model.include_citations,
         )
 
     model_config = ConfigDict(frozen=True)
