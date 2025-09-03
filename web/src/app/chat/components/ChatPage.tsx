@@ -54,7 +54,6 @@ import { FilePickerModal } from "../my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
-import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { ChatSearchModal } from "../chat_search/ChatSearchModal";
 import { ErrorBanner } from "../message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -129,15 +128,6 @@ export function ChatPage({
     shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
-
-  const {
-    selectedFiles,
-    selectedFolders,
-    addSelectedFolder,
-    clearSelectedItems,
-    folders: userFolders,
-    files: allUserFiles,
-  } = useDocumentsContext();
 
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
@@ -278,37 +268,6 @@ export function ChatPage({
       setCurrentProjectId(null);
     }
   }, [searchParams?.get("projectid"), setCurrentProjectId]);
-
-  useEffect(() => {
-    const userFolderId = searchParams?.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID);
-    const allMyDocuments = searchParams?.get(
-      SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS
-    );
-
-    if (userFolderId) {
-      const userFolder = userFolders.find(
-        (folder) => folder.id === parseInt(userFolderId)
-      );
-      if (userFolder) {
-        addSelectedFolder(userFolder);
-      }
-    } else if (allMyDocuments === "true" || allMyDocuments === "1") {
-      // Clear any previously selected folders
-
-      clearSelectedItems();
-
-      // Add all user folders to the current context
-      userFolders.forEach((folder) => {
-        addSelectedFolder(folder);
-      });
-    }
-  }, [
-    userFolders,
-    searchParams?.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID),
-    searchParams?.get(SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS),
-    addSelectedFolder,
-    clearSelectedItems,
-  ]);
 
   const [message, setMessage] = useState(
     searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
@@ -549,7 +508,6 @@ export function ChatPage({
     submitOnLoadPerformed,
     hasPerformedInitialScroll,
     clientScrollToBottom,
-    clearSelectedItems,
     refreshChatSessions,
     onSubmit,
   });
@@ -582,10 +540,9 @@ export function ChatPage({
   const reset = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
-    clearSelectedItems();
     // TODO: move this into useChatController
     // setLoadingError(null);
-  }, [setMessage, setCurrentMessageFiles, clearSelectedItems]);
+  }, [setMessage, setCurrentMessageFiles]);
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
@@ -714,11 +671,6 @@ export function ChatPage({
   if (!user) {
     redirect("/auth/login");
   }
-
-  const clearSelectedDocuments = useCallback(() => {
-    setSelectedDocuments([]);
-    clearSelectedItems();
-  }, [clearSelectedItems]);
 
   const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
@@ -856,7 +808,7 @@ export function ChatPage({
               closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={clearSelectedDocuments}
+              clearSelectedDocuments={() => setSelectedDocuments([])}
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
@@ -1013,7 +965,7 @@ export function ChatPage({
               closeSidebar={handleDesktopDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={clearSelectedDocuments}
+              clearSelectedDocuments={() => setSelectedDocuments([])}
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
@@ -1125,8 +1077,6 @@ export function ChatPage({
                             liveAssistant={liveAssistant}
                             llmManager={llmManager}
                             deepResearchEnabled={deepResearchEnabled}
-                            selectedFiles={selectedFiles}
-                            selectedFolders={selectedFolders}
                             currentMessageFiles={currentMessageFiles}
                             setPresentingDocument={setPresentingDocument}
                             setCurrentFeedback={setCurrentFeedback}
@@ -1201,7 +1151,7 @@ export function ChatPage({
                                 toggleDocumentSidebar={toggleDocumentSidebar}
                                 filterManager={filterManager}
                                 llmManager={llmManager}
-                                removeDocs={clearSelectedDocuments}
+                                removeDocs={() => setSelectedDocuments([])}
                                 retrievalEnabled={retrievalEnabled}
                                 toggleDocSelection={handleToggleDocSelection}
                                 showConfigureAPIKey={handleShowApiKeyModal}

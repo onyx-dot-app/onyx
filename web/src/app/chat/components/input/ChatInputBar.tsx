@@ -32,7 +32,6 @@ import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { DeepResearchToggle } from "./DeepResearchToggle";
 import { ActionToggle } from "./ActionManagement";
@@ -144,12 +143,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 }: ChatInputBarProps) {
   const [isUploading, setIsUploading] = useState(false);
   const { user } = useUser();
-  const {
-    selectedFiles,
-    selectedFolders,
-    removeSelectedFile,
-    removeSelectedFolder,
-  } = useDocumentsContext();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
   const {
@@ -330,19 +323,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       originalFile: any;
     }> = [];
 
-    // Add selected files (excluding those already in currentMessageFiles)
-    selectedFiles.forEach((file) => {
-      if (!currentMessageFileIds.has(String(file.file_id || file.id))) {
-        combined.push({
-          id: String(file.file_id || file.id),
-          name: file.name,
-          chatFileType: file.chat_file_type,
-          source: "selected",
-          originalFile: file,
-        });
-      }
-    });
-
     // Add current message files
     currentMessageFiles.forEach((file, index) => {
       combined.push({
@@ -356,7 +336,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     });
 
     return combined;
-  }, [selectedFiles, currentMessageFiles, currentMessageFileIds]);
+  }, [currentMessageFiles, currentMessageFileIds]);
 
   return (
     <div id="onyx-chat-input">
@@ -490,8 +470,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
             />
 
             {(selectedDocuments.length > 0 ||
-              selectedFiles.length > 0 ||
-              selectedFolders.length > 0 ||
               currentMessageFiles.length > 0 ||
               filterManager.timeRange ||
               filterManager.selectedDocumentSets.length > 0 ||
@@ -534,7 +512,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                         title={file.name}
                         onRemove={() => {
                           if (file.source === "selected") {
-                            removeSelectedFile(file.originalFile);
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
                           } else {
                             setCurrentMessageFiles(
                               currentMessageFiles.filter(
@@ -558,7 +540,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                         title={file.name}
                         onRemove={() => {
                           if (file.source === "selected") {
-                            removeSelectedFile(file.originalFile);
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
                           } else {
                             setCurrentMessageFiles(
                               currentMessageFiles.filter(
@@ -570,14 +556,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                       />
                     )
                   )}
-                  {selectedFolders.map((folder) => (
-                    <SourceChip
-                      key={folder.id}
-                      icon={<FolderIcon size={16} />}
-                      title={folder.name}
-                      onRemove={() => removeSelectedFolder(folder)}
-                    />
-                  ))}
+
                   {filterManager.timeRange && (
                     <SourceChip
                       truncateTitle={false}

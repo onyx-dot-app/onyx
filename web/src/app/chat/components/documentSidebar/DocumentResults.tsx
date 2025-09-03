@@ -12,7 +12,6 @@ import {
 } from "react";
 import { XIcon } from "@/components/icons/icons";
 import { FileSourceCardInResults } from "@/app/chat/message/SourcesDisplay";
-import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { getCitations } from "../../services/packetUtils";
 import {
   useCurrentMessageTree,
@@ -49,8 +48,6 @@ const DocumentResultsComponent = (
   }: DocumentResultsProps,
   ref: ForwardedRef<HTMLDivElement>
 ) => {
-  const { files: allUserFiles } = useDocumentsContext();
-
   const idOfMessageToDisplay = useSelectedNodeForDocDisplay();
   const currentMessageTree = useCurrentMessageTree();
 
@@ -85,9 +82,6 @@ const DocumentResultsComponent = (
 
   const humanFileDescriptors = humanMessage?.files.filter(
     (file) => file.type == ChatFileType.USER_KNOWLEDGE
-  );
-  const userFiles = allUserFiles?.filter((file) =>
-    humanFileDescriptors?.some((descriptor) => descriptor.id === file.file_id)
   );
   const selectedDocumentIds =
     selectedDocuments?.map((document) => document.document_id) || [];
@@ -134,26 +128,7 @@ const DocumentResultsComponent = (
         >
           <div className="flex flex-col h-full">
             <div className="overflow-y-auto h-fit mb-8 pb-8 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
-              {userFiles && userFiles.length > 0 ? (
-                <div className=" gap-y-2 flex flex-col pt-2 mx-3">
-                  {userFiles?.map((file, index) => (
-                    <FileSourceCardInResults
-                      key={index}
-                      relevantDocument={dedupedDocuments.find(
-                        (doc) =>
-                          doc.document_id === `FILE_CONNECTOR__${file.file_id}`
-                      )}
-                      document={file}
-                      setPresentingDocument={() =>
-                        setPresentingDocument({
-                          document_id: file.document_id,
-                          semantic_identifier: file.file_id || null,
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-              ) : dedupedDocuments.length > 0 ? (
+              {dedupedDocuments.length > 0 ? (
                 <>
                   {/* Cited Documents Section */}
                   {citedDocuments.length > 0 && (
