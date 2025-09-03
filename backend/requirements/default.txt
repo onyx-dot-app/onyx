@@ -42,7 +42,7 @@ langgraph==0.2.72
 langgraph-checkpoint==2.0.13
 langgraph-sdk==0.1.44
 lazy_imports==1.0.1
-litellm==1.72.2 
+litellm==1.76.1
 lxml==5.3.0
 lxml_html_clean==0.2.2
 Mako==1.2.4

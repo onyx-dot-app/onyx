@@ -92,7 +92,7 @@ BEDROCK_MODEL_NAMES = [
     model
     # bedrock_converse_models are just extensions of the bedrock_models, not sure why
     # litellm has split them into two lists :(
-    for model in litellm.bedrock_models + litellm.bedrock_converse_models
+    for model in litellm.bedrock_models | litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
