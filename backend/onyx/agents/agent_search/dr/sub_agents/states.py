@@ -4,6 +4,7 @@ from typing import Annotated
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestratorTool
 from onyx.agents.agent_search.dr.states import LoggerUpdate
+from onyx.context.search.models import InferenceSection
 from onyx.db.connector import DocumentSource
 
 
@@ -12,8 +13,11 @@ class SubAgentUpdate(LoggerUpdate):
     current_step_nr: int = 1
 
 
+# TODO: move these new states to the internet_search sub_agent
 class BranchUpdate(LoggerUpdate):
     branch_iteration_responses: Annotated[list[IterationAnswer], add] = []
+    raw_documents: Annotated[list[InferenceSection], add] = []
+    branch_questions_to_urls: Annotated[dict[str, list[str]], lambda x, y: y] = {}
 
 
 class SubAgentInput(LoggerUpdate):

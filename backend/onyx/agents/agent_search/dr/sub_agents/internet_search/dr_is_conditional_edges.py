@@ -32,23 +32,22 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
 
 
 def fetch_router(state: InternetSearchInput) -> list[Send | Hashable]:
-    deduped_branch_question_to_urls = state.deduped_branch_question_to_urls
+    branch_questions_to_urls = state.branch_questions_to_urls
     return [
         Send(
             "fetch",
             FetchInput(
                 iteration_nr=state.iteration_nr,
-                parallelization_nr=parallelization_nr,
-                branch_question=branch_question,
-                urls_to_open=urls,
+                urls_to_open=[url],
                 tools_used=state.tools_used,
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,
                 assistant_task_prompt=state.assistant_task_prompt,
                 current_step_nr=state.current_step_nr,
+                branch_questions_to_urls=branch_questions_to_urls,
             ),
         )
-        for parallelization_nr, (branch_question, urls) in enumerate(
-            deduped_branch_question_to_urls.items()
+        for url in set(
+            url for urls in branch_questions_to_urls.values() for url in urls
         )
     ]

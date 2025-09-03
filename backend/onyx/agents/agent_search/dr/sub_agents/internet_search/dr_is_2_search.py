@@ -110,13 +110,13 @@ def web_search(
         schema=WebSearchAnswer,
         timeout_override=30,
     )
-    urls_to_open = [
-        (search_query, search_results[i].link)
+    results_to_open = [
+        (search_query, search_results[i])
         for i in agent_decision.urls_to_open_indices
         if i < len(search_results) and i >= 0
     ]
     return InternetSearchUpdate(
-        urls_to_open=urls_to_open,
+        results_to_open=results_to_open,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="internet_search",

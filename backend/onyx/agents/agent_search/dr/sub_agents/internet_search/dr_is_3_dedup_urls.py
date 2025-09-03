@@ -1,9 +1,20 @@
+from collections import defaultdict
+
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+    InternetSearchResult,
+)
 from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
     InternetSearchInput,
 )
+from onyx.agents.agent_search.dr.sub_agents.internet_search.utils import (
+    dummy_inference_section_from_internet_search_result,
+)
+from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 
 
 def dedup_urls(
@@ -11,17 +22,31 @@ def dedup_urls(
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
 ) -> InternetSearchInput:
-    seen_urls = set()
-    deduped_urls_to_open = []
-    for query, url in state.urls_to_open:
-        if url not in seen_urls:
-            seen_urls.add(url)
-            deduped_urls_to_open.append((query, url))
-    deduped_branch_question_to_urls: dict[str, list[str]] = {}
-    for query, url in deduped_urls_to_open:
-        deduped_branch_question_to_urls.setdefault(query, []).append(url)
+    branch_questions_to_urls: dict[str, list[str]] = defaultdict(list)
+    unique_results_by_link: dict[str, InternetSearchResult] = {}
+    for query, result in state.results_to_open:
+        branch_questions_to_urls[query].append(result.link)
+        if result.link not in unique_results_by_link:
+            unique_results_by_link[result.link] = result
+
+    unique_results = list(unique_results_by_link.values())
+    dummy_docs_inference_sections = [
+        dummy_inference_section_from_internet_search_result(doc)
+        for doc in unique_results
+    ]
+
+    write_custom_event(
+        state.current_step_nr,
+        SearchToolDelta(
+            queries=[],
+            documents=convert_inference_sections_to_search_docs(
+                dummy_docs_inference_sections, is_internet=True
+            ),
+        ),
+        writer,
+    )
 
     return InternetSearchInput(
-        urls_to_open=[],
-        deduped_branch_question_to_urls=deduped_branch_question_to_urls,
+        results_to_open=[],
+        branch_questions_to_urls=branch_questions_to_urls,
     )
