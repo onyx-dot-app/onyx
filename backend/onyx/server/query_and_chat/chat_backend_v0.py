@@ -262,6 +262,7 @@ def handle_new_chat_message_v0(
             # Track state for aggregating certain responses
             final_message_info = {}
             all_citations = []
+            pending_tool_call = None
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 # Get the stream of objects from the modern chat processor
@@ -291,6 +292,32 @@ def handle_new_chat_message_v0(
                             # Store message info for potential later use
                             final_message_info.update(v0_response)
                             yield json.dumps(v0_response) + "\n"
+                        elif "tool_name" in v0_response:
+                            # Store tool call to emit later with result
+                            pending_tool_call = v0_response
+                            # Emit tool call immediately
+                            yield json.dumps(v0_response) + "\n"
+                        elif "top_documents" in v0_response:
+                            # This is a QADocsResponse - emit it
+                            yield json.dumps(v0_response) + "\n"
+
+                            # If there was a pending search tool, emit the combined result
+                            if (
+                                pending_tool_call
+                                and pending_tool_call.get("tool_name") == "run_search"
+                            ):
+                                # Emit tool result with documents
+                                tool_result_response = {
+                                    "tool_name": "run_search",
+                                    "tool_args": pending_tool_call.get("tool_args", {}),
+                                    "tool_result": v0_response.get("top_documents", []),
+                                    "level": v0_response.get("level"),
+                                    "level_question_num": v0_response.get(
+                                        "level_question_num"
+                                    ),
+                                }
+                                yield json.dumps(tool_result_response) + "\n"
+                                pending_tool_call = None
                         else:
                             # Yield the transformed response
                             yield json.dumps(v0_response) + "\n"
