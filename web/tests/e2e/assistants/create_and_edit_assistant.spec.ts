@@ -24,8 +24,6 @@ const getNumChunksInput = (page: Page) =>
   page.locator('input[name="num_chunks"]');
 const getAiRelevanceCheckbox = (page: Page) =>
   page.getByRole("checkbox", { name: /AI Relevance Filter/i });
-const getCitationsCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /Citations/i });
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}.message"]`);
 const getCreateSubmitButton = (page: Page) =>
@@ -86,9 +84,6 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
 
   // AI Relevance Filter (Enable)
   await getAiRelevanceCheckbox(page).click();
-
-  // Citations (Disable) - Click to toggle from default (likely true) to false
-  await getCitationsCheckbox(page).click();
 
   // Starter Message
   await getStarterMessageInput(page).fill(assistantStarterMessage);
@@ -182,10 +177,6 @@ not(contains(@class, 'invisible'))]`,
     "aria-checked",
     "true"
   );
-  await expect(getCitationsCheckbox(page)).toHaveAttribute(
-    "aria-checked",
-    "false"
-  ); // Was toggled to false
   await expect(getStarterMessageInput(page)).toHaveValue(
     assistantStarterMessage
   );
@@ -204,8 +195,6 @@ not(contains(@class, 'invisible'))]`,
   await getNumChunksInput(page).fill(editedNumChunks);
   // AI Relevance Filter (Disable) - Click to toggle from true to false
   await getAiRelevanceCheckbox(page).click();
-  // Citations (Enable) - Click to toggle from false to true
-  await getCitationsCheckbox(page).click();
   await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
   // Submit the edit form
@@ -252,10 +241,6 @@ not(contains(@class, 'invisible'))]`,
     "aria-checked",
     "false"
   ); // Now disabled
-  await expect(getCitationsCheckbox(page)).toHaveAttribute(
-    "aria-checked",
-    "true"
-  ); // Now enabled
   await expect(getStarterMessageInput(page)).toHaveValue(
     editedAssistantStarterMessage
   );
