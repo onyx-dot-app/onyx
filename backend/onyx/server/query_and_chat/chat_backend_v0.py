@@ -138,7 +138,7 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
 
             # Add query if present
             if obj.queries:
-                query = obj.queries[0] if obj.queries else ""
+                query = obj.queries[0]
                 tool_response["tool_args"] = {"query": query}
 
             # If documents are returned, we need to format them
