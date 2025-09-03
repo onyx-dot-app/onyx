@@ -27,12 +27,12 @@ def downgrade() -> None:
             "include_citations",
             sa.BOOLEAN(),
             autoincrement=False,
-            nullable=False,
+            nullable=True,
         ),
     )
-    # Ensure ImageGeneration prompt does not include citations after downgrade
+    # Set include_citations based on prompt name: FALSE for ImageGeneration, TRUE for others
     op.execute(
         sa.text(
-            "UPDATE prompt SET include_citations = FALSE WHERE name = 'ImageGeneration'"
+            "UPDATE prompt SET include_citations = CASE WHEN name = 'ImageGeneration' THEN FALSE ELSE TRUE END"
         )
     )
