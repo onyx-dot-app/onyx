@@ -9,6 +9,7 @@ from typing import Any
 
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
@@ -498,7 +499,7 @@ class OnyxSalesforceSQLite:
 
             # remove salesforce id's (and add to parent id set)
             if (
-                field != "Id"
+                field != ID_FIELD
                 and isinstance(value, str)
                 and validate_salesforce_id(value)
             ):
@@ -535,13 +536,13 @@ class OnyxSalesforceSQLite:
                 reader = csv.DictReader(f)
                 uncommitted_rows = 0
                 for row in reader:
-                    if "Id" not in row:
+                    if ID_FIELD not in row:
                         logger.warning(
-                            f"Row {row} does not have an Id field in {csv_download_path}"
+                            f"Row {row} does not have an {ID_FIELD} field in {csv_download_path}"
                         )
                         continue
 
-                    row_id = row["Id"]
+                    row_id = row[ID_FIELD]
 
                     normalized_record, parent_ids = (
                         OnyxSalesforceSQLite.normalize_record(row, remove_ids)

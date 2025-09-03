@@ -207,7 +207,7 @@ def convert_sf_object_to_doc(
 ) -> Document:
     """Would be nice if this function was documented"""
     object_dict = sf_object.data
-    salesforce_id = object_dict["Id"]
+    salesforce_id = object_dict[ID_FIELD]
     onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
     base_url = f"https://{sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(object_dict[MODIFIED_FIELD])

@@ -25,7 +25,7 @@ class SalesforceObject:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SalesforceObject":
         return cls(
-            id=data["Id"],
+            id=data[ID_FIELD],
             type=data["Type"],
             data=data,
         )
