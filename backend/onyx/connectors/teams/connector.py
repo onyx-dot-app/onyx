@@ -284,6 +284,11 @@ class TeamsConnector(
                         yield slim_doc_buffer
                         slim_doc_buffer = []
 
+                # Flush any remaining slim documents collected for this channel
+                if slim_doc_buffer:
+                    yield slim_doc_buffer
+                    slim_doc_buffer = []
+
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
     top_message_user_name: str

@@ -32,7 +32,7 @@ def _sanitize_message_user_display_name(value: dict) -> dict:
                 user_obj["displayName"] = "Unknown User"
                 from_obj["user"] = user_obj
                 value["from"] = from_obj
-    except Exception:
+    except (AttributeError, TypeError, KeyError):
         pass
     return value
 
