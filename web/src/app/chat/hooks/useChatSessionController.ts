@@ -53,7 +53,6 @@ interface UseChatSessionControllerProps {
 
   // Actions
   clientScrollToBottom: (fast?: boolean) => void;
-  clearSelectedItems: () => void;
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
@@ -79,7 +78,6 @@ export function useChatSessionController({
   submitOnLoadPerformed,
   hasPerformedInitialScroll,
   clientScrollToBottom,
-  clearSelectedItems,
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
@@ -138,7 +136,6 @@ export function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-        clearSelectedItems();
         if (existingChatSessionId) {
           updateHasPerformedInitialScroll(existingChatSessionId, false);
         }

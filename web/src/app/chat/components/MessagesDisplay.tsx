@@ -20,16 +20,12 @@ interface MessagesDisplayProps {
   liveAssistant: MinimalPersonaSnapshot;
   llmManager: { currentLlm: LlmDescriptor | null };
   deepResearchEnabled: boolean;
-  selectedFiles: FileResponse[];
-  selectedFolders: FolderResponse[];
   currentMessageFiles: FileDescriptor[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   setCurrentFeedback: (feedback: [FeedbackType, number] | null) => void;
   onSubmit: (args: {
     message: string;
     messageIdToResend?: number;
-    selectedFiles: FileResponse[];
-    selectedFolders: FolderResponse[];
     currentMessageFiles: FileDescriptor[];
     useAgentSearch: boolean;
     modelOverride?: LlmDescriptor;
@@ -64,8 +60,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   liveAssistant,
   llmManager,
   deepResearchEnabled,
-  selectedFiles,
-  selectedFolders,
   currentMessageFiles,
   setPresentingDocument,
   setCurrentFeedback,
@@ -96,8 +90,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       return async function (modelOverride: LlmDescriptor) {
         return await onSubmit({
           message: regenerationRequest.parentMessage.message,
-          selectedFiles,
-          selectedFolders,
           currentMessageFiles,
           useAgentSearch: deepResearchEnabled,
           modelOverride,
@@ -107,13 +99,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
         });
       };
     },
-    [
-      onSubmit,
-      deepResearchEnabled,
-      selectedFiles,
-      selectedFolders,
-      currentMessageFiles,
-    ]
+    [onSubmit, deepResearchEnabled, currentMessageFiles]
   );
 
   const handleFeedback = useCallback(
@@ -128,8 +114,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       onSubmit({
         message: editedContent,
         messageIdToResend: msgId || undefined,
-        selectedFiles: [],
-        selectedFolders: [],
         currentMessageFiles: [],
         useAgentSearch: deepResearchEnabled,
       });
