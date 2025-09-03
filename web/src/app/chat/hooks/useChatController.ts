@@ -54,11 +54,6 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import {
-  FileResponse,
-  FolderResponse,
-  useDocumentsContext,
-} from "../my-documents/DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
 import Prism from "prismjs";
 import {
@@ -75,7 +70,7 @@ import {
 } from "../services/streamingModels";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { Klee_One } from "next/font/google";
-import { useProjectsContext } from "../projects/ProjectsContext";
+import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -124,7 +119,8 @@ export function useChatController({
   const searchParams = useSearchParams();
   const { refreshChatSessions, llmProviders } = useChatContext();
   const { assistantPreferences, forcedToolIds } = useAssistantsContext();
-  const { fetchProjects } = useProjectsContext();
+  const { fetchProjects, uploadFiles, setCurrentMessageFiles } =
+    useProjectsContext();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -169,9 +165,6 @@ export function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const currentChatState = useCurrentChatState();
-
-  const { selectedFiles, selectedFolders, uploadFile, setCurrentMessageFiles } =
-    useDocumentsContext();
 
   const navigatingAway = useRef(false);
 
@@ -577,8 +570,7 @@ export function useChatController({
             filterManager.selectedSources,
             filterManager.selectedDocumentSets,
             filterManager.timeRange,
-            filterManager.selectedTags,
-            selectedFiles.map((file) => file.id)
+            filterManager.selectedTags
           ),
           selectedDocumentIds: selectedDocuments
             .filter(
@@ -861,34 +853,25 @@ export function useChatController({
 
       updateChatStateAction(getCurrentSessionId(), "uploading");
 
-      for (let file of acceptedFiles) {
-        const formData = new FormData();
-        formData.append("files", file);
-        const response: FileResponse[] = await uploadFile(formData, null);
-
-        if (response.length > 0 && response[0] !== undefined) {
-          const uploadedFile = response[0];
-
-          const newFileDescriptor: FileDescriptor = {
-            // Use file_id (storage ID) if available, otherwise fallback to DB id
-            // Ensure it's a string as FileDescriptor expects
-            id: uploadedFile.file_id
-              ? String(uploadedFile.file_id)
-              : String(uploadedFile.id),
-            type: uploadedFile.chat_file_type
-              ? uploadedFile.chat_file_type
-              : ChatFileType.PLAIN_TEXT,
-            name: uploadedFile.name,
-            isUploading: false, // Mark as successfully uploaded
-          };
-
-          setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
-        } else {
-          setPopup({
-            type: "error",
-            message: "Failed to upload file",
-          });
-        }
+      try {
+        const uploadedMessageFiles: ProjectFile[] = await uploadFiles(
+          Array.from(acceptedFiles)
+        );
+        const messageFiles: FileDescriptor[] = uploadedMessageFiles.map(
+          (file) => ({
+            id: file.file_id,
+            name: file.name,
+            type: file.chat_file_type,
+            isUploading: false,
+            user_file_id: file.id,
+          })
+        );
+        setCurrentMessageFiles((prev) => [...prev, ...messageFiles]);
+      } catch (error) {
+        setPopup({
+          type: "error",
+          message: "Failed to upload file",
+        });
       }
 
       updateChatStateAction(getCurrentSessionId(), "input");
@@ -975,43 +958,44 @@ export function useChatController({
     fetchMaxTokens();
   }, [liveAssistant]);
 
+  //TODO(subash): add this for projects
   // fetch # of document tokens for the selected files
-  useEffect(() => {
-    const calculateTokensAndUpdateSearchMode = async () => {
-      if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-        try {
-          // Prepare the query parameters for the API call
-          const fileIds = selectedFiles.map((file: FileResponse) => file.id);
-          const folderIds = selectedFolders.map(
-            (folder: FolderResponse) => folder.id
-          );
+  // useEffect(() => {
+  //   const calculateTokensAndUpdateSearchMode = async () => {
+  //     if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+  //       try {
+  //         // Prepare the query parameters for the API call
+  //         const fileIds = selectedFiles.map((file: FileResponse) => file.id);
+  //         const folderIds = selectedFolders.map(
+  //           (folder: FolderResponse) => folder.id
+  //         );
 
-          // Build the query string
-          const queryParams = new URLSearchParams();
-          fileIds.forEach((id) =>
-            queryParams.append("file_ids", id.toString())
-          );
-          folderIds.forEach((id) =>
-            queryParams.append("folder_ids", id.toString())
-          );
+  //         // Build the query string
+  //         const queryParams = new URLSearchParams();
+  //         fileIds.forEach((id) =>
+  //           queryParams.append("file_ids", id.toString())
+  //         );
+  //         folderIds.forEach((id) =>
+  //           queryParams.append("folder_ids", id.toString())
+  //         );
 
-          // Make the API call to get token estimate
-          const response = await fetch(
-            `/api/user/file/token-estimate?${queryParams.toString()}`
-          );
+  //         // Make the API call to get token estimate
+  //         const response = await fetch(
+  //           `/api/user/file/token-estimate?${queryParams.toString()}`
+  //         );
 
-          if (!response.ok) {
-            console.error("Failed to fetch token estimate");
-            return;
-          }
-        } catch (error) {
-          console.error("Error calculating tokens:", error);
-        }
-      }
-    };
+  //         if (!response.ok) {
+  //           console.error("Failed to fetch token estimate");
+  //           return;
+  //         }
+  //       } catch (error) {
+  //         console.error("Error calculating tokens:", error);
+  //       }
+  //     }
+  //   };
 
-    calculateTokensAndUpdateSearchMode();
-  }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
+  //   calculateTokensAndUpdateSearchMode();
+  // }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use

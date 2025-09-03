@@ -41,6 +41,7 @@ import FilePicker from "../files/FilePicker";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { useChatController } from "../../hooks/useChatController";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -93,7 +94,6 @@ export const SourceChip = ({
 );
 
 interface ChatInputBarProps {
-  toggleDocSelection: () => void;
   removeDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
@@ -118,7 +118,6 @@ interface ChatInputBarProps {
 }
 
 export const ChatInputBar = React.memo(function ChatInputBar({
-  toggleDocSelection,
   retrievalEnabled,
   removeDocs,
   toggleDocumentSidebar,
@@ -141,7 +140,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   toggleDeepResearch,
   placeholder,
 }: ChatInputBarProps) {
-  const [isUploading, setIsUploading] = useState(false);
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
@@ -152,29 +150,15 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     recentFiles,
   } = useProjectsContext();
 
-  const handleUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setIsUploading(true);
-    try {
-      const uploadedMessageFiles: ProjectFile[] = await uploadFiles(
-        Array.from(files)
-      );
-      const messageFiles: FileDescriptor[] = uploadedMessageFiles.map(
-        (file) => ({
-          id: file.file_id,
-          name: file.name,
-          type: file.chat_file_type,
-          isUploading: false,
-          user_file_id: file.id,
-        })
-      );
-      setCurrentMessageFiles(messageFiles);
-    } finally {
-      setIsUploading(false);
-      e.target.value = ""; // reset input
-    }
-  };
+  const handleUploadChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      handleFileUpload(Array.from(files));
+      e.target.value = "";
+    },
+    [handleFileUpload]
+  );
 
   // Create a Set of IDs from currentMessageFiles for efficient lookup
   // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
@@ -623,14 +607,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
               <div className="space-x-1 flex px-4 ">
-                <ChatInputOption
-                  flexPriority="stiff"
-                  Icon={FileUploadIcon}
-                  onClick={() => {
-                    toggleDocSelection();
-                  }}
-                  tooltipContent={"Upload files and attach user files"}
-                />
                 <FilePicker
                   onPickRecent={(file: ProjectFile) => {
                     // Check if file with same ID already exists
@@ -645,15 +621,14 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                         name: file.name,
                         user_file_id: file.id,
                       };
-                      setCurrentMessageFiles([
-                        ...currentMessageFiles,
+                      setCurrentMessageFiles((prev) => [
+                        ...prev,
                         fileDescriptor,
                       ]);
                     }
                   }}
                   recentFiles={recentFiles}
                   handleUploadChange={handleUploadChange}
-                  isUploading={isUploading}
                 />
 
                 {selectedAssistant.tools.length > 0 && (
