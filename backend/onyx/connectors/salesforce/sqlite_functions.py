@@ -6,6 +6,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
@@ -409,7 +410,7 @@ class OnyxSalesforceSQLite:
             # if this id is a parent type, yield it directly
             if changed_type in parent_types:
                 yield changed_id, changed_type, num_examined
-                changed_parent_ids.update(changed_id)
+                changed_parent_ids.add(changed_id)
                 continue
 
             # if this id is a child type, then check the columns
@@ -432,7 +433,7 @@ class OnyxSalesforceSQLite:
                     logger.warning(f"{field_name=} not in data for {changed_type=}!")
                     continue
 
-                parent_id = sf_object.data[field_name]
+                parent_id = cast(str, sf_object.data[field_name])
                 parent_id_prefix = parent_id[:3]
 
                 if parent_id_prefix not in prefix_to_type:
@@ -446,7 +447,7 @@ class OnyxSalesforceSQLite:
                     continue
 
                 yield parent_id, parent_type, num_examined
-                changed_parent_ids.update(parent_id)
+                changed_parent_ids.add(parent_id)
                 break
 
     def object_type_count(self, object_type: str) -> int:
