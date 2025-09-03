@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.users import current_curator_or_admin_user, current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
