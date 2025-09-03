@@ -225,6 +225,9 @@ def choose_tool(
             ):
                 raise ValueError("No expanded keyword or semantic threads found.")
 
+        if tool_args.get("override_kwargs") == override_kwargs:
+            del tool_args["override_kwargs"]
+
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
                 tool=tool,
