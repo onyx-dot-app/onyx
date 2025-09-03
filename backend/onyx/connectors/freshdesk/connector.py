@@ -70,6 +70,7 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 }
 
 
+# TODO: unify this with other generic rate limited requests with retries (e.g. Axero)
 @retry_builder()
 @rate_limit_builder(max_calls=5, period=1)
 def _rate_limited_freshdesk_get(
