@@ -124,7 +124,6 @@ export default function ProjectContextPanel() {
           showTriggerLabel
           triggerLabel="Add Files"
           recentFiles={recentFiles}
-          isUploading={isUploading}
           handleUploadChange={async (
             e: React.ChangeEvent<HTMLInputElement>
           ) => {

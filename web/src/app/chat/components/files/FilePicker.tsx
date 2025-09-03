@@ -27,7 +27,6 @@ type FilePickerProps = {
   onPickRecent?: (file: ProjectFile) => void;
   recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  isUploading: boolean;
   showTriggerLabel?: boolean;
   triggerLabel?: string;
 };
@@ -42,7 +41,6 @@ export default function FilePicker({
   onPickRecent,
   recentFiles,
   handleUploadChange,
-  isUploading,
   showTriggerLabel = false,
   triggerLabel = "Add Files",
 }: FilePickerProps) {
@@ -130,7 +128,6 @@ export default function FilePicker({
             <MenubarSeparator />
             <MenubarItem
               onClick={triggerUploadPicker}
-              disabled={isUploading}
               className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
             >
               <Row>
