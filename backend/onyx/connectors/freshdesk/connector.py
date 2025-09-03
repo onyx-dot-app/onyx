@@ -70,6 +70,14 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 }
 
 
+@retry_builder()
+@rate_limit_builder(max_calls=5, period=1)
+def _rate_limited_freshdesk_get(
+    url: str, auth: tuple, params: dict
+) -> requests.Response:
+    return requests.get(url, auth=auth, params=params)
+
+
 def _create_metadata_from_ticket(ticket: dict) -> dict:
     metadata: dict[str, str | list[str]] = {}
     # Combine all emails into a list so there are no repeated emails
@@ -185,9 +193,6 @@ class FreshdeskConnector(PollConnector, LoadConnector):
         self.api_key = str(api_key)
         self.domain = domain
 
-    # Freshdesk API rate limits: https://developers.freshdesk.com/api/#ratelimit
-    @retry_builder()
-    @rate_limit_builder(max_calls=50, period=60)
     def _fetch_tickets(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> Iterator[List[dict]]:
@@ -215,7 +220,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
 
         while True:
             # Freshdesk API uses API key as the username and any value as the password.
-            response = requests.get(
+            response = _rate_limited_freshdesk_get(
                 base_url,
                 auth=(self.api_key, "CanYouBelieveFreshdeskDoesThis"),
                 params=params,
