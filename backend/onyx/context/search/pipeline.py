@@ -87,12 +87,6 @@ class SearchPipeline:
         )
         self.slack_context: dict[str, str] | None = slack_context
 
-        # Log Slack context in SearchPipeline constructor
-        if slack_context:
-            logger.info(f"SearchPipeline: Slack context captured: {slack_context}")
-        else:
-            logger.info("SearchPipeline: No Slack context provided")
-
         # Preprocessing steps generate this
         self._search_query: SearchQuery | None = None
         self._predicted_search_type: SearchType | None = None
