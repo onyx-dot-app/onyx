@@ -5,11 +5,12 @@ from datetime import timezone
 from typing import List
 
 import requests
+from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
+    rl_requests,
 )
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -20,7 +21,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -70,13 +70,12 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 }
 
 
-# TODO: unify this with other generic rate limited requests with retries (e.g. Axero)
-@retry_builder()
-@rate_limit_builder(max_calls=5, period=1)
+# TODO: unify this with other generic rate limited requests with retries (e.g. Axero, Notion?)
+@retry(tries=3, delay=1, backoff=2)
 def _rate_limited_freshdesk_get(
     url: str, auth: tuple, params: dict
 ) -> requests.Response:
-    return requests.get(url, auth=auth, params=params)
+    return rl_requests.get(url, auth=auth, params=params)
 
 
 def _create_metadata_from_ticket(ticket: dict) -> dict:
