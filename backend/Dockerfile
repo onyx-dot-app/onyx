@@ -1,11 +1,11 @@
 FROM python:3.11.7-slim-bookworm
 
-LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+LABEL com.bizbot.maintainer="admin@bizbot.app"
+LABEL com.bizbot.description="This image is the backend container of Bizbot which \
+contains code for both the Community and Enterprise editions of Bizbot. If you do not \
+have a contract or agreement with the Bizbot team, you are not permitted to use the Enterprise \
 Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+admin@bizbot.app for more information."
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
@@ -61,7 +61,7 @@ RUN pip install --no-cache-dir --upgrade \
 # Cleanup for CVEs and size reduction
 # https://github.com/tornadoweb/tornado/issues/3107
 # xserver-common and xvfb included by playwright installation but not needed after
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality
+# perl-base is part of the base Python Debian image but not needed for Bizbot functionality
 # perl-base could only be removed with --allow-remove-essential
 RUN apt-get update && \
     apt-get remove -y --allow-remove-essential \

@@ -96,7 +96,7 @@ export default function NRFPage({
     setSettingsOpen((prev) => !prev);
   };
 
-  // If user toggles the "Use Onyx" switch to off, prompt a modal
+  // If user toggles the "Use Bizbot" switch to off, prompt a modal
   const handleUseOnyxToggle = (checked: boolean) => {
     if (!checked) {
       setShowTurnOffModal(true);
@@ -242,8 +242,8 @@ export default function NRFPage({
                 }`}
               >
                 {isNight
-                  ? "End your day with Onyx"
-                  : "Start your day with Onyx"}
+                  ? "End your day with Bizbot"
+                  : "Start your day with Bizbot"}
               </h1>
 
               <SimplifiedChatInputBar
@@ -321,11 +321,11 @@ export default function NRFPage({
       <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
         <DialogContent className="w-fit max-w-[95%]">
           <DialogHeader>
-            <DialogTitle>Turn off Onyx new tab page?</DialogTitle>
+            <DialogTitle>Turn off Bizbot new tab page?</DialogTitle>
             <DialogDescription>
               You&apos;ll see your browser&apos;s default new tab page instead.
               <br />
-              You can turn it back on anytime in your Onyx settings.
+              You can turn it back on anytime in your Bizbot settings.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 justify-center">
@@ -360,7 +360,7 @@ export default function NRFPage({
           ) : (
             <div className="flex flex-col items-center">
               <h2 className="text-center text-xl text-strong font-bold mb-4">
-                Welcome to Onyx
+                Welcome to Bizbot
               </h2>
               <Button
                 className="bg-agent w-full hover:bg-accent-hover text-white"

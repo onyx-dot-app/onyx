@@ -149,7 +149,7 @@ export function FederatedOAuthModal() {
   };
 
   const applicationName =
-    settings?.enterpriseSettings?.application_name || "Onyx";
+    settings?.enterpriseSettings?.application_name || "Bizbot";
 
   if (skipCount >= MAX_SKIP_COUNT) {
     return (

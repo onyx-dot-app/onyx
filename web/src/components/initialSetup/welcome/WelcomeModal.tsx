@@ -62,17 +62,17 @@ export function WelcomeModal({ user }: { user: User | null }) {
           setWelcomeFlowComplete();
           router.refresh();
         }}
-        title={"Welcome to Onyx!"}
+        title={"Welcome to Bizbot!"}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >
         <div>
           <Text className="mb-4">
-            Onyx brings all your company&apos;s knowledge to your fingertips,
+            Bizbot brings all your company&apos;s knowledge to your fingertips,
             ready to be accessed instantly.
           </Text>
           <Text className="mb-4">
             To get started, we need to set up an API key for the Language Model
-            (LLM) provider. This key allows Onyx to interact with the AI model,
+            (LLM) provider. This key allows Bizbot to interact with the AI model,
             enabling intelligent responses to your queries.
           </Text>
 

@@ -57,7 +57,7 @@ export function AccessTypeForm({
       name: "Public",
       value: "public",
       description:
-        "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        "Everyone with an account on Bizbot can access the documents pulled in by this connector",
     },
   ];
 
@@ -66,7 +66,7 @@ export function AccessTypeForm({
       name: "Auto Sync Permissions",
       value: "sync",
       description:
-        "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        "We will automatically sync permissions from the source. A document will be searchable in Bizbot if and only if the user performing the search has permission to access the document in the source.",
     });
   }
 

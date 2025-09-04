@@ -5,7 +5,7 @@ from enum import auto
 from enum import Enum
 
 
-ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+ONYX_DEFAULT_APPLICATION_NAME = "Bizbot"
 ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
@@ -29,7 +29,7 @@ TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
 NO_AUTH_USER_ID = "__no_auth_user__"
-NO_AUTH_USER_EMAIL = "anonymous@onyx.app"
+NO_AUTH_USER_EMAIL = "anonymous@bizbot.app"
 
 # For chunking/processing chunks
 RETURN_SEPARATOR = "\n\r\n"
@@ -42,9 +42,9 @@ ONYX_METADATA_FILENAME = ".onyx_metadata.json"
 
 # Messages
 DISABLED_GEN_AI_MSG = (
-    "Your System Admin has disabled the Generative AI functionalities of Onyx.\n"
+    "Your System Admin has disabled the Generative AI functionalities of Bizbot.\n"
     "Please contact them if you wish to have this enabled.\n"
-    "You can still use Onyx as a search engine."
+    "You can still use Bizbot as a search engine."
 )
 
 #####
@@ -82,7 +82,7 @@ POSTGRES_UNKNOWN_APP_NAME = "unknown"
 SSL_CERT_FILE = "bundle.pem"
 # API Keys
 DANSWER_API_KEY_PREFIX = "API_KEY__"
-DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "onyxapikey.ai"
+DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "bizbotapikey.ai"
 UNNAMED_KEY_PLACEHOLDER = "Unnamed"
 
 # Key-Value store keys

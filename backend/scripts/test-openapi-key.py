@@ -50,9 +50,9 @@ if __name__ == "__main__":
             temperature=2,
         )
         print(response.choices[0].message.content)
-        print("Success! Feel free to use this API key for Onyx.")
+        print("Success! Feel free to use this API key for Bizbot.")
     except Exception:
         print(
-            "Failed, provided API key is invalid for Onyx, please address the error from OpenAI."
+            "Failed, provided API key is invalid for Bizbot, please address the error from OpenAI."
         )
         raise

@@ -33,7 +33,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
   }
 
   // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
-  // Onyx in an un-authenticated state
+  // Bizbot in an un-authenticated state
   if (authType === "oidc" || authType === "saml") {
     return {
       authType,

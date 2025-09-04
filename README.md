@@ -24,11 +24,11 @@
 </a>
 </p>
 
-<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI platform connected to your company's docs, apps, and people.
-Onyx provides a feature rich Chat interface and plugs into any LLM of your choice.
+<strong>[Bizbot](https://www.bizbot.app/)</strong> (formerly Danswer, also known as Onyx) is the AI platform connected to your company's docs, apps, and people.
+Bizbot provides a feature rich Chat interface and plugs into any LLM of your choice.
 Keep knowledge and access controls sync-ed across over 40 connectors like Google Drive, Slack, Confluence, Salesforce, etc.
 Create custom AI agents with unique prompts, knowledge, and actions that the agents can take.
-Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
+Bizbot can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
 
 
 <h3>Feature Highlights</h3>
@@ -38,19 +38,19 @@ Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premi
 https://private-user-images.githubusercontent.com/32520769/414509312-48392e83-95d0-4fb5-8650-a396e05e0a32.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mzk5Mjg2MzYsIm5iZiI6MTczOTkyODMzNiwicGF0aCI6Ii8zMjUyMDc2OS80MTQ1MDkzMTItNDgzOTJlODMtOTVkMC00ZmI1LTg2NTAtYTM5NmUwNWUwYTMyLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTAyMTklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwMjE5VDAxMjUzNlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFhMzk5Njg2Y2Y5YjFmNDNiYTQ2YzM5ZTg5YWJiYTU2NWMyY2YwNmUyODE2NWUxMDRiMWQxZWJmODI4YTA0MTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.a9D8A0sgKE9AoaoE-mfFbJ6_OKYeqaf7TZ4Han2JfW8
 
 
-**Use Onyx as a secure AI Chat with any LLM:**
+**Use Bizbot as a secure AI Chat with any LLM:**
 
-![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
+![Bizbot Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
 
 
 **Easily set up connectors to your apps:**
 
-![Onyx Connector Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxConnectorSilentDemo.gif)
+![Bizbot Connector Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxConnectorSilentDemo.gif)
 
 
-**Access Onyx where your team already works:**
+**Access Bizbot where your team already works:**
 
-![Onyx Bot Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxBot.png)
+![Bizbot Bot Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxBot.png)
 
 
 ## Deployment

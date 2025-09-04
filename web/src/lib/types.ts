@@ -51,7 +51,7 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
     "Global Curator users can perform admin actions for all groups they are a member of",
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
   [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
+    "This role is automatically assigned to users who only use Bizbot via Slack",
 };
 
 export interface User {
