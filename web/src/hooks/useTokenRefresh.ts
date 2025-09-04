@@ -58,10 +58,6 @@ export function useTokenRefresh(
           // If token refresh fails, try to get current user info
           await onRefreshFail();
         }
-
-        // Instead, just update the refresh time without making the API call
-        setLastTokenRefresh(Date.now());
-        console.debug("Auth token refresh disabled - skipping API call");
       } catch (error) {
         console.error("Error refreshing auth token:", error);
       }
