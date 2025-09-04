@@ -174,7 +174,6 @@ def query_slack(
                         )
                         continue
                 except Exception as e:
-                    # If we can't get channel info, be conservative and filter it out
                     logger.warning(
                         f"Could not determine channel type for {channel_id}, filtering out: {e}"
                     )
@@ -204,7 +203,6 @@ def query_slack(
                     )
                     continue
             except Exception as e:
-                # If we can't get channel info, be conservative and filter it out
                 logger.warning(
                     f"Could not determine channel type for {channel_id}, filtering out: {e}"
                 )
@@ -466,7 +464,6 @@ def slack_retrieval(
 
     # Check if we're in a bot context by looking at the access token prefix
     if access_token.startswith("xoxp-"):
-        # This is a user OAuth token, likely from bot context - skip thread context to avoid additional scope requirements
         logger.info(
             "Bot context detected (user OAuth token): skipping thread context to avoid additional scope requirements"
         )

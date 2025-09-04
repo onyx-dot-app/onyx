@@ -233,7 +233,6 @@ class SlackFederatedConnector(FederatedConnector):
         Returns:
             Search results in SlackSearchResponse format
         """
-        # Log what entities we're receiving
         logger.info(f"Slack federated search called with entities: {entities}")
 
         with get_session_with_current_tenant() as db_session:
