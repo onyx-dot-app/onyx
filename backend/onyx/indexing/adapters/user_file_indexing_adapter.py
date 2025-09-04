@@ -19,6 +19,8 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
+from onyx.llm.factory import get_default_llms
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -126,7 +128,19 @@ class UserFileIndexingAdapter:
             for user_file_id in updatable_ids
         }
 
+        # Initialize tokenizer used for token count calculation
+        try:
+            llm, _ = get_default_llms()
+            llm_tokenizer = get_tokenizer(
+                model_name=llm.config.model_name,
+                provider_type=llm.config.model_provider,
+            )
+        except Exception as e:
+            logger.error(f"Error getting tokenizer: {e}")
+            llm_tokenizer = None
+
         user_file_id_to_raw_text: dict[str, str] = {}
+        user_file_id_to_token_count: dict[int, int | None] = {}
         for user_file_id in updatable_ids:
             user_file_chunks = [
                 chunk
@@ -138,8 +152,13 @@ class UserFileIndexingAdapter:
                     [chunk.content for chunk in user_file_chunks]
                 )
                 user_file_id_to_raw_text[user_file_id] = combined_content
+                token_count = (
+                    len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
+                )
+                user_file_id_to_token_count[user_file_id] = token_count
             else:
                 user_file_id_to_raw_text[user_file_id] = None
+                user_file_id_to_token_count[user_file_id] = None
 
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
@@ -160,7 +179,7 @@ class UserFileIndexingAdapter:
             doc_id_to_previous_chunk_cnt=user_file_id_to_previous_chunk_cnt,
             doc_id_to_new_chunk_cnt=user_file_id_to_new_chunk_cnt,
             user_file_id_to_raw_text=user_file_id_to_raw_text,
-            user_file_id_to_token_count={},
+            user_file_id_to_token_count=user_file_id_to_token_count,
         )
 
     def post_index(
@@ -177,4 +196,8 @@ class UserFileIndexingAdapter:
         )
         for user_file in user_files:
             user_file.status = UserFileStatus.COMPLETED
+            user_file.chunk_count = result.doc_id_to_new_chunk_cnt[str(user_file.id)]
+            user_file.token_count = result.user_file_id_to_token_count[
+                str(user_file.id)
+            ]
         self.db_session.commit()

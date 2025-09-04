@@ -586,6 +586,39 @@ def get_max_document_tokens(
     )
 
 
+class AvailableContextTokensResponse(BaseModel):
+    available_tokens: int
+
+
+@router.get("/available-context-tokens/{session_id}")
+def get_available_context_tokens_for_session(
+    session_id: UUID,
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> AvailableContextTokensResponse:
+    """Return available context tokens for a chat session based on its persona."""
+    try:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=session_id,
+            user_id=user.id if user is not None else None,
+            db_session=db_session,
+            is_shared=False,
+            include_deleted=False,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    if not chat_session.persona:
+        raise HTTPException(status_code=400, detail="Chat session has no persona")
+
+    available = compute_max_document_tokens_for_persona(
+        db_session=db_session,
+        persona=chat_session.persona,
+    )
+
+    return AvailableContextTokensResponse(available_tokens=available)
+
+
 """Endpoints for chat seeding"""
 
 

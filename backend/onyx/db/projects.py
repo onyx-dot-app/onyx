@@ -4,6 +4,8 @@ from typing import List
 from uuid import UUID
 
 from fastapi import UploadFile
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -16,10 +18,19 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.server.documents.connector import upload_files
+from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class CategorizedFilesResult(BaseModel):
+    user_files: list[UserFile]
+    non_accepted_files: list[str]
+    unsupported_files: list[str]
+    # Allow SQLAlchemy ORM models inside this result container
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 def create_user_files(
@@ -28,24 +39,33 @@ def create_user_files(
     user: User | None,
     db_session: Session,
     link_url: str | None = None,
-) -> list[UserFile]:
+) -> CategorizedFilesResult:
     """NOTE(rkuo): This function can take -1 (RECENT_DOCS_FOLDER_ID for folder_id.
     Document what this does?
     """
 
+    # Categorize the files
+    categorized_files = categorize_uploaded_files(files)
     # NOTE: At the moment, zip metadata is not used for user files.
     # Should revisit to decide whether this should be a feature.
-    upload_response = upload_files(files)
+    upload_response = upload_files(categorized_files.acceptable)
     user_files = []
+    non_accepted_files = categorized_files.non_accepted
+    unsupported_files = categorized_files.unsupported
 
-    for file_path, file in zip(upload_response.file_paths, files):
+    # Pair returned storage paths with the same set of acceptable files we uploaded
+    for file_path, file in zip(
+        upload_response.file_paths, categorized_files.acceptable
+    ):
         new_file = UserFile(
             id=uuid.uuid4(),
             user_id=user.id if user else None,
             file_id=file_path,
-            document_id=uuid.uuid4(),  # TODO: remove this column
+            document_id=uuid.uuid4(),  # TODO(subash): remove this column
             name=file.filename,
-            token_count=None,
+            token_count=categorized_files.acceptable_file_to_token_count[
+                file.filename or ""
+            ],
             link_url=link_url,
             content_type=file.content_type,
             file_type=file.content_type,
@@ -62,7 +82,11 @@ def create_user_files(
             db_session.add(project_to_user_file)
         user_files.append(new_file)
     db_session.commit()
-    return user_files
+    return CategorizedFilesResult(
+        user_files=user_files,
+        non_accepted_files=non_accepted_files,
+        unsupported_files=unsupported_files,
+    )
 
 
 def upload_files_to_user_files_with_indexing(
@@ -70,11 +94,20 @@ def upload_files_to_user_files_with_indexing(
     project_id: int | None,
     user: User,
     db_session: Session,
-) -> list[UserFile]:
-    user_files = create_user_files(files, project_id, user, db_session)
+) -> CategorizedFilesResult:
+    categorized_files_result = create_user_files(files, project_id, user, db_session)
+    user_files = categorized_files_result.user_files
+    non_accepted_files = categorized_files_result.non_accepted_files
+    unsupported_files = categorized_files_result.unsupported_files
 
     # Trigger per-file processing immediately for the current tenant
     tenant_id = get_current_tenant_id()
+    if non_accepted_files:
+        for filename in non_accepted_files:
+            logger.warning(f"Non-accepted file: {filename}")
+    if unsupported_files:
+        for filename in unsupported_files:
+            logger.warning(f"Unsupported file: {filename}")
     for user_file in user_files:
         task = client_app.send_task(
             OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
@@ -86,7 +119,11 @@ def upload_files_to_user_files_with_indexing(
             f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
         )
 
-    return user_files
+    return CategorizedFilesResult(
+        user_files=user_files,
+        non_accepted_files=non_accepted_files,
+        unsupported_files=unsupported_files,
+    )
 
 
 def check_project_ownership(

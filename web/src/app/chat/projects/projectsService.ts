@@ -10,6 +10,12 @@ export interface Project {
   chat_sessions: ChatSession[];
 }
 
+export interface CategorizedFiles {
+  user_files: ProjectFile[];
+  non_accepted_files: string[];
+  unsupported_files: string[];
+}
+
 export interface ProjectFile {
   id: string;
   name: string;
@@ -17,10 +23,20 @@ export interface ProjectFile {
   user_id: string | null;
   file_id: string;
   created_at: string;
-  status: string;
+  status: UserFileStatus;
   file_type: string;
   last_accessed_at: string;
   chat_file_type: ChatFileType;
+  token_count: number | null;
+  chunk_count: number | null;
+}
+
+export enum UserFileStatus {
+  UPLOADING = "uploading",
+  PROCESSING = "processing",
+  COMPLETED = "completed",
+  FAILED = "failed",
+  CANCELED = "canceled",
 }
 
 export type ProjectDetails = {
@@ -52,7 +68,7 @@ export async function createProject(name: string): Promise<Project> {
 export async function uploadFiles(
   files: File[],
   projectId?: string | number | null
-): Promise<ProjectFile[]> {
+): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (projectId !== undefined && projectId !== null) {
@@ -135,6 +151,19 @@ export async function getProjectDetails(
     throw new Error("Failed to fetch project details");
   }
   return response.json();
+}
+
+export async function getSessionProjectTokenCount(
+  chatSessionId: string
+): Promise<number> {
+  const response = await fetch(
+    `/api/user/projects/session/${encodeURIComponent(chatSessionId)}/token-count`
+  );
+  if (!response.ok) {
+    return 0;
+  }
+  const data = (await response.json()) as { total_tokens: number };
+  return data.total_tokens ?? 0;
 }
 
 export async function moveChatSession(

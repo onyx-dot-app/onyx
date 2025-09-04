@@ -129,7 +129,12 @@ export function ChatPage({
     refreshChatSessions,
   } = useChatContext();
 
-  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    setCurrentProjectId,
+    currentProjectId,
+  } = useProjectsContext();
 
   const { height: screenHeight } = useScreenSize();
 
@@ -158,7 +163,6 @@ export function ChatPage({
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
-  const { setCurrentProjectId, currentProjectId } = useProjectsContext();
 
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
@@ -490,7 +494,11 @@ export function ChatPage({
       setSelectedAssistantFromId,
     });
 
-  const { onMessageSelection } = useChatSessionController({
+  const {
+    onMessageSelection,
+    currentSessionFileTokenCount,
+    availableContextTokens,
+  } = useChatSessionController({
     existingChatSessionId,
     searchParams,
     filterManager,
@@ -1129,6 +1137,10 @@ export function ChatPage({
                                 stopGenerating={stopGenerating}
                                 onSubmit={handleChatInputSubmit}
                                 chatState={currentChatState}
+                                currentSessionFileTokenCount={
+                                  currentSessionFileTokenCount
+                                }
+                                availableContextTokens={availableContextTokens}
                                 selectedAssistant={
                                   selectedAssistant || liveAssistant
                                 }

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
+from onyx.db.projects import CategorizedFilesResult
 from onyx.file_store.models import ChatFileType
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatSessionDetails
@@ -22,6 +23,8 @@ class UserFileSnapshot(BaseModel):
     last_accessed_at: datetime
     file_type: str
     chat_file_type: ChatFileType
+    token_count: int | None
+    chunk_count: int | None
 
     @classmethod
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
@@ -36,6 +39,29 @@ class UserFileSnapshot(BaseModel):
             last_accessed_at=model.last_accessed_at,
             file_type=model.content_type,
             chat_file_type=mime_type_to_chat_file_type(model.content_type),
+            token_count=model.token_count,
+            chunk_count=model.chunk_count,
+        )
+
+
+class TokenCountResponse(BaseModel):
+    total_tokens: int
+
+
+class CategorizedFilesSnapshot(BaseModel):
+    user_files: list[UserFileSnapshot]
+    non_accepted_files: list[str]
+    unsupported_files: list[str]
+
+    @classmethod
+    def from_result(cls, result: CategorizedFilesResult) -> "CategorizedFilesSnapshot":
+        return cls(
+            user_files=[
+                UserFileSnapshot.from_model(user_file)
+                for user_file in result.user_files
+            ],
+            non_accepted_files=result.non_accepted_files,
+            unsupported_files=result.unsupported_files,
         )
 
 

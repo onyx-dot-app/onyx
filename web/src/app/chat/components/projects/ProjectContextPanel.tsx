@@ -22,9 +22,15 @@ import { RiPlayListAddFill } from "react-icons/ri";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePicker from "../files/FilePicker";
 import FilesList from "../files/FilesList";
-import type { ProjectFile } from "../../projects/projectsService";
+import type {
+  ProjectFile,
+  CategorizedFiles,
+} from "../../projects/projectsService";
+import { UserFileStatus } from "../../projects/projectsService";
+import { ChatFileType } from "@/app/chat/interfaces";
+import { usePopup } from "@/components/admin/connectors/Popup";
 
-function ProjectFileCard({ file }: { file: ProjectFile }) {
+export function FileCard({ file }: { file: ProjectFile }) {
   const typeLabel = useMemo(() => {
     if (!file.file_type) return "";
     const parts = String(file.file_type).split("/");
@@ -32,7 +38,9 @@ function ProjectFileCard({ file }: { file: ProjectFile }) {
     return String(ext).toUpperCase();
   }, [file.file_type]);
 
-  const isProcessing = String(file.status).toLowerCase() === "processing";
+  const isProcessing =
+    String(file.status).toLowerCase() === "processing" ||
+    String(file.status).toLowerCase() === "uploading";
 
   return (
     <div className="flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm">
@@ -51,7 +59,11 @@ function ProjectFileCard({ file }: { file: ProjectFile }) {
           {file.name}
         </span>
         <span className="text-xs text-text-400 truncate">
-          {isProcessing ? "Processing..." : typeLabel}
+          {isProcessing
+            ? file.status === UserFileStatus.UPLOADING
+              ? "Uploading..."
+              : "Processing..."
+            : typeLabel}
         </span>
       </div>
     </div>
@@ -62,6 +74,8 @@ export default function ProjectContextPanel() {
   const [isInstrOpen, setIsInstrOpen] = useState(false);
   const [showProjectFiles, setShowProjectFiles] = useState(false);
   const [instructionText, setInstructionText] = useState("");
+  const { popup, setPopup } = usePopup();
+  const [tempProjectFiles, setTempProjectFiles] = useState<ProjectFile[]>([]);
   const {
     upsertInstructions,
     currentProjectDetails,
@@ -131,23 +145,62 @@ export default function ProjectContextPanel() {
             if (!files || files.length === 0) return;
             setIsUploading(true);
             try {
-              await uploadFiles(Array.from(files), currentProjectId);
+              // Show temporary uploading files immediately
+              const tempFiles: ProjectFile[] = Array.from(files).map(
+                (file) => ({
+                  id: file.name,
+                  file_id: file.name,
+                  name: file.name,
+                  project_id: currentProjectId,
+                  user_id: null,
+                  created_at: new Date().toISOString(),
+                  status: UserFileStatus.UPLOADING,
+                  file_type: file.type,
+                  last_accessed_at: new Date().toISOString(),
+                  chat_file_type: ChatFileType.DOCUMENT,
+                })
+              );
+              setTempProjectFiles((prev) => [...prev, ...tempFiles]);
+
+              const result: CategorizedFiles = await uploadFiles(
+                Array.from(files),
+                currentProjectId
+              );
+              const unsupported = result?.unsupported_files || [];
+              const nonAccepted = result?.non_accepted_files || [];
+              if (unsupported.length > 0 || nonAccepted.length > 0) {
+                const parts: string[] = [];
+                if (unsupported.length > 0) {
+                  parts.push(`Unsupported: ${unsupported.join(", ")}`);
+                }
+                if (nonAccepted.length > 0) {
+                  parts.push(`Not accepted: ${nonAccepted.join(", ")}`);
+                }
+                setPopup({
+                  type: "warning",
+                  message: `Some files were not uploaded. ${parts.join(" | ")}`,
+                });
+              }
               await refreshCurrentProjectDetails(String(currentProjectId));
             } finally {
               setIsUploading(false);
+              setTempProjectFiles([]);
               e.target.value = "";
             }
           }}
         />
       </div>
 
-      {currentProjectDetails?.files &&
-      currentProjectDetails.files.length > 0 ? (
+      {tempProjectFiles.length > 0 ||
+      (currentProjectDetails?.files &&
+        currentProjectDetails.files.length > 0) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {currentProjectDetails.files.slice(0, 3).map((f) => (
-            <ProjectFileCard key={f.id} file={f} />
-          ))}
-          {currentProjectDetails.files.length > 3 && (
+          {[...tempProjectFiles, ...(currentProjectDetails?.files || [])]
+            .slice(0, 3)
+            .map((f) => (
+              <FileCard key={f.id} file={f} />
+            ))}
+          {[...(currentProjectDetails?.files || [])].length > 3 && (
             <button
               className="flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm text-left"
               onClick={() => setShowProjectFiles(true)}
@@ -160,7 +213,7 @@ export default function ProjectContextPanel() {
                   View all project files
                 </span>
                 <span className="text-xs text-text-400 truncate">
-                  {currentProjectDetails.files.length} files
+                  {(currentProjectDetails?.files || []).length} files
                 </span>
               </div>
             </button>
@@ -216,6 +269,7 @@ export default function ProjectContextPanel() {
           />
         </DialogContent>
       </Dialog>
+      {popup}
     </div>
   );
 }

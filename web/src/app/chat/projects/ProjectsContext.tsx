@@ -11,7 +11,7 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
-import type { Project, ProjectFile } from "./projectsService";
+import type { CategorizedFiles, Project, ProjectFile } from "./projectsService";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -24,7 +24,6 @@ import {
   getProjectDetails as svcGetProjectDetails,
   ProjectDetails,
 } from "./projectsService";
-import { FileDescriptor } from "../interfaces";
 import { Prompt } from "@/app/admin/assistants/interfaces";
 
 export type { Project, ProjectFile } from "./projectsService";
@@ -36,8 +35,8 @@ interface ProjectsContextType {
   currentProjectId: string | null;
   isLoading: boolean;
   error: string | null;
-  currentMessageFiles: FileDescriptor[];
-  setCurrentMessageFiles: Dispatch<SetStateAction<FileDescriptor[]>>;
+  currentMessageFiles: ProjectFile[];
+  setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
   setCurrentProjectId: (projectId: string | null) => void;
   upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
@@ -45,7 +44,7 @@ interface ProjectsContextType {
   uploadFiles: (
     files: File[],
     projectId?: string | number | null
-  ) => Promise<ProjectFile[]>;
+  ) => Promise<CategorizedFiles>;
   getRecentFiles: () => Promise<ProjectFile[]>;
   getFilesInProject: (projectId: string) => Promise<ProjectFile[]>;
   refreshCurrentProjectDetails: (projectId: string) => Promise<void>;
@@ -70,9 +69,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentMessageFiles, setCurrentMessageFiles] = useState<
-    FileDescriptor[]
-  >([]);
+  const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
+    []
+  );
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
 
@@ -134,11 +133,14 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     async (
       files: File[],
       projectId?: string | number | null
-    ): Promise<ProjectFile[]> => {
+    ): Promise<CategorizedFiles> => {
       setIsLoading(true);
       setError(null);
       try {
-        const uploaded: ProjectFile[] = await svcUploadFiles(files, projectId);
+        const uploaded: CategorizedFiles = await svcUploadFiles(
+          files,
+          projectId
+        );
 
         // If we uploaded into a specific project, refresh that project's files
         if (projectId) {
@@ -212,6 +214,45 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       refreshCurrentProjectDetails(currentProjectId);
     }
   }, [currentProjectId, refreshCurrentProjectDetails]);
+
+  // Keep currentMessageFiles in sync with latest file statuses from backend (key by id only)
+  useEffect(() => {
+    if (currentMessageFiles.length === 0) return;
+
+    const latestById = new Map<string, ProjectFile>();
+    // Prefer project files first, then recent files as fallback
+    (currentProjectDetails?.files || []).forEach((f) => {
+      latestById.set(String(f.id), f);
+    });
+    recentFiles.forEach((f) => {
+      const key = String(f.id);
+      if (!latestById.has(key)) {
+        latestById.set(key, f);
+      }
+    });
+
+    let changed = false;
+    const reconciled = currentMessageFiles.map((f) => {
+      const key = String(f.id);
+      const latest = latestById.get(key);
+      if (latest) {
+        // Only mark changed if status or other fields differ
+        if (
+          String(latest.status) !== String(f.status) ||
+          String(latest.name) !== String(f.name) ||
+          String(latest.file_type) !== String(f.file_type)
+        ) {
+          changed = true;
+          return { ...f, ...latest } as ProjectFile;
+        }
+      }
+      return f;
+    });
+
+    if (changed) {
+      setCurrentMessageFiles(reconciled);
+    }
+  }, [recentFiles, currentProjectDetails?.files]);
 
   // Poll every second while any file is processing
   useEffect(() => {

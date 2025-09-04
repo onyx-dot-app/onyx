@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -18,6 +19,8 @@ from onyx.db.models import UserFolder
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.prompts import upsert_prompt
 from onyx.server.features.persona.models import PromptSnapshot
+from onyx.server.features.projects.models import CategorizedFilesSnapshot
+from onyx.server.features.projects.models import TokenCountResponse
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
 from onyx.utils.logger import setup_logger
@@ -55,14 +58,15 @@ def upload_user_files(
     project_id: int | None = Form(None),
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> list[UserFileSnapshot]:
+) -> CategorizedFilesSnapshot:
     try:
+
         # Use our consolidated function that handles indexing properly
-        user_files = upload_files_to_user_files_with_indexing(
+        categorized_files_result = upload_files_to_user_files_with_indexing(
             files=files, project_id=project_id, user=user, db_session=db_session
         )
 
-        return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
+        return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
         logger.error(f"Error uploading files: {str(e)}")
@@ -207,3 +211,37 @@ def move_chat_session(
     chat_session.project_id = project_id
     db_session.commit()
     return Response(status_code=204)
+
+
+@router.get("/session/{chat_session_id}/token-count", response_model=TokenCountResponse)
+def get_chat_session_project_token_count(
+    chat_session_id: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> TokenCountResponse:
+    """Return sum of token_count for all user files in the project linked to the given chat session.
+
+    If the chat session has no project, returns 0.
+    """
+    chat_session = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user.id)
+        .one_or_none()
+    )
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    if chat_session.project_id is None:
+        return TokenCountResponse(total_tokens=0)
+
+    total_tokens = (
+        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
+        .filter(
+            UserFile.user_id == user.id,
+            UserFile.projects.any(id=chat_session.project_id),
+        )
+        .scalar()
+        or 0
+    )
+
+    return TokenCountResponse(total_tokens=int(total_tokens))
