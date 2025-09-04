@@ -3,6 +3,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { FiPlus } from "react-icons/fi";
@@ -14,22 +15,19 @@ import { InputPrompt } from "@/app/chat/interfaces";
 
 import { FilterManager, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
-import { ChatFileType } from "../../interfaces";
 import {
   DocumentIcon2,
   FileIcon,
-  FileUploadIcon,
   SendIcon,
   StopGeneratingIcon,
 } from "@/components/icons/icons";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
-import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
+import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
@@ -39,8 +37,11 @@ import { SelectedTool } from "./SelectedTool";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import FilePicker from "../files/FilePicker";
 import { useProjectsContext } from "../../projects/ProjectsContext";
-import { FileDescriptor } from "@/app/chat/interfaces";
-import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { FileCard } from "../projects/ProjectContextPanel";
+import {
+  ProjectFile,
+  UserFileStatus,
+} from "@/app/chat/projects/projectsService";
 import { useChatController } from "../../hooks/useChatController";
 
 const MAX_INPUT_HEIGHT = 200;
@@ -103,7 +104,8 @@ interface ChatInputBarProps {
   onSubmit: () => void;
   llmManager: LlmManager;
   chatState: ChatState;
-
+  currentSessionFileTokenCount: number;
+  availableContextTokens: number;
   // assistants
   selectedAssistant: MinimalPersonaSnapshot;
 
@@ -129,7 +131,8 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   stopGenerating,
   onSubmit,
   chatState,
-
+  currentSessionFileTokenCount,
+  availableContextTokens,
   // assistants
   selectedAssistant,
 
@@ -143,12 +146,14 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
-  const {
-    currentMessageFiles,
-    setCurrentMessageFiles,
-    uploadFiles,
-    recentFiles,
-  } = useProjectsContext();
+  const { currentMessageFiles, setCurrentMessageFiles, recentFiles } =
+    useProjectsContext();
+
+  const currentIndexingFiles = useMemo(() => {
+    return currentMessageFiles.filter(
+      (file) => file.status === UserFileStatus.PROCESSING
+    );
+  }, [currentMessageFiles]);
 
   const handleUploadChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,13 +163,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       e.target.value = "";
     },
     [handleFileUpload]
-  );
-
-  // Create a Set of IDs from currentMessageFiles for efficient lookup
-  // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
-  const currentMessageFileIds = useMemo(
-    () => new Set(currentMessageFiles.map((f) => String(f.id))), // Ensure IDs are strings for comparison
-    [currentMessageFiles]
   );
 
   const settings = useContext(SettingsContext);
@@ -199,6 +197,8 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 
   const { llmProviders, inputPrompts } = useChatContext();
   const [showPrompts, setShowPrompts] = useState(false);
+  const [showStickyBanner, setShowStickyBanner] = useState(false);
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
   const hidePrompts = () => {
     setTimeout(() => {
@@ -206,6 +206,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     }, 50);
     setTabbingIconIndex(0);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowStickyBanner(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   const updateInputPrompt = (prompt: InputPrompt) => {
     hidePrompts();
@@ -261,6 +266,33 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     [inputPrompts, startFilterSlash]
   );
 
+  useEffect(() => {
+    if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
+      const currentFilesTokenTotal = currentMessageFiles.reduce(
+        (acc, file) => acc + (file.token_count || 0),
+        0
+      );
+      const totalTokens =
+        (currentSessionFileTokenCount || 0) + currentFilesTokenTotal;
+      if (totalTokens < availableContextTokens) {
+        setBannerMessage(
+          "Since your file is within the context limit, you don’t need to wait for processing, messages sent early still give the best answer."
+        );
+      } else {
+        setBannerMessage(
+          "Since your total file context exceeds the maximum length, you need to wait until the file processing completes to get the better answer."
+        );
+      }
+    } else {
+      setBannerMessage(null);
+    }
+  }, [
+    currentMessageFiles,
+    currentSessionFileTokenCount,
+    currentIndexingFiles,
+    availableContextTokens,
+  ]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
       e.preventDefault();
@@ -296,32 +328,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     }
   };
 
-  // Combine selectedFiles and currentMessageFiles for unified rendering
-  const allFiles = useMemo(() => {
-    const combined: Array<{
-      id: string;
-      name: string;
-      chatFileType: ChatFileType;
-      isUploading?: boolean;
-      source: "selected" | "current";
-      originalFile: any;
-    }> = [];
-
-    // Add current message files
-    currentMessageFiles.forEach((file, index) => {
-      combined.push({
-        id: file.id,
-        name: file.name || `File${file.id}`,
-        chatFileType: file.type,
-        isUploading: file.isUploading,
-        source: "current",
-        originalFile: file,
-      });
-    });
-
-    return combined;
-  }, [currentMessageFiles, currentMessageFileIds]);
-
   return (
     <div id="onyx-chat-input">
       <div className="flex  justify-center mx-auto">
@@ -334,6 +340,8 @@ export const ChatInputBar = React.memo(function ChatInputBar({
             mx-auto
           "
         >
+          {/* Sticky background banner will be positioned relative to the card wrapper below */}
+
           {showPrompts && user?.preferences?.shortcut_enabled && (
             <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
               <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
@@ -377,32 +385,75 @@ export const ChatInputBar = React.memo(function ChatInputBar({
             showConfigureAPIKey={showConfigureAPIKey}
           />
           <div className="w-full h-[10px]"></div>
-          <div
-            className="
-              opacity-100
-              w-full
-              h-fit
-              flex
-              flex-col
-              border
-              shadow-lg
-              bg-input-background
-              border-input-border
-              dark:border-none
-              rounded-xl
-              overflow-hidden
-              text-text-chatbar
-              [&:has(textarea:focus)]::ring-1
-              [&:has(textarea:focus)]::ring-black
-            "
-          >
-            <textarea
-              onPaste={handlePaste}
-              onKeyDownCapture={handleKeyDown}
-              onChange={handleInputChange}
-              ref={textAreaRef}
-              id="onyx-chat-input-textarea"
-              className={`
+          <div className="relative">
+            {bannerMessage && (
+              <>
+                <div
+                  className={`
+                    absolute
+                    inset-x-0
+                    -top-8
+                    h-16
+                    rounded-xl
+                    border
+                    shadow-sm
+                    z-0
+                    transition-all
+                    duration-300
+                    ease-out
+                    ${showStickyBanner ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}
+                    bg-amber-50 dark:bg-yellow-800/30
+                    border-amber-300 dark:border-yellow-700
+                    flex
+                    items-start
+                    pt-2
+                    justify-center
+                  `}
+                >
+                  <span className="text-xs text-neutral-800 dark:text-neutral-100 text-center">
+                    {bannerMessage}
+                  </span>
+                </div>
+              </>
+            )}
+
+            <div
+              className="
+                opacity-100
+                w-full
+                h-fit
+                flex
+                flex-col
+                border
+                shadow-lg
+                bg-input-background
+                border-input-border
+                dark:border-none
+                rounded-xl
+                overflow-hidden
+                text-text-chatbar
+                [&:has(textarea:focus)]::ring-1
+                [&:has(textarea:focus)]::ring-black
+              "
+              // Ensure this sits above the sticky background banner
+              style={{ position: "relative", zIndex: 10 }}
+            >
+              {currentMessageFiles.length > 0 && (
+                <div className="px-4 pt-4">
+                  <div className="flex flex-wrap gap-2">
+                    {currentMessageFiles.map((file) => (
+                      <FileCard key={file.id} file={file} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <textarea
+                onPaste={handlePaste}
+                onKeyDownCapture={handleKeyDown}
+                onChange={handleInputChange}
+                ref={textAreaRef}
+                id="onyx-chat-input-textarea"
+                className={`
                 m-0
                 w-full
                 shrink
@@ -451,270 +502,202 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                     onSubmit();
                   }
                 }
-              }}
-              suppressContentEditableWarning={true}
-            />
+                }}
+                suppressContentEditableWarning={true}
+              />
 
-            {(selectedDocuments.length > 0 ||
-              currentMessageFiles.length > 0 ||
-              filterManager.timeRange ||
-              filterManager.selectedDocumentSets.length > 0 ||
-              filterManager.selectedTags.length > 0 ||
-              filterManager.selectedSources.length > 0) && (
-              <div className="flex bg-input-background gap-x-.5 px-2">
-                <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
-                  {filterManager.selectedTags &&
-                    filterManager.selectedTags.map((tag, index) => (
-                      <SourceChip
-                        key={index}
-                        icon={<TagIcon size={12} />}
-                        title={`#${tag.tag_key}_${tag.tag_value}`}
-                        onRemove={() => {
-                          filterManager.setSelectedTags(
-                            filterManager.selectedTags.filter(
-                              (t) => t.tag_key !== tag.tag_key
-                            )
-                          );
-                        }}
-                      />
-                    ))}
-
-                  {/* Unified file rendering section for both selected and current message files */}
-                  {allFiles.map((file, index) =>
-                    file.chatFileType === ChatFileType.IMAGE ? (
-                      <SourceChip
-                        key={`${file.source}-${file.id}-${index}`}
-                        icon={
-                          file.isUploading ? (
-                            <FiLoader className="animate-spin" />
-                          ) : (
-                            <img
-                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                              src={buildImgUrl(file.id)}
-                              alt={file.name || "File image"}
-                            />
-                          )
-                        }
-                        title={file.name}
-                        onRemove={() => {
-                          if (file.source === "selected") {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
+              {(selectedDocuments.length > 0 ||
+                currentMessageFiles.length > 0 ||
+                filterManager.timeRange ||
+                filterManager.selectedDocumentSets.length > 0 ||
+                filterManager.selectedTags.length > 0 ||
+                filterManager.selectedSources.length > 0) && (
+                <div className="flex bg-input-background gap-x-.5 px-2">
+                  <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
+                    {filterManager.selectedTags &&
+                      filterManager.selectedTags.map((tag, index) => (
+                        <SourceChip
+                          key={index}
+                          icon={<TagIcon size={12} />}
+                          title={`#${tag.tag_key}_${tag.tag_value}`}
+                          onRemove={() => {
+                            filterManager.setSelectedTags(
+                              filterManager.selectedTags.filter(
+                                (t) => t.tag_key !== tag.tag_key
                               )
-                            );
-                          } else {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
-                              )
-                            );
-                          }
-                        }}
-                      />
-                    ) : (
-                      <SourceChip
-                        key={`${file.source}-${file.id}-${index}`}
-                        icon={
-                          <FileIcon
-                            className={
-                              file.source === "current" ? "text-red-500" : ""
-                            }
-                            size={16}
-                          />
-                        }
-                        title={file.name}
-                        onRemove={() => {
-                          if (file.source === "selected") {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
-                              )
-                            );
-                          } else {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
-                              )
-                            );
-                          }
-                        }}
-                      />
-                    )
-                  )}
-
-                  {filterManager.timeRange && (
-                    <SourceChip
-                      truncateTitle={false}
-                      key="time-range"
-                      icon={<CalendarIcon size={12} />}
-                      title={`${getFormattedDateRangeString(
-                        filterManager.timeRange.from,
-                        filterManager.timeRange.to
-                      )}`}
-                      onRemove={() => {
-                        filterManager.setTimeRange(null);
-                      }}
-                    />
-                  )}
-                  {filterManager.selectedDocumentSets.length > 0 &&
-                    filterManager.selectedDocumentSets.map((docSet, index) => (
-                      <SourceChip
-                        key={`doc-set-${index}`}
-                        icon={<DocumentIcon2 size={16} />}
-                        title={docSet}
-                        onRemove={() => {
-                          filterManager.setSelectedDocumentSets(
-                            filterManager.selectedDocumentSets.filter(
-                              (ds) => ds !== docSet
-                            )
-                          );
-                        }}
-                      />
-                    ))}
-                  {filterManager.selectedSources.length > 0 &&
-                    filterManager.selectedSources.map((source, index) => (
-                      <SourceChip
-                        key={`source-${index}`}
-                        icon={
-                          <SourceIcon
-                            sourceType={source.internalName}
-                            iconSize={16}
-                          />
-                        }
-                        title={source.displayName}
-                        onRemove={() => {
-                          filterManager.setSelectedSources(
-                            filterManager.selectedSources.filter(
-                              (s) => s.internalName !== source.internalName
-                            )
-                          );
-                        }}
-                      />
-                    ))}
-                  {selectedDocuments.length > 0 && (
-                    <SourceChip
-                      key="selected-documents"
-                      onClick={() => {
-                        toggleDocumentSidebar();
-                      }}
-                      icon={<FileIcon size={16} />}
-                      title={`${selectedDocuments.length} selected`}
-                      onRemove={removeDocs}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
-              <div className="space-x-1 flex px-4 ">
-                <FilePicker
-                  onPickRecent={(file: ProjectFile) => {
-                    // Check if file with same ID already exists
-                    if (
-                      !currentMessageFiles.some(
-                        (existingFile) => existingFile.id === file.file_id
-                      )
-                    ) {
-                      const fileDescriptor: FileDescriptor = {
-                        id: file.file_id,
-                        type: file.chat_file_type,
-                        name: file.name,
-                        user_file_id: file.id,
-                      };
-                      setCurrentMessageFiles((prev) => [
-                        ...prev,
-                        fileDescriptor,
-                      ]);
-                    }
-                  }}
-                  recentFiles={recentFiles}
-                  handleUploadChange={handleUploadChange}
-                />
-
-                {selectedAssistant.tools.length > 0 && (
-                  <ActionToggle selectedAssistant={selectedAssistant} />
-                )}
-
-                {retrievalEnabled &&
-                  settings?.settings.deep_research_enabled && (
-                    <DeepResearchToggle
-                      deepResearchEnabled={deepResearchEnabled}
-                      toggleDeepResearch={toggleDeepResearch}
-                    />
-                  )}
-
-                {forcedToolIds.length > 0 && (
-                  <div className="pl-1 flex items-center gap-2 text-blue-500">
-                    {forcedToolIds.map((toolId) => {
-                      const tool = selectedAssistant.tools.find(
-                        (tool) => tool.id === toolId
-                      );
-                      if (!tool) {
-                        return null;
-                      }
-                      return (
-                        <SelectedTool
-                          key={toolId}
-                          tool={tool}
-                          onClick={() => {
-                            setForcedToolIds((prev) =>
-                              prev.filter((id) => id !== toolId)
                             );
                           }}
                         />
-                      );
-                    })}
+                      ))}
+
+                    {filterManager.timeRange && (
+                      <SourceChip
+                        truncateTitle={false}
+                        key="time-range"
+                        icon={<CalendarIcon size={12} />}
+                        title={`${getFormattedDateRangeString(
+                          filterManager.timeRange.from,
+                          filterManager.timeRange.to
+                        )}`}
+                        onRemove={() => {
+                          filterManager.setTimeRange(null);
+                        }}
+                      />
+                    )}
+                    {filterManager.selectedDocumentSets.length > 0 &&
+                      filterManager.selectedDocumentSets.map(
+                        (docSet, index) => (
+                          <SourceChip
+                            key={`doc-set-${index}`}
+                            icon={<DocumentIcon2 size={16} />}
+                            title={docSet}
+                            onRemove={() => {
+                              filterManager.setSelectedDocumentSets(
+                                filterManager.selectedDocumentSets.filter(
+                                  (ds) => ds !== docSet
+                                )
+                              );
+                            }}
+                          />
+                        )
+                      )}
+                    {filterManager.selectedSources.length > 0 &&
+                      filterManager.selectedSources.map((source, index) => (
+                        <SourceChip
+                          key={`source-${index}`}
+                          icon={
+                            <SourceIcon
+                              sourceType={source.internalName}
+                              iconSize={16}
+                            />
+                          }
+                          title={source.displayName}
+                          onRemove={() => {
+                            filterManager.setSelectedSources(
+                              filterManager.selectedSources.filter(
+                                (s) => s.internalName !== source.internalName
+                              )
+                            );
+                          }}
+                        />
+                      ))}
+                    {selectedDocuments.length > 0 && (
+                      <SourceChip
+                        key="selected-documents"
+                        onClick={() => {
+                          toggleDocumentSidebar();
+                        }}
+                        icon={<FileIcon size={16} />}
+                        title={`${selectedDocuments.length} selected`}
+                        onRemove={removeDocs}
+                      />
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className="flex items-center my-auto gap-x-2">
-                <LLMPopover
-                  llmProviders={llmProviders}
-                  llmManager={llmManager}
-                  requiresImageGeneration={false}
-                  currentAssistant={selectedAssistant}
-                />
+              <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
+                <div className="space-x-1 flex px-4 ">
+                  <FilePicker
+                    onPickRecent={(file: ProjectFile) => {
+                      // Check if file with same ID already exists
+                      if (
+                        !currentMessageFiles.some(
+                          (existingFile) =>
+                            existingFile.file_id === file.file_id
+                        )
+                      ) {
+                        setCurrentMessageFiles((prev) => [...prev, file]);
+                      }
+                    }}
+                    recentFiles={recentFiles}
+                    handleUploadChange={handleUploadChange}
+                  />
 
-                <button
-                  id="onyx-chat-input-send-button"
-                  className={`cursor-pointer ${
-                    chatState == "streaming" ||
-                    chatState == "toolBuilding" ||
-                    chatState == "loading"
-                      ? chatState != "streaming"
-                        ? "bg-neutral-500 dark:bg-neutral-400 "
-                        : "bg-neutral-900 dark:bg-neutral-50"
-                      : "bg-red-200"
-                  } h-[22px] w-[22px] rounded-full`}
-                  onClick={() => {
-                    if (chatState == "streaming") {
-                      stopGenerating();
-                    } else if (message) {
-                      onSubmit();
-                    }
-                  }}
-                >
-                  {chatState == "streaming" ||
-                  chatState == "toolBuilding" ||
-                  chatState == "loading" ? (
-                    <StopGeneratingIcon
-                      size={8}
-                      className="text-neutral-50 dark:text-neutral-900 m-auto text-white flex-none"
-                    />
-                  ) : (
-                    <SendIcon
-                      size={22}
-                      className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
-                        chatState == "input" && message
-                          ? "bg-neutral-900 dark:bg-neutral-50"
-                          : "bg-neutral-500 dark:bg-neutral-400"
-                      }`}
-                    />
+                  {selectedAssistant.tools.length > 0 && (
+                    <ActionToggle selectedAssistant={selectedAssistant} />
                   )}
-                </button>
+
+                  {retrievalEnabled &&
+                    settings?.settings.deep_research_enabled && (
+                      <DeepResearchToggle
+                        deepResearchEnabled={deepResearchEnabled}
+                        toggleDeepResearch={toggleDeepResearch}
+                      />
+                    )}
+
+                  {forcedToolIds.length > 0 && (
+                    <div className="pl-1 flex items-center gap-2 text-blue-500">
+                      {forcedToolIds.map((toolId) => {
+                        const tool = selectedAssistant.tools.find(
+                          (tool) => tool.id === toolId
+                        );
+                        if (!tool) {
+                          return null;
+                        }
+                        return (
+                          <SelectedTool
+                            key={toolId}
+                            tool={tool}
+                            onClick={() => {
+                              setForcedToolIds((prev) =>
+                                prev.filter((id) => id !== toolId)
+                              );
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center my-auto gap-x-2">
+                  <LLMPopover
+                    llmProviders={llmProviders}
+                    llmManager={llmManager}
+                    requiresImageGeneration={true}
+                    currentAssistant={selectedAssistant}
+                  />
+
+                  <button
+                    id="onyx-chat-input-send-button"
+                    className={`cursor-pointer ${
+                      chatState == "streaming" ||
+                      chatState == "toolBuilding" ||
+                      chatState == "loading"
+                        ? chatState != "streaming"
+                          ? "bg-neutral-500 dark:bg-neutral-400 "
+                          : "bg-neutral-900 dark:bg-neutral-50"
+                        : "bg-red-200"
+                    } h-[22px] w-[22px] rounded-full`}
+                    onClick={() => {
+                      if (chatState == "streaming") {
+                        stopGenerating();
+                      } else if (message) {
+                        setBannerMessage(null);
+                        onSubmit();
+                      }
+                    }}
+                  >
+                    {chatState == "streaming" ||
+                    chatState == "toolBuilding" ||
+                    chatState == "loading" ? (
+                      <StopGeneratingIcon
+                        size={8}
+                        className="text-neutral-50 dark:text-neutral-900 m-auto text-white flex-none"
+                      />
+                    ) : (
+                      <SendIcon
+                        size={22}
+                        className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
+                          chatState == "input" && message
+                            ? "bg-neutral-900 dark:bg-neutral-50"
+                            : "bg-neutral-500 dark:bg-neutral-400"
+                        }`}
+                      />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
