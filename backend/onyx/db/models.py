@@ -1442,9 +1442,6 @@ class FederatedConnector(Base):
 
 
 class FederatedConnectorOAuthToken(Base):
-    """
-    for actions."""
-
     __tablename__ = "federated_connector_oauth_token"
 
     id: Mapped[int] = mapped_column(primary_key=True)
