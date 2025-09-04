@@ -33,7 +33,7 @@ export interface MinimalPersonaSnapshot {
 }
 
 export interface Persona extends MinimalPersonaSnapshot {
-  user_file_ids: number[];
+  user_file_ids: string[];
   user_folder_ids: number[];
   users: MinimalUserSnapshot[];
   groups: number[];

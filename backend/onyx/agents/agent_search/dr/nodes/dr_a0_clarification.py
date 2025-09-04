@@ -52,6 +52,7 @@ from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
 from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
@@ -420,6 +421,13 @@ def clarifier(
     else:
         assistant_system_prompt = PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build()
         assistant_task_prompt = ""
+
+    if graph_config.inputs.project_instructions:
+        assistant_system_prompt = (
+            assistant_system_prompt
+            + PROJECT_INSTRUCTIONS_SEPARATOR
+            + graph_config.inputs.project_instructions
+        )
 
     chat_history_string = (
         get_chat_history_string(

@@ -71,14 +71,7 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
-import {
-  TagIcon,
-  UserIcon,
-  FileIcon,
-  FolderIcon,
-  InfoIcon,
-  BookIcon,
-} from "lucide-react";
+import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -96,6 +89,9 @@ import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { FormErrorFocus } from "@/components/FormErrorHelpers";
+import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import FilePicker from "@/app/chat/components/files/FilePicker";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -297,7 +293,7 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
-  const { files, folders, refreshFolders } = useDocumentsContext();
+  const { recentFiles, uploadFiles: uploadProjectFiles } = useProjectsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
@@ -345,13 +341,12 @@ export function AssistantEditor({
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
-    user_folder_ids: existingPersona?.user_folder_ids ?? [],
+    user_folder_ids: [],
     knowledge_source: !canShowKnowledgeSource
       ? "user_files"
       : !userKnowledgeEnabled
         ? "team_knowledge"
-        : (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
-            (existingPersona?.user_folder_ids?.length ?? 0) > 0
+        : (existingPersona?.user_file_ids?.length ?? 0) > 0
           ? "user_files"
           : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
@@ -650,7 +645,6 @@ export function AssistantEditor({
             num_chunks: numChunks,
             document_set_ids: teamKnowledge ? values.document_set_ids : [],
             user_file_ids: teamKnowledge ? [] : values.user_file_ids,
-            user_folder_ids: teamKnowledge ? [] : values.user_folder_ids,
           };
 
           let personaResponse;
@@ -713,7 +707,6 @@ export function AssistantEditor({
             }
 
             await refreshAssistants();
-            await refreshFolders();
 
             router.push(
               isAdminPage
@@ -746,38 +739,8 @@ export function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          // TODO: memoize this / make more efficient
-          const selectedFiles = files.filter((file) =>
-            values.user_file_ids.includes(file.id)
-          );
-
-          const selectedFolders = folders.filter((folder) =>
-            values.user_folder_ids.includes(folder.id)
-          );
-
           return (
             <>
-              {filePickerModalOpen && (
-                <FilePickerModal
-                  setPresentingDocument={setPresentingDocument}
-                  isOpen={filePickerModalOpen}
-                  onClose={() => {
-                    setFilePickerModalOpen(false);
-                  }}
-                  onSave={(selectedFiles, selectedFolders) => {
-                    setFieldValue(
-                      "user_file_ids",
-                      selectedFiles.map((file) => file.id)
-                    );
-                    setFieldValue(
-                      "user_folder_ids",
-                      selectedFolders.map((folder) => folder.id)
-                    );
-                    setFilePickerModalOpen(false);
-                  }}
-                  buttonContent="Add to Assistant"
-                />
-              )}
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />
                 {/* Refresh starter messages when name or description changes */}
@@ -1078,37 +1041,73 @@ export function AssistantEditor({
                           !existingPersona?.is_default_persona && (
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>
-                                Click below to add documents or folders from My
-                                Documents
+                                Click below to add files from My Documents
                               </SubLabel>
-                              {(values.user_file_ids.length > 0 ||
-                                values.user_folder_ids.length > 0) && (
+                              {values.user_file_ids.length > 0 && (
                                 <div className="flex flex-wrap mb-2 max-w-sm gap-2">
-                                  {selectedFiles.map((file) => (
-                                    <SourceChip
-                                      key={file.id}
-                                      onRemove={() => {}}
-                                      title={file.name}
-                                      icon={<FileIcon size={16} />}
-                                    />
-                                  ))}
-                                  {selectedFolders.map((folder) => (
-                                    <SourceChip
-                                      key={folder.id}
-                                      onRemove={() => {}}
-                                      title={folder.name}
-                                      icon={<FolderIcon size={16} />}
-                                    />
-                                  ))}
+                                  {values.user_file_ids.map(
+                                    (userFileId: string) => {
+                                      const rf = recentFiles.find(
+                                        (f) => f.id === userFileId
+                                      );
+                                      const title =
+                                        rf?.name ||
+                                        `File ${userFileId.slice(0, 8)}`;
+                                      return (
+                                        <SourceChip
+                                          key={userFileId}
+                                          onRemove={() => {
+                                            setFieldValue(
+                                              "user_file_ids",
+                                              values.user_file_ids.filter(
+                                                (id: string) =>
+                                                  id !== userFileId
+                                              )
+                                            );
+                                          }}
+                                          title={title}
+                                          icon={<FileIcon size={16} />}
+                                        />
+                                      );
+                                    }
+                                  )}
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setFilePickerModalOpen(true)}
-                                className="text-primary hover:underline"
-                              >
-                                + Add User Files
-                              </button>
+                              <FilePicker
+                                showTriggerLabel
+                                triggerLabel="Add Files"
+                                recentFiles={recentFiles}
+                                onPickRecent={(file: ProjectFile) => {
+                                  if (!values.user_file_ids.includes(file.id)) {
+                                    setFieldValue("user_file_ids", [
+                                      ...values.user_file_ids,
+                                      file.id,
+                                    ]);
+                                  }
+                                }}
+                                handleUploadChange={async (
+                                  e: React.ChangeEvent<HTMLInputElement>
+                                ) => {
+                                  const files = e.target.files;
+                                  if (!files || files.length === 0) return;
+
+                                  try {
+                                    const uploaded = await uploadProjectFiles(
+                                      Array.from(files)
+                                    );
+                                    const newIds = uploaded.map((f) => f.id);
+                                    const merged = Array.from(
+                                      new Set([
+                                        ...(values.user_file_ids || []),
+                                        ...newIds,
+                                      ])
+                                    );
+                                    setFieldValue("user_file_ids", merged);
+                                  } finally {
+                                    e.target.value = "";
+                                  }
+                                }}
+                              />
                             </div>
                           )}
 

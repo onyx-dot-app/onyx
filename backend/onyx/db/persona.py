@@ -33,7 +33,6 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
@@ -237,6 +236,16 @@ def create_update_persona(
                 elif user.role != UserRole.ADMIN:
                     raise ValueError("Only admins can make a default persona")
 
+        # Convert incoming string UUIDs to UUID objects for DB operations
+        converted_user_file_ids = None
+        if create_persona_request.user_file_ids is not None:
+            try:
+                converted_user_file_ids = [
+                    UUID(str_id) for str_id in create_persona_request.user_file_ids
+                ]
+            except Exception:
+                raise ValueError("Invalid user_file_ids; must be UUID strings")
+
         persona = upsert_persona(
             persona_id=persona_id,
             user=user,
@@ -264,8 +273,7 @@ def create_update_persona(
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             is_default_persona=create_persona_request.is_default_persona,
-            user_file_ids=create_persona_request.user_file_ids,
-            user_folder_ids=create_persona_request.user_folder_ids,
+            user_file_ids=converted_user_file_ids,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -504,8 +512,7 @@ def upsert_persona(
     builtin_persona: bool = False,
     is_default_persona: bool | None = None,
     label_ids: list[int] | None = None,
-    user_file_ids: list[int] | None = None,
-    user_folder_ids: list[int] | None = None,
+    user_file_ids: list[UUID] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
@@ -565,17 +572,6 @@ def upsert_persona(
         )
         if not user_files and user_file_ids:
             raise ValueError("user_files not found")
-
-    # Fetch and attach user_folders by IDs
-    user_folders = None
-    if user_folder_ids is not None:
-        user_folders = (
-            db_session.query(UserFolder)
-            .filter(UserFolder.id.in_(user_folder_ids))
-            .all()
-        )
-        if not user_folders and user_folder_ids:
-            raise ValueError("user_folders not found")
 
     labels = None
     if label_ids is not None:
@@ -644,10 +640,6 @@ def upsert_persona(
             existing_persona.user_files.clear()
             existing_persona.user_files = user_files or []
 
-        if user_folder_ids is not None:
-            existing_persona.user_folders.clear()
-            existing_persona.user_folders = user_folders or []
-
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -686,7 +678,6 @@ def upsert_persona(
             is_default_persona=(
                 is_default_persona if is_default_persona is not None else False
             ),
-            user_folders=user_folders or [],
             user_files=user_files or [],
             labels=labels or [],
         )

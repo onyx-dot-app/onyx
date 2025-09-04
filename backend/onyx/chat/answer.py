@@ -62,6 +62,7 @@ class Answer:
         use_agentic_search: bool = False,
         research_type: ResearchType | None = None,
         research_plan: dict[str, Any] | None = None,
+        project_instructions: str | None = None,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
         self._processed_stream: list[AnswerStreamPart] | None = None
@@ -97,6 +98,7 @@ class Answer:
             prompt_builder=prompt_builder,
             files=latest_query_files,
             structured_response_format=answer_style_config.structured_response_format,
+            project_instructions=project_instructions,
         )
         self.graph_tooling = GraphTooling(
             primary_llm=llm,

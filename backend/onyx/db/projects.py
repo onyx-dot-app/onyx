@@ -11,6 +11,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import Project__UserFile
+from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
@@ -112,3 +113,31 @@ def get_user_files_from_project(
         .filter(Project__UserFile.project_id == project_id)
         .all()
     )
+
+
+def get_project_instructions(db_session: Session, project_id: int | None) -> str | None:
+    """Return the project's instruction prompt text if available; otherwise None.
+
+    Safe helper that swallows DB errors and returns None on any failure.
+    """
+    if not project_id:
+        return None
+    try:
+        project = (
+            db_session.query(UserFolder)
+            .filter(UserFolder.id == project_id)
+            .one_or_none()
+        )
+        if not project or not project.prompt_id:
+            return None
+        project_prompt = (
+            db_session.query(Prompt)
+            .filter(Prompt.id == project.prompt_id)
+            .one_or_none()
+        )
+        if not project_prompt or not project_prompt.system_prompt:
+            return None
+        instructions = project_prompt.system_prompt.strip()
+        return instructions or None
+    except Exception:
+        return None

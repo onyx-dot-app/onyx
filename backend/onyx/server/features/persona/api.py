@@ -64,9 +64,9 @@ def _validate_user_knowledge_enabled(
     """Check if user knowledge is enabled when user files/folders are provided."""
     settings = load_settings()
     if not settings.user_knowledge_enabled:
-        if (
-            persona_upsert_request.user_file_ids
-            or persona_upsert_request.user_folder_ids
+        # Only user files are supported going forward; keep getattr for backward compat
+        if persona_upsert_request.user_file_ids or getattr(
+            persona_upsert_request, "user_folder_ids", None
         ):
             raise HTTPException(
                 status_code=400,

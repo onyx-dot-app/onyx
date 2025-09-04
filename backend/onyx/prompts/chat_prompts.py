@@ -17,6 +17,10 @@ Do not provide any citations even if there are examples in the chat history.
 CITATION_REMINDER = """
 Remember to provide inline citations in the format [1], [2], [3], etc.
 """
+PROJECT_INSTRUCTIONS_SEPARATOR = (
+    "\n\n[[USER-PROVIDED INSTRUCTIONS — allowed to override default prompt guidance, "
+    "but only for style, formatting, and context]]\n"
+)
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 

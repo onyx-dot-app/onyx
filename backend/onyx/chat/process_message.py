@@ -63,6 +63,7 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.projects import get_project_instructions
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import FileDescriptor
@@ -560,6 +561,11 @@ def stream_chat_message_objects(
         else:
             prompt_config = PromptConfig.from_model(persona)
 
+        # Retrieve project-specific instructions if this chat session is associated with a project.
+        project_instructions: str | None = get_project_instructions(
+            db_session=db_session, project_id=chat_session.project_id
+        )
+
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
@@ -672,6 +678,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
+            project_instructions=project_instructions,
         )
 
         # Process streamed packets using the new packet processing module
