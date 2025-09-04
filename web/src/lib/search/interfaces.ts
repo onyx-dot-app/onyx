@@ -15,45 +15,6 @@ export const SearchType = {
 };
 export type SearchType = (typeof SearchType)[keyof typeof SearchType];
 
-export interface ProSearchPacket {
-  sub_question?: string;
-  answer_piece?: string;
-  sub_query?: string;
-  tool_response?: ToolResponse;
-  level: number;
-  level_question_num: number;
-}
-
-export interface RefinedAnswerImprovement {
-  refined_answer_improvement: boolean;
-}
-
-export interface AgentAnswerPiece {
-  answer_piece: string;
-  level: number;
-  level_question_num: number;
-  answer_type: "agent_sub_answer" | "agent_level_answer";
-}
-
-export interface SubQuestionPiece {
-  sub_question: string;
-  level: number;
-  level_question_num: number;
-}
-
-export interface SubQueryPiece {
-  sub_query: string;
-  level: number;
-  level_question_num: number;
-  query_id: number;
-}
-
-export interface SubQuestionSearchDoc {
-  context_docs: OnyxDocument[];
-  level_question_num: number;
-  level: number;
-}
-
 export interface ToolResponse {
   id?: string | null;
   response?: any;
@@ -61,10 +22,6 @@ export interface ToolResponse {
 export interface ExtendedToolResponse extends ToolResponse {
   level: number;
   level_question_num: number;
-}
-
-export interface AnswerPiecePacket {
-  answer_piece: string;
 }
 
 export enum StreamStopReason {
@@ -162,14 +119,13 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
-  Storage = "Storage",
-  Wiki = "Wiki",
-  CustomerSupport = "Customer Support",
-  CustomerRelationshipManagement = "Customer Relationship Management",
+  Wiki = "Knowledge Base & Wikis",
+  Storage = "Cloud Storage",
+  TicketingAndTaskManagement = "Ticketing & Task Management",
   Messaging = "Messaging",
-  ProjectManagement = "Project Management",
+  Sales = "Sales",
   CodeRepository = "Code Repository",
-  Other = "Other",
+  Other = "Others",
 }
 
 export interface SourceMetadata {
@@ -179,6 +135,7 @@ export interface SourceMetadata {
   shortDescription?: string;
   internalName: ValidSources;
   adminUrl: string;
+  isPopular?: boolean;
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;

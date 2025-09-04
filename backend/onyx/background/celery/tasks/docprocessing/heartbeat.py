@@ -1,3 +1,4 @@
+import contextvars
 import threading
 
 from sqlalchemy import update
@@ -24,17 +25,15 @@ def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.
                         .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
                     )
                     db_session.commit()
-                    logger.debug(
-                        "Updated heartbeat counter for index attempt %s",
-                        index_attempt_id,
-                    )
             except Exception:
                 logger.exception(
                     "Failed to update heartbeat counter for index attempt %s",
                     index_attempt_id,
                 )
 
-    thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    # Ensure contextvars from the outer context are available in the thread
+    context = contextvars.copy_context()
+    thread = threading.Thread(target=context.run, args=(heartbeat_loop,), daemon=True)
     thread.start()
     return thread, stop_event
 

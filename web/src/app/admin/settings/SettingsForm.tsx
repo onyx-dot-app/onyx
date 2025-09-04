@@ -36,7 +36,9 @@ export function Checkbox({
         className="mr-2 w-3.5 h-3.5 my-auto"
       />
       <div>
-        <Label small>{label}</Label>
+        <span className="block font-medium text-text-700 dark:text-neutral-100 text-sm">
+          {label}
+        </span>
         {sublabel && <SubLabel>{sublabel}</SubLabel>}
       </div>
     </label>
@@ -251,11 +253,11 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label="Agent Search"
-        sublabel="If set, users will be able to use Agent Search."
-        checked={settings.pro_search_enabled ?? true}
+        label="Deep Research"
+        sublabel="If set, users will be able to use Deep Research."
+        checked={settings.deep_research_enabled ?? false}
         onChange={(e) =>
-          handleToggleSettingsField("pro_search_enabled", e.target.checked)
+          handleToggleSettingsField("deep_research_enabled", e.target.checked)
         }
       />
 

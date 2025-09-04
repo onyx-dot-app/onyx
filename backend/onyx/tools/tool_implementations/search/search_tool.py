@@ -87,6 +87,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     def __init__(
         self,
+        tool_id: int,
         db_session: Session,
         user: User | None,
         persona: Persona,
@@ -161,6 +162,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 doc_pruning_config=document_pruning_config,
             )
         )
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

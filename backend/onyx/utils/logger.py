@@ -209,6 +209,11 @@ def setup_logger(
                 if is_containerized
                 else f"./log/{LOG_FILE_NAME}_{level}.log"
             )
+            # Ensure the log directory exists
+            log_dir = os.path.dirname(file_name)
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+
             file_handler = RotatingFileHandler(
                 file_name,
                 maxBytes=25 * 1024 * 1024,  # 25 MB

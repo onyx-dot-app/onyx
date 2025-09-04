@@ -8,11 +8,6 @@ from langgraph.types import StreamWriter
 from sqlalchemy import text
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
-)
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGRelationshipDetection
 from onyx.agents.agent_search.kb_search.states import KGSearchType
@@ -33,8 +28,10 @@ from onyx.db.engine.sql_engine import get_db_readonly_user_session_with_current_
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import ENTITY_SOURCE_DETECTION_PROMPT
+from onyx.prompts.kg_prompts import ENTITY_TABLE_DESCRIPTION
+from onyx.prompts.kg_prompts import RELATIONSHIP_TABLE_DESCRIPTION
 from onyx.prompts.kg_prompts import SIMPLE_ENTITY_SQL_PROMPT
-from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
+from onyx.prompts.kg_prompts import SIMPLE_SQL_ERROR_FIX_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -122,6 +119,22 @@ def _sql_is_aggregate_query(sql_statement: str) -> bool:
     )
 
 
+def _run_sql(
+    sql_statement: str, rel_temp_view: str, ent_temp_view: str
+) -> list[dict[str, Any]]:
+    # check sql, just in case
+    _raise_error_if_sql_fails_problem_test(sql_statement, rel_temp_view, ent_temp_view)
+    with get_db_readonly_user_session_with_current_tenant() as db_session:
+        result = db_session.execute(text(sql_statement))
+        # Handle scalar results (like COUNT)
+        if sql_statement.upper().startswith("SELECT COUNT"):
+            scalar_result = result.scalar()
+            return [{"count": int(scalar_result)}] if scalar_result is not None else []
+        # Handle regular row results
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
+
+
 def _get_source_documents(
     sql_statement: str,
     llm: LLM,
@@ -189,7 +202,7 @@ def generate_simple_sql(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     entities_types_str = state.entities_types_str
     relationship_types_str = state.relationship_types_str
 
@@ -199,15 +212,12 @@ def generate_simple_sql(
         raise ValueError("kg_doc_temp_view_name is not set")
     if state.kg_rel_temp_view_name is None:
         raise ValueError("kg_rel_temp_view_name is not set")
-
     if state.kg_entity_temp_view_name is None:
         raise ValueError("kg_entity_temp_view_name is not set")
 
     sql_statement_display: str | None = None
 
     ## STEP 3 - articulate goals
-
-    stream_write_step_activities(writer, _KG_STEP_NR)
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -270,6 +280,12 @@ def generate_simple_sql(
                 )
                 .replace("---question---", question)
                 .replace("---entity_explanation_string---", entity_explanation_str)
+                .replace(
+                    "---query_entities_with_attributes---",
+                    "\n".join(state.query_graph_entities_w_attributes),
+                )
+                .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+                .replace("---user_name---", f"EMPLOYEE:{user_name}")
             )
         else:
             simple_sql_prompt = (
@@ -289,8 +305,7 @@ def generate_simple_sql(
                 .replace("---user_name---", f"EMPLOYEE:{user_name}")
             )
 
-        # prepare SQL query generation
-
+        # generate initial sql statement
         msg = [
             HumanMessage(
                 content=simple_sql_prompt,
@@ -298,7 +313,6 @@ def generate_simple_sql(
         ]
 
         primary_llm = graph_config.tooling.primary_llm
-        # Grader
         try:
             llm_response = run_with_timeout(
                 KG_SQL_GENERATION_TIMEOUT,
@@ -335,53 +349,6 @@ def generate_simple_sql(
                 kg_entity_view_name=ent_temp_view,
             )
             raise e
-
-        if state.query_type == KGRelationshipDetection.RELATIONSHIPS.value:
-            # Correction if needed:
-
-            correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
-                "---draft_sql---", sql_statement
-            )
-
-            msg = [
-                HumanMessage(
-                    content=correction_prompt,
-                )
-            ]
-
-            try:
-                llm_response = run_with_timeout(
-                    KG_SQL_GENERATION_TIMEOUT,
-                    primary_llm.invoke,
-                    prompt=msg,
-                    timeout_override=25,
-                    max_tokens=1500,
-                )
-
-                cleaned_response = (
-                    str(llm_response.content)
-                    .replace("```json\n", "")
-                    .replace("\n```", "")
-                )
-
-                sql_statement = (
-                    cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-                )
-                sql_statement = sql_statement.split(";")[0].strip() + ";"
-                sql_statement = sql_statement.replace("sql", "").strip()
-
-            except Exception as e:
-                logger.error(
-                    f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
-                )
-
-                drop_views(
-                    allowed_docs_view_name=doc_temp_view,
-                    kg_relationships_view_name=rel_temp_view,
-                    kg_entity_view_name=ent_temp_view,
-                )
-
-                raise e
 
         # display sql statement with view names replaced by general view names
         sql_statement_display = sql_statement.replace(
@@ -437,51 +404,93 @@ def generate_simple_sql(
 
             logger.debug(f"A3 source_documents_sql: {source_documents_sql_display}")
 
-        scalar_result = None
-        query_results = None
+        query_results = []  # if no results, will be empty (not None)
+        query_generation_error = None
 
-        # check sql, just in case
-        _raise_error_if_sql_fails_problem_test(
-            sql_statement, rel_temp_view, ent_temp_view
-        )
+        # run sql
+        try:
+            query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
+            if not query_results:
+                query_generation_error = "SQL query returned no results"
+                logger.warning(f"{query_generation_error}, retrying...")
+        except Exception as e:
+            query_generation_error = str(e)
+            logger.warning(f"Error executing SQL query: {e}, retrying...")
 
-        with get_db_readonly_user_session_with_current_tenant() as db_session:
+        # fix sql and try one more time if sql query didn't work out
+        # if the result is still empty after this, the kg probably doesn't have the answer,
+        # so we update the strategy to simple and address this in the answer generation
+        if query_generation_error is not None:
+            sql_fix_prompt = (
+                SIMPLE_SQL_ERROR_FIX_PROMPT.replace(
+                    "---table_description---",
+                    (
+                        ENTITY_TABLE_DESCRIPTION
+                        if state.query_type
+                        == KGRelationshipDetection.NO_RELATIONSHIPS.value
+                        else RELATIONSHIP_TABLE_DESCRIPTION
+                    ),
+                )
+                .replace("---entity_types---", entities_types_str)
+                .replace("---relationship_types---", relationship_types_str)
+                .replace("---question---", question)
+                .replace("---sql_statement---", sql_statement)
+                .replace("---error_message---", query_generation_error)
+                .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+                .replace("---user_name---", f"EMPLOYEE:{user_name}")
+            )
+            msg = [HumanMessage(content=sql_fix_prompt)]
+            primary_llm = graph_config.tooling.primary_llm
+
             try:
-                result = db_session.execute(text(sql_statement))
-                # Handle scalar results (like COUNT)
-                if sql_statement.upper().startswith("SELECT COUNT"):
-                    scalar_result = result.scalar()
-                    query_results = (
-                        [{"count": int(scalar_result)}]
-                        if scalar_result is not None
-                        else []
-                    )
-                else:
-                    # Handle regular row results
-                    rows = result.fetchall()
-                    query_results = [dict(row._mapping) for row in rows]
+                llm_response = run_with_timeout(
+                    KG_SQL_GENERATION_TIMEOUT,
+                    primary_llm.invoke,
+                    prompt=msg,
+                    timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
+                    max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
+                )
+
+                cleaned_response = (
+                    str(llm_response.content)
+                    .replace("```json\n", "")
+                    .replace("\n```", "")
+                )
+                sql_statement = (
+                    cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+                )
+                sql_statement = sql_statement.split(";")[0].strip() + ";"
+                sql_statement = sql_statement.replace("sql", "").strip()
+                sql_statement = sql_statement.replace(
+                    "relationship_table", rel_temp_view
+                )
+                sql_statement = sql_statement.replace("entity_table", ent_temp_view)
+
+                reasoning = (
+                    cleaned_response.split("<reasoning>")[1]
+                    .strip()
+                    .split("</reasoning>")[0]
+                )
+
+                query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
             except Exception as e:
+                logger.error(f"Error executing SQL query even after retry: {e}")
                 # TODO: raise error on frontend
-                logger.error(f"Error executing SQL query: {e}")
                 drop_views(
                     allowed_docs_view_name=doc_temp_view,
                     kg_relationships_view_name=rel_temp_view,
                     kg_entity_view_name=ent_temp_view,
                 )
-
-                raise e
+                raise
 
         source_document_results = None
-
         if source_documents_sql is not None and source_documents_sql != sql_statement:
-
             # check source document sql, just in case
             _raise_error_if_sql_fails_problem_test(
                 source_documents_sql, rel_temp_view, ent_temp_view
             )
 
             with get_db_readonly_user_session_with_current_tenant() as db_session:
-
                 try:
                     result = db_session.execute(text(source_documents_sql))
                     rows = result.fetchall()
@@ -491,28 +500,16 @@ def generate_simple_sql(
                         for source_document_result in query_source_document_results
                     ]
                 except Exception as e:
-                    # TODO: raise error on frontend
-
-                    drop_views(
-                        allowed_docs_view_name=doc_temp_view,
-                        kg_relationships_view_name=rel_temp_view,
-                        kg_entity_view_name=ent_temp_view,
-                    )
-
+                    # TODO: raise warning on frontend
                     logger.error(f"Error executing Individualized SQL query: {e}")
 
+        elif state.query_type == KGRelationshipDetection.NO_RELATIONSHIPS.value:
+            # source documents should be returned for entity queries
+            source_document_results = [
+                x["source_document"] for x in query_results if "source_document" in x
+            ]
         else:
-
-            if state.query_type == KGRelationshipDetection.NO_RELATIONSHIPS.value:
-                # source documents should be returned for entity queries
-                source_document_results = [
-                    x["source_document"]
-                    for x in query_results
-                    if "source_document" in x
-                ]
-
-            else:
-                source_document_results = None
+            source_document_results = None
 
         drop_views(
             allowed_docs_view_name=doc_temp_view,
@@ -528,21 +525,10 @@ def generate_simple_sql(
 
         main_sql_statement = sql_statement
 
-    if reasoning:
-        stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
-
-    if sql_statement_display:
-        stream_write_step_answer_explicit(
-            writer,
-            step_nr=_KG_STEP_NR,
-            answer=f" \n Generated SQL: {sql_statement_display}",
-        )
-
-    stream_close_step_answer(writer, _KG_STEP_NR)
-
-    # Update path if too many results are retrieved
-
-    if query_results and len(query_results) > KG_MAX_DEEP_SEARCH_RESULTS:
+    # Update path if too many, or no results were retrieved from sql
+    if main_sql_statement and (
+        not query_results or len(query_results) > KG_MAX_DEEP_SEARCH_RESULTS
+    ):
         updated_strategy = KGAnswerStrategy.SIMPLE
     else:
         updated_strategy = None

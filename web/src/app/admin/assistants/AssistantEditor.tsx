@@ -25,7 +25,7 @@ import {
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 
 import {
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -53,8 +54,8 @@ import {
   SwapIcon,
   TrashIcon,
 } from "@/components/icons/icons";
-import { buildImgUrl } from "@/app/chat/files/images/utils";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -69,7 +70,7 @@ import {
   SearchMultiSelectDropdown,
   Option as DropdownOption,
 } from "@/components/Dropdown";
-import { SourceChip } from "@/app/chat/input/ChatInputBar";
+import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import {
   TagIcon,
   UserIcon,
@@ -86,10 +87,11 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
+import { FormErrorFocus } from "@/components/FormErrorHelpers";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -133,7 +135,8 @@ export function AssistantEditor({
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
 }) {
-  const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
+  const { refreshAssistants, isImageGenerationAvailable } =
+    useAssistantsContext();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -211,15 +214,80 @@ export function AssistantEditor({
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
 
-  const customTools = tools.filter(
+  // Separate MCP tools from regular custom tools
+  const allCustomTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
   );
 
+  const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
+  const customTools = allCustomTools.filter((tool) => !tool.mcp_server_id);
+
+  // Group MCP tools by server
+  const mcpToolsByServer = useMemo(() => {
+    const groups: { [serverId: number]: ToolSnapshot[] } = {};
+    mcpTools.forEach((tool) => {
+      if (tool.mcp_server_id) {
+        if (!groups[tool.mcp_server_id]) {
+          groups[tool.mcp_server_id] = [];
+        }
+        groups[tool.mcp_server_id]!.push(tool);
+      }
+    });
+    return groups;
+  }, [mcpTools]);
+
+  // Helper functions for MCP server checkbox state
+  const getMCPServerCheckboxState = (
+    serverId: number,
+    enabledToolsMap: { [key: number]: boolean }
+  ) => {
+    const serverTools = mcpToolsByServer[serverId] || [];
+    const enabledCount = serverTools.filter(
+      (tool) => enabledToolsMap[tool.id]
+    ).length;
+
+    if (enabledCount === 0) return false; // unchecked
+    if (enabledCount === serverTools.length) return true; // checked
+    return "indeterminate"; // partially checked
+  };
+
+  const toggleMCPServerTools = (
+    serverId: number,
+    enabledToolsMap: { [key: number]: boolean },
+    setFieldValue: any
+  ) => {
+    const serverTools = mcpToolsByServer[serverId] || [];
+    const currentState = getMCPServerCheckboxState(serverId, enabledToolsMap);
+    const shouldEnable = currentState !== true; // enable if not fully checked
+
+    const updatedMap = { ...enabledToolsMap };
+    serverTools.forEach((tool) => {
+      updatedMap[tool.id] = shouldEnable;
+    });
+
+    setFieldValue("enabled_tools_map", updatedMap);
+  };
+
+  const toggleServerCollapse = (serverId: number) => {
+    const newCollapsed = new Set(collapsedServers);
+    if (newCollapsed.has(serverId)) {
+      newCollapsed.delete(serverId);
+    } else {
+      newCollapsed.add(serverId);
+    }
+    setCollapsedServers(newCollapsed);
+  };
+
+  const getMCPServerInfo = (serverId: number): MCPServer | null => {
+    return mcpServers.find((server) => server.id === serverId) || null;
+  };
+
   const availableTools = [
     ...customTools,
+    ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
@@ -342,6 +410,10 @@ export function AssistantEditor({
 
   const [labelToDelete, setLabelToDelete] = useState<PersonaLabel | null>(null);
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+  const [collapsedServers, setCollapsedServers] = useState<Set<number>>(
+    new Set()
+  );
 
   const { data: userGroups } = useUserGroups();
 
@@ -351,6 +423,19 @@ export function AssistantEditor({
   );
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Fetch MCP servers for URL display
+  useEffect(() => {
+    const fetchMcpServers = async () => {
+      const response = await fetch("/api/admin/mcp/servers");
+      if (response.ok) {
+        const data = await response.json();
+        setMcpServers(data.mcp_servers || []);
+      }
+    };
+
+    fetchMcpServers();
+  }, []);
 
   if (!labels) {
     return <></>;
@@ -688,6 +773,7 @@ export function AssistantEditor({
                 />
               )}
               <Form className="w-full text-text-950 assistant-editor">
+                <FormErrorFocus />
                 {/* Refresh starter messages when name or description changes */}
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
@@ -1132,6 +1218,7 @@ export function AssistantEditor({
                         </>
                       )}
 
+                      {/* Regular Custom Tools */}
                       {customTools.length > 0 &&
                         customTools.map((tool) => (
                           <BooleanFormField
@@ -1141,6 +1228,98 @@ export function AssistantEditor({
                             subtext={tool.description}
                           />
                         ))}
+
+                      {/* MCP Server Tools - Hierarchical Structure */}
+                      {Object.keys(mcpToolsByServer).length > 0 &&
+                        Object.entries(mcpToolsByServer).map(
+                          ([serverId, serverTools]) => {
+                            const serverIdNum = parseInt(serverId);
+                            const serverInfo = getMCPServerInfo(serverIdNum);
+                            const isCollapsed =
+                              collapsedServers.has(serverIdNum);
+
+                            // Extract server name from tool name (format: "server_name_tool_name")
+                            const firstTool = serverTools[0];
+                            const serverName =
+                              serverInfo?.name ||
+                              firstTool?.name
+                                ?.split("_")
+                                .slice(0, -1)
+                                .join("_") ||
+                              `MCP Server ${serverId}`;
+
+                            const serverUrl =
+                              serverInfo?.server_url || "Unknown URL";
+
+                            const checkboxState = getMCPServerCheckboxState(
+                              serverIdNum,
+                              values.enabled_tools_map
+                            );
+
+                            return (
+                              <div
+                                key={`mcp-server-${serverId}`}
+                                className="border rounded-lg p-4 space-y-3 dark:border-gray-700"
+                              >
+                                {/* Server-level header with collapse button */}
+                                <div className="flex items-center space-x-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toggleServerCollapse(serverIdNum)
+                                    }
+                                    className="flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                  >
+                                    {isCollapsed ? (
+                                      <FiChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                    ) : (
+                                      <FiChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                    )}
+                                  </button>
+                                  <input
+                                    type="checkbox"
+                                    checked={checkboxState === true}
+                                    ref={(el) => {
+                                      if (el)
+                                        el.indeterminate =
+                                          checkboxState === "indeterminate";
+                                    }}
+                                    onChange={() =>
+                                      toggleMCPServerTools(
+                                        serverIdNum,
+                                        values.enabled_tools_map,
+                                        setFieldValue
+                                      )
+                                    }
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+                                  />
+                                  <div className="flex-grow">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                      {serverName}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                      {serverUrl} ({serverTools.length} tools)
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Individual tool checkboxes - only show when not collapsed */}
+                                {!isCollapsed && (
+                                  <div className="ml-7 space-y-2">
+                                    {serverTools.map((tool) => (
+                                      <BooleanFormField
+                                        key={tool.id}
+                                        name={`enabled_tools_map.${tool.id}`}
+                                        label={tool.display_name}
+                                        subtext={tool.description}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                        )}
                     </div>
                   </div>
                 </div>
@@ -1618,7 +1797,7 @@ export function AssistantEditor({
                       </Button>
                     )}
                   </div>
-                  <div className="flex gap-x-2">
+                  <div className="flex gap-x-4 items-center">
                     <Button
                       type="submit"
                       disabled={isSubmitting || isRequestSuccessful}

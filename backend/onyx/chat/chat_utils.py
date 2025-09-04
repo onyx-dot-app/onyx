@@ -13,15 +13,17 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.background.celery.tasks.kg_processing.kg_indexing import (
     try_creating_kg_source_reset_task,
 )
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.kg_config import get_kg_config_settings
@@ -42,6 +44,7 @@ from onyx.kg.setup.kg_default_entity_definitions import (
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -111,6 +114,42 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         source_links=inference_section.center_chunk.source_links,
         match_highlights=inference_section.center_chunk.match_highlights,
     )
+
+
+def saved_search_docs_from_llm_docs(
+    llm_docs: list[LlmDoc] | None,
+) -> list[SavedSearchDoc]:
+    """Convert LlmDoc objects to SavedSearchDoc format."""
+    if not llm_docs:
+        return []
+
+    search_docs = []
+    for i, llm_doc in enumerate(llm_docs):
+        # Convert LlmDoc to SearchDoc format
+        # Note: Some fields need default values as they're not in LlmDoc
+        search_doc = SearchDoc(
+            document_id=llm_doc.document_id,
+            chunk_ind=0,  # Default value as LlmDoc doesn't have chunk index
+            semantic_identifier=llm_doc.semantic_identifier,
+            link=llm_doc.link,
+            blurb=llm_doc.blurb,
+            source_type=llm_doc.source_type,
+            boost=0,  # Default value
+            hidden=False,  # Default value
+            metadata=llm_doc.metadata,
+            score=None,  # Will be set by SavedSearchDoc
+            match_highlights=llm_doc.match_highlights or [],
+            updated_at=llm_doc.updated_at,
+            primary_owners=None,  # Default value
+            secondary_owners=None,  # Default value
+            is_internet=False,  # Default value
+        )
+
+        # Convert SearchDoc to SavedSearchDoc
+        saved_search_doc = SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+        search_docs.append(saved_search_doc)
+
+    return search_docs
 
 
 def combine_message_thread(
@@ -371,7 +410,10 @@ def create_temporary_persona(
         for schema in persona_config.custom_tools_openapi:
             tools = cast(
                 list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(schema),
+                build_custom_tools_from_openapi_schema_and_headers(
+                    tool_id=0,  # dummy tool id
+                    openapi_schema=schema,
+                ),
             )
             persona.tools.extend(tools)
 
@@ -401,7 +443,7 @@ def process_kg_commands(
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith("KG Beta"):
+    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
         return
 
     kg_config_settings = get_kg_config_settings()

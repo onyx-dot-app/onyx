@@ -156,14 +156,23 @@ class DAQueryHistoryEntry(DATestChatSession):
     feedback_type: QAFeedbackType | None
 
 
+class ToolName(str, Enum):
+    INTERNET_SEARCH = "internet_search"
+    INTERNAL_SEARCH = "run_search"
+    IMAGE_GENERATION = "generate_image"
+
+
+class ToolResult(BaseModel):
+    tool_name: ToolName
+
+    queries: list[str] = Field(default_factory=list)
+    documents: list[SavedSearchDoc] = Field(default_factory=list)
+
+
 class StreamedResponse(BaseModel):
     full_message: str = ""
-    rephrased_query: str | None = None
-    tool_name: str | None = None
     top_documents: list[SavedSearchDoc] | None = None
-    relevance_summaries: list[dict[str, Any]] | None = None
-    tool_result: Any | None = None
-    user: str | None = None
+    used_tools: list[ToolResult] = Field(default_factory=list)
 
 
 class DATestGatingType(str, Enum):

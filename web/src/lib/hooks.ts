@@ -37,8 +37,8 @@ import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -349,7 +349,7 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = () => {
+  const getFilterString = useCallback(() => {
     const params = new URLSearchParams();
 
     if (timeRange) {
@@ -380,14 +380,14 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
-  };
+  }, [timeRange, selectedSources, selectedDocumentSets, selectedTags]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  };
+  }, []);
 
   function buildFiltersFromQueryString(
     filterString: string,
@@ -622,7 +622,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider };
+        return { ...model, provider: provider.provider, name: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -637,6 +637,11 @@ export function useLlmManager(
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
     setCurrentLlm(newLlm);
+    setUserHasManuallyOverriddenLLM(true);
+  };
+
+  const updateCurrentLlmToModelName = (modelName: string) => {
+    setCurrentLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
@@ -877,7 +882,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // Google Models
 
   // 2.5 pro models
-  "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
+  "gemini-2.5-pro": "Gemini 2.5 Pro",
+  "gemini-2.5-flash": "Gemini 2.5 Flash",
+  "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
+  // "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
 
   // 2.0 flash lite models
   "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
@@ -889,7 +897,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-2.0-flash": "Gemini 2.0 Flash",
   "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
   "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
-  "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
+  // "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
   // "gemini-2.0-flash-thinking-exp-01-02":
   //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
   // "gemini-2.0-flash-thinking-exp-01-21":

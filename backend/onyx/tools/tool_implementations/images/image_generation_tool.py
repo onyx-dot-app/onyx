@@ -91,8 +91,9 @@ class ImageGenerationTool(Tool[None]):
         api_key: str,
         api_base: str | None,
         api_version: str | None,
+        tool_id: int,
         model: str = IMAGE_MODEL_NAME,
-        num_imgs: int = 2,
+        num_imgs: int = 1,
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:
@@ -111,6 +112,12 @@ class ImageGenerationTool(Tool[None]):
 
         self.additional_headers = additional_headers
         self.output_format = output_format
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

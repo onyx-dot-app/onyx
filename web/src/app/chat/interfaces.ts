@@ -3,12 +3,20 @@ import {
   Filters,
   SearchOnyxDocument,
   StreamStopReason,
-  SubQuestionPiece,
-  SubQueryPiece,
-  AgentAnswerPiece,
-  SubQuestionSearchDoc,
-  StreamStopInfo,
 } from "@/lib/search/interfaces";
+import { Packet } from "./services/streamingModels";
+
+export type FeedbackType = "like" | "dislike";
+export type ChatState =
+  | "input"
+  | "loading"
+  | "streaming"
+  | "toolBuilding"
+  | "uploading";
+export interface RegenerationState {
+  regenerating: boolean;
+  finalMessageIndex: number;
+}
 
 export enum RetrievalType {
   None = "none",
@@ -31,7 +39,8 @@ export interface RetrievalDetails {
   enable_auto_detect_filters?: boolean | null;
 }
 
-type CitationMap = { [key: string]: number };
+// Document ID -> Citation number
+export type CitationMap = { [key: string]: number };
 
 export enum ChatFileType {
   IMAGE = "image",
@@ -99,33 +108,29 @@ export interface SearchSession {
 
 export interface Message {
   is_generating?: boolean;
-  messageId: number;
+  messageId?: number;
+  nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
   type: "user" | "assistant" | "system" | "error";
   retrievalType?: RetrievalType;
   query?: string | null;
-  documents?: OnyxDocument[] | null;
-  citations?: CitationMap;
   files: FileDescriptor[];
   toolCall: ToolCallMetadata | null;
-  // for rebuilding the message tree
-  parentMessageId: number | null;
-  childrenMessageIds?: number[];
-  latestChildMessageId?: number | null;
+  // for rebuilding the message tree - these now use nodeId
+  parentNodeId: number | null;
+  childrenNodeIds?: number[];
+  latestChildNodeId?: number | null;
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
-  sub_questions?: SubQuestionDetail[] | null;
-  is_agentic?: boolean | null;
 
-  // Streaming only
-  second_level_generating?: boolean;
-  agentic_docs?: OnyxDocument[] | null;
-  second_level_message?: string;
-  second_level_subquestions?: SubQuestionDetail[] | null;
-  isImprovement?: boolean | null;
-  isStreamingQuestions?: boolean;
+  // new gen
+  packets: Packet[];
+
+  // cached values for easy access
+  documents?: OnyxDocument[] | null;
+  citations?: CitationMap;
 }
 
 export interface BackendChatSession {
@@ -141,6 +146,8 @@ export interface BackendChatSession {
   shared_status: ChatSessionSharedStatus;
   current_temperature_override: number | null;
   current_alternate_model?: string;
+
+  packets: Packet[][];
 }
 
 export interface BackendMessage {
@@ -170,15 +177,6 @@ export interface BackendMessage {
 export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number;
-}
-
-export interface AgentMessageIDInfo {
-  level: number;
-  message_id: number;
-}
-
-export interface AgenticMessageResponseIDInfo {
-  agentic_message_ids: AgentMessageIDInfo[];
 }
 
 export interface UserKnowledgeFilePacket {
@@ -232,7 +230,6 @@ export interface PromptData {
   prompt: string;
   content: string;
 }
-// We need to update the constructSubQuestions function so it can take in either SubQueryDetail or SubQuestionDetail and given current state of subQuestions, build it up
 
 /**
  * // Start of Selection
@@ -258,139 +255,3 @@ export interface SubQueryDetail {
   query_id: number;
   doc_ids?: number[] | null;
 }
-
-export const constructSubQuestions = (
-  subQuestions: SubQuestionDetail[],
-  newDetail:
-    | SubQuestionPiece
-    | SubQueryPiece
-    | AgentAnswerPiece
-    | SubQuestionSearchDoc
-    | DocumentsResponse
-    | StreamStopInfo
-): SubQuestionDetail[] => {
-  if (!newDetail) {
-    return subQuestions;
-  }
-  if (newDetail.level_question_num == 0) {
-    return subQuestions;
-  }
-
-  const updatedSubQuestions = [...subQuestions];
-
-  if ("stop_reason" in newDetail) {
-    const { level, level_question_num } = newDetail;
-    let subQuestion = updatedSubQuestions.find(
-      (sq) => sq.level === level && sq.level_question_num === level_question_num
-    );
-    if (subQuestion) {
-      if (newDetail.stream_type == "sub_answer") {
-        subQuestion.answer_streaming = false;
-      } else {
-        subQuestion.is_complete = true;
-        subQuestion.is_stopped = true;
-      }
-    }
-  } else if ("top_documents" in newDetail) {
-    const { level, level_question_num, top_documents } = newDetail;
-    let subQuestion = updatedSubQuestions.find(
-      (sq) => sq.level === level && sq.level_question_num === level_question_num
-    );
-    if (!subQuestion) {
-      subQuestion = {
-        level: level ?? 0,
-        level_question_num: level_question_num ?? 0,
-        question: "",
-        answer: "",
-        sub_queries: [],
-        context_docs: { top_documents },
-        is_complete: false,
-      };
-    } else {
-      subQuestion.context_docs = { top_documents };
-    }
-  } else if ("answer_piece" in newDetail) {
-    // Handle AgentAnswerPiece
-    const { level, level_question_num, answer_piece } = newDetail;
-    // Find or create the relevant SubQuestionDetail
-    let subQuestion = updatedSubQuestions.find(
-      (sq) => sq.level === level && sq.level_question_num === level_question_num
-    );
-
-    if (!subQuestion) {
-      subQuestion = {
-        level,
-        level_question_num,
-        question: "",
-        answer: "",
-        sub_queries: [],
-        context_docs: undefined,
-        is_complete: false,
-      };
-      updatedSubQuestions.push(subQuestion);
-    }
-
-    // Append to the answer
-    subQuestion.answer += answer_piece;
-  } else if ("sub_question" in newDetail) {
-    // Handle SubQuestionPiece
-    const { level, level_question_num, sub_question } = newDetail;
-
-    // Find or create the relevant SubQuestionDetail
-    let subQuestion = updatedSubQuestions.find(
-      (sq) => sq.level === level && sq.level_question_num === level_question_num
-    );
-
-    if (!subQuestion) {
-      subQuestion = {
-        level,
-        level_question_num,
-        question: "",
-        answer: "",
-        sub_queries: [],
-        context_docs: undefined,
-        is_complete: false,
-      };
-      updatedSubQuestions.push(subQuestion);
-    }
-
-    // Append to the question
-    subQuestion.question += sub_question;
-  } else if ("sub_query" in newDetail) {
-    // Handle SubQueryPiece
-    const { level, level_question_num, query_id, sub_query } = newDetail;
-
-    // Find the relevant SubQuestionDetail
-    let subQuestion = updatedSubQuestions.find(
-      (sq) => sq.level === level && sq.level_question_num === level_question_num
-    );
-
-    if (!subQuestion) {
-      // If we receive a sub_query before its parent question, create a placeholder
-      subQuestion = {
-        level,
-        level_question_num: level_question_num,
-        question: "",
-        answer: "",
-        sub_queries: [],
-        context_docs: undefined,
-      };
-      updatedSubQuestions.push(subQuestion);
-    }
-
-    // Find or create the relevant SubQueryDetail
-    let subQuery = subQuestion.sub_queries?.find(
-      (sq) => sq.query_id === query_id
-    );
-
-    if (!subQuery) {
-      subQuery = { query: "", query_id };
-      subQuestion.sub_queries = [...(subQuestion.sub_queries || []), subQuery];
-    }
-
-    // Append to the query
-    subQuery.query += sub_query;
-  }
-
-  return updatedSubQuestions;
-};

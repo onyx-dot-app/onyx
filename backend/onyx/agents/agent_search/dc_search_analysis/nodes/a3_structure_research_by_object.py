@@ -9,8 +9,6 @@ from onyx.agents.agent_search.dc_search_analysis.states import MainState
 from onyx.agents.agent_search.dc_search_analysis.states import (
     ObjectResearchInformationUpdate,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -22,17 +20,6 @@ def structure_research_by_object(
     """
     LangGraph node to start the agentic search process.
     """
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=" consolidating the information across source types for each object...",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
 
     object_source_research_results = state.object_source_research_results
 

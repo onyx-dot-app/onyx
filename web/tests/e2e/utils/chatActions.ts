@@ -1,14 +1,24 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
 
+export async function verifyAssistantIsChosen(
+  page: Page,
+  assistantName: string,
+  timeout: number = 5000
+) {
+  await expect(
+    page.getByPlaceholder(`How can ${assistantName} help you today`)
+  ).toBeVisible({ timeout });
+}
+
 export async function navigateToAssistantInHistorySidebar(
   page: Page,
   testId: string,
-  description: string
+  assistantName: string
 ) {
   await page.getByTestId(`assistant-${testId}`).click();
   try {
-    await expect(page.getByText(description)).toBeVisible();
+    await verifyAssistantIsChosen(page, assistantName);
   } catch (error) {
     console.error("Error in navigateToAssistantInHistorySidebar:", error);
     const pageText = await page.textContent("body");
@@ -21,7 +31,7 @@ export async function sendMessage(page: Page, message: string) {
   await page.locator("#onyx-chat-input-textarea").click();
   await page.locator("#onyx-chat-input-textarea").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
-  await page.waitForSelector("#onyx-ai-message");
+  await page.waitForSelector('[data-testid="onyx-ai-message"]');
   await page.waitForTimeout(2000);
 }
 

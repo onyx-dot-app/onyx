@@ -45,6 +45,8 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Document360.png"
     if source == DocumentSource.BOOKSTACK.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Bookstack.png"
+    if source == DocumentSource.OUTLINE.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Outline.png"
     if source == DocumentSource.LOOPIO.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Loopio.png"
     if source == DocumentSource.SHAREPOINT.value:

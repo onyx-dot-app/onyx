@@ -7,20 +7,23 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+    get_default_provider,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
 from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
-from onyx.tools.tool_implementations.internet_search.providers import (
-    get_available_providers,
-)
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
+)
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
@@ -52,7 +55,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
     ),
-    # don't show the InternetSearchTool as an option if BING_API_KEY is not available
+    # Show internet search tools if any providers are available
     *(
         [
             InCodeToolInfo(
@@ -63,17 +66,27 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 ),
                 in_code_tool_id=InternetSearchTool.__name__,
                 display_name=InternetSearchTool._DISPLAY_NAME,
-            )
+            ),
         ]
-        if os.environ.get("BING_API_KEY")
+        if (bool(get_default_provider()))
         else []
+    ),
+    InCodeToolInfo(
+        cls=KnowledgeGraphTool,
+        description="""The Knowledge Graph Search Action allows the assistant to search the \
+    Knowledge Graph for information. This tool can (for now) only be active in the KG Beta Assistant, \
+    and it requires the Knowledge Graph to be enabled.""",
+        in_code_tool_id=KnowledgeGraphTool.__name__,
+        display_name=KnowledgeGraphTool._DISPLAY_NAME,
     ),
     # Show Okta Profile tool if the environment variables are set
     *(
         [
             InCodeToolInfo(
                 cls=OktaProfileTool,
-                description="The Okta Profile Action allows the assistant to fetch user information from Okta.",
+                description="The Okta Profile Action allows the assistant to fetch the current user's information from Okta. \
+It could include the user's name, email, phone number, address as well as other information like who they report to and \
+who reports to them.",
                 in_code_tool_id=OktaProfileTool.__name__,
                 display_name=OktaProfileTool._DISPLAY_NAME,
             )
@@ -124,27 +137,37 @@ def load_builtin_tools(db_session: Session) -> None:
     logger.notice("All built-in tools are loaded/verified.")
 
 
-def get_search_tool(db_session: Session) -> ToolDBModel | None:
+def get_builtin_tool(
+    db_session: Session,
+    tool_type: Type[
+        SearchTool | ImageGenerationTool | InternetSearchTool | KnowledgeGraphTool
+    ],
+) -> ToolDBModel:
     """
-    Retrieves for the SearchTool from the BUILT_IN_TOOLS list.
+    Retrieves a built-in tool from the database based on the tool type.
     """
-    search_tool_id = next(
+    tool_id = next(
         (
             tool["in_code_tool_id"]
             for tool in BUILT_IN_TOOLS
-            if tool["cls"].__name__ == SearchTool.__name__
+            if tool["cls"].__name__ == tool_type.__name__
         ),
         None,
     )
 
-    if not search_tool_id:
-        raise RuntimeError("SearchTool not found in the BUILT_IN_TOOLS list.")
+    if not tool_id:
+        raise RuntimeError(
+            f"Tool type {tool_type.__name__} not found in the BUILT_IN_TOOLS list."
+        )
 
-    search_tool = db_session.execute(
-        select(ToolDBModel).where(ToolDBModel.in_code_tool_id == search_tool_id)
+    db_tool = db_session.execute(
+        select(ToolDBModel).where(ToolDBModel.in_code_tool_id == tool_id)
     ).scalar_one_or_none()
 
-    return search_tool
+    if not db_tool:
+        raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
+
+    return db_tool
 
 
 def auto_add_search_tool_to_personas(db_session: Session) -> None:
@@ -154,10 +177,7 @@ def auto_add_search_tool_to_personas(db_session: Session) -> None:
     Persona objects that were created before the concept of Tools were added.
     """
     # Fetch the SearchTool from the database based on in_code_tool_id from BUILT_IN_TOOLS
-    search_tool = get_search_tool(db_session)
-
-    if not search_tool:
-        raise RuntimeError("SearchTool not found in the database.")
+    search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
 
     # Fetch all Personas that need the SearchTool added
     personas_to_update = (

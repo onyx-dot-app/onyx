@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import User
-from onyx.db.tools import create_tool
-from onyx.db.tools import delete_tool
+from onyx.db.tools import create_tool__no_commit
+from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import update_tool
@@ -27,6 +28,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
 )
 from onyx.tools.utils import is_image_generation_available
 
@@ -59,7 +63,7 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
-    tool = create_tool(
+    tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
         openapi_schema=tool_data.definition,
@@ -68,6 +72,7 @@ def create_custom_tool(
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
     )
+    db_session.commit()
     return ToolSnapshot.from_model(tool)
 
 
@@ -101,12 +106,13 @@ def delete_custom_tool(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     try:
-        delete_tool(tool_id, db_session)
+        delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         # handles case where tool is still used by an Assistant
         raise HTTPException(status_code=400, detail=str(e))
+    db_session.commit()
 
 
 class ValidateToolRequest(BaseModel):
@@ -149,9 +155,19 @@ def list_tools(
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session)
+
+    kg_configs = get_kg_config_settings()
+    kg_available = kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
+
     return [
         ToolSnapshot.from_model(tool)
         for tool in tools
-        if tool.in_code_tool_id != ImageGenerationTool._NAME
-        or is_image_generation_available(db_session=db_session)
+        if (
+            tool.display_name != KnowledgeGraphTool._DISPLAY_NAME
+            and (
+                tool.in_code_tool_id != ImageGenerationTool._NAME
+                or is_image_generation_available(db_session=db_session)
+            )
+        )
+        or (tool.display_name == KnowledgeGraphTool._DISPLAY_NAME and kg_available)
     ]
