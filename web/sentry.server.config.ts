@@ -1,18 +1,12 @@
+// This file configures the initialization of Sentry on the server.
+// The config you add here will be used whenever the server handles a request.
+// https://docs.sentry.io/platforms/javascript/guides/nextjs/
+
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+Sentry.init({
+  dsn: "https://f9db349b4cb5783fb7c93ba0e72c0669@o4509930383998976.ingest.us.sentry.io/4509958506938368",
 
-    // Only capture unhandled exceptions and errors
-    tracesSampleRate: 0,
-    enableTracing: false,
-
-    // Disable performance monitoring and only capture errors
-    profilesSampleRate: 0,
-
-    // Note: if you want to override the automatic release value, do not set a
-    // `release` value here - use the environment variable `SENTRY_RELEASE`, so
-    // that it will also get attached to your source maps
-  });
-}
+  // Setting this option to true will print useful information to the console while you're setting up Sentry.
+  debug: false,
+});
