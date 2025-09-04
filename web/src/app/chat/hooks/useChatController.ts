@@ -71,6 +71,7 @@ import {
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { Klee_One } from "next/font/google";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
+import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -309,7 +310,7 @@ export function useChatController({
     }: {
       message: string;
       //from chat input bar
-      currentMessageFiles: FileDescriptor[];
+      currentMessageFiles: ProjectFile[];
       // from the chat bar???
 
       useAgentSearch: boolean;
@@ -580,7 +581,12 @@ export function useChatController({
             .map((document) => document.db_doc_id as number),
           queryOverride,
           forceSearch,
-          currentMessageFiles: currentMessageFiles,
+          currentMessageFiles: currentMessageFiles.map((file) => ({
+            id: file.file_id,
+            type: file.chat_file_type,
+            name: file.name,
+            user_file_id: file.id,
+          })),
           regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -750,7 +756,12 @@ export function useChatController({
               nodeId: initialUserNode.nodeId,
               message: currMessage,
               type: "user",
-              files: currentMessageFiles,
+              files: currentMessageFiles.map((file) => ({
+                id: file.file_id,
+                type: file.chat_file_type,
+                name: file.name,
+                user_file_id: file.id,
+              })),
               toolCall: null,
               parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
               packets: [],
@@ -854,19 +865,57 @@ export function useChatController({
       updateChatStateAction(getCurrentSessionId(), "uploading");
 
       try {
-        const uploadedMessageFiles: ProjectFile[] = await uploadFiles(
-          Array.from(acceptedFiles)
-        );
-        const messageFiles: FileDescriptor[] = uploadedMessageFiles.map(
+        //this is to show files in the INPUT BAR immediately
+        const tempProjectFiles: ProjectFile[] = Array.from(acceptedFiles).map(
           (file) => ({
-            id: file.file_id,
+            id: file.name,
+            file_id: file.name,
             name: file.name,
-            type: file.chat_file_type,
-            isUploading: false,
-            user_file_id: file.id,
+            project_id: null,
+            user_id: null,
+            created_at: new Date().toISOString(),
+            status: UserFileStatus.UPLOADING,
+            file_type: file.type,
+            last_accessed_at: new Date().toISOString(),
+            chat_file_type: ChatFileType.DOCUMENT,
+            token_count: null,
+            chunk_count: null,
           })
         );
-        setCurrentMessageFiles((prev) => [...prev, ...messageFiles]);
+        setCurrentMessageFiles((prev) => [...prev, ...tempProjectFiles]);
+
+        const uploadedMessageFiles: CategorizedFiles = await uploadFiles(
+          Array.from(acceptedFiles)
+        );
+        //remove the temp files
+        setCurrentMessageFiles((prev) =>
+          prev.filter(
+            (file) =>
+              !tempProjectFiles.some((tempFile) => tempFile.id === file.id)
+          )
+        );
+        setCurrentMessageFiles((prev) => [
+          ...prev,
+          ...uploadedMessageFiles.user_files,
+        ]);
+
+        // Show toast if any files were rejected or unsupported
+        const unsupported = uploadedMessageFiles.unsupported_files || [];
+        const nonAccepted = uploadedMessageFiles.non_accepted_files || [];
+        if (unsupported.length > 0 || nonAccepted.length > 0) {
+          const detailsParts: string[] = [];
+          if (unsupported.length > 0) {
+            detailsParts.push(`Unsupported: ${unsupported.join(", ")}`);
+          }
+          if (nonAccepted.length > 0) {
+            detailsParts.push(`Not accepted: ${nonAccepted.join(", ")}`);
+          }
+
+          setPopup({
+            type: "warning",
+            message: `Some files were not uploaded. ${detailsParts.join(" | ")}`,
+          });
+        }
       } catch (error) {
         setPopup({
           type: "error",

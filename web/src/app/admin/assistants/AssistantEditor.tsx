@@ -1076,7 +1076,7 @@ export function AssistantEditor({
                               )}
                               <FilePicker
                                 showTriggerLabel
-                                triggerLabel="Add Files"
+                                triggerLabel="Add User  Files"
                                 recentFiles={recentFiles}
                                 onPickRecent={(file: ProjectFile) => {
                                   if (!values.user_file_ids.includes(file.id)) {
@@ -1096,7 +1096,9 @@ export function AssistantEditor({
                                     const uploaded = await uploadProjectFiles(
                                       Array.from(files)
                                     );
-                                    const newIds = uploaded.map((f) => f.id);
+                                    const newIds = uploaded.user_files.map(
+                                      (f) => f.id
+                                    );
                                     const merged = Array.from(
                                       new Set([
                                         ...(values.user_file_ids || []),

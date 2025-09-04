@@ -345,6 +345,19 @@ export async function deleteAllChatSessions() {
   return response;
 }
 
+export async function getAvailableContextTokens(
+  chatSessionId: string
+): Promise<number> {
+  const response = await fetch(
+    `/api/chat/available-context-tokens/${chatSessionId}`
+  );
+  if (!response.ok) {
+    return 0;
+  }
+  const data = (await response.json()) as { available_tokens: number };
+  return data?.available_tokens ?? 0;
+}
+
 export async function* simulateLLMResponse(input: string, delay: number = 30) {
   // Split the input string into tokens. This is a simple example, and in real use case, tokenization can be more complex.
   // Iterate over tokens and yield them one by one

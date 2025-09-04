@@ -13,6 +13,7 @@ import {
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
+import { ProjectFile } from "../projects/ProjectsContext";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];
@@ -20,13 +21,13 @@ interface MessagesDisplayProps {
   liveAssistant: MinimalPersonaSnapshot;
   llmManager: { currentLlm: LlmDescriptor | null };
   deepResearchEnabled: boolean;
-  currentMessageFiles: FileDescriptor[];
+  currentMessageFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   setCurrentFeedback: (feedback: [FeedbackType, number] | null) => void;
   onSubmit: (args: {
     message: string;
     messageIdToResend?: number;
-    currentMessageFiles: FileDescriptor[];
+    currentMessageFiles: ProjectFile[];
     useAgentSearch: boolean;
     modelOverride?: LlmDescriptor;
     regenerationRequest?: {

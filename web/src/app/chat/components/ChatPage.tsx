@@ -128,7 +128,12 @@ export function ChatPage({
     refreshChatSessions,
   } = useChatContext();
 
-  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    setCurrentProjectId,
+    currentProjectId,
+  } = useProjectsContext();
 
   const { height: screenHeight } = useScreenSize();
 
@@ -157,7 +162,6 @@ export function ChatPage({
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
-  const { setCurrentProjectId, currentProjectId } = useProjectsContext();
 
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
@@ -489,7 +493,11 @@ export function ChatPage({
       setSelectedAssistantFromId,
     });
 
-  const { onMessageSelection } = useChatSessionController({
+  const {
+    onMessageSelection,
+    currentSessionFileTokenCount,
+    availableContextTokens,
+  } = useChatSessionController({
     existingChatSessionId,
     searchParams,
     filterManager,
@@ -1110,7 +1118,7 @@ export function ChatPage({
                             {showCenteredInput && (
                               <div
                                 data-testid="chat-intro"
-                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
+                                className="row-start-1 self-end flex text-text-800 justify-center mb-8 transition-opacity duration-300"
                               >
                                 <AssistantIcon
                                   colorOverride="text-text-800"
@@ -1140,6 +1148,10 @@ export function ChatPage({
                                 stopGenerating={stopGenerating}
                                 onSubmit={handleChatInputSubmit}
                                 chatState={currentChatState}
+                                currentSessionFileTokenCount={
+                                  currentSessionFileTokenCount
+                                }
+                                availableContextTokens={availableContextTokens}
                                 selectedAssistant={
                                   selectedAssistant || liveAssistant
                                 }
