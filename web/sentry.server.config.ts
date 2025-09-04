@@ -4,9 +4,15 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://f9db349b4cb5783fb7c93ba0e72c0669@o4509930383998976.ingest.us.sentry.io/4509958506938368",
+if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // Setting this option to true will print useful information to the console while you're setting up Sentry.
-  debug: false,
-});
+    // Setting this option to true will print useful information to the console while you're setting up Sentry.
+    debug: false,
+
+    // Disable performance monitoring and only capture errors
+    tracesSampleRate: 0,
+    profilesSampleRate: 0,
+  });
+}
