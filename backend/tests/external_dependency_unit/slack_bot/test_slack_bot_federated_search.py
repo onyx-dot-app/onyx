@@ -401,10 +401,6 @@ class TestSlackBotFederatedSearch:
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            response_text = last_call[1].get("text", "")
-
-            assert len(response_text) > 0, "Bot should have sent a response"
-
             assert hasattr(
                 self, "_captured_filtering_params"
             ), "query_slack should have been called"
@@ -450,8 +446,6 @@ class TestSlackBotFederatedSearch:
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            response_text = last_call[1].get("text", "")
-
             assert hasattr(
                 self, "_captured_filtering_params"
             ), "query_slack should have been called"
@@ -496,10 +490,6 @@ class TestSlackBotFederatedSearch:
 
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
-
-            response_text = last_call[1].get("text", "")
-
-            assert len(response_text) > 0, "Bot should have sent a response"
 
             assert hasattr(
                 self, "_captured_filtering_params"
