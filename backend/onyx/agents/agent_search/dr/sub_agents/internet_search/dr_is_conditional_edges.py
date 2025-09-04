@@ -7,6 +7,7 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchI
 from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
     InternetSearchInput,
 )
+from onyx.agents.agent_search.dr.sub_agents.internet_search.states import SummarizeInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 
 
@@ -24,13 +25,14 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,
                 assistant_task_prompt=state.assistant_task_prompt,
-                urls_to_open=[],
+                results_to_open=[],
             ),
         )
         for _, query in enumerate(state.query_list[:MAX_DR_PARALLEL_SEARCH])
     ]
 
 
+# at most 10 groups of urls => maybe you should do that in the graph compilation parallelization setting?
 def fetch_router(state: InternetSearchInput) -> list[Send | Hashable]:
     branch_questions_to_urls = state.branch_questions_to_urls
     return [
@@ -45,9 +47,31 @@ def fetch_router(state: InternetSearchInput) -> list[Send | Hashable]:
                 assistant_task_prompt=state.assistant_task_prompt,
                 current_step_nr=state.current_step_nr,
                 branch_questions_to_urls=branch_questions_to_urls,
+                raw_documents=state.raw_documents,
             ),
         )
         for url in set(
             url for urls in branch_questions_to_urls.values() for url in urls
         )
+    ]
+
+
+def summarize_router(state: InternetSearchInput) -> list[Send | Hashable]:
+    branch_questions_to_urls = state.branch_questions_to_urls
+    return [
+        Send(
+            "summarize",
+            SummarizeInput(
+                iteration_nr=state.iteration_nr,
+                raw_documents=state.raw_documents,
+                branch_questions_to_urls=branch_questions_to_urls,
+                branch_question=branch_question,
+                tools_used=state.tools_used,
+                available_tools=state.available_tools,
+                assistant_system_prompt=state.assistant_system_prompt,
+                assistant_task_prompt=state.assistant_task_prompt,
+                current_step_nr=state.current_step_nr,
+            ),
+        )
+        for branch_question in branch_questions_to_urls.keys()
     ]

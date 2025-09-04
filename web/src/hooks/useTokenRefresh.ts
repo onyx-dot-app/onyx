@@ -44,20 +44,25 @@ export function useTokenRefresh(
           isFirstLoad.current = false;
         }
 
-        const response = await fetch("/api/auth/refresh", {
-          method: "POST",
-          credentials: "include",
-        });
+        // DISABLED: API call to /api/auth/refresh is turned off
+        // const response = await fetch("/api/auth/refresh", {
+        //   method: "POST",
+        //   credentials: "include",
+        // });
 
-        if (response.ok) {
-          // Update last refresh time on success
-          setLastTokenRefresh(Date.now());
-          console.debug("Auth token refreshed successfully");
-        } else {
-          console.warn("Failed to refresh auth token:", response.status);
-          // If token refresh fails, try to get current user info
-          await onRefreshFail();
-        }
+        // if (response.ok) {
+        //   // Update last refresh time on success
+        //   setLastTokenRefresh(Date.now());
+        //   console.debug("Auth token refreshed successfully");
+        // } else {
+        //   console.warn("Failed to refresh auth token:", response.status);
+        //   // If token refresh fails, try to get current user info
+        //   await onRefreshFail();
+        // }
+
+        // Instead, just update the refresh time without making the API call
+        setLastTokenRefresh(Date.now());
+        console.debug("Auth token refresh disabled - skipping API call");
       } catch (error) {
         console.error("Error refreshing auth token:", error);
       }

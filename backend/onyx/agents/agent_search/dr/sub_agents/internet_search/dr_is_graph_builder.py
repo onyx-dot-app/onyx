@@ -14,7 +14,13 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_dedup_urls i
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_4_fetch import (
     web_fetch,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_5_reduce import (
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_5_collect_raw_docs import (
+    collect_raw_docs,
+)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_6_summarize import (
+    is_summarize,
+)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_7_reduce import (
     is_reducer,
 )
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
@@ -22,6 +28,9 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_ed
 )
 from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
     fetch_router,
+)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
+    summarize_router,
 )
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentMainState
@@ -44,9 +53,13 @@ def dr_is_graph_builder() -> StateGraph:
 
     graph.add_node("search", web_search)
 
+    graph.add_node("dedup_urls", dedup_urls)
+
     graph.add_node("fetch", web_fetch)
 
-    graph.add_node("dedup_urls", dedup_urls)
+    graph.add_node("collect_raw_docs", collect_raw_docs)
+
+    graph.add_node("summarize", is_summarize)
 
     graph.add_node("reducer", is_reducer)
 
@@ -60,7 +73,11 @@ def dr_is_graph_builder() -> StateGraph:
 
     graph.add_conditional_edges("dedup_urls", fetch_router)
 
-    graph.add_edge(start_key="fetch", end_key="reducer")
+    graph.add_edge(start_key="fetch", end_key="collect_raw_docs")
+
+    graph.add_conditional_edges("collect_raw_docs", summarize_router)
+
+    graph.add_edge(start_key="summarize", end_key="reducer")
 
     graph.add_edge(start_key="reducer", end_key=END)
 

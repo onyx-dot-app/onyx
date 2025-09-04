@@ -7,13 +7,11 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
     get_default_provider,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
-    FetchInput,
-)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchInput
+from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchUpdate
 from onyx.agents.agent_search.dr.sub_agents.internet_search.utils import (
     dummy_inference_section_from_internet_content,
 )
-from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -29,7 +27,7 @@ def web_fetch(
     state: FetchInput,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
-) -> BranchUpdate:
+) -> FetchUpdate:
     """
     LangGraph node to fetch content from URLs and process the results.
     """
@@ -61,7 +59,7 @@ def web_fetch(
     if not retrieved_docs:
         logger.warning("No content retrieved from URLs")
 
-    return BranchUpdate(
+    return FetchUpdate(
         raw_documents=retrieved_docs,
         log_messages=[
             get_langgraph_node_log_string(
