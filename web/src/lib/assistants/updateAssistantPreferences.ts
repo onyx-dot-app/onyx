@@ -30,48 +30,16 @@ export async function updateAssistantVisibility(
   return response.ok;
 }
 
-export async function removeAssistantFromList(
-  assistantId: number
-): Promise<boolean> {
-  return updateAssistantVisibility(assistantId, false);
-}
-
 export async function addAssistantToList(
   assistantId: number
 ): Promise<boolean> {
   return updateAssistantVisibility(assistantId, true);
 }
 
-export async function addAssistantToListAndPin(
-  assistantId: number,
-  currentPinnedAssistantIds: number[] = []
+export async function removeAssistantFromList(
+  assistantId: number
 ): Promise<boolean> {
-  // First add to chosen assistants list
-  const visibilitySuccess = await updateAssistantVisibility(assistantId, true);
-  if (!visibilitySuccess) {
-    return false;
-  }
-
-  // Then pin the assistant by appending to existing pinned list
-  try {
-    const updatedPinnedAssistantsIds = [
-      ...currentPinnedAssistantIds,
-      assistantId,
-    ];
-    const response = await fetch(`/api/user/pinned-assistants`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ordered_assistant_ids: updatedPinnedAssistantsIds,
-      }),
-    });
-    return response.ok;
-  } catch (error) {
-    console.error("Error pinning assistant:", error);
-    return false;
-  }
+  return updateAssistantVisibility(assistantId, false);
 }
 
 export async function moveAssistantUp(

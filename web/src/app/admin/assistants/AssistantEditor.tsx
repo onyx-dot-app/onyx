@@ -19,7 +19,7 @@ import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
-import { addAssistantToListAndPin } from "@/lib/assistants/updateAssistantPreferences";
+import { updateAssistantVisibility } from "@/lib/assistants/updateAssistantPreferences";
 import {
   parseLlmDescriptor,
   modelSupportsImageInput,
@@ -56,6 +56,7 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useUser } from "@/components/user/UserProvider";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -138,6 +139,7 @@ export function AssistantEditor({
   const { refreshAssistants, isImageGenerationAvailable } =
     useAssistantsContext();
 
+  const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -689,12 +691,22 @@ export function AssistantEditor({
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
             ) {
-              const currentPinnedIds =
-                user?.preferences?.pinned_assistants || [];
-              const success = await addAssistantToListAndPin(
+              // First add to chosen assistants list
+              const visibilitySuccess = await updateAssistantVisibility(
                 assistantId,
-                currentPinnedIds
+                true
               );
+              if (visibilitySuccess) {
+                // Then pin the assistant using the existing API
+                const currentPinnedIds =
+                  user?.preferences?.pinned_assistants || [];
+                await toggleAssistantPinnedStatus(
+                  currentPinnedIds,
+                  assistantId,
+                  true
+                );
+              }
+              const success = visibilitySuccess;
               if (success) {
                 setPopup({
                   message: `"${assistant.name}" has been added to your list.`,
