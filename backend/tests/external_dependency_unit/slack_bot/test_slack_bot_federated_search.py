@@ -18,12 +18,12 @@ from onyx.db.models import Prompt
 from onyx.db.models import SlackBot
 from onyx.db.models import SlackChannelConfig
 from onyx.onyxbot.slack.listener import process_message
+from onyx.tools.built_in_tools import get_search_tool
 from tests.external_dependency_unit.conftest import create_test_user
 
 
 def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
     """Helper to create a test persona configured for Slack federated search"""
-    # Create a document set with unique name
     unique_id = str(uuid4())[:8]
     document_set = DocumentSet(
         name=f"test_slack_docs_{unique_id}",
@@ -32,7 +32,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
     db_session.add(document_set)
     db_session.flush()
 
-    # Create a persona with unique name
     persona = Persona(
         name=f"test_slack_persona_{unique_id}",
         description="Test persona for Slack federated search",
@@ -45,7 +44,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
     db_session.add(persona)
     db_session.flush()
 
-    # Link persona to document set
     persona_doc_set = Persona__DocumentSet(
         persona_id=persona.id,
         document_set_id=document_set.id,
@@ -53,7 +51,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
     db_session.add(persona_doc_set)
     db_session.commit()
 
-    # Add a default prompt to the persona
     prompt = Prompt(
         name="default_prompt",
         description="Default prompt for testing",
@@ -63,12 +60,8 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
     db_session.add(prompt)
     db_session.flush()
 
-    # Link the prompt to the persona
     persona_prompt = Persona__Prompt(persona_id=persona.id, prompt_id=prompt.id)
     db_session.add(persona_prompt)
-
-    # Add the search tool to the persona for federated search
-    from onyx.tools.built_in_tools import get_search_tool
 
     search_tool = get_search_tool(db_session)
     if search_tool:
@@ -77,7 +70,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
 
     db_session.commit()
 
-    # Reload the persona with prompts relationship
     persona_with_prompts = db_session.scalar(
         select(Persona)
         .options(joinedload(Persona.prompts))
@@ -454,34 +446,21 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_private_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in private channel sees private + public channel messages"""
-        # Setup test environment
-        user, persona, slack_connector, slack_bot, slack_channel_config = (
-            self._setup_test_environment(db_session)
-        )
+        self._setup_test_environment(db_session)
 
         channel_id = "C9999999999"  # #dev-team (private)
         channel_name = "dev-team"
 
-        # Setup only Slack API mocks - everything else runs live
         patches, started_patches = self._setup_slack_mocks(channel_name)
 
         try:
-            # Call process_message - this will run through the real flow with live services
-            # Only Slack API calls are mocked, everything else (Postgres, Vespa, LLM) runs live
-
-            # Create mock Slack request and client
             mock_req = _create_mock_slack_request(
                 "search for performance issues", channel_id
             )
             mock_client = _create_mock_slack_client(channel_id)
 
-            # Call process_message to trigger the search
             process_message(mock_req, mock_client)
 
-            # The real slack_retrieval function will be called and handle the filtering
-            # We just verify that the bot successfully processed the request
-
-            # Verify the response was sent to the correct channel
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
@@ -493,17 +472,13 @@ class TestSlackBotFederatedSearch:
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            # Verify that the bot response contains only messages from expected channels
-            # The real slack_retrieval function should filter messages based on channel context
             response_text = last_call[1].get("text", "")
 
-            # Test the actual filtering logic by verifying the parameters passed to query_slack
             assert hasattr(
                 self, "_captured_filtering_params"
             ), "query_slack should have been called"
             params = self._captured_filtering_params
 
-            # For private channels, should have access to the specific private channel and no DM access
             assert (
                 params["allowed_private_channel"] == "C9999999999"
             ), "Private channels should have access to their specific private channel"
@@ -519,34 +494,21 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_dm_filtering(self, db_session: Session) -> None:
         """Test that slack bot in DM sees all messages (no filtering)"""
-        # Setup test environment
-        user, persona, slack_connector, slack_bot, slack_channel_config = (
-            self._setup_test_environment(db_session)
-        )
+        self._setup_test_environment(db_session)
 
         channel_id = "D1234567890"  # DM
         channel_name = "directmessage"
 
-        # Setup only Slack API mocks - everything else runs live
         patches, started_patches = self._setup_slack_mocks(channel_name)
 
         try:
-            # Call process_message - this will run through the real flow with live services
-            # Only Slack API calls are mocked, everything else (Postgres, Vespa, LLM) runs live
-
-            # Create mock Slack request and client
             mock_req = _create_mock_slack_request(
                 "search for performance issues", channel_id
             )
             mock_client = _create_mock_slack_client(channel_id)
 
-            # Call process_message to trigger the search
             process_message(mock_req, mock_client)
 
-            # The real slack_retrieval function will be called and handle the filtering
-            # We just verify that the bot successfully processed the request
-
-            # Verify the response was sent to the correct channel
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
@@ -554,24 +516,18 @@ class TestSlackBotFederatedSearch:
                 last_call[1]["channel"] == channel_id
             ), f"Response should be sent to {channel_id}"
 
-            # Verify the response contains content
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            # Verify that the bot response contains only messages from expected channels
-            # The real slack_retrieval function should filter messages based on channel context
             response_text = last_call[1].get("text", "")
 
-            # Test that the bot successfully processed the request
             assert len(response_text) > 0, "Bot should have sent a response"
 
-            # Test the actual filtering logic by verifying the parameters passed to query_slack
             assert hasattr(
                 self, "_captured_filtering_params"
             ), "query_slack should have been called"
             params = self._captured_filtering_params
 
-            # For DMs, should have no private channel access but should include DMs
             assert (
                 params["allowed_private_channel"] is None
             ), "DMs should not have private channel access"
