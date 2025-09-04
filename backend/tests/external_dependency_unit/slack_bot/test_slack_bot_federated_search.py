@@ -103,13 +103,11 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
     mock_client.slack_bot_id = 12345
     mock_client.web_client = Mock()
 
-    # Mock chat_postMessage to return proper response structure
     mock_post_message_response = {"ok": True, "message_ts": "1234567890.123456"}
     mock_client.web_client.chat_postMessage = Mock(
         return_value=mock_post_message_response
     )
 
-    # Mock users_info to return proper response structure
     mock_users_info_response = Mock()
     mock_users_info_response.__getitem__ = Mock(
         side_effect=lambda key: {"ok": True}[key]
@@ -129,7 +127,6 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
     }
     mock_client.web_client.users_info = Mock(return_value=mock_users_info_response)
 
-    # Mock auth_test to return proper response structure
     mock_auth_test_response = {
         "ok": True,
         "user_id": "U1234567890",
@@ -137,7 +134,6 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
     }
     mock_client.web_client.auth_test = Mock(return_value=mock_auth_test_response)
 
-    # Mock conversations_info to return proper response structure
     def mock_conversations_info_response(channel):
         channel_id = channel
         if channel_id == "C1234567890":  # general - public
@@ -213,12 +209,10 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
         side_effect=mock_conversations_info_response
     )
 
-    # Mock conversations_members
     mock_client.web_client.conversations_members = Mock(
         return_value={"ok": True, "members": ["U9876543210", "U1234567890"]}
     )
 
-    # Mock conversations_replies
     mock_client.web_client.conversations_replies = Mock(
         return_value={"ok": True, "messages": []}
     )
@@ -277,17 +271,14 @@ class TestSlackBotFederatedSearch:
 
         self._setup_slack_api_mocks(started_patches[0], None)
 
-        # Setup query_slack mock to test filtering logic
         self._setup_query_slack_mock(started_patches[1], channel_name)
 
-        # Setup channel type mock
         self._setup_channel_type_mock(started_patches[2], channel_name)
 
         return patches, started_patches
 
     def _setup_slack_api_mocks(self, mock_search_messages, mock_conversations_info):
         """Setup Slack API mocks to return controlled data for testing filtering"""
-        # Mock search_messages to return messages from different channel types
         mock_search_response = Mock()
         mock_search_response.validate.return_value = None
         mock_search_response.get.return_value = {
@@ -340,14 +331,12 @@ class TestSlackBotFederatedSearch:
             bot_token: str | None = None,
             include_dm: bool = False,
         ):
-            # Store the filtering parameters for verification
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
                 "include_dm": include_dm,
                 "channel_name": channel_name,
             }
 
-            # Return empty list - we're just testing the parameters, not the filtering logic
             return []
 
         mock_query_slack.side_effect = mock_query_slack_capture_params
@@ -378,34 +367,21 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_public_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in public channel sees only public channel messages"""
-        # Setup test environment
-        user, persona, slack_connector, slack_bot, slack_channel_config = (
-            self._setup_test_environment(db_session)
-        )
+        self._setup_test_environment(db_session)
 
         channel_id = "C1234567890"  # #general (public)
         channel_name = "general"
 
-        # Setup only Slack API mocks - everything else runs live
         patches, started_patches = self._setup_slack_mocks(channel_name)
 
         try:
-            # Call process_message - this will run through the real flow with live services
-            # Only Slack API calls are mocked, everything else (Postgres, Vespa, LLM) runs live
-
-            # Create mock Slack request and client
             mock_req = _create_mock_slack_request(
                 "search for performance issues", channel_id
             )
             mock_client = _create_mock_slack_client(channel_id)
 
-            # Call process_message to trigger the search
             process_message(mock_req, mock_client)
 
-            # The real slack_retrieval function will be called and handle the filtering
-            # We just verify that the bot successfully processed the request
-
-            # Verify the response was sent to the correct channel
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
@@ -413,24 +389,18 @@ class TestSlackBotFederatedSearch:
                 last_call[1]["channel"] == channel_id
             ), f"Response should be sent to {channel_id}"
 
-            # Verify the response contains content
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            # Verify that the bot response contains only messages from expected channels
-            # The real slack_retrieval function should filter messages based on channel context
             response_text = last_call[1].get("text", "")
 
-            # Test that the bot successfully processed the request
             assert len(response_text) > 0, "Bot should have sent a response"
 
-            # Test the actual filtering logic by verifying the parameters passed to query_slack
             assert hasattr(
                 self, "_captured_filtering_params"
             ), "query_slack should have been called"
             params = self._captured_filtering_params
 
-            # For public channels, should have no private channel access and no DM access
             assert (
                 params["allowed_private_channel"] is None
             ), "Public channels should not have private channel access"
@@ -468,7 +438,6 @@ class TestSlackBotFederatedSearch:
                 last_call[1]["channel"] == channel_id
             ), f"Response should be sent to {channel_id}"
 
-            # Verify the response contains content
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
