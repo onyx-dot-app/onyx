@@ -91,7 +91,7 @@ def get_channel_type_from_id(web_client: WebClient, channel_id: str) -> str:
     try:
         channel_info = web_client.conversations_info(channel=channel_id)
         if channel_info.get("ok") and channel_info.get("channel"):
-            channel = channel_info.get("channel", {})
+            channel: dict[str, Any] = channel_info.get("channel", {})
 
             if channel.get("is_im"):
                 return "im"  # Direct message

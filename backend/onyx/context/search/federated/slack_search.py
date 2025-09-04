@@ -162,7 +162,9 @@ def query_slack(
                     channel_client = WebClient(token=token_to_use)
                     channel_info = channel_client.conversations_info(channel=channel_id)
 
-                    if _is_public_channel(channel_info):
+                    if isinstance(channel_info.data, dict) and _is_public_channel(
+                        channel_info.data
+                    ):
                         # This is a public channel - keep it
                         pass
                     else:
@@ -192,7 +194,9 @@ def query_slack(
                 channel_client = WebClient(token=token_to_use)
                 channel_info = channel_client.conversations_info(channel=channel_id)
 
-                if _is_public_channel(channel_info):
+                if isinstance(channel_info.data, dict) and _is_public_channel(
+                    channel_info.data
+                ):
                     # This is a public channel - keep it
                     pass
                 else:

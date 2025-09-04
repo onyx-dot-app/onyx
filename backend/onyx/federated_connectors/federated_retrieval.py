@@ -39,18 +39,6 @@ def get_federated_retrieval_functions(
     document_set_names: list[str] | None,
     slack_context: dict[str, str] | None = None,  # Add Slack context parameter
 ) -> list[FederatedRetrievalInfo]:
-    logger.info(
-        f"get_federated_retrieval_functions called with document_set_names: {document_set_names}"
-    )
-
-    # Log Slack context received
-    if slack_context:
-        logger.info(
-            f"get_federated_retrieval_functions: Received Slack context: {slack_context}"
-        )
-    else:
-        logger.info("get_federated_retrieval_functions: No Slack context received")
-
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
         logger.info("Slack context detected, checking for Slack bot setup...")
@@ -78,7 +66,6 @@ def get_federated_retrieval_functions(
                     logger.warning("No enabled Slack bots found")
 
             if tenant_slack_bot:
-
                 federated_retrieval_infos_slack = []
 
                 def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
@@ -158,6 +145,12 @@ def get_federated_retrieval_functions(
         document_set_associations = federated_connector_id_to_document_sets[
             oauth_token.federated_connector_id
         ]
+
+        # if document set names are specified by the user, skip federated connectors that are
+        # not associated with any of the document sets
+        if document_set_names and not document_set_associations:
+            continue
+
         if document_set_associations:
             entities = document_set_associations[0].entities
         else:
