@@ -22,7 +22,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# only fetch and truncate content
 def web_fetch(
     state: FetchInput,
     config: RunnableConfig,
@@ -46,7 +45,6 @@ def web_fetch(
     if provider is None:
         raise ValueError("No web search provider found")
 
-    # Fetch content from URLs
     retrieved_docs: list[InferenceSection] = []
     try:
         retrieved_docs = [

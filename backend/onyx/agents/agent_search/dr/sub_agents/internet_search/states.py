@@ -11,6 +11,7 @@ from onyx.context.search.models import InferenceSection
 
 class InternetSearchInput(SubAgentInput):
     results_to_open: Annotated[list[tuple[str, InternetSearchResult]], add] = []
+    parallelization_nr: int = 0
     branch_question: Annotated[str, lambda x, y: y] = ""
     branch_questions_to_urls: Annotated[dict[str, list[str]], lambda x, y: y] = {}
     raw_documents: Annotated[list[InferenceSection], add] = []

@@ -18,6 +18,7 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
             InternetSearchInput(
                 iteration_nr=state.iteration_nr,
                 current_step_nr=state.current_step_nr,
+                parallelization_nr=parallelization_nr,
                 query_list=[query],
                 branch_question=query,
                 context="",
@@ -28,11 +29,12 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
                 results_to_open=[],
             ),
         )
-        for _, query in enumerate(state.query_list[:MAX_DR_PARALLEL_SEARCH])
+        for parallelization_nr, query in enumerate(
+            state.query_list[:MAX_DR_PARALLEL_SEARCH]
+        )
     ]
 
 
-# at most 10 groups of urls => maybe you should do that in the graph compilation parallelization setting?
 def fetch_router(state: InternetSearchInput) -> list[Send | Hashable]:
     branch_questions_to_urls = state.branch_questions_to_urls
     return [
