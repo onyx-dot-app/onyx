@@ -17,12 +17,13 @@ from onyx.db.models import Persona__Tool
 from onyx.db.models import Prompt
 from onyx.db.models import SlackBot
 from onyx.db.models import SlackChannelConfig
+from onyx.db.models import User
 from onyx.onyxbot.slack.listener import process_message
 from onyx.tools.built_in_tools import get_search_tool
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-def _create_test_persona_with_slack_config(db_session: Session) -> Persona:
+def _create_test_persona_with_slack_config(db_session: Session) -> Persona | None:
     """Helper to create a test persona configured for Slack federated search"""
     unique_id = str(uuid4())[:8]
     document_set = DocumentSet(
@@ -134,7 +135,7 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
     }
     mock_client.web_client.auth_test = Mock(return_value=mock_auth_test_response)
 
-    def mock_conversations_info_response(channel):
+    def mock_conversations_info_response(channel: str) -> Mock:
         channel_id = channel
         if channel_id == "C1234567890":  # general - public
             mock_response = Mock()
@@ -223,11 +224,15 @@ def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
 class TestSlackBotFederatedSearch:
     """Test Slack bot federated search functionality"""
 
-    def _setup_test_environment(self, db_session: Session):
+    def _setup_test_environment(
+        self, db_session: Session
+    ) -> tuple[User, Persona, FederatedConnector, SlackBot, SlackChannelConfig]:
         """Setup test environment with user, persona, and federated connector"""
         user = create_test_user(db_session, "slack_bot_test")
 
         persona = _create_test_persona_with_slack_config(db_session)
+        if persona is None:
+            raise ValueError("Failed to create test persona")
 
         federated_connector = FederatedConnector(
             source=FederatedConnectorSource.FEDERATED_SLACK,
@@ -259,7 +264,7 @@ class TestSlackBotFederatedSearch:
 
         return user, persona, federated_connector, slack_bot, slack_channel_config
 
-    def _setup_slack_mocks(self, channel_name: str):
+    def _setup_slack_mocks(self, channel_name: str) -> tuple[list, list]:
         """Setup only Slack API mocks - everything else runs live"""
         patches = [
             patch("slack_sdk.WebClient.search_messages"),
@@ -269,7 +274,7 @@ class TestSlackBotFederatedSearch:
 
         started_patches = [p.start() for p in patches]
 
-        self._setup_slack_api_mocks(started_patches[0], None)
+        self._setup_slack_api_mocks(started_patches[0], started_patches[0])
 
         self._setup_query_slack_mock(started_patches[1], channel_name)
 
@@ -277,7 +282,9 @@ class TestSlackBotFederatedSearch:
 
         return patches, started_patches
 
-    def _setup_slack_api_mocks(self, mock_search_messages, mock_conversations_info):
+    def _setup_slack_api_mocks(
+        self, mock_search_messages: Mock, mock_conversations_info: Mock
+    ) -> None:
         """Setup Slack API mocks to return controlled data for testing filtering"""
         mock_search_response = Mock()
         mock_search_response.validate.return_value = None
@@ -319,18 +326,20 @@ class TestSlackBotFederatedSearch:
         }
         mock_search_messages.return_value = mock_search_response
 
-    def _setup_query_slack_mock(self, mock_query_slack, channel_name: str):
+    def _setup_query_slack_mock(
+        self, mock_query_slack: Mock, channel_name: str
+    ) -> None:
         """Setup query_slack mock to capture filtering parameters"""
 
         def mock_query_slack_capture_params(
             query_string: str,
-            original_query,
+            original_query: str,
             access_token: str,
             limit: int | None = None,
             allowed_private_channel: str | None = None,
             bot_token: str | None = None,
             include_dm: bool = False,
-        ):
+        ) -> list:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
                 "include_dm": include_dm,
@@ -342,11 +351,11 @@ class TestSlackBotFederatedSearch:
         mock_query_slack.side_effect = mock_query_slack_capture_params
 
     def _setup_channel_type_mock(
-        self, mock_get_channel_type_from_id, channel_name: str
-    ):
+        self, mock_get_channel_type_from_id: Mock, channel_name: str
+    ) -> None:
         """Setup get_channel_type_from_id mock to return correct channel types"""
 
-        def mock_channel_type_response(web_client, channel_id: str):
+        def mock_channel_type_response(web_client: Mock, channel_id: str) -> str:
             if channel_id == "C1234567890":  # general - public
                 return "public_channel"
             elif channel_id == "C1111111111":  # support - public
@@ -360,7 +369,7 @@ class TestSlackBotFederatedSearch:
 
         mock_get_channel_type_from_id.side_effect = mock_channel_type_response
 
-    def _teardown_common_mocks(self, patches):
+    def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
         for p in patches:
             p.stop()
