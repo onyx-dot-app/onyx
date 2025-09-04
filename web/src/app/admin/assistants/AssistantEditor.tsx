@@ -19,7 +19,7 @@ import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
-import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
+import { addAssistantToListAndPin } from "@/lib/assistants/updateAssistantPreferences";
 import {
   parseLlmDescriptor,
   modelSupportsImageInput,
@@ -689,7 +689,12 @@ export function AssistantEditor({
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
             ) {
-              const success = await addAssistantToList(assistantId);
+              const currentPinnedIds =
+                user?.preferences?.pinned_assistants || [];
+              const success = await addAssistantToListAndPin(
+                assistantId,
+                currentPinnedIds
+              );
               if (success) {
                 setPopup({
                   message: `"${assistant.name}" has been added to your list.`,
