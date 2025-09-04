@@ -24,6 +24,7 @@ class GraphInputs(BaseModel):
     prompt_builder: AnswerPromptBuilder
     files: list[InMemoryChatFile] | None = None
     structured_response_format: dict | None = None
+    project_instructions: str | None = None
 
     class Config:
         arbitrary_types_allowed = True
