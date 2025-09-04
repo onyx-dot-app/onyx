@@ -12,6 +12,7 @@ from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_OBJECTS
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_PREFIXES
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_SUFFIXES
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
+from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -218,7 +219,7 @@ class OnyxSalesforce(Salesforce):
                             continue
 
                         for child_record in child_result["records"]:
-                            child_record_id = child_record["Id"]
+                            child_record_id = child_record[ID_FIELD]
                             if not child_record_id:
                                 logger.warning("Child record has no id")
                                 continue

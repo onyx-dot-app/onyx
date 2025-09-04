@@ -323,7 +323,6 @@ export function AssistantEditor({
     search_start_date: existingPersona?.search_start_date
       ? existingPersona?.search_start_date.toString().split("T")[0]
       : null,
-    include_citations: existingPersona?.prompts[0]?.include_citations ?? true,
     llm_relevance_filter: existingPersona?.llm_relevance_filter ?? false,
     llm_model_provider_override:
       existingPersona?.llm_model_provider_override ?? null,
@@ -539,7 +538,6 @@ export function AssistantEditor({
             is_public: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().nullable(),
-            include_citations: Yup.boolean().required(),
             llm_relevance_filter: Yup.boolean().required(),
             llm_model_version_override: Yup.string().nullable(),
             llm_model_provider_override: Yup.string().nullable(),
@@ -974,7 +972,7 @@ export function AssistantEditor({
                                 Knowledge
                               </p>
                               <div className="flex items-center">
-                                <TooltipProvider delayDuration={0}>
+                                <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <div
@@ -1399,7 +1397,7 @@ export function AssistantEditor({
 
                       <div className="min-h-[100px]">
                         <div className="flex items-center mb-2">
-                          <TooltipProvider delayDuration={0}>
+                          <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div>
@@ -1745,14 +1743,6 @@ export function AssistantEditor({
                             name="llm_relevance_filter"
                             label="AI Relevance Filter"
                             subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
-                          />
-
-                          <BooleanFormField
-                            small
-                            removeIndent
-                            name="include_citations"
-                            label="Citations"
-                            subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
                           />
                         </div>
                       </div>

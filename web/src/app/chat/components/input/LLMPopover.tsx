@@ -179,7 +179,7 @@ export default function LLMPopover({
                         provider
                       ) && (
                         <TooltipProvider>
-                          <Tooltip delayDuration={0}>
+                          <Tooltip>
                             <TooltipTrigger className="my-auto flex items-center ml-auto">
                               <FiAlertTriangle
                                 className="text-alert"

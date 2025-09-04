@@ -137,7 +137,6 @@ def enable_or_disable_kg(
         system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
         task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
         datetime_aware=False,
-        include_citations=True,
         num_chunks=25,
         llm_relevance_filter=False,
         is_public=is_public,

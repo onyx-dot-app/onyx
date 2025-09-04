@@ -80,7 +80,7 @@ export default function StarterMessagesList({
       ))}
 
       <div className="flex items-center gap-2 ">
-        <TooltipProvider delayDuration={50}>
+        <TooltipProvider>
           <Tooltip onOpenChange={setTooltipOpen} open={tooltipOpen}>
             <TooltipTrigger asChild>
               <Button

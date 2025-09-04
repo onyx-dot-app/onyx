@@ -60,7 +60,6 @@ def load_prompts_from_yaml(
             description=prompt["description"].strip(),
             system_prompt=prompt["system"].strip(),
             task_prompt=prompt["task"].strip(),
-            include_citations=prompt["include_citations"],
             datetime_aware=prompt.get("datetime_aware", True),
             default_prompt=True,
             personas=None,

@@ -20,7 +20,7 @@ class ResearchAnswerPurpose(str, Enum):
 class DRPath(str, Enum):
     CLARIFIER = "Clarifier"
     ORCHESTRATOR = "Orchestrator"
-    INTERNAL_SEARCH = "Search Tool"
+    INTERNAL_SEARCH = "Internal Search"
     GENERIC_TOOL = "Generic Tool"
     KNOWLEDGE_GRAPH = "Knowledge Graph Search"
     INTERNET_SEARCH = "Internet Search"

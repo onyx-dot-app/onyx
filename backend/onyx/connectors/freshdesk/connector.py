@@ -8,6 +8,9 @@ import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -17,6 +20,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -64,6 +68,15 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
     4: "resolved",
     5: "closed",
 }
+
+
+# TODO: unify this with other generic rate limited requests with retries (e.g. Axero)
+@retry_builder()
+@rate_limit_builder(max_calls=5, period=1)
+def _rate_limited_freshdesk_get(
+    url: str, auth: tuple, params: dict
+) -> requests.Response:
+    return requests.get(url, auth=auth, params=params)
 
 
 def _create_metadata_from_ticket(ticket: dict) -> dict:
@@ -154,16 +167,32 @@ class FreshdeskConnector(PollConnector, LoadConnector):
     def load_credentials(self, credentials: dict[str, str | int]) -> None:
         api_key = credentials.get("freshdesk_api_key")
         domain = credentials.get("freshdesk_domain")
-        password = credentials.get("freshdesk_password")
-
-        if not all(isinstance(cred, str) for cred in [domain, api_key, password]):
+        if not all(isinstance(cred, str) for cred in [domain, api_key]):
             raise ConnectorMissingCredentialError(
                 "All Freshdesk credentials must be strings"
             )
 
+        # TODO: Move the domain to the connector-specific configuration instead of part of the credential
+        # Then apply normalization and validation against the config
+        # Clean and normalize the domain URL
+        domain = str(domain).strip().lower()
+
+        # Remove any trailing slashes
+        domain = domain.rstrip("/")
+
+        # Remove protocol if present
+        if domain.startswith(("http://", "https://")):
+            domain = domain.replace("http://", "").replace("https://", "")
+
+        # Remove .freshdesk.com suffix and any API paths if present
+        if ".freshdesk.com" in domain:
+            domain = domain.split(".freshdesk.com")[0]
+
+        if not domain:
+            raise ConnectorMissingCredentialError("Freshdesk domain cannot be empty")
+
         self.api_key = str(api_key)
-        self.domain = str(domain)
-        self.password = str(password)
+        self.domain = domain
 
     def _fetch_tickets(
         self, start: datetime | None = None, end: datetime | None = None
@@ -177,7 +206,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
         'include' field available for this endpoint:
         https://developers.freshdesk.com/api/#filter_tickets
         """
-        if self.api_key is None or self.domain is None or self.password is None:
+        if self.api_key is None or self.domain is None:
             raise ConnectorMissingCredentialError("freshdesk")
 
         base_url = f"https://{self.domain}.freshdesk.com/api/v2/tickets"
@@ -191,8 +220,11 @@ class FreshdeskConnector(PollConnector, LoadConnector):
             params["updated_since"] = start.isoformat()
 
         while True:
-            response = requests.get(
-                base_url, auth=(self.api_key, self.password), params=params
+            # Freshdesk API uses API key as the username and any value as the password.
+            response = _rate_limited_freshdesk_get(
+                base_url,
+                auth=(self.api_key, "CanYouBelieveFreshdeskDoesThis"),
+                params=params,
             )
             response.raise_for_status()
 

@@ -115,7 +115,6 @@ def create_assistant(
             description="Auto-generated prompt",
             system_prompt=request.instructions,
             task_prompt="",
-            include_citations=True,
             datetime_aware=True,
             personas=[],
             db_session=db_session,

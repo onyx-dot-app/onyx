@@ -230,7 +230,6 @@ export interface DiscordCredentialJson {
 
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
-  freshdesk_password: string;
   freshdesk_api_key: string;
 }
 
@@ -365,6 +364,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     clickup_api_token: "",
     clickup_team_id: "",
   } as ClickupCredentialJson,
+
   s3: {
     authentication_method: "access_key",
     authMethods: [
@@ -409,7 +409,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as OCICredentialJson,
   freshdesk: {
     freshdesk_domain: "",
-    freshdesk_password: "",
     freshdesk_api_key: "",
   } as FreshdeskCredentialJson,
   fireflies: {
@@ -587,7 +586,6 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Freshdesk
   freshdesk_domain: "Freshdesk Domain",
-  freshdesk_password: "Freshdesk Password",
   freshdesk_api_key: "Freshdesk API Key",
 
   // Fireflies

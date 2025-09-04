@@ -2487,7 +2487,6 @@ class Prompt(Base):
     description: Mapped[str] = mapped_column(String)
     system_prompt: Mapped[str] = mapped_column(String(length=8000))
     task_prompt: Mapped[str] = mapped_column(String(length=8000))
-    include_citations: Mapped[bool] = mapped_column(Boolean, default=True)
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
     # Default prompts are configured via backend during deployment
     # Treated specially (cannot be user edited etc.)

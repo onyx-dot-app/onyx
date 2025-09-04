@@ -69,7 +69,6 @@ def upsert_prompt(
     datetime_aware: bool,
     prompt_id: int | None = None,
     personas: list[Persona] | None = None,
-    include_citations: bool = False,
     default_prompt: bool = True,
     # Support backwards compatibility
     description: str | None = None,
@@ -90,7 +89,6 @@ def upsert_prompt(
         prompt.description = description
         prompt.system_prompt = system_prompt
         prompt.task_prompt = task_prompt
-        prompt.include_citations = include_citations
         prompt.datetime_aware = datetime_aware
         prompt.default_prompt = default_prompt
 
@@ -106,7 +104,6 @@ def upsert_prompt(
             description=description,
             system_prompt=system_prompt,
             task_prompt=task_prompt,
-            include_citations=include_citations,
             datetime_aware=datetime_aware,
             default_prompt=default_prompt,
             personas=personas or [],

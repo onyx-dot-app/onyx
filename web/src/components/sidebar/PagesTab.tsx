@@ -247,7 +247,11 @@ export function PagesTab({
   );
 
   const renderChatSession = useCallback(
-    (chat: ChatSession, foldersExisting: boolean) => {
+    (
+      chat: ChatSession,
+      foldersExisting: boolean,
+      parentFolderName?: string
+    ) => {
       return (
         <div
           key={chat.id}
@@ -269,6 +273,7 @@ export function PagesTab({
             showDeleteModal={showDeleteModal}
             closeSidebar={closeSidebar}
             isDragging={isDraggingSessionId === chat.id}
+            parentFolderName={parentFolderName}
           />
         </div>
       );
@@ -326,7 +331,7 @@ export function PagesTab({
         <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
           <p>Chats</p>
 
-          <TooltipProvider delayDuration={1000}>
+          <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -424,7 +429,8 @@ export function PagesTab({
                       folder.chat_sessions.map((chat) =>
                         renderChatSession(
                           chat,
-                          folders != undefined && folders.length > 0
+                          folders != undefined && folders.length > 0,
+                          folder.folder_name
                         )
                       )}
                   </SortableFolder>
