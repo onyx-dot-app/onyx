@@ -360,9 +360,13 @@ class TestSlackBotFederatedSearch:
     ) -> None:
         """Setup get_channel_type_from_id mock to return correct channel types"""
 
+<<<<<<< HEAD
         def mock_channel_type_response(
             web_client: Mock, channel_id: str
         ) -> ChannelType:
+=======
+        def mock_channel_type_response(web_client: Mock, channel_id: str) -> str:
+>>>>>>> 2eda6367d (lint)
             if channel_id == "C1234567890":  # general - public
                 return ChannelType.PUBLIC_CHANNEL
             elif channel_id == "C1111111111":  # support - public
