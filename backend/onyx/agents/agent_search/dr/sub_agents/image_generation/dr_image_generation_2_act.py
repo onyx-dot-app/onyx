@@ -72,13 +72,9 @@ def image_generation(
     for tool_response in image_tool.run(prompt=branch_query):
         if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
             # Stream heartbeat to frontend
-            heartbeat_data = tool_response.response
             write_custom_event(
                 state.current_step_nr,
-                ImageGenerationToolHeartbeat(
-                    status=heartbeat_data.get("status", "generating"),
-                    heartbeat_count=heartbeat_data.get("heartbeat", 0),
-                ),
+                ImageGenerationToolHeartbeat(),
                 writer,
             )
         elif tool_response.id == IMAGE_GENERATION_RESPONSE_ID:

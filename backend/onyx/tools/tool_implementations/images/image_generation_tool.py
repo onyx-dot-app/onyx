@@ -343,7 +343,7 @@ class ImageGenerationTool(Tool[None]):
             # Yield a heartbeat packet to prevent timeout
             yield ToolResponse(
                 id=IMAGE_GENERATION_HEARTBEAT_ID,
-                response={"status": "generating", "heartbeat": heartbeat_count},
+                response=None,
             )
             heartbeat_count += 1
 
