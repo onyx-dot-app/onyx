@@ -187,6 +187,8 @@ services:
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       - BING_API_KEY=${BING_API_KEY:-}
       - EXA_API_KEY=${EXA_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
       - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
