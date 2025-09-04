@@ -42,7 +42,7 @@ YES_IMAGE_GENERATION = "Yes Image Generation"
 SKIP_IMAGE_GENERATION = "Skip Image Generation"
 
 # Heartbeat interval in seconds to prevent timeouts
-HEARTBEAT_INTERVAL = 2.0
+HEARTBEAT_INTERVAL = 5.0
 
 IMAGE_GENERATION_TEMPLATE = f"""
 Given the conversation history and a follow up query, determine if the system should call \
