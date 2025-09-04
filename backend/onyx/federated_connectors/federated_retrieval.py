@@ -58,9 +58,27 @@ def get_federated_retrieval_functions(
         try:
             logger.info("Fetching Slack bots...")
             slack_bots = fetch_slack_bots(db_session)
-            tenant_slack_bot = next((bot for bot in slack_bots if bot.enabled), None)
+            logger.info(f"Found {len(slack_bots)} Slack bots")
 
-            if tenant_slack_bot and tenant_slack_bot.user_token:
+            # First try to find a bot with user_token (preferred for full functionality)
+            tenant_slack_bot = next(
+                (bot for bot in slack_bots if bot.enabled and bot.user_token), None
+            )
+            if tenant_slack_bot:
+                logger.info(f"Selected bot with user_token: {tenant_slack_bot.name}")
+            else:
+                # Fall back to any enabled bot (may have limited functionality)
+                tenant_slack_bot = next(
+                    (bot for bot in slack_bots if bot.enabled), None
+                )
+                if tenant_slack_bot:
+                    logger.info(
+                        f"Selected bot without user_token: {tenant_slack_bot.name} (limited functionality)"
+                    )
+                else:
+                    logger.warning("No enabled Slack bots found")
+
+            if tenant_slack_bot:
                 # For Slack bot context, we'll determine search scope in slack_retrieval
                 # based on the current Slack event context
 
@@ -68,9 +86,18 @@ def get_federated_retrieval_functions(
 
                 # Create a wrapper that properly handles session and context
                 def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
+                    # Use user_token if available, otherwise fall back to bot_token
+                    access_token = (
+                        tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                    )
+                    if not tenant_slack_bot.user_token:
+                        logger.warning(
+                            f"Using bot_token for Slack search (limited functionality): {tenant_slack_bot.name}"
+                        )
+
                     result = slack_retrieval(
                         query=query,
-                        access_token=tenant_slack_bot.user_token or "",
+                        access_token=access_token,
                         db_session=get_session_with_current_tenant().__enter__(),
                         limit=MAX_FEDERATED_CHUNKS,
                         slack_event_context=slack_context,  # Captured from outer scope
