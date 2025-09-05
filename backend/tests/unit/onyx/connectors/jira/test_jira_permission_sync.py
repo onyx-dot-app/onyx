@@ -5,6 +5,7 @@ import pytest
 
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.db.models import ConnectorCredentialPair
 
 
@@ -47,6 +48,10 @@ def test_jira_permission_sync(
 ) -> None:
     with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
         mock_build_client.return_value = jira_connector._jira_client
+        jira_connector._jira_client._options = MagicMock()
+        jira_connector._jira_client._options.return_value = {
+            "rest_api_version": JIRA_SERVER_API_VERSION
+        }
 
         for doc in jira_doc_sync(
             cc_pair=mock_jira_cc_pair,
