@@ -932,10 +932,6 @@ export function ChatPage({
                 duration-300
                 ease-in-out
                 bg-transparent
-                transition-all
-                duration-300
-                ease-in-out
-                h-full
                 ${
                   documentSidebarVisible && !settings?.isMobile
                     ? "w-[400px]"
