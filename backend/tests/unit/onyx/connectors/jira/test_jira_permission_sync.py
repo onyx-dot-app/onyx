@@ -48,6 +48,7 @@ def test_jira_permission_sync(
 ) -> None:
     with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
         mock_build_client.return_value = jira_connector._jira_client
+        assert jira_connector._jira_client is not None
         jira_connector._jira_client._options = MagicMock()
         jira_connector._jira_client._options.return_value = {
             "rest_api_version": JIRA_SERVER_API_VERSION
