@@ -19,6 +19,7 @@ from onyx.db.models import SlackBot
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.onyxbot.slack.listener import process_message
+from onyx.onyxbot.slack.models import ChannelType
 from onyx.tools.built_in_tools import get_search_tool
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -80,7 +81,9 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     return persona_with_prompts
 
 
-def _create_mock_slack_request(text: str, channel_id: str = "C1234567890") -> Mock:
+def _create_mock_slack_request(
+    text: str, channel_id: str = "C1234567890", slack_bot_id: int = 12345
+) -> Mock:
     """Create a mock Slack request"""
     mock_req = Mock()
     mock_req.type = "events_api"
@@ -94,14 +97,16 @@ def _create_mock_slack_request(text: str, channel_id: str = "C1234567890") -> Mo
             "ts": "1234567890.123456",
         }
     }
-    mock_req.slack_bot_id = 12345
+    mock_req.slack_bot_id = slack_bot_id
     return mock_req
 
 
-def _create_mock_slack_client(channel_id: str = "C1234567890") -> Mock:
+def _create_mock_slack_client(
+    channel_id: str = "C1234567890", slack_bot_id: int = 12345
+) -> Mock:
     """Create a mock Slack client"""
     mock_client = Mock()
-    mock_client.slack_bot_id = 12345
+    mock_client.slack_bot_id = slack_bot_id
     mock_client.web_client = Mock()
 
     mock_post_message_response = {"ok": True, "message_ts": "1234567890.123456"}
@@ -355,17 +360,19 @@ class TestSlackBotFederatedSearch:
     ) -> None:
         """Setup get_channel_type_from_id mock to return correct channel types"""
 
-        def mock_channel_type_response(web_client: Mock, channel_id: str) -> str:
+        def mock_channel_type_response(
+            web_client: Mock, channel_id: str
+        ) -> ChannelType:
             if channel_id == "C1234567890":  # general - public
-                return "public_channel"
+                return ChannelType.PUBLIC_CHANNEL
             elif channel_id == "C1111111111":  # support - public
-                return "public_channel"
+                return ChannelType.PUBLIC_CHANNEL
             elif channel_id == "C9999999999":  # dev-team - private
-                return "private_channel"
+                return ChannelType.PRIVATE_CHANNEL
             elif channel_id == "D1234567890":  # DM
-                return "im"
+                return ChannelType.IM
             else:
-                return "public_channel"  # default
+                return ChannelType.PUBLIC_CHANNEL  # default
 
         mock_get_channel_type_from_id.side_effect = mock_channel_type_response
 
@@ -376,7 +383,9 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_public_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in public channel sees only public channel messages"""
-        self._setup_test_environment(db_session)
+        user, persona, federated_connector, slack_bot, slack_channel_config = (
+            self._setup_test_environment(db_session)
+        )
 
         channel_id = "C1234567890"  # #general (public)
         channel_name = "general"
@@ -385,9 +394,9 @@ class TestSlackBotFederatedSearch:
 
         try:
             mock_req = _create_mock_slack_request(
-                "search for performance issues", channel_id
+                "search for performance issues", channel_id, slack_bot.id
             )
-            mock_client = _create_mock_slack_client(channel_id)
+            mock_client = _create_mock_slack_client(channel_id, slack_bot.id)
 
             process_message(mock_req, mock_client)
 
@@ -421,7 +430,9 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_private_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in private channel sees private + public channel messages"""
-        self._setup_test_environment(db_session)
+        user, persona, federated_connector, slack_bot, slack_channel_config = (
+            self._setup_test_environment(db_session)
+        )
 
         channel_id = "C9999999999"  # #dev-team (private)
         channel_name = "dev-team"
@@ -430,9 +441,9 @@ class TestSlackBotFederatedSearch:
 
         try:
             mock_req = _create_mock_slack_request(
-                "search for performance issues", channel_id
+                "search for performance issues", channel_id, slack_bot.id
             )
-            mock_client = _create_mock_slack_client(channel_id)
+            mock_client = _create_mock_slack_client(channel_id, slack_bot.id)
 
             process_message(mock_req, mock_client)
 
@@ -466,7 +477,9 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_dm_filtering(self, db_session: Session) -> None:
         """Test that slack bot in DM sees all messages (no filtering)"""
-        self._setup_test_environment(db_session)
+        user, persona, federated_connector, slack_bot, slack_channel_config = (
+            self._setup_test_environment(db_session)
+        )
 
         channel_id = "D1234567890"  # DM
         channel_name = "directmessage"
@@ -475,9 +488,9 @@ class TestSlackBotFederatedSearch:
 
         try:
             mock_req = _create_mock_slack_request(
-                "search for performance issues", channel_id
+                "search for performance issues", channel_id, slack_bot.id
             )
-            mock_client = _create_mock_slack_client(channel_id)
+            mock_client = _create_mock_slack_client(channel_id, slack_bot.id)
 
             process_message(mock_req, mock_client)
 

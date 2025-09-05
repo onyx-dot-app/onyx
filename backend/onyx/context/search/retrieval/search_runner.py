@@ -30,6 +30,7 @@ from onyx.document_index.vespa.shared_utils.utils import (
 from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
 )
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -329,7 +330,7 @@ def retrieve_chunks(
     retrieval_metrics_callback: (
         Callable[[RetrievalMetricsContainer], None] | None
     ) = None,
-    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+    slack_context: SlackContext | None = None,
 ) -> list[InferenceChunk]:
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
@@ -341,13 +342,6 @@ def retrieve_chunks(
     )
 
     # Federated retrieval
-    if slack_context:
-        logger.info(
-            f"retrieve_chunks: Passing Slack context to federated retrieval: {slack_context}"
-        )
-    else:
-        logger.info("retrieve_chunks: No Slack context to pass to federated retrieval")
-
     federated_retrieval_infos = get_federated_retrieval_functions(
         db_session,
         user_id,

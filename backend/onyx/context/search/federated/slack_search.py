@@ -28,6 +28,8 @@ from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
+from onyx.onyxbot.slack.models import ChannelType
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -409,9 +411,7 @@ def slack_retrieval(
     access_token: str,
     db_session: Session,
     limit: int | None = None,
-    slack_event_context: (
-        dict[str, str] | None
-    ) = None,  # Add Slack event context parameter
+    slack_event_context: SlackContext | None = None,
     bot_token: str | None = None,  # Add bot token parameter
 ) -> list[InferenceChunk]:
     # query slack
@@ -422,13 +422,11 @@ def slack_retrieval(
     allowed_private_channel = None
 
     if slack_event_context:
-        channel_type = slack_event_context.get(
-            "channel_type"
-        )  # "im", "private_channel", "public_channel"
-        if channel_type == "im":  # DM with user
+        channel_type = slack_event_context.channel_type
+        if channel_type == ChannelType.IM:  # DM with user
             include_dm = True
-        if channel_type == "private_channel":
-            allowed_private_channel = slack_event_context.get("channel_id")
+        if channel_type == ChannelType.PRIVATE_CHANNEL:
+            allowed_private_channel = slack_event_context.channel_id
             logger.info(
                 f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
             )
@@ -450,19 +448,8 @@ def slack_retrieval(
             for query_string in query_strings
         ]
     )
-
     slack_messages, docid_to_message = merge_slack_messages(results)
     slack_messages = slack_messages[: limit or len(slack_messages)]
-
-    # Debug: Log what Slack messages we have
-    logger.info(
-        f"slack_retrieval: Total Slack messages after merge: {len(slack_messages)}"
-    )
-    for i, msg in enumerate(slack_messages):
-        logger.info(
-            f"slack_retrieval: Message {i+1}: channel={msg.channel_id}, content={msg.text[:100]}..."
-        )
-
     if not slack_messages:
         return []
 

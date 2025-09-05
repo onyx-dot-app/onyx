@@ -36,6 +36,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.llm.interfaces import LLM
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.agentic_evaluation import evaluate_inference_section
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
@@ -65,7 +66,7 @@ class SearchPipeline:
         rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
         prompt_config: PromptConfig | None = None,
         contextual_pruning_config: ContextualPruningConfig | None = None,
-        slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+        slack_context: SlackContext | None = None,
     ):
         # NOTE: The Search Request contains a lot of fields that are overrides, many of them can be None
         # and typically are None. The preprocessing will fetch default values to replace these empty overrides.
@@ -85,7 +86,7 @@ class SearchPipeline:
         self.contextual_pruning_config: ContextualPruningConfig | None = (
             contextual_pruning_config
         )
-        self.slack_context: dict[str, str] | None = slack_context
+        self.slack_context: SlackContext | None = slack_context
 
         # Preprocessing steps generate this
         self._search_query: SearchQuery | None = None

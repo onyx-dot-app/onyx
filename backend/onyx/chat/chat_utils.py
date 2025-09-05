@@ -41,6 +41,7 @@ from onyx.kg.setup.kg_default_entity_definitions import (
 )
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
@@ -63,7 +64,7 @@ def prepare_chat_message_request(
     db_session: Session,
     use_agentic_search: bool = False,
     skip_gen_ai_answer_generation: bool = False,
-    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+    slack_context: SlackContext | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
