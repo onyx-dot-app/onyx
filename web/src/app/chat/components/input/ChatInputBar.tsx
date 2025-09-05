@@ -330,7 +330,9 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 
   return (
     <div id="onyx-chat-input">
-      <div className="flex  justify-center mx-auto">
+      <div
+        className={`flex  justify-center mx-auto ${bannerMessage ? "mt-4" : ""}`}
+      >
         <div
           className="
             max-w-full

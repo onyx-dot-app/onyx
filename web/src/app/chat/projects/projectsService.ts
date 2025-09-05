@@ -2,7 +2,7 @@ import { Prompt } from "@/app/admin/assistants/interfaces";
 import { ChatFileType, ChatSession } from "../interfaces";
 
 export interface Project {
-  id: string;
+  id: number;
   name: string;
   description: string | null;
   created_at: string;
@@ -19,7 +19,7 @@ export interface CategorizedFiles {
 export interface ProjectFile {
   id: string;
   name: string;
-  project_id: string | number | null;
+  project_id: number | null;
   user_id: string | null;
   file_id: string;
   created_at: string;
@@ -67,7 +67,7 @@ export async function createProject(name: string): Promise<Project> {
 
 export async function uploadFiles(
   files: File[],
-  projectId?: string | number | null
+  projectId?: number | null
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
@@ -97,7 +97,7 @@ export async function getRecentFiles(): Promise<ProjectFile[]> {
 }
 
 export async function getFilesInProject(
-  projectId: string
+  projectId: number
 ): Promise<ProjectFile[]> {
   const response = await fetch(`/api/user/projects/files/${projectId}`);
   if (!response.ok) {
@@ -106,7 +106,7 @@ export async function getFilesInProject(
   return response.json();
 }
 
-export async function getProject(projectId: string): Promise<Project> {
+export async function getProject(projectId: number): Promise<Project> {
   const response = await fetch(`/api/user/projects/${projectId}`);
   if (!response.ok) {
     throw new Error("Failed to fetch project");
@@ -114,8 +114,34 @@ export async function getProject(projectId: string): Promise<Project> {
   return response.json();
 }
 
+export async function renameProject(
+  projectId: number,
+  name: string
+): Promise<Project> {
+  const response = await fetch(`/api/user/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).detail || "Failed to rename project");
+  }
+  return response.json();
+}
+
+export async function deleteProject(projectId: number): Promise<void> {
+  const response = await fetch(`/api/user/projects/${projectId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).detail || "Failed to delete project");
+  }
+}
+
 export async function getProjectInstructions(
-  projectId: string
+  projectId: number
 ): Promise<Prompt | null> {
   const response = await fetch(`/api/user/projects/${projectId}/instructions`);
   if (!response.ok) {
@@ -126,7 +152,7 @@ export async function getProjectInstructions(
 }
 
 export async function upsertProjectInstructions(
-  projectId: string,
+  projectId: number,
   instructions: string
 ): Promise<Prompt> {
   const response = await fetch(`/api/user/projects/${projectId}/instructions`, {
@@ -144,13 +170,26 @@ export async function upsertProjectInstructions(
 }
 
 export async function getProjectDetails(
-  projectId: string
+  projectId: number
 ): Promise<ProjectDetails> {
   const response = await fetch(`/api/user/projects/${projectId}/details`);
   if (!response.ok) {
     throw new Error("Failed to fetch project details");
   }
   return response.json();
+}
+
+export async function deleteUserFile(fileId: string): Promise<void> {
+  const response = await fetch(
+    `/api/user/projects/file/${encodeURIComponent(fileId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).detail || "Failed to delete file");
+  }
 }
 
 export async function getSessionProjectTokenCount(
@@ -181,6 +220,23 @@ export async function moveChatSession(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error((errorData as any).detail || "Failed to move chat session");
+  }
+  return response.ok;
+}
+
+export async function removeChatSessionFromProject(
+  chatSessionId: string
+): Promise<boolean> {
+  const response = await fetch(`/api/user/projects/remove_chat_session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_session_id: chatSessionId }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as any).detail || "Failed to remove chat session from project"
+    );
   }
   return response.ok;
 }

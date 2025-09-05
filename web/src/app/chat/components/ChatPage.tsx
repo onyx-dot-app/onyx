@@ -87,6 +87,8 @@ import { MessagesDisplay } from "./MessagesDisplay";
 import ProjectContextPanel from "./projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 
+import ProjectChatSessionList from "./projects/ProjectChatSessionList";
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -263,7 +265,7 @@ export function ChatPage({
     const projectId = searchParams?.get("projectid");
     if (projectId) {
       console.log("setting project id", projectId);
-      setCurrentProjectId(projectId);
+      setCurrentProjectId(parseInt(projectId));
     } else {
       console.log("clearing project id");
       setCurrentProjectId(null);
@@ -273,6 +275,8 @@ export function ChatPage({
   const [message, setMessage] = useState(
     searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
   );
+
+  const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
@@ -690,6 +694,7 @@ export function ChatPage({
   }, []);
 
   const handleChatInputSubmit = useCallback(() => {
+    setProjectPanelVisible(false);
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
@@ -721,6 +726,19 @@ export function ChatPage({
     !isFetchingChatMessages &&
     !loadingError &&
     !submittedMessage;
+
+  // Only show the centered hero layout when there is NO project selected
+  // and there are no messages yet. If a project is selected, prefer a top layout.
+  const showCenteredHero = currentProjectId === null && showCenteredInput;
+
+  useEffect(() => {
+    if (currentProjectId !== null && showCenteredInput) {
+      setProjectPanelVisible(true);
+    }
+    if (!showCenteredInput) {
+      setProjectPanelVisible(false);
+    }
+  }, [currentProjectId, showCenteredInput]);
 
   // handle error case where no assistants are available
   if (noAssistants) {
@@ -991,13 +1009,6 @@ export function ChatPage({
                   hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
-              {currentProjectId !== null && (
-                <div
-                  className={`transition-all duration-300 ease-in-out ${sidebarVisible ? "ml-[200px]" : "ml-[0px]"}`}
-                >
-                  <ProjectContextPanel />
-                </div>
-              )}
 
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
@@ -1088,9 +1099,11 @@ export function ChatPage({
                         <div
                           ref={inputRef}
                           className={`absolute pointer-events-none z-10 w-full ${
-                            showCenteredInput
+                            showCenteredHero
                               ? "inset-0"
-                              : "bottom-0 left-0 right-0 translate-y-0"
+                              : currentProjectId !== null && showCenteredInput
+                                ? "top-0 left-0 right-0"
+                                : "bottom-0 left-0 right-0 translate-y-0"
                           }`}
                         >
                           {!showCenteredInput && aboveHorizon && (
@@ -1106,12 +1119,12 @@ export function ChatPage({
 
                           <div
                             className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
-                              showCenteredInput
+                              showCenteredHero
                                 ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
                                 : "mb-8"
                             }`}
                           >
-                            {showCenteredInput && (
+                            {showCenteredHero && (
                               <div
                                 data-testid="chat-intro"
                                 className="row-start-1 self-end flex text-text-800 justify-center mb-8 transition-opacity duration-300"
@@ -1127,8 +1140,19 @@ export function ChatPage({
                               </div>
                             )}
                             <div
-                              className={showCenteredInput ? "row-start-2" : ""}
+                              className={showCenteredHero ? "row-start-2" : ""}
                             >
+                              {currentProjectId !== null && (
+                                <div
+                                  className={`transition-all duration-700 ease-out ${
+                                    projectPanelVisible
+                                      ? "opacity-100 translate-y-0"
+                                      : "opacity-0 translate-y-6 pointer-events-none"
+                                  }`}
+                                >
+                                  <ProjectContextPanel />
+                                </div>
+                              )}
                               <ChatInputBar
                                 deepResearchEnabled={deepResearchEnabled}
                                 toggleDeepResearch={toggleDeepResearch}
@@ -1158,10 +1182,16 @@ export function ChatPage({
                               />
                             </div>
 
+                            {currentProjectId !== null && (
+                              <div className="transition-all duration-700 ease-out">
+                                <ProjectChatSessionList />
+                              </div>
+                            )}
+
                             {liveAssistant.starter_messages &&
                               liveAssistant.starter_messages.length > 0 &&
                               messageHistory.length === 0 &&
-                              showCenteredInput && (
+                              showCenteredHero && (
                                 <div className="mt-6 row-start-3">
                                   <StarterMessageDisplay
                                     starterMessages={

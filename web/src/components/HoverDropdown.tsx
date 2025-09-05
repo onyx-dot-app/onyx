@@ -15,6 +15,7 @@ interface HoverDropdownProps {
   onItemClick: (item: DropdownItem) => void;
   className?: string;
   dropdownClassName?: string;
+  emptyMessage?: string;
 }
 
 export const HoverDropdown: FC<HoverDropdownProps> = ({
@@ -23,6 +24,7 @@ export const HoverDropdown: FC<HoverDropdownProps> = ({
   onItemClick,
   className = "",
   dropdownClassName = "",
+  emptyMessage = "No items to show",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -99,14 +101,15 @@ export const HoverDropdown: FC<HoverDropdownProps> = ({
             ${dropdownClassName}
           `}
         >
-          {items.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => {
-                onItemClick(item);
-                setIsOpen(false);
-              }}
-              className={`
+          {items.length > 0 ? (
+            items.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => {
+                  onItemClick(item);
+                  setIsOpen(false);
+                }}
+                className={`
                 flex
                 mx-1
                 px-2
@@ -120,20 +123,25 @@ export const HoverDropdown: FC<HoverDropdownProps> = ({
                 text-text-dark
                 hover:bg-accent-background-hovered
               `}
-            >
-              <div>
-                <div className="flex">
-                  <FiFolder size={16} className="mr-2 h-4 w-4 my-auto" />
-                  {item.label}
-                </div>
-                {item.description && (
-                  <div className="text-xs text-text-500">
-                    {item.description}
+              >
+                <div>
+                  <div className="flex">
+                    <FiFolder size={16} className="mr-2 h-4 w-4 my-auto" />
+                    {item.label}
                   </div>
-                )}
+                  {item.description && (
+                    <div className="text-xs text-text-500">
+                      {item.description}
+                    </div>
+                  )}
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="text-sm px-3 py-1.5 text-text-500">
+              {emptyMessage}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
