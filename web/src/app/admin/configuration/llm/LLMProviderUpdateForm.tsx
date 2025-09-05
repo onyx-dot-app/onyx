@@ -58,6 +58,13 @@ export function LLMProviderUpdateForm({
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
+    // For Azure OpenAI, combine api_base and api_version into target_uri
+    target_uri:
+      llmProviderDescriptor.name === "azure" &&
+      existingLlmProvider?.api_base &&
+      existingLlmProvider?.api_version
+        ? `${existingLlmProvider.api_base}/openai/deployments/your-deployment?api-version=${existingLlmProvider.api_version}`
+        : "",
     default_model_name:
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
@@ -98,12 +105,42 @@ export function LLMProviderUpdateForm({
     api_key: llmProviderDescriptor.api_key_required
       ? Yup.string().required("API Key is required")
       : Yup.string(),
-    api_base: llmProviderDescriptor.api_base_required
-      ? Yup.string().required("API Base is required")
-      : Yup.string(),
-    api_version: llmProviderDescriptor.api_version_required
-      ? Yup.string().required("API Version is required")
-      : Yup.string(),
+    api_base:
+      llmProviderDescriptor.api_base_required &&
+      llmProviderDescriptor.name !== "azure"
+        ? Yup.string().required("API Base is required")
+        : Yup.string(),
+    api_version:
+      llmProviderDescriptor.api_version_required &&
+      llmProviderDescriptor.name !== "azure"
+        ? Yup.string().required("API Version is required")
+        : Yup.string(),
+    target_uri:
+      llmProviderDescriptor.name === "azure"
+        ? Yup.string()
+            .required("Target URI is required")
+            .test(
+              "valid-target-uri",
+              "Target URI must be a valid URL with exactly one query parameter (api-version)",
+              (value) => {
+                if (!value) return false;
+                try {
+                  const url = new URL(value);
+                  const params = new URLSearchParams(url.search);
+                  const paramKeys = Array.from(params.keys());
+
+                  // Check if there's exactly one parameter and it's api-version
+                  return (
+                    paramKeys.length === 1 &&
+                    paramKeys[0] === "api-version" &&
+                    !!params.get("api-version")
+                  );
+                } catch {
+                  return false;
+                }
+              }
+            )
+        : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
       ? {
           custom_config: Yup.object(
@@ -153,12 +190,30 @@ export function LLMProviderUpdateForm({
         const {
           selected_model_names: visibleModels,
           model_configurations: modelConfigurations,
+          target_uri,
           ...rest
         } = values;
+
+        // For Azure OpenAI, parse target_uri to extract api_base and api_version
+        let finalApiBase = rest.api_base;
+        let finalApiVersion = rest.api_version;
+
+        if (llmProviderDescriptor.name === "azure" && target_uri) {
+          try {
+            const url = new URL(target_uri);
+            finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
+            finalApiVersion = url.searchParams.get("api-version") || "";
+          } catch (error) {
+            // This should not happen due to validation, but handle gracefully
+            console.error("Failed to parse target_uri:", error);
+          }
+        }
 
         // Create the final payload with proper typing
         const finalValues = {
           ...rest,
+          api_base: finalApiBase,
+          api_version: finalApiVersion,
           api_key_changed: values.api_key !== initialValues.api_key,
           model_configurations: llmProviderDescriptor.model_configurations.map(
             (modelConfiguration): ModelConfigurationUpsertRequest => ({
@@ -290,22 +345,34 @@ export function LLMProviderUpdateForm({
             />
           )}
 
-          {llmProviderDescriptor.api_base_required && (
+          {llmProviderDescriptor.name === "azure" ? (
             <TextFormField
               small={firstTimeConfiguration}
-              name="api_base"
-              label="API Base"
-              placeholder="API Base"
+              name="target_uri"
+              label="Target URI"
+              placeholder="https://your-resource.openai.azure.com/openai/deployments/your-deployment?api-version=2024-02-15-preview"
+              subtext="The complete Azure OpenAI endpoint URL including the API version as a query parameter"
             />
-          )}
+          ) : (
+            <>
+              {llmProviderDescriptor.api_base_required && (
+                <TextFormField
+                  small={firstTimeConfiguration}
+                  name="api_base"
+                  label="API Base"
+                  placeholder="API Base"
+                />
+              )}
 
-          {llmProviderDescriptor.api_version_required && (
-            <TextFormField
-              small={firstTimeConfiguration}
-              name="api_version"
-              label="API Version"
-              placeholder="API Version"
-            />
+              {llmProviderDescriptor.api_version_required && (
+                <TextFormField
+                  small={firstTimeConfiguration}
+                  name="api_version"
+                  label="API Version"
+                  placeholder="API Version"
+                />
+              )}
+            </>
           )}
 
           {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => {
