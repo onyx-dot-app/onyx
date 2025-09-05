@@ -36,12 +36,6 @@ export async function addAssistantToList(
   return updateAssistantVisibility(assistantId, true);
 }
 
-export async function removeAssistantFromList(
-  assistantId: number
-): Promise<boolean> {
-  return updateAssistantVisibility(assistantId, false);
-}
-
 export async function moveAssistantUp(
   assistantId: number,
   chosenAssistants: number[]
