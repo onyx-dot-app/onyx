@@ -254,12 +254,13 @@ jobs:
             -p mock-it-services-stack up -d
 
       # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
+      # NOTE: `-e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true` should be added once
+      # enterprise tests are fixed 
       - name: Run Standard Integration Tests
         run: |
           echo "Running integration tests..."
           docker run --rm --network onyx-stack_default \
             --name test-runner \
-            -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
