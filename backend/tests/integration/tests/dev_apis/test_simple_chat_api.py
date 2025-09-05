@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from onyx.configs.constants import MessageType
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
@@ -15,7 +16,9 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
+from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.conftest import DocumentBuilderType
 
 
 @pytest.mark.skipif(
@@ -245,3 +248,35 @@ def test_send_message_simple_with_history_strict_json(
         assert isinstance(parsed_answer_citationless, dict)
     except json.JSONDecodeError:
         assert False, "The answer_citationless is not a valid JSON object"
+
+
+def test_answer_with_citation_api(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+    document_builder: DocumentBuilderType,
+) -> None:
+
+    # create docs
+    docs = document_builder(["Chris' favorite color is green"])
+
+    # send a message
+    response = requests.post(
+        f"{API_SERVER_URL}/query/answer-with-citation",
+        json={
+            "messages": [
+                {
+                    "message": "What is Chris' favorite color?",
+                    "role": MessageType.USER.value,
+                }
+            ],
+            "persona_id": 0,
+        },
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    assert response.status_code == 200
+    response_json = response.json()
+    assert response_json["answer"]
+    assert response_json["citations"] == [
+        CitationInfo(citation_num=0, document_id=docs[0].id).model_dump()
+    ]

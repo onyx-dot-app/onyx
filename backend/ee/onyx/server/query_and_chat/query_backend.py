@@ -8,7 +8,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.chat.process_message import gather_stream_for_answer_api
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
@@ -22,6 +21,8 @@ from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import PersonaOverrideConfig
+from onyx.chat.models import QADocsResponse
+from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.models import SavedSearchDocWithContent
@@ -39,6 +40,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 
@@ -218,12 +220,28 @@ def get_answer_with_citation(
 ) -> OneShotQAResponse:
     try:
         packets = get_answer_stream(request, user, db_session)
-        answer = gather_stream_for_answer_api(packets)
+        answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
 
-        return answer
+        return OneShotQAResponse(
+            answer=answer.answer,
+            chat_message_id=answer.message_id,
+            error_msg=answer.error_msg,
+            citations=[
+                CitationInfo(citation_num=i, document_id=doc_id)
+                for i, doc_id in answer.cited_documents.items()
+            ],
+            docs=QADocsResponse(
+                top_documents=answer.top_documents,
+                predicted_flow=None,
+                predicted_search=None,
+                applied_source_filters=None,
+                applied_time_cutoff=None,
+                recency_bias_multiplier=0.0,
+            ),
+        )
     except Exception as e:
         logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")

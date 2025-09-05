@@ -196,6 +196,5 @@ class OneShotQAResponse(BaseModel):
     rephrase: str | None = None
     citations: list[CitationInfo] | None = None
     docs: QADocsResponse | None = None
-    llm_selected_doc_indices: list[int] | None = None
     error_msg: str | None = None
     chat_message_id: int | None = None

@@ -1,24 +1,33 @@
 import os
+from collections.abc import Callable
 
 import pytest
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.managers.api_key import APIKeyManager
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import SimpleTestDocument
 from tests.integration.common_utils.vespa import vespa_fixture
 
 BASIC_USER_NAME = "basic_user"
+
+DocumentBuilderType = Callable[[list[str]], list[SimpleTestDocument]]
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -161,6 +170,34 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser | None) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture
+def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
+    api_key: DATestAPIKey = APIKeyManager.create(
+        user_performing_action=admin_user,
+    )
+
+    # create connector
+    cc_pair_1 = CCPairManager.create_from_scratch(
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+
+    def _document_builder(contents: list[str]) -> list[SimpleTestDocument]:
+        # seed documents
+        docs: list[SimpleTestDocument] = [
+            DocumentManager.seed_doc_with_content(
+                cc_pair=cc_pair_1,
+                content=content,
+                api_key=api_key,
+            )
+            for content in contents
+        ]
+
+        return docs
+
+    return _document_builder
 
 
 def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
