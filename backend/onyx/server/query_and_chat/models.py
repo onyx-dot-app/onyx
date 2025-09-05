@@ -22,6 +22,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolCallFinalResult
 
@@ -148,8 +149,8 @@ class CreateChatMessageRequest(ChunkContext):
     # List of tool IDs we MUST use.
     forced_tool_ids: list[int] | None = None
 
-    # Slack context for federated search (channel_type, channel_id, user_id)
-    slack_context: dict[str, str] | None = None
+    # Slack context for federated search
+    slack_context: SlackContext | None = None
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":

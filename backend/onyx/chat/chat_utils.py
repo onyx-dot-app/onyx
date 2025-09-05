@@ -42,6 +42,7 @@ from onyx.kg.setup.kg_default_entity_definitions import (
 from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -66,7 +67,7 @@ def prepare_chat_message_request(
     skip_gen_ai_answer_generation: bool = False,
     llm_override: LLMOverride | None = None,
     allowed_tool_ids: list[int] | None = None,
-    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+    slack_context: SlackContext | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(

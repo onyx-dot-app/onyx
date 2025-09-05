@@ -82,6 +82,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
@@ -881,11 +882,11 @@ def build_request_details(
         # Get proper channel type from Slack API instead of relying on event.channel_type
         channel_type = get_channel_type_from_id(client.web_client, channel)
 
-        slack_context = {
-            "channel_type": channel_type,
-            "channel_id": channel,
-            "user_id": sender_id or "unknown",
-        }
+        slack_context = SlackContext(
+            channel_type=channel_type,
+            channel_id=channel,
+            user_id=sender_id or "unknown",
+        )
         logger.info(f"build_request_details: Capturing Slack context: {slack_context}")
 
         if thread_ts != message_ts and thread_ts is not None:
@@ -939,11 +940,11 @@ def build_request_details(
         # Get proper channel type for slash commands too
         channel_type = get_channel_type_from_id(client.web_client, channel)
 
-        slack_context = {
-            "channel_type": channel_type,
-            "channel_id": channel,
-            "user_id": sender,
-        }
+        slack_context = SlackContext(
+            channel_type=channel_type,
+            channel_id=channel,
+            user_id=sender,
+        )
         logger.info(
             f"build_request_details: Capturing Slack context for slash command: {slack_context}"
         )

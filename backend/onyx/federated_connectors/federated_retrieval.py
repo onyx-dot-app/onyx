@@ -20,6 +20,7 @@ from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -37,7 +38,7 @@ def get_federated_retrieval_functions(
     user_id: UUID | None,
     source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
-    slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+    slack_context: SlackContext | None = None,
 ) -> list[FederatedRetrievalInfo]:
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
@@ -160,7 +161,6 @@ def get_federated_retrieval_functions(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
-
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
                 retrieval_function=lambda query: connector.search(
@@ -172,5 +172,4 @@ def get_federated_retrieval_functions(
                 source=oauth_token.federated_connector.source,
             )
         )
-
     return federated_retrieval_infos

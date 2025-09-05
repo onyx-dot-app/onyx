@@ -37,6 +37,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
@@ -106,7 +107,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         full_doc: bool = False,
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
-        slack_context: dict[str, str] | None = None,  # Add Slack context parameter
+        slack_context: SlackContext | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
