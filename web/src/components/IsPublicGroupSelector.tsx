@@ -85,10 +85,16 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             removeIndent={removeIndent}
             label={
               publicToWhom === "Curators"
-                ? `${i18n.t(k.MAKE_THIS)} ${objectName} ${i18n.t(
-                    k.CURATOR_ACCESSIBLE
-                  )}`
-                : `${i18n.t(k.MAKE_THIS)} ${objectName} ${i18n.t(k.PUBLIC2)}`
+                ? `${i18n.t(k.MAKE_THIS)} ${
+                    objectName === "document set"
+                      ? "набор документов"
+                      : objectName
+                  } ${i18n.t(k.CURATOR_ACCESSIBLE)}`
+                : `${i18n.t(k.MAKE_THIS)} ${
+                    objectName === "document set"
+                      ? "набор документов"
+                      : objectName
+                  } ${i18n.t(k.PUBLIC2)}`
             }
             disabled={!isAdmin}
             subtext={
@@ -106,8 +112,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                 {i18n.t(k.AND)}{" "}
                 <b>
                   {publicToWhom === "Users" ? "Пользователи" : publicToWhom}
-                </b>{" "}
-                {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}
+                </b>
+                {", "}
+                {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}{" "}
                 {objectName === "document set"
                   ? "набору документов"
                   : objectName}{" "}
@@ -124,7 +131,10 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
           <>
             <div className="flex mt-4 gap-x-2 items-center">
               <div className="block font-medium text-base">
-                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)} {objectName}
+                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)}{" "}
+                {objectName === "document set"
+                  ? "набора документов"
+                  : objectName}
               </div>
             </div>
             {userGroupsIsLoading ? (
@@ -133,13 +143,18 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               <Text className="mb-3">
                 {isAdmin || !enforceGroupSelection ? (
                   <>
-                    {i18n.t(k.THIS)} {objectName}{" "}
+                    {i18n.t(k.THIS)}{" "}
+                    {objectName === "document set"
+                      ? "набор документов"
+                      : objectName}{" "}
                     {i18n.t(k.WILL_BE_VISIBLE_ACCESSIBLE_BY)}
                   </>
                 ) : (
                   <>
                     {i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO1)}
-                    {objectName}
+                    {objectName === "document set"
+                      ? "набор документов"
+                      : objectName}
                   </>
                 )}
               </Text>

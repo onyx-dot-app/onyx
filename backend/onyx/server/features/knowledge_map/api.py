@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user, current_user
+from onyx.auth.users import current_admin_user, current_curator_or_admin_user, current_user
 from onyx.db.engine import get_session
 from onyx.db.knowledge_map import insert_knowledge_map, get_knowledge_map_list, delete_knowledge_map_by_id, \
     get_knowledge_map_by_id, update_knowledge_map, get_answers_by_knowledge_map_id
@@ -41,7 +41,7 @@ async def patch_knowledge_map(
 
 @router.get("/")
 async def get_all_knowledge_maps(
-        _: User | None = Depends(current_admin_user),
+        _: User | None = Depends(current_curator_or_admin_user),
         db_session: Session = Depends(get_session),
 ) -> list[KnowledgeMap]:
     knowledge_maps: list[KnowledgeMap] = []

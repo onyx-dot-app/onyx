@@ -248,14 +248,14 @@ export function UserDropdown({
                   <DropdownOption
                     href="/admin/indexing/status"
                     icon={<LightSettingsIcon size={16} className="my-auto" />}
-                    label="Панель администратора"
+                    label={i18n.t(k.ADMIN_PANEL_LABEL)}
                   />
                 ) : (
                   showCuratorPanel && (
                     <DropdownOption
                       href="/admin/indexing/status"
                       icon={<LightSettingsIcon size={16} className="my-auto" />}
-                      label="Панель куратора"
+                      label={i18n.t(k.CURATOR_PANEL_LABEL)}
                     />
                   )
                 )}
@@ -270,9 +270,25 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={toggleUserSettings}
                     icon={<UserIcon size={16} className="my-auto" />}
-                    label="Настройки пользователя"
+                    label={i18n.t(k.USER_SETTINGS_LABEL)}
                   />
                 )}
+                <DropdownOption
+                  onClick={() => {
+                    const nextLang = i18n.language === "ru" ? "en" : "ru";
+                    i18n.changeLanguage(nextLang);
+                  }}
+                  icon={
+                    <span className="my-auto text-xs font-semibold">
+                      {i18n.language === "ru" ? "EN" : "RU"}
+                    </span>
+                  }
+                  label={
+                    i18n.language === "ru"
+                      ? "Switch to English"
+                      : "Переключить на русский"
+                  }
+                />
 
                 <DropdownOption
                   onClick={() => {
@@ -298,7 +314,7 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={handleLogout}
                     icon={<FiLogOut size={16} className="my-auto" />}
-                    label="Выйти"
+                    label={i18n.t(k.LOGOUT_LABEL)}
                   />
                 )}
               </>
