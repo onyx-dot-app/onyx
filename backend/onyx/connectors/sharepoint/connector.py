@@ -185,12 +185,13 @@ def _convert_driveitem_to_document_with_permissions(
     ctx: ClientContext | None,
     graph_client: GraphClient,
     include_permissions: bool = False,
-) -> Document:
+) -> Document | None:
 
-    if driveitem.name is None:
-        raise ValueError("DriveItem name is required")
-    if driveitem.id is None:
-        raise ValueError("DriveItem ID is required")
+    if not driveitem.name or not driveitem.id:
+        raise ValueError("DriveItem name/id is required")
+
+    if include_permissions and ctx is None:
+        raise ValueError("ClientContext is required for permissions")
 
     try:
         # Access size from the JSON representation since it's not exposed as a direct attribute
@@ -204,14 +205,7 @@ def _convert_driveitem_to_document_with_permissions(
                     f"File size: {file_size} bytes. Skipping."
                 )
 
-                return Document(
-                    id=driveitem.id,
-                    sections=[],
-                    source=DocumentSource.SHAREPOINT,
-                    semantic_identifier="",
-                    external_access=ExternalAccess.empty(),
-                    metadata={},
-                )
+                return None  # Skip files that exceed the size threshold
         else:
             logger.warning(
                 f"Could not access file size for '{driveitem.name}' Proceeding with download."
@@ -220,8 +214,6 @@ def _convert_driveitem_to_document_with_permissions(
         logger.info(
             f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
         )
-    if include_permissions and ctx is None:
-        raise ValueError("ClientContext is required for permissions")
 
     # Proceed with download if size is acceptable or not available
     content = sleep_and_retry(driveitem.get_content(), "get_content")
@@ -600,7 +592,7 @@ class SharepointConnector(
         include_site_documents: bool = True,
     ) -> None:
         self.batch_size = batch_size
-        self.sites = sites
+        self.sites = list(sites)
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
         )
@@ -662,7 +654,7 @@ class SharepointConnector(
                     )
                 )
             else:
-                logger.warning(f"Site URL '{site_url}' is not a valid Sharepoint URL")
+                logger.warning(f"Site URL '{url}' is not a valid Sharepoint URL")
         return site_data_list
 
     def _get_drive_items_for_drive_name(
@@ -1364,11 +1356,14 @@ class SharepointConnector(
                         include_permissions=include_permissions,
                     )
 
-                    if doc.sections:
-                        yield doc
-                    elif should_yield_if_empty:
-                        doc.sections = [TextSection(link=driveitem.web_url, text="")]
-                        yield doc
+                    if doc:
+                        if doc.sections:
+                            yield doc
+                        elif should_yield_if_empty:
+                            doc.sections = [
+                                TextSection(link=driveitem.web_url, text="")
+                            ]
+                            yield doc
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"
