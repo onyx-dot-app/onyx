@@ -422,6 +422,7 @@ def generate_simple_sql(
             query_generation_error = str(e)
             logger.warning(f"Error executing SQL query: {e}, retrying...")
 
+        # TODO: exclude the case where the verification failed
         # fix sql and try one more time if sql query didn't work out
         # if the result is still empty after this, the kg probably doesn't have the answer,
         # so we update the strategy to simple and address this in the answer generation
