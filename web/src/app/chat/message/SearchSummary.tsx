@@ -14,7 +14,6 @@ import {
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { useEffect, useRef, useState } from "react";
 import { FiBook, FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
-import { FileResponse } from "../my-documents/DocumentsContext";
 
 export function ShowHideDocsButton({
   messageId,
@@ -247,28 +246,6 @@ export function SearchSummary({
           )}
         </>
       )}
-    </div>
-  );
-}
-
-export function UserKnowledgeFiles({
-  userKnowledgeFiles,
-}: {
-  userKnowledgeFiles: FileResponse[];
-}): JSX.Element {
-  if (!userKnowledgeFiles || userKnowledgeFiles.length === 0) {
-    return <></>;
-  }
-
-  return (
-    <div className="flex group w-fit items-center mb-1">
-      <div className="flex items-center text-xs desktop:text-sm">
-        <FiBook className="mobile:hidden flex-none mr-2" size={14} />
-        <span className="text-xs desktop:text-sm">
-          Referenced {userKnowledgeFiles.length}{" "}
-          {userKnowledgeFiles.length === 1 ? "document" : "documents"}
-        </span>
-      </div>
     </div>
   );
 }

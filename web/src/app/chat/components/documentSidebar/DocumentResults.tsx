@@ -11,7 +11,6 @@ import {
   memo,
 } from "react";
 import { XIcon } from "@/components/icons/icons";
-import { FileSourceCardInResults } from "@/app/chat/message/SourcesDisplay";
 import { getCitations } from "../../services/packetUtils";
 import {
   useCurrentMessageTree,

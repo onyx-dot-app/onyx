@@ -1,4 +1,3 @@
-import { DocumentsProvider } from "./my-documents/DocumentsContext";
 import { SEARCH_PARAMS } from "@/lib/extension/constants";
 import ChatLayout from "./WrappedChat";
 import { ProjectsProvider } from "./projects/ProjectsContext";
@@ -12,14 +11,11 @@ export default async function Page(props: {
     searchParams[SEARCH_PARAMS.DEFAULT_SIDEBAR_OFF] === "true";
 
   return (
-    <DocumentsProvider>
-
-      <ProjectsProvider>
+    <ProjectsProvider>
       <ChatLayout
         firstMessage={firstMessage}
         defaultSidebarOff={defaultSidebarOff}
       />
-      </ProjectsProvider>
-    </DocumentsProvider>
+    </ProjectsProvider>
   );
 }

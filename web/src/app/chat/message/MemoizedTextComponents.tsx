@@ -10,7 +10,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { FileResponse } from "../my-documents/DocumentsContext";
+import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
 
 export const MemoizedAnchor = memo(
@@ -26,7 +26,7 @@ export const MemoizedAnchor = memo(
     subQuestions?: SubQuestionDetail[];
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
-    userFiles?: FileResponse[] | null;
+    userFiles?: ProjectFile[] | null;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     href?: string;
     children: React.ReactNode;

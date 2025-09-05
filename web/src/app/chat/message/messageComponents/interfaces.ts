@@ -2,7 +2,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { FeedbackType } from "../../interfaces";
 import { Packet } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { FileResponse } from "../../my-documents/DocumentsContext";
+import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
@@ -17,7 +17,7 @@ export interface FullChatState {
   assistant: MinimalPersonaSnapshot;
   // Document-related context for citations
   docs?: OnyxDocument[] | null;
-  userFiles?: FileResponse[];
+  userFiles?: ProjectFile[];
   citations?: { [key: string]: number };
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   // Regenerate functionality
