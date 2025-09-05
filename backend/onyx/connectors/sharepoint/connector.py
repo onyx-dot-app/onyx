@@ -212,18 +212,18 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
 
     # Fallback: Range request for first byte to read total from Content-Range
     try:
-        range_resp = requests.get(
+        with requests.get(
             url,
             headers={"Range": "bytes=0-0"},
             timeout=timeout,
             stream=True,
-        )
-        range_resp.raise_for_status()
-        cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
-        if cr and "/" in cr:
-            total = cr.split("/")[-1]
-            if total.isdigit():
-                return int(total)
+        ) as range_resp:
+            range_resp.raise_for_status()
+            cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
+            if cr and "/" in cr:
+                total = cr.split("/")[-1]
+                if total.isdigit():
+                    return int(total)
     except requests.RequestException:
         pass
 
