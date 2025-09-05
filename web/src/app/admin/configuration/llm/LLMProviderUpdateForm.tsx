@@ -350,7 +350,7 @@ export function LLMProviderUpdateForm({
               small={firstTimeConfiguration}
               name="target_uri"
               label="Target URI"
-              placeholder="https://your-resource.openai.azure.com/openai/deployments/your-deployment?api-version=2024-02-15-preview"
+              placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
               subtext="The complete Azure OpenAI endpoint URL including the API version as a query parameter"
             />
           ) : (
