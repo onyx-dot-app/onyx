@@ -59,7 +59,7 @@ class TeamsConnector(
     def __init__(
         self,
         # TODO: (chris) move from "Display Names" to IDs, since display names
-        # are NOT guaranteed to be unique
+        # are not necessarily guaranteed to be unique
         teams: list[str] = [],
         max_workers: int = MAX_WORKERS,
     ) -> None:
@@ -295,7 +295,9 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
     if top_message.from_ and top_message.from_.user:
         user_display_name = top_message.from_.user.display_name
-        top_message_user_name = user_display_name if user_display_name else "Unknown User"
+        top_message_user_name = (
+            user_display_name if user_display_name else "Unknown User"
+        )
     else:
         logger.warn(f"Message {top_message=} has no `from.user` field")
         top_message_user_name = "Unknown User"
