@@ -1,5 +1,8 @@
+import copy
 import os
+from collections.abc import Callable
 from collections.abc import Iterable
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -7,6 +10,7 @@ from typing import Any
 
 from jira import JIRA
 from jira.resources import Issue
+from more_itertools import chunked
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -34,6 +38,7 @@ from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.jira.utils import get_jira_project_key_from_issue
+from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -49,6 +54,7 @@ logger = setup_logger()
 
 ONE_HOUR = 3600
 
+_MAX_RESULTS_FETCH_IDS = 5000  # 5000
 _JIRA_SLIM_PAGE_SIZE = 500
 _JIRA_FULL_PAGE_SIZE = 50
 
@@ -73,13 +79,155 @@ _FIELD_RESOLUTION_DATE = "resolutiondate"
 _FIELD_RESOLUTION_DATE_KEY = "resolution_date"
 
 
+def _is_cloud_client(jira_client: JIRA) -> bool:
+    return jira_client._options["rest_api_version"] == JIRA_CLOUD_API_VERSION
+
+
 def _perform_jql_search(
     jira_client: JIRA,
     jql: str,
     start: int,
     max_results: int,
     fields: str | None = None,
+    all_issue_ids: list[list[str]] | None = None,
+    checkpoint_callback: (
+        Callable[[Iterator[list[str]], str | None], None] | None
+    ) = None,
+    nextPageToken: str | None = None,
+    ids_done: bool = False,
 ) -> Iterable[Issue]:
+    """
+    The caller should expect
+    a) this function returns an iterable of issues of length 0 < len(issues) <= max_results.
+       - caveat; if all_issue_ids is provided, the iterable will be the size of some sub-list.
+       - this will only not match the above bound if a recent deployment changed max_results.
+
+    IF the v3 API is used (i.e. the jira instance is a cloud instance), then the caller should expect:
+
+    b) this function will call checkpoint_callback ONCE after at least one of the following has happened:
+       - a new batch of ids has been fetched via enhanced search
+       - a batch of issues has been bulk-fetched
+    c) checkpoint_callback is called with the new all_issue_ids and the pageToken of the enhanced
+       search request. We pass in a pageToken of None once we've fetched all the issue ids.
+
+    Note: nextPageToken is valid for 7 days according to a post from a year ago, so for now
+    we won't add any handling for restarting (just re-index, since there's no easy
+    way to recover from this).
+    """
+    # it would be preferable to use one approach for both versions, but
+    # v2 doesnt have the bulk fetch api and v3 has fully deprecated the search
+    # api that v2 uses
+    if _is_cloud_client(jira_client):
+        if all_issue_ids is None:
+            raise ValueError("all_issue_ids is required for v3")
+        return _perform_jql_search_v3(
+            jira_client,
+            jql,
+            max_results,
+            all_issue_ids,
+            fields=fields,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=nextPageToken,
+            ids_done=ids_done,
+        )
+    else:
+        return _perform_jql_search_v2(jira_client, jql, start, max_results, fields)
+
+
+def enhanced_search_ids(
+    jira_client: JIRA, jql: str, nextPageToken: str | None = None
+) -> tuple[list[str], str | None]:
+    # https://community.atlassian.com/forums/Jira-articles/
+    # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
+    # For cloud, it's recommended that we fetch all ids first then use the bulk fetch API.
+    # The enhanced search isn't currently supported by our python library, so we have to
+    # do this janky thing where we use the session directly.
+    enhanced_search_path = jira_client._get_url("search/jql")
+    params: dict[str, str | int | None] = {
+        "jql": jql,
+        "maxResults": _MAX_RESULTS_FETCH_IDS,
+        "nextPageToken": nextPageToken,
+        "fields": "id",
+    }
+    response = jira_client._session.get(enhanced_search_path, params=params).json()
+    return [str(issue["id"]) for issue in response["issues"]], response.get(
+        "nextPageToken"
+    )
+
+
+def bulk_fetch_issues(
+    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
+) -> list[Issue]:
+    # TODO: move away from this jira library if they continue to not support
+    # the endpoints we need. Using private fields is not ideal, but
+    # is likely fine for now since we pin the library version
+    bulk_fetch_path = jira_client._get_url("issue/bulkfetch")
+
+    # Prepare the payload according to Jira API v3 specification
+    payload: dict[str, Any] = {"issueIdsOrKeys": issue_ids}
+
+    # Only restrict fields if specified, might want to explicitly do this in the future
+    # to avoid reading unnecessary data
+    payload["fields"] = fields.split(",") if fields else ["*all"]
+
+    try:
+        response = jira_client._session.post(bulk_fetch_path, json=payload).json()
+    except Exception as e:
+        logger.error(f"Error fetching issues: {e}")
+        raise e
+    return [
+        Issue(jira_client._options, jira_client._session, raw=issue)
+        for issue in response["issues"]
+    ]
+
+
+def _perform_jql_search_v3(
+    jira_client: JIRA,
+    jql: str,
+    max_results: int,
+    all_issue_ids: list[list[str]],
+    fields: str | None = None,
+    checkpoint_callback: (
+        Callable[[Iterator[list[str]], str | None], None] | None
+    ) = None,
+    nextPageToken: str | None = None,
+    ids_done: bool = False,
+) -> Iterable[Issue]:
+    """
+    The way this works is we get all the issue ids and bulk fetch them in batches.
+    However, for really large deployments we can't do these operations sequentially,
+    as it might take several hours to fetch all the issue ids.
+
+    So, each run of this function does at least one of:
+     - fetch a batch of issue ids
+     - bulk fetch a batch of issues
+
+    If all_issue_ids is not None, we use it to bulk fetch issues.
+    """
+
+    # with some careful synchronization these steps can be done in parallel,
+    # leaving that out for now to avoid rate limit issues
+    if not ids_done:
+        new_ids, pageToken = enhanced_search_ids(jira_client, jql, nextPageToken)
+        if checkpoint_callback is not None:
+            checkpoint_callback(chunked(new_ids, max_results), pageToken)
+
+    # bulk fetch issues from ids. Note that the above callback MAY mutate all_issue_ids,
+    # but this fetch always just takes the last id batch.
+    if all_issue_ids:
+        yield from bulk_fetch_issues(jira_client, all_issue_ids.pop(), fields)
+
+
+def _perform_jql_search_v2(
+    jira_client: JIRA,
+    jql: str,
+    start: int,
+    max_results: int,
+    fields: str | None = None,
+) -> Iterable[Issue]:
+    """
+    Unfortunately, jira server/data center will forever use the v2 APIs that are now deprecated.
+    """
     logger.debug(
         f"Fetching Jira issues with JQL: {jql}, "
         f"starting at {start}, max results: {max_results}"
@@ -202,6 +350,12 @@ def process_jira_issue(
 
 
 class JiraConnectorCheckpoint(ConnectorCheckpoint):
+    # used for v3 (cloud) endpoint
+    all_issue_ids: list[list[str]] = []
+    ids_done: bool = False
+    cursor: str | None = None
+    # deprecated
+    # Used for v2 endpoint (server/data center)
     offset: int | None = None
 
 
@@ -301,12 +455,19 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         # Get the current offset from checkpoint or start at 0
         starting_offset = checkpoint.offset or 0
         current_offset = starting_offset
+        new_checkpoint = copy.deepcopy(checkpoint)
+
+        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
 
         for issue in _perform_jql_search(
             jira_client=self.jira_client,
             jql=jql,
             start=current_offset,
             max_results=_JIRA_FULL_PAGE_SIZE,
+            all_issue_ids=new_checkpoint.all_issue_ids,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=new_checkpoint.cursor,
+            ids_done=new_checkpoint.ids_done,
         ):
             issue_key = issue.key
             try:
@@ -331,12 +492,28 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             current_offset += 1
 
         # Update checkpoint
-        checkpoint = JiraConnectorCheckpoint(
-            offset=current_offset,
-            # if we didn't retrieve a full batch, we're done
-            has_more=current_offset - starting_offset == _JIRA_FULL_PAGE_SIZE,
+        self.update_checkpoint_for_next_run(
+            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
         )
-        return checkpoint
+
+        return new_checkpoint
+
+    def update_checkpoint_for_next_run(
+        self,
+        checkpoint: JiraConnectorCheckpoint,
+        current_offset: int,
+        starting_offset: int,
+        page_size: int,
+    ) -> None:
+        if _is_cloud_client(self.jira_client):
+            # other updates done in the checkpoint callback
+            checkpoint.has_more = (
+                len(checkpoint.all_issue_ids) > 0 or not checkpoint.ids_done
+            )
+        else:
+            checkpoint.offset = current_offset
+            # if we didn't retrieve a full batch, we're done
+            checkpoint.has_more = current_offset - starting_offset == page_size
 
     def retrieve_all_slim_documents(
         self,
@@ -352,33 +529,47 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         )  # we add one day to account for any potential timezone issues
 
         jql = self._get_jql_query(start, end)
-
+        checkpoint = self.build_dummy_checkpoint()
+        checkpoint_callback = make_checkpoint_callback(checkpoint)
+        prev_offset = 0
+        current_offset = 0
         slim_doc_batch = []
-        for issue in _perform_jql_search(
-            jira_client=self.jira_client,
-            jql=jql,
-            start=int(start),
-            max_results=_JIRA_SLIM_PAGE_SIZE,
-        ):
-            project_key = get_jira_project_key_from_issue(issue=issue)
-            if not project_key:
-                continue
+        while checkpoint.has_more:
+            for issue in _perform_jql_search(
+                jira_client=self.jira_client,
+                jql=jql,
+                start=current_offset,
+                max_results=_JIRA_SLIM_PAGE_SIZE,
+                all_issue_ids=checkpoint.all_issue_ids,
+                checkpoint_callback=checkpoint_callback,
+                nextPageToken=checkpoint.cursor,
+                ids_done=checkpoint.ids_done,
+            ):
+                project_key = get_jira_project_key_from_issue(issue=issue)
+                if not project_key:
+                    continue
 
-            issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-            id = build_jira_url(self.jira_client, issue_key)
-            slim_doc_batch.append(
-                SlimDocument(
-                    id=id,
-                    external_access=get_project_permissions(
-                        jira_client=self.jira_client, jira_project=project_key
-                    ),
+                issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
+                id = build_jira_url(self.jira_client, issue_key)
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=id,
+                        external_access=get_project_permissions(
+                            jira_client=self.jira_client, jira_project=project_key
+                        ),
+                    )
                 )
+                current_offset += 1
+                if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+            self.update_checkpoint_for_next_run(
+                checkpoint, current_offset, prev_offset, _JIRA_SLIM_PAGE_SIZE
             )
-            if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
-                yield slim_doc_batch
-                slim_doc_batch = []
+            prev_offset = current_offset
 
-        yield slim_doc_batch
+        if slim_doc_batch:
+            yield slim_doc_batch
 
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
@@ -469,6 +660,21 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         return JiraConnectorCheckpoint(
             has_more=True,
         )
+
+
+def make_checkpoint_callback(
+    checkpoint: JiraConnectorCheckpoint,
+) -> Callable[[Iterator[list[str]], str | None], None]:
+    def checkpoint_callback(
+        issue_ids: Iterator[list[str]], pageToken: str | None
+    ) -> None:
+        for id_batch in issue_ids:
+            checkpoint.all_issue_ids.append(id_batch)
+        checkpoint.cursor = pageToken
+        # pageToken starts out as None and is only None once we've fetched all the issue ids
+        checkpoint.ids_done = pageToken is None
+
+    return checkpoint_callback
 
 
 if __name__ == "__main__":

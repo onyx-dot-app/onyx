@@ -16,7 +16,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.streaming_endpoints.conftest import DocumentBuilderType
+from tests.integration.conftest import DocumentBuilderType
 
 
 def parse_v0_streaming_response(response_text: str) -> list[dict[str, Any]]:

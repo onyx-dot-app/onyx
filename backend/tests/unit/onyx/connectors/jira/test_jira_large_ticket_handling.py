@@ -69,7 +69,8 @@ def mock_issue_large() -> MagicMock:
 @pytest.fixture
 def mock_jira_api_version() -> Generator[Any, Any, Any]:
     with patch("onyx.connectors.jira.utils.JIRA_CLOUD_API_VERSION", "3"):
-        yield
+        with patch("onyx.connectors.jira.utils.JIRA_SERVER_API_VERSION", "2"):
+            yield
 
 
 @pytest.fixture
