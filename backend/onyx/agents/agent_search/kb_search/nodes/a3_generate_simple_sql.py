@@ -419,11 +419,6 @@ def generate_simple_sql(
                 query_generation_error = "SQL query returned no results"
                 logger.warning(f"{query_generation_error}, retrying...")
         except Exception as e:
-            drop_views(
-                allowed_docs_view_name=doc_temp_view,
-                kg_relationships_view_name=rel_temp_view,
-                kg_entity_view_name=ent_temp_view,
-            )
             query_generation_error = str(e)
             logger.warning(f"Error executing SQL query: {e}, retrying...")
 

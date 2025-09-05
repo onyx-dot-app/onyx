@@ -53,9 +53,6 @@ def dr_is_graph_builder() -> StateGraph:
 
     graph.add_conditional_edges("search", fetch_router)
 
-    # Fallback edge from search to reducer when no URLs are found
-    # graph.add_edge(start_key="search", end_key="reducer")
-
     graph.add_edge(start_key="fetch", end_key="reducer")
 
     graph.add_edge(start_key="reducer", end_key=END)
