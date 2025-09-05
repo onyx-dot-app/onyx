@@ -458,14 +458,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         current_offset = starting_offset
         new_checkpoint = copy.deepcopy(checkpoint)
 
-        def checkpoint_callback(
-            issue_ids: Iterator[list[str]], pageToken: str | None
-        ) -> None:
-            for id_batch in issue_ids:
-                new_checkpoint.all_issue_ids.append(id_batch)
-            new_checkpoint.cursor = pageToken
-            # pageToken starts out as None and is only None once we've fetched all the issue ids
-            new_checkpoint.ids_done = pageToken is None
+        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
 
         for issue in _perform_jql_search(
             jira_client=self.jira_client,
@@ -500,20 +493,29 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             current_offset += 1
 
         # Update checkpoint
-
-        if _is_cloud_client(self.jira_client):
-            # other updates done in the checkpoint callback
-            new_checkpoint.has_more = (
-                len(new_checkpoint.all_issue_ids) > 0 or not new_checkpoint.ids_done
-            )
-        else:
-            new_checkpoint.offset = current_offset
-            # if we didn't retrieve a full batch, we're done
-            new_checkpoint.has_more = (
-                current_offset - starting_offset == _JIRA_FULL_PAGE_SIZE
-            )
+        self.update_checkpoint_for_next_run(
+            new_checkpoint, current_offset, starting_offset
+        )
 
         return new_checkpoint
+
+    def update_checkpoint_for_next_run(
+        self,
+        checkpoint: JiraConnectorCheckpoint,
+        current_offset: int,
+        starting_offset: int,
+    ) -> None:
+        if _is_cloud_client(self.jira_client):
+            # other updates done in the checkpoint callback
+            checkpoint.has_more = (
+                len(checkpoint.all_issue_ids) > 0 or not checkpoint.ids_done
+            )
+        else:
+            checkpoint.offset = current_offset
+            # if we didn't retrieve a full batch, we're done
+            checkpoint.has_more = (
+                current_offset - starting_offset == _JIRA_FULL_PAGE_SIZE
+            )
 
     def retrieve_all_slim_documents(
         self,
@@ -529,36 +531,45 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         )  # we add one day to account for any potential timezone issues
 
         jql = self._get_jql_query(start, end)
-
-        # TODO: make checkpointed slim connector. this is somewhat urgent,
-        # since at the moment we're only returning <=500 jira issues from
-        # this function.
+        checkpoint = self.build_dummy_checkpoint()
+        checkpoint_callback = make_checkpoint_callback(checkpoint)
+        prev_offset = 0
+        current_offset = 0
         slim_doc_batch = []
-        for issue in _perform_jql_search(
-            jira_client=self.jira_client,
-            jql=jql,
-            start=int(start),
-            max_results=_JIRA_SLIM_PAGE_SIZE,
-        ):
-            project_key = get_jira_project_key_from_issue(issue=issue)
-            if not project_key:
-                continue
+        while checkpoint.has_more:
+            for issue in _perform_jql_search(
+                jira_client=self.jira_client,
+                jql=jql,
+                start=current_offset,
+                max_results=_JIRA_SLIM_PAGE_SIZE,
+                all_issue_ids=checkpoint.all_issue_ids,
+                checkpoint_callback=checkpoint_callback,
+                nextPageToken=checkpoint.cursor,
+                ids_done=checkpoint.ids_done,
+            ):
+                project_key = get_jira_project_key_from_issue(issue=issue)
+                if not project_key:
+                    continue
 
-            issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-            id = build_jira_url(self.jira_client, issue_key)
-            slim_doc_batch.append(
-                SlimDocument(
-                    id=id,
-                    external_access=get_project_permissions(
-                        jira_client=self.jira_client, jira_project=project_key
-                    ),
+                issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
+                id = build_jira_url(self.jira_client, issue_key)
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=id,
+                        external_access=get_project_permissions(
+                            jira_client=self.jira_client, jira_project=project_key
+                        ),
+                    )
                 )
-            )
-            if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
-                yield slim_doc_batch
-                slim_doc_batch = []
+                current_offset += 1
+                if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+            self.update_checkpoint_for_next_run(checkpoint, current_offset, prev_offset)
+            prev_offset = current_offset
 
-        yield slim_doc_batch
+        if slim_doc_batch:
+            yield slim_doc_batch
 
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
@@ -649,6 +660,21 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         return JiraConnectorCheckpoint(
             has_more=True,
         )
+
+
+def make_checkpoint_callback(
+    checkpoint: JiraConnectorCheckpoint,
+) -> Callable[[Iterator[list[str]], str | None], None]:
+    def checkpoint_callback(
+        issue_ids: Iterator[list[str]], pageToken: str | None
+    ) -> None:
+        for id_batch in issue_ids:
+            checkpoint.all_issue_ids.append(id_batch)
+        checkpoint.cursor = pageToken
+        # pageToken starts out as None and is only None once we've fetched all the issue ids
+        checkpoint.ids_done = pageToken is None
+
+    return checkpoint_callback
 
 
 if __name__ == "__main__":
