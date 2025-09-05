@@ -53,7 +53,7 @@ def dr_graph_builder() -> StateGraph:
     graph.add_node(DRPath.KNOWLEDGE_GRAPH, kg_search_graph)
 
     internet_search_graph = dr_ws_graph_builder().compile()
-    graph.add_node(DRPath.INTERNET_SEARCH, internet_search_graph)
+    graph.add_node(DRPath.WEB_SEARCH, internet_search_graph)
 
     image_generation_graph = dr_image_generation_graph_builder().compile()
     graph.add_node(DRPath.IMAGE_GENERATION, image_generation_graph)
