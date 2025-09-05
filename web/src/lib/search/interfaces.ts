@@ -182,10 +182,13 @@ export interface SearchResponse {
   additional_relevance?: Relevance;
 }
 
-export enum SourceCategory {
-  AppConnection = Number(i18n.t(k.CONNECT_TO_APPS)),
-  ImportedKnowledge = Number(i18n.t(k.IMPORT_KNOWLEDGE)),
-}
+export const SourceCategory = {
+  AppConnection: i18n.t(k.CONNECT_TO_APPS),
+  ImportedKnowledge: i18n.t(k.IMPORT_KNOWLEDGE),
+} as const;
+
+export type SourceCategory =
+  (typeof SourceCategory)[keyof typeof SourceCategory];
 
 export interface SourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
