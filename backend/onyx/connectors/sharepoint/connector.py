@@ -196,9 +196,6 @@ def _get_download_url(driveitem: DriveItem) -> str | None:
             return url
     except Exception:
         pass
-    # If both HEAD and a range GET failed to reveal a size, signal unknown size.
-    # Callers should treat None as "size unavailable" and proceed with a safe
-    # streaming path that enforces a hard cap to avoid excessive memory usage.
     return None
 
 
@@ -229,6 +226,10 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
                 return int(total)
     except requests.RequestException:
         pass
+
+    # If both HEAD and a range GET failed to reveal a size, signal unknown size.
+    # Callers should treat None as "size unavailable" and proceed with a safe
+    # streaming path that enforces a hard cap to avoid excessive memory usage.
     return None
 
 
