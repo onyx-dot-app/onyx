@@ -602,17 +602,6 @@ class SharepointConnector(
         self.include_site_documents = include_site_documents
         self.sp_tenant_domain: str | None = None
 
-        # Ensure sites are sharepoint urls
-        for site_url in sites:
-            if not site_url.startswith("https://") or "/sites/" not in site_url:
-                raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site)"
-                )
-
-        self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
-            sites
-        )
-
     def validate_connector_settings(self) -> None:
         # Validate that at least one content type is enabled
         if not self.include_site_documents and not self.include_site_pages:
