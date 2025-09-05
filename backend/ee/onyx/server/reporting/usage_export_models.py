@@ -29,3 +29,8 @@ class UsageReportMetadata(BaseModel):
     time_created: datetime
     period_from: datetime | None  # None = All time
     period_to: datetime | None
+
+
+class UsageReportGenerationRequest(BaseModel):
+    task_id: str
+    message: str

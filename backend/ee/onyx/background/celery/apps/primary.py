@@ -130,6 +130,34 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
         )
 
 
+@celery_app.task(
+    name=OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
+    ignore_result=True,
+    soft_time_limit=JOB_TIMEOUT,
+)
+def generate_usage_report_task(
+    *,
+    tenant_id: str,
+    user_id: str | None = None,
+    period_from: str | None = None,
+    period_to: str | None = None,
+) -> None:
+    """User-initiated usage report generation task"""
+    period = None
+    if period_from and period_to:
+        period = (
+            datetime.fromisoformat(period_from),
+            datetime.fromisoformat(period_to),
+        )
+
+    with get_session_with_current_tenant() as db_session:
+        create_new_usage_report(
+            db_session=db_session,
+            user_id=user_id,
+            period=period,
+        )
+
+
 celery_app.autodiscover_tasks(
     [
         "ee.onyx.background.celery.tasks.doc_permission_syncing",

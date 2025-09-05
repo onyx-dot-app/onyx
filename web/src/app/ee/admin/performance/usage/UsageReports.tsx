@@ -16,8 +16,8 @@ import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import useSWR from "swr";
-import { useState } from "react";
-import { UsageReport } from "./types";
+import React, { useState } from "react";
+import { UsageReport, UsageReportGenerationRequest } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Link from "next/link";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
@@ -34,7 +34,11 @@ import { CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
-function GenerateReportInput() {
+function GenerateReportInput({
+  onReportGenerated,
+}: {
+  onReportGenerated: () => void;
+}) {
   const [dateRange, setDateRange] = useState<DateRangePickerValue | undefined>(
     undefined
   );
@@ -77,13 +81,13 @@ function GenerateReportInput() {
         throw Error(`Received an error: ${res.statusText}`);
       }
 
-      const report = await res.json();
-      const transfer = await fetch(
-        `/api/admin/usage-report/${report.report_name}`
-      );
+      const response = (await res.json()) as UsageReportGenerationRequest;
 
-      const bytes = await transfer.blob();
-      download(bytes);
+      // Show success message instead of downloading immediately
+      alert(response.message);
+
+      // Trigger refresh of the reports list
+      onReportGenerated();
     } catch (e) {
       setErrorOccurred(e as Error);
     } finally {
@@ -216,7 +220,10 @@ function GenerateReportInput() {
       >
         Generate Report
       </Button>
-      <p className="mt-1 text-xs">This can take a few minutes.</p>
+      <p className="mt-1 text-xs">
+        Report generation runs in the background. Check the "Previous Reports"
+        section below to download when ready.
+      </p>
       {errorOccurred && (
         <ErrorCallout
           errorTitle="Something went wrong."
@@ -229,7 +236,7 @@ function GenerateReportInput() {
 
 const USAGE_REPORT_URL = "/api/admin/usage-report";
 
-function UsageReportsTable() {
+function UsageReportsTable({ refreshTrigger }: { refreshTrigger: number }) {
   const [page, setPage] = useState(1);
   const NUM_IN_PAGE = 10;
 
@@ -237,7 +244,15 @@ function UsageReportsTable() {
     data: usageReportsMetadata,
     error: usageReportsError,
     isLoading: usageReportsIsLoading,
+    mutate,
   } = useSWR<UsageReport[]>(USAGE_REPORT_URL, errorHandlingFetcher);
+
+  // Refresh when refreshTrigger changes
+  React.useEffect(() => {
+    if (refreshTrigger > 0) {
+      mutate();
+    }
+  }, [refreshTrigger, mutate]);
 
   const paginatedReports = usageReportsMetadata
     ? usageReportsMetadata
@@ -328,11 +343,17 @@ function UsageReportsTable() {
 }
 
 export default function UsageReports() {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleReportGenerated = () => {
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
   return (
     <div className="mx-auto container">
-      <GenerateReportInput />
+      <GenerateReportInput onReportGenerated={handleReportGenerated} />
       <Separator />
-      <UsageReportsTable />
+      <UsageReportsTable refreshTrigger={refreshTrigger} />
     </div>
   );
 }
