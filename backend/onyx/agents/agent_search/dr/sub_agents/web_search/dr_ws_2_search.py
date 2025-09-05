@@ -6,16 +6,16 @@ from langgraph.types import StreamWriter
 from langsmith import traceable
 
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchResult,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
     InternetSearchInput,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
     InternetSearchUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

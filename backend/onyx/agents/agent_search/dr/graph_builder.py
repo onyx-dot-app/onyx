@@ -23,11 +23,11 @@ from onyx.agents.agent_search.dr.sub_agents.generic_internal_tool.dr_generic_int
 from onyx.agents.agent_search.dr.sub_agents.image_generation.dr_image_generation_graph_builder import (
     dr_image_generation_graph_builder,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_graph_builder import (
-    dr_is_graph_builder,
-)
 from onyx.agents.agent_search.dr.sub_agents.kg_search.dr_kg_search_graph_builder import (
     dr_kg_search_graph_builder,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_graph_builder import (
+    dr_ws_graph_builder,
 )
 
 # from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_2_act import search
@@ -52,7 +52,7 @@ def dr_graph_builder() -> StateGraph:
     kg_search_graph = dr_kg_search_graph_builder().compile()
     graph.add_node(DRPath.KNOWLEDGE_GRAPH, kg_search_graph)
 
-    internet_search_graph = dr_is_graph_builder().compile()
+    internet_search_graph = dr_ws_graph_builder().compile()
     graph.add_node(DRPath.INTERNET_SEARCH, internet_search_graph)
 
     image_generation_graph = dr_image_generation_graph_builder().compile()

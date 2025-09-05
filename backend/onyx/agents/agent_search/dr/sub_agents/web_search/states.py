@@ -2,10 +2,10 @@ from operator import add
 from typing import Annotated
 
 from onyx.agents.agent_search.dr.states import LoggerUpdate
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchResult,
 )
-from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 from onyx.context.search.models import InferenceSection
 
 

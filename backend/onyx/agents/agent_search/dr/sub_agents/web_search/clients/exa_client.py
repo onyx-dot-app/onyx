@@ -1,13 +1,13 @@
 from exa_py import Exa
 from exa_py.api import HighlightsContentsOptions
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetContent,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchProvider,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchResult,
 )
 from onyx.configs.chat_configs import EXA_API_KEY

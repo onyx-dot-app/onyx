@@ -2,45 +2,45 @@ from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_1_branch import (
-    is_branch,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_2_search import (
-    web_search,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_dedup_urls import (
-    dedup_urls,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_4_fetch import (
-    web_fetch,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_5_collect_raw_docs import (
-    collect_raw_docs,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_6_summarize import (
-    is_summarize,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_7_reduce import (
-    is_reducer,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
-    branching_router,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
-    fetch_router,
-)
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
-    summarize_router,
-)
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentMainState
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_1_branch import (
+    is_branch,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_2_search import (
+    web_search,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_3_dedup_urls import (
+    dedup_urls,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_4_fetch import (
+    web_fetch,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_5_collect_raw_docs import (
+    collect_raw_docs,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_6_summarize import (
+    is_summarize,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_7_reduce import (
+    is_reducer,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_conditional_edges import (
+    branching_router,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_conditional_edges import (
+    fetch_router,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.dr_ws_conditional_edges import (
+    summarize_router,
+)
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
 
 
-def dr_is_graph_builder() -> StateGraph:
+def dr_ws_graph_builder() -> StateGraph:
     """
     LangGraph graph builder for Internet Search Sub-Agent
     """

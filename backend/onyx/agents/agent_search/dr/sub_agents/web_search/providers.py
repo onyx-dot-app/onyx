@@ -1,7 +1,7 @@
-from onyx.agents.agent_search.dr.sub_agents.internet_search.clients.exa_client import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.clients.exa_client import (
     ExaClient,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchProvider,
 )
 from onyx.configs.chat_configs import EXA_API_KEY

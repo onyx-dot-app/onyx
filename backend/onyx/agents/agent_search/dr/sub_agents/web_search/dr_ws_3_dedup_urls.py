@@ -3,13 +3,13 @@ from collections import defaultdict
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchResult,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
     InternetSearchInput,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.utils import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs

@@ -7,8 +7,8 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import SummarizeInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import SummarizeInput
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig

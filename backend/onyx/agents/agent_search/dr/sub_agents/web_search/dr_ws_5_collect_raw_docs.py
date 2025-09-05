@@ -1,8 +1,8 @@
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchInput
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchInput
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
     InternetSearchInput,
 )
 

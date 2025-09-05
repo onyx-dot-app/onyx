@@ -4,12 +4,12 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchInput
-from onyx.agents.agent_search.dr.sub_agents.internet_search.states import FetchUpdate
-from onyx.agents.agent_search.dr.sub_agents.internet_search.utils import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchInput
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchUpdate
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_content,
 )
 from onyx.agents.agent_search.models import GraphConfig
