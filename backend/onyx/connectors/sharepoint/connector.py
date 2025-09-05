@@ -661,6 +661,8 @@ class SharepointConnector(
                         folder_path=folder_path,
                     )
                 )
+            else:
+                logger.warning(f"Site URL '{site_url}' is not a valid Sharepoint URL")
         return site_data_list
 
     def _get_drive_items_for_drive_name(
