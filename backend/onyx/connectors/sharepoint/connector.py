@@ -203,9 +203,14 @@ def _convert_driveitem_to_document_with_permissions(
                     f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
                     f"File size: {file_size} bytes. Skipping."
                 )
-                raise RuntimeError(
-                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                    f"File size: {file_size} bytes."
+
+                return Document(
+                    id=driveitem.id,
+                    sections=[],
+                    source=DocumentSource.SHAREPOINT,
+                    semantic_identifier="",
+                    external_access=ExternalAccess.empty(),
+                    metadata={},
                 )
         else:
             logger.warning(
