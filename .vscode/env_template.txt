@@ -70,3 +70,9 @@ S3_AWS_SECRET_ACCESS_KEY=minioadmin
 
 # Show extra/uncommon connectors
 SHOW_EXTRA_CONNECTORS=True
+
+# Local langsmith tracing
+LANGSMITH_TRACING="true"
+LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
+LANGSMITH_API_KEY=<REPLACE_THIS>
+LANGSMITH_PROJECT=<REPLACE_THIS>

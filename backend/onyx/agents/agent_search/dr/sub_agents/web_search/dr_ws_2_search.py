@@ -5,16 +5,19 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from langsmith import traceable
 
-from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchResult,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
-from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
-from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
+    InternetSearchInput,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
+    InternetSearchUpdate,
+)
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -30,15 +33,15 @@ logger = setup_logger()
 
 
 def web_search(
-    state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> BranchUpdate:
+    state: InternetSearchInput,
+    config: RunnableConfig,
+    writer: StreamWriter = lambda _: None,
+) -> InternetSearchUpdate:
     """
     LangGraph node to perform internet search and decide which URLs to fetch.
     """
 
     node_start_time = datetime.now()
-    iteration_nr = state.iteration_nr
-    parallelization_nr = state.parallelization_nr
     current_step_nr = state.current_step_nr
 
     if not current_step_nr:
@@ -49,11 +52,7 @@ def web_search(
 
     if not state.available_tools:
         raise ValueError("available_tools is not set")
-    is_tool_info = state.available_tools[state.tools_used[-1]]
-
     search_query = state.branch_question
-    if not search_query:
-        raise ValueError("search_query is not set")
 
     write_custom_event(
         current_step_nr,
@@ -111,26 +110,13 @@ def web_search(
         schema=WebSearchAnswer,
         timeout_override=30,
     )
-    urls_to_open = [
-        search_results[i].link
+    results_to_open = [
+        (search_query, search_results[i])
         for i in agent_decision.urls_to_open_indices
         if i < len(search_results) and i >= 0
     ]
-    return BranchUpdate(
-        branch_iteration_responses=[
-            IterationAnswer(
-                tool=is_tool_info.llm_path,
-                tool_id=is_tool_info.tool_id,
-                iteration_nr=iteration_nr,
-                parallelization_nr=parallelization_nr,
-                question=search_query,
-                answer="",
-                claims=[],
-                cited_documents={},
-                reasoning="",
-                additional_data=None,
-            )
-        ],
+    return InternetSearchUpdate(
+        results_to_open=results_to_open,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="internet_search",
@@ -138,7 +124,4 @@ def web_search(
                 node_start_time=node_start_time,
             )
         ],
-        # TODO: Pass through IterationAnswer instead of BranchUpdate
-        # There's some tricky langgraph magic needed to make this work
-        urls_to_open=urls_to_open,
     )
