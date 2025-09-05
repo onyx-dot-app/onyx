@@ -158,7 +158,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     fetchFolders();
   }, []);
 
-  const refreshFolders = async () => {
+  const refreshFolders = useCallback(async () => {
     try {
       const data = await documentsService.fetchFolders();
       setFolders(data);
@@ -166,7 +166,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
       console.error("Failed to fetch folders:", error);
       setError("Failed to fetch folders");
     }
-  };
+  }, []);
 
   const uploadFile = useCallback(
     async (
