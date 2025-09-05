@@ -121,10 +121,10 @@ export const preprocessLaTeX = (content: string) => {
     (_, equation) => `$$${equation}$$`
   );
 
-  // Replace inline LaTeX delimiters \( \) with $ $
+  // Replace inline LaTeX delimiters \( \) with $$ $$
   const inlineProcessed = blockProcessed.replace(
     /\\\(([\s\S]*?)\\\)/g,
-    (_, equation) => `$${equation}$`
+    (_, equation) => `$$${equation}$$`
   );
 
   // Restore original dollar signs in code contexts
