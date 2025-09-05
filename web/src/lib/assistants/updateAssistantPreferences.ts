@@ -30,6 +30,12 @@ export async function updateAssistantVisibility(
   return response.ok;
 }
 
+export async function removeAssistantFromList(
+  assistantId: number
+): Promise<boolean> {
+  return updateAssistantVisibility(assistantId, false);
+}
+
 export async function addAssistantToList(
   assistantId: number
 ): Promise<boolean> {
