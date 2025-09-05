@@ -259,6 +259,7 @@ jobs:
           echo "Running integration tests..."
           docker run --rm --network onyx-stack_default \
             --name test-runner \
+            -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \

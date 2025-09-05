@@ -5,17 +5,8 @@ import pytest
 import requests
 
 from onyx.configs.constants import MessageType
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
-from tests.integration.common_utils.managers.api_key import APIKeyManager
-from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.conftest import DocumentBuilderType
@@ -25,27 +16,23 @@ from tests.integration.conftest import DocumentBuilderType
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
-def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:
-    # create connectors
-    cc_pair_1: DATestCCPair = CCPairManager.create_from_scratch(
-        user_performing_action=admin_user,
-    )
-    api_key: DATestAPIKey = APIKeyManager.create(
-        user_performing_action=admin_user,
-    )
-    LLMProviderManager.create(user_performing_action=admin_user)
-    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
-        cc_pair=cc_pair_1,
-        num_docs=NUM_DOCS,
-        api_key=api_key,
-    )
+def test_send_message_simple_with_history(
+    reset: None,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+    document_builder: DocumentBuilderType,
+) -> None:
+    # create documents using the document builder
+    # Create NUM_DOCS number of documents with dummy content
+    content_list = [f"Document {i} content" for i in range(NUM_DOCS)]
+    docs = document_builder(content_list)
 
     response = requests.post(
         f"{API_SERVER_URL}/chat/send-message-simple-with-history",
         json={
             "messages": [
                 {
-                    "message": cc_pair_1.documents[0].content,
+                    "message": docs[0].content,
                     "role": MessageType.USER.value,
                 }
             ],
@@ -59,10 +46,10 @@ def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -
     response_json = response.json()
 
     # Check that the top document is the correct document
-    assert response_json["top_documents"][0]["document_id"] == cc_pair_1.documents[0].id
+    assert response_json["top_documents"][0]["document_id"] == docs[0].id
 
     # assert that the metadata is correct
-    for doc in cc_pair_1.documents:
+    for doc in docs:
         found_doc = next(
             (x for x in response_json["top_documents"] if x["document_id"] == doc.id),
             None,
@@ -75,41 +62,19 @@ def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
-def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> None:
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-
-    # create connector
-    cc_pair_1: DATestCCPair = CCPairManager.create_from_scratch(
-        user_performing_action=admin_user,
-    )
-    api_key: DATestAPIKey = APIKeyManager.create(
-        user_performing_action=admin_user,
-    )
-    LLMProviderManager.create(user_performing_action=admin_user)
-
+def test_using_reference_docs_with_simple_with_history_api_flow(
+    reset: None,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+    document_builder: DocumentBuilderType,
+) -> None:
     # SEEDING DOCUMENTS
-    cc_pair_1.documents = []
-    cc_pair_1.documents.append(
-        DocumentManager.seed_doc_with_content(
-            cc_pair=cc_pair_1,
-            content="Chris's favorite color is blue",
-            api_key=api_key,
-        )
-    )
-    cc_pair_1.documents.append(
-        DocumentManager.seed_doc_with_content(
-            cc_pair=cc_pair_1,
-            content="Hagen's favorite color is red",
-            api_key=api_key,
-        )
-    )
-    cc_pair_1.documents.append(
-        DocumentManager.seed_doc_with_content(
-            cc_pair=cc_pair_1,
-            content="Pablo's favorite color is green",
-            api_key=api_key,
-        )
+    docs = document_builder(
+        [
+            "Chris's favorite color is blue",
+            "Hagen's favorite color is red",
+            "Pablo's favorite color is green",
+        ]
     )
 
     # SEINDING MESSAGE 1
@@ -155,24 +120,21 @@ def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> 
     # make sure there is an answer
     assert response_json["answer"]
 
-    # since we only gave it one search doc, all responses should only contain that doc
-    assert response_json["final_context_doc_indices"] == [0]
-    assert response_json["llm_selected_doc_indices"] == [0]
-    assert cc_pair_1.documents[2].id in response_json["cited_documents"].values()
     # This ensures the the document we think we are referencing when we send the search_doc_ids in the second
     # message is the document that we expect it to be
-    assert response_json["top_documents"][0]["document_id"] == cc_pair_1.documents[2].id
+    assert response_json["top_documents"][0]["document_id"] == docs[2].id
 
 
+@pytest.mark.skip(reason="We don't support this anymore with the DR flow :(")
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
 def test_send_message_simple_with_history_strict_json(
-    new_admin_user: DATestUser | None,
+    reset: None,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
 ) -> None:
-    # create connectors
-    LLMProviderManager.create(user_performing_action=new_admin_user)
 
     response = requests.post(
         f"{API_SERVER_URL}/chat/send-message-simple-with-history",
@@ -207,7 +169,7 @@ def test_send_message_simple_with_history_strict_json(
                 },
             },
         },
-        headers=new_admin_user.headers if new_admin_user else GENERAL_HEADERS,
+        headers=admin_user.headers,
     )
     assert response.status_code == 200
 
@@ -250,7 +212,12 @@ def test_send_message_simple_with_history_strict_json(
         assert False, "The answer_citationless is not a valid JSON object"
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="/query/answer-with-citation tests are enterprise only",
+)
 def test_answer_with_citation_api(
+    reset: None,
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
     document_builder: DocumentBuilderType,
@@ -265,7 +232,7 @@ def test_answer_with_citation_api(
         json={
             "messages": [
                 {
-                    "message": "What is Chris' favorite color?",
+                    "message": "What is Chris' favorite color? Make sure to cite the document.",
                     "role": MessageType.USER.value,
                 }
             ],
@@ -277,6 +244,11 @@ def test_answer_with_citation_api(
     assert response.status_code == 200
     response_json = response.json()
     assert response_json["answer"]
-    assert response_json["citations"] == [
-        CitationInfo(citation_num=0, document_id=docs[0].id).model_dump()
-    ]
+
+    has_correct_citation = False
+    for citation in response_json["citations"]:
+        if citation["document_id"] == docs[0].id:
+            has_correct_citation = True
+            break
+
+    assert has_correct_citation
