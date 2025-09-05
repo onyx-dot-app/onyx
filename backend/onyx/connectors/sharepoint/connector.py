@@ -31,6 +31,7 @@ from office365.sharepoint.client_context import ClientContext  # type: ignore[im
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
@@ -64,8 +65,6 @@ SLIM_BATCH_SIZE = 1000
 
 
 ASPX_EXTENSION = ".aspx"
-REQUEST_TIMEOUT = 10
-SHAREPOINT_DOWNLOAD_URL_REQUEST_TIMEOUT = 60
 
 
 class SiteDescriptor(BaseModel):
@@ -179,6 +178,98 @@ def acquire_token_for_rest(
     return TokenResponse.from_json(token)
 
 
+def _get_download_url(driveitem: DriveItem) -> str | None:
+    """Best-effort retrieval of the Microsoft Graph download URL from a DriveItem."""
+    try:
+        additional_data = getattr(driveitem, "additional_data", None)
+        if isinstance(additional_data, dict):
+            url = additional_data.get("@microsoft.graph.downloadUrl")
+            if isinstance(url, str) and url:
+                return url
+    except Exception:
+        pass
+
+    try:
+        driveitem_json = driveitem.to_json()
+        url = driveitem_json.get("@microsoft.graph.downloadUrl")
+        if isinstance(url, str) and url:
+            return url
+    except Exception:
+        pass
+    # If both HEAD and a range GET failed to reveal a size, signal unknown size.
+    # Callers should treat None as "size unavailable" and proceed with a safe
+    # streaming path that enforces a hard cap to avoid excessive memory usage.
+    return None
+
+
+def _probe_remote_size(url: str, timeout: int) -> int | None:
+    """Determine remote size using HEAD or a range GET probe. Returns None if unknown."""
+    try:
+        head_resp = requests.head(url, timeout=timeout, allow_redirects=True)
+        head_resp.raise_for_status()
+        cl = head_resp.headers.get("Content-Length")
+        if cl and cl.isdigit():
+            return int(cl)
+    except requests.RequestException:
+        pass
+
+    # Fallback: Range request for first byte to read total from Content-Range
+    try:
+        range_resp = requests.get(
+            url,
+            headers={"Range": "bytes=0-0"},
+            timeout=timeout,
+            stream=True,
+        )
+        range_resp.raise_for_status()
+        cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
+        if cr and "/" in cr:
+            total = cr.split("/")[-1]
+            if total.isdigit():
+                return int(total)
+    except requests.RequestException:
+        pass
+    return None
+
+
+def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
+    """Stream download content with an upper bound on bytes read.
+
+    Behavior:
+    - Checks `Content-Length` first and aborts early if it exceeds `cap`.
+    - Otherwise streams the body in chunks and stops once `cap` is surpassed.
+    - Raises `RuntimeError('size_cap_exceeded')` when the cap would be exceeded.
+    - Returns the full bytes if the content fits within `cap`.
+    """
+    with requests.get(url, stream=True, timeout=timeout) as resp:
+        resp.raise_for_status()
+
+        # If the server provides Content-Length, prefer an early decision.
+        cl_header = resp.headers.get("Content-Length")
+        if cl_header and cl_header.isdigit():
+            content_len = int(cl_header)
+            if content_len > cap:
+                logger.warning(
+                    f"Content-Length {content_len} exceeds cap {cap}; skipping download."
+                )
+                raise RuntimeError("size_cap_exceeded")
+
+        buf = io.BytesIO()
+        # Stream in 64KB chunks; adjust if needed for slower networks.
+        for chunk in resp.iter_content(64 * 1024):
+            if not chunk:
+                continue
+            buf.write(chunk)
+            if buf.tell() > cap:
+                # Avoid keeping a large partial buffer; close and signal caller to skip.
+                logger.warning(
+                    f"Streaming download exceeded cap {cap} bytes; aborting early."
+                )
+                raise RuntimeError("size_cap_exceeded")
+
+        return buf.getvalue()
+
+
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItem,
     drive_name: str,
@@ -193,120 +284,60 @@ def _convert_driveitem_to_document_with_permissions(
     if include_permissions and ctx is None:
         raise ValueError("ClientContext is required for permissions")
 
+    # Determine size before downloading, when possible
+    file_size: int | None = None
     try:
-        # Access size from the JSON representation since it's not exposed as a direct attribute
-        driveitem_json = driveitem.to_json()
-        size_value = driveitem_json.get("size")
+        item_json = driveitem.to_json()
+        size_value = item_json.get("size")
         if size_value is not None:
             file_size = int(size_value)
-            if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
-                logger.warning(
-                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                    f"File size: {file_size} bytes. Skipping."
-                )
-
-                return None  # Skip files that exceed the size threshold
-        else:
-            logger.warning(
-                f"Could not access file size for '{driveitem.name}' Proceeding with download."
-            )
-    except (ValueError, TypeError, AttributeError, KeyError) as e:
-        logger.info(
-            f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
+    except Exception as e:
+        logger.debug(
+            f"Could not access file size for '{driveitem.name}' from item JSON: {e}"
         )
 
-    # Proceed with download if size is acceptable or not available
-    content = sleep_and_retry(driveitem.get_content(), "get_content")
+    download_url = _get_download_url(driveitem)
+    if file_size is None and download_url:
+        file_size = _probe_remote_size(download_url, REQUEST_TIMEOUT_SECONDS)
 
-    if content is None:
-        logger.warning(f"Could not access content for '{driveitem.name}'")
-        raise ValueError(f"Could not access content for '{driveitem.name}'")
+    if file_size is not None and file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
+        logger.warning(
+            f"Skipping '{driveitem.name}' over size threshold ({file_size} > {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes)."
+        )
+        return None
 
-    content_bytes = None
-    # Handle different content types
-    if isinstance(content.value, bytes):
-        content_bytes = content.value
-    else:
-        # Fallback: attempt to use @microsoft.graph.downloadUrl to fetch content directly
-        download_url = None
+    # Prefer downloadUrl streaming with size cap
+    content_bytes: bytes | None = None
+    if download_url:
         try:
-            additional_data = getattr(driveitem, "additional_data", None)
-            if isinstance(additional_data, dict):
-                download_url = additional_data.get("@microsoft.graph.downloadUrl")
-        except Exception:
-            download_url = None
-
-        if not download_url:
-            try:
-                driveitem_json = driveitem.to_json()
-                download_url = driveitem_json.get("@microsoft.graph.downloadUrl")
-            except Exception:
-                download_url = None
-
-        if download_url:
-            try:
-                # First make a HEAD request to check the size
-                head_response = requests.head(download_url, timeout=REQUEST_TIMEOUT)
-                head_response.raise_for_status()
-                content_length_header = head_response.headers.get("Content-Length")
-
-                if (
-                    content_length_header is not None
-                    and content_length_header.isdigit()
-                ):
-                    file_size = int(content_length_header)
-                    if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
-                        logger.warning(
-                            f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                            f"File size: {file_size} bytes. Skipping."
-                        )
-                        raise RuntimeError(
-                            f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                            f"File size: {file_size} bytes."
-                        )
-                else:
-                    logger.warning(
-                        f"Could not determine file size from download URL for '{driveitem.name}'. Proceeding with download."
-                    )
-
-                # If size check passes, proceed with download
-                response = requests.get(
-                    download_url, timeout=SHAREPOINT_DOWNLOAD_URL_REQUEST_TIMEOUT
-                )
-                response.raise_for_status()
-                content_bytes = response.content
-                # Handle zero-length downloads gracefully using header or content length
-                try:
-                    if (
-                        content_length_header is not None
-                        and content_length_header.isdigit()
-                        and int(content_length_header) == 0
-                    ) or len(content_bytes) == 0:
-                        logger.info(
-                            f"Downloaded zero-length content for '{driveitem.name}' via downloadUrl; skipping extraction."
-                        )
-                except Exception:
-                    if len(content_bytes) == 0:
-                        logger.info(
-                            f"Downloaded zero-length content for '{driveitem.name}' via downloadUrl; skipping extraction."
-                        )
-            except requests.exceptions.RequestException as e:
-                status = e.response.status_code if e.response is not None else -1
-                logger.warning(
-                    f"Failed to download via downloadUrl for '{driveitem.name}': "
-                    f"(status={status})"
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to download content via downloadUrl for '{driveitem.name}': {e}"
-                )
-                raise ValueError(
-                    f"Unable to download content via downloadUrl for '{driveitem.name}'"
-                )
-        else:
-            raise ValueError(
-                f"Unsupported content type: {type(content.value)} and no downloadUrl available"
+            content_bytes = _download_with_cap(
+                download_url,
+                REQUEST_TIMEOUT_SECONDS,
+                SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             )
+        except RuntimeError as e:
+            if "size_cap_exceeded" in str(e):
+                logger.warning(
+                    f"Skipping '{driveitem.name}' exceeded size cap during streaming."
+                )
+                return None
+            else:
+                raise
+        except requests.RequestException as e:
+            status = e.response.status_code if e.response is not None else -1
+            logger.warning(
+                f"Failed to download via downloadUrl for '{driveitem.name}' (status={status}); falling back to SDK."
+            )
+
+    # Fallback to SDK content if needed
+    if content_bytes is None:
+        content = sleep_and_retry(driveitem.get_content(), "get_content")
+        if content is None or not isinstance(
+            getattr(content, "value", None), (bytes, bytearray)
+        ):
+            logger.warning(f"Could not access content for '{driveitem.name}'")
+            raise ValueError(f"Could not access content for '{driveitem.name}'")
+        content_bytes = bytes(content.value)
 
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]
@@ -931,7 +962,10 @@ class SharepointConnector(
         params = {"$expand": "canvasLayout"}
 
         response = requests.get(
-            pages_endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+            pages_endpoint,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         pages_data = response.json()
@@ -940,7 +974,9 @@ class SharepointConnector(
         # Handle pagination if there are more pages
         while "@odata.nextLink" in pages_data:
             next_url = pages_data["@odata.nextLink"]
-            response = requests.get(next_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            response = requests.get(
+                next_url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+            )
             response.raise_for_status()
             pages_data = response.json()
             all_pages.extend(pages_data.get("value", []))
