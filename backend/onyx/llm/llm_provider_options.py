@@ -226,14 +226,24 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name="AWS_ACCESS_KEY_ID",
                     display_name="AWS Access Key ID",
                     is_required=False,
-                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                    description="If using AWS IAM roles or a long-term API key, this field can be left blank.",
                 ),
                 CustomConfigKey(
                     name="AWS_SECRET_ACCESS_KEY",
                     display_name="AWS Secret Access Key",
                     is_required=False,
                     is_secret=True,
-                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                    description="If using AWS IAM roles or a long-term API key, this field can be left blank.",
+                ),
+                CustomConfigKey(
+                    name="AWS_BEARER_TOKEN_BEDROCK",
+                    display_name="AWS Bedrock Long-term API Key",
+                    is_required=False,
+                    is_secret=True,
+                    description=(
+                        "Provide an Amazon Bedrock Long-term API Key. "
+                        "Leave blank to use IAM roles or access keys."
+                    ),
                 ),
             ],
             model_configurations=fetch_model_configurations_for_provider(
