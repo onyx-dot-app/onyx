@@ -687,6 +687,15 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
+            if (!isUpdate) {
+              const currentPinnedIds =
+                user?.preferences?.pinned_assistants || [];
+              await toggleAssistantPinnedStatus(
+                currentPinnedIds,
+                assistantId,
+                true
+              );
+            }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
