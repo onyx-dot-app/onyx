@@ -63,7 +63,8 @@ export function Modal({
     <div
       onMouseDown={handleMouseDown}
       className={cn(
-        `fixed inset-0 bg-neutral-950/50 border border-neutral-200 dark:border-neutral-800 bg-opacity-30 backdrop-blur-sm h-full
+        `fixed inset-0 h-full w-full
+        bg-neutral-950/50 dark:bg-neutral-950/60 backdrop-blur-sm
         flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out`
       )}
     >
@@ -75,7 +76,7 @@ export function Modal({
           }
         }}
         className={`
-          bg-[#FAFAFA] dark:bg-neutral-800
+          bg-white dark:bg-neutral-800 opacity-100
           text-neutral-950 dark:text-neutral-50
           rounded
           shadow-2xl
