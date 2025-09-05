@@ -221,9 +221,6 @@ const SignedUpUserTable = ({
   );
 
   const renderUserRoleDropdown = (user: User) => {
-    if (user.role === UserRole.SLACK_USER) {
-      return <p className="ml-2">{i18n.t(k.SLACK_USER)}</p>;
-    }
     return (
       <UserRoleDropdown
         user={user}
@@ -308,16 +305,6 @@ const SignedUpUserTable = ({
   };
 
   const renderActionButtons = (user: User) => {
-    if (user.role === UserRole.SLACK_USER) {
-      return (
-        <InviteUserButton
-          user={user}
-          invited={invitedUsers.map((u) => u.email).includes(user.email)}
-          setPopup={setPopup}
-          mutate={[refresh, invitedUsersMutate]}
-        />
-      );
-    }
     return (
       <ActionMenu
         user={user}
