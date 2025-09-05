@@ -82,6 +82,12 @@ class UserProjectSnapshot(BaseModel):
             created_at=model.created_at,
             user_id=model.user_id,
             chat_sessions=[
-                ChatSessionDetails.from_model(chat) for chat in model.chat_sessions
+                ChatSessionDetails.from_model(chat)
+                for chat in model.chat_sessions
+                if not chat.deleted
             ],
         )
+
+
+class ChatSessionRequest(BaseModel):
+    chat_session_id: str

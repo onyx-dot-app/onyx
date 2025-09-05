@@ -8,8 +8,13 @@ import {
   FileText,
   FolderOpen,
   FolderPlus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
+import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import type { ChatSession } from "@/app/chat/interfaces";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
@@ -24,6 +29,8 @@ function CollapsibleFolder({
   defaultOpen = true,
   onToggle,
   onNameClick,
+  onRename,
+  onDeleteClick,
   isSelected,
 }: {
   title: string;
@@ -31,15 +38,20 @@ function CollapsibleFolder({
   defaultOpen?: boolean;
   onToggle?: (open: boolean) => void;
   onNameClick?: () => void;
+  onRename?: (newName: string) => Promise<void> | void;
+  onDeleteClick?: () => void;
   isSelected?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [hoveringIcon, setHoveringIcon] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(title);
+  const [isSaving, setIsSaving] = useState(false);
   console.log("isSelected", isSelected);
   return (
     <div className="w-full">
       <div
-        className={`w-full flex items-center gap-x-2 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
+        className={`w-full group flex items-center gap-x-2 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
       >
         <button
           type="button"
@@ -67,13 +79,116 @@ function CollapsibleFolder({
             />
           )}
         </button>
-        <button
-          type="button"
-          onClick={onNameClick}
-          className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
+        {isEditing ? (
+          <input
+            className="w-full text-base bg-transparent outline-none text-black dark:text-[#D4D4D4] py-1 rounded-md border-b border-transparent focus:border-accent-background-hovered"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter") {
+                if (!onRename) return;
+                const nextName = editValue.trim();
+                if (!nextName || nextName === title) {
+                  setIsEditing(false);
+                  setEditValue(title);
+                  return;
+                }
+                try {
+                  setIsSaving(true);
+                  await onRename(nextName);
+                } finally {
+                  setIsSaving(false);
+                  setIsEditing(false);
+                }
+              } else if (e.key === "Escape") {
+                setIsEditing(false);
+                setEditValue(title);
+              }
+            }}
+            autoFocus
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={onNameClick}
+            className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
+          >
+            <span className="truncate">{title}</span>
+          </button>
+        )}
+        <div
+          className={`ml-2 flex items-center gap-x-1 transition-opacity ${isEditing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
         >
-          <span className="truncate">{title}</span>
-        </button>
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                aria-label="Save name"
+                disabled={isSaving}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!onRename) return;
+                  const nextName = editValue.trim();
+                  if (!nextName || nextName === title) {
+                    setIsEditing(false);
+                    setEditValue(title);
+                    return;
+                  }
+                  try {
+                    setIsSaving(true);
+                    await onRename(nextName);
+                  } finally {
+                    setIsSaving(false);
+                    setIsEditing(false);
+                  }
+                }}
+                className="p-1 rounded hover:bg-accent-background-hovered text-green-600 disabled:opacity-50"
+              >
+                <Check size={16} />
+              </button>
+              <button
+                type="button"
+                aria-label="Cancel rename"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(false);
+                  setEditValue(title);
+                }}
+                className="p-1 rounded hover:bg-accent-background-hovered text-red-600"
+              >
+                <X size={16} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                aria-label="Rename project"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                  setEditValue(title);
+                }}
+                className="p-1 rounded hover:bg-accent-background-hovered text-text-history-sidebar-button"
+              >
+                <Pencil size={16} />
+              </button>
+              {onDeleteClick && (
+                <button
+                  type="button"
+                  aria-label="Delete project"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteClick();
+                  }}
+                  className="p-1 rounded hover:bg-accent-background-hovered text-text-history-sidebar-button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div
@@ -91,11 +206,21 @@ function CollapsibleFolder({
 
 export default function Projects({ onOpenProject }: ProjectsProps) {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
-  const { createProject, projects, currentProjectId } = useProjectsContext();
+  const {
+    createProject,
+    projects,
+    currentProjectId,
+    renameProject,
+    deleteProject,
+  } = useProjectsContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const chatSessionId = searchParams?.get("chatId");
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   return (
     <div className="flex flex-col gap-y-2 mt-4">
       <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
@@ -130,6 +255,12 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
               }
               router.push(`${pathname}?${params.toString()}`);
             }}
+            onRename={async (newName: string) => {
+              await renameProject(p.id, newName);
+            }}
+            onDeleteClick={() => {
+              setDeleteTarget({ id: p.id, name: p.name });
+            }}
           >
             {p.chat_sessions && p.chat_sessions.length > 0 ? (
               p.chat_sessions.map((chatSession) => (
@@ -138,6 +269,7 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
                   chatSession={chatSession}
                   isSelected={chatSession.id == chatSessionId}
                   showDragHandle={false}
+                  projectId={p.id}
                 />
               ))
             ) : (
@@ -157,6 +289,24 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
         onCreate={async (_name) => {
           await createProject(_name);
         }}
+      />
+      <DeleteEntityModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          const targetId = deleteTarget.id;
+          await deleteProject(targetId);
+          setDeleteTarget(null);
+          const params = new URLSearchParams(searchParams?.toString() || "");
+          if (params.get("projectid") === String(targetId)) {
+            params.delete("projectid");
+            if (params.has("chatId")) params.delete("chatId");
+            router.push(`${pathname}?${params.toString()}`);
+          }
+        }}
+        entityType="folder"
+        entityName={deleteTarget?.name || ""}
       />
     </div>
   );

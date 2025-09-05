@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { FileIcon, FolderOpen, Loader2 } from "lucide-react";
+import { FileIcon, FolderOpen, Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { RiPlayListAddFill } from "react-icons/ri";
 import { useProjectsContext } from "../../projects/ProjectsContext";
@@ -31,6 +31,7 @@ import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 export function FileCard({ file }: { file: ProjectFile }) {
+  const { deleteUserFile } = useProjectsContext();
   const typeLabel = useMemo(() => {
     if (!file.file_type) return "";
     const parts = String(file.file_type).split("/");
@@ -42,8 +43,28 @@ export function FileCard({ file }: { file: ProjectFile }) {
     String(file.status).toLowerCase() === "processing" ||
     String(file.status).toLowerCase() === "uploading";
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isProcessing) return;
+    try {
+      await deleteUserFile(file.id);
+    } catch (err) {
+      // Swallow; parent poll/refresh will sync state
+    }
+  };
+
   return (
-    <div className="flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm">
+    <div className="relative flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm">
+      {!isProcessing && (
+        <button
+          onClick={handleDelete}
+          title="Delete file"
+          aria-label="Delete file"
+          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm hover:opacity-90"
+        >
+          <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
+        </button>
+      )}
       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background-dark/60">
         {isProcessing ? (
           <Loader2 className="h-5 w-5 text-text-400 animate-spin" />
@@ -101,27 +122,30 @@ export default function ProjectContextPanel() {
       </h1>
       <Separator />
       <div className="flex flex-row gap-2 justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="font-bold">Instructions</p>
           {currentProjectDetails?.instructions ? (
-            <p className="font-light">
+            <p
+              className="font-light truncate"
+              title={currentProjectDetails.instructions.system_prompt}
+            >
               {currentProjectDetails.instructions.system_prompt}
             </p>
           ) : (
-            <p className="font-light">
+            <p className="font-light truncate">
               Add instructions to tailor the response in this project.
             </p>
           )}
         </div>
         <button
           onClick={() => setIsInstrOpen(true)}
-          className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered cursor-pointer transition-all duration-150"
+          className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 shrink-0 whitespace-nowrap"
         >
           <RiPlayListAddFill
             size={20}
             className="text-text-darker dark:text-text-lighter"
           />
-          <p className="text-sm text-text-darker dark:text-text-lighter">
+          <p className="text-sm text-text-darker dark:text-text-lighter whitespace-nowrap">
             Set Instructions
           </p>
         </button>
@@ -158,6 +182,8 @@ export default function ProjectContextPanel() {
                   file_type: file.type,
                   last_accessed_at: new Date().toISOString(),
                   chat_file_type: ChatFileType.DOCUMENT,
+                  token_count: 0,
+                  chunk_count: 0,
                 })
               );
               setTempProjectFiles((prev) => [...prev, ...tempFiles]);
@@ -181,7 +207,7 @@ export default function ProjectContextPanel() {
                   message: `Some files were not uploaded. ${parts.join(" | ")}`,
                 });
               }
-              await refreshCurrentProjectDetails(String(currentProjectId));
+              await refreshCurrentProjectDetails();
             } finally {
               setIsUploading(false);
               setTempProjectFiles([]);

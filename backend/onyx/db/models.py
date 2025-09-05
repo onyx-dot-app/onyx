@@ -3284,7 +3284,7 @@ class UserFolder(Base):
         ForeignKey("prompt.id"), nullable=True
     )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        "ChatSession", back_populates="project"
+        "ChatSession", back_populates="project", lazy="selectin"
     )
 
 

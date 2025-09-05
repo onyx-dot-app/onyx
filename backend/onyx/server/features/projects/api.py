@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -20,6 +22,7 @@ from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.prompts import upsert_prompt
 from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
+from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
@@ -126,9 +129,6 @@ def get_project_instructions(
     return PromptSnapshot.from_model(prompt)
 
 
-# -------------------------
-# Project Instructions
-# -------------------------
 class UpsertProjectInstructionsRequest(BaseModel):
     instructions: str
 
@@ -162,7 +162,6 @@ def upsert_project_instructions(
         task_prompt="",
         datetime_aware=True,
         prompt_id=project.prompt_id,
-        include_citations=False,
         default_prompt=False,
         description=description,
     )
@@ -190,14 +189,98 @@ def get_project_details(
     return ProjectPayload(project=project, files=files, instructions=instructions)
 
 
-class MoveChatSessionRequest(BaseModel):
-    chat_session_id: str
+class UpdateProjectRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+@router.patch("/{project_id}", response_model=UserProjectSnapshot)
+def update_project(
+    project_id: int,
+    body: UpdateProjectRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+):
+    project = (
+        db_session.query(UserFolder)
+        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if body.name is not None:
+        project.name = body.name
+    if body.description is not None:
+        project.description = body.description
+
+    db_session.commit()
+    db_session.refresh(project)
+    return UserProjectSnapshot.from_model(project)
+
+
+@router.delete("/{project_id}")
+def delete_project(
+    project_id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    project = (
+        db_session.query(UserFolder)
+        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Unlink chat sessions from this project
+    for chat in project.chat_sessions:
+        chat.project_id = None
+
+    # Unlink many-to-many user files association (Project__UserFile)
+    for uf in list(project.user_files):
+        project.user_files.remove(uf)
+
+    # Unlink one-to-many folder relationship on UserFile if used
+    for f in list(project.files):
+        f.folder_id = None
+
+    db_session.delete(project)
+    db_session.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/file/{file_id}")
+def delete_user_file(
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Delete a user file belonging to the current user.
+
+    This will also remove any project associations for the file.
+    """
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .one_or_none()
+    )
+    if user_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Remove project associations if any
+    for project in list(user_file.projects):
+        user_file.projects.remove(project)
+
+    db_session.delete(user_file)
+    db_session.commit()
+    return Response(status_code=204)
 
 
 @router.post("/{project_id}/move_chat_session")
 def move_chat_session(
     project_id: int,
-    body: MoveChatSessionRequest,
+    body: ChatSessionRequest,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -209,6 +292,25 @@ def move_chat_session(
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
     chat_session.project_id = project_id
+    db_session.commit()
+    return Response(status_code=204)
+
+
+@router.post("/remove_chat_session")
+def remove_chat_session(
+    body: ChatSessionRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+
+    chat_session = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user.id)
+        .one_or_none()
+    )
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    chat_session.project_id = None
     db_session.commit()
     return Response(status_code=204)
 
