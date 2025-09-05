@@ -52,7 +52,7 @@ msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
-openai==1.75.0
+openai==1.106.1
 passlib==1.7.4
 playwright==1.41.2
 psutil==5.9.5
