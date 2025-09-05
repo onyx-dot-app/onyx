@@ -310,18 +310,6 @@ export const HistorySidebar = React.memo(
                     New Chat
                   </p>
                 </Link>
-                <Link
-                  className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href="/chat/my-documents"
-                >
-                  <KnowledgeGroupIcon
-                    size={20}
-                    className="flex-none text-text-history-sidebar-button"
-                  />
-                  <p className="my-auto flex font-normal items-center text-base">
-                    My Documents
-                  </p>
-                </Link>
                 {user?.preferences?.shortcut_enabled && (
                   <Link
                     className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"

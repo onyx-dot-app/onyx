@@ -6,14 +6,10 @@ import { ErrorBanner } from "../message/Resubmit";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor } from "@/lib/hooks";
-import {
-  FileResponse,
-  FolderResponse,
-} from "@/app/chat/my-documents/DocumentsContext";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
-import { ProjectFile } from "../projects/ProjectsContext";
+import { ProjectFile } from "../projects/projectsService";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];

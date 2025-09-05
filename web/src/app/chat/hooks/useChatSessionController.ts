@@ -18,16 +18,13 @@ import {
 } from "../services/searchParams";
 import { FilterManager } from "@/lib/hooks";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FileDescriptor } from "../interfaces";
-import { FileResponse, FolderResponse } from "../my-documents/DocumentsContext";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { getCitations } from "../services/packetUtils";
 import { getAvailableContextTokens } from "../services/lib";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
-import { ProjectFile } from "../projects/ProjectsContext";
+import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 
 interface UseChatSessionControllerProps {
