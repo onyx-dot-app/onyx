@@ -154,6 +154,11 @@ class ChatSessionManager:
                 )
                 continue
 
+            if packet_type == "image_generation_tool_heartbeat":
+                # Track heartbeat packets for debugging/testing
+                analyzed.heartbeat_packets.append(data)
+                continue
+
             if packet_type == "internal_search_tool_delta":
                 ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
 

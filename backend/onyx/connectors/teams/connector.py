@@ -284,12 +284,18 @@ class TeamsConnector(
                         yield slim_doc_buffer
                         slim_doc_buffer = []
 
+                # Flush any remaining slim documents collected for this channel
+                if slim_doc_buffer:
+                    yield slim_doc_buffer
+                    slim_doc_buffer = []
+
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
     top_message_user_name: str
 
     if top_message.from_ and top_message.from_.user:
-        top_message_user_name = top_message.from_.user.display_name
+        user_display_name = top_message.from_.user.display_name
+        top_message_user_name = user_display_name if user_display_name else "Unknown User"
     else:
         logger.warn(f"Message {top_message=} has no `from.user` field")
         top_message_user_name = "Unknown User"

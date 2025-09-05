@@ -24,6 +24,7 @@ export const ApiKeyModal = ({
   if (!shouldShowConfigurationNeeded) {
     return null;
   }
+
   return (
     <Modal
       title="Configure a Generative AI Model"

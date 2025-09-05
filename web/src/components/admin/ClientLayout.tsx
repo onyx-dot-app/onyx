@@ -42,6 +42,7 @@ import Link from "next/link";
 import { Button } from "../ui/button";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
+import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 
 const connectors_items = () => [
   {
@@ -153,7 +154,8 @@ const collections = (
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
-  kgExposed: boolean
+  kgExposed: boolean,
+  customAnalyticsEnabled: boolean
 ) => [
   {
     name: "Connectors",
@@ -311,7 +313,7 @@ const collections = (
                         },
                       ]
                     : []),
-                  ...(!enableCloud
+                  ...(!enableCloud && customAnalyticsEnabled
                     ? [
                         {
                           name: (
@@ -393,6 +395,7 @@ export function ClientLayout({
   enableCloud: boolean;
 }) {
   const { kgExposed, isLoading } = useIsKGExposed();
+  const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
@@ -464,7 +467,8 @@ export function ClientLayout({
             enableCloud,
             enableEnterprise,
             settings,
-            kgExposed
+            kgExposed,
+            customAnalyticsEnabled
           )}
         />
       </div>

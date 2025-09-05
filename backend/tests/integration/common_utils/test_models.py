@@ -174,6 +174,9 @@ class StreamedResponse(BaseModel):
     top_documents: list[SavedSearchDoc] | None = None
     used_tools: list[ToolResult] = Field(default_factory=list)
 
+    # Track heartbeat packets for image generation and other tools
+    heartbeat_packets: list[dict[str, Any]] = Field(default_factory=list)
+
 
 class DATestGatingType(str, Enum):
     FULL = "full"

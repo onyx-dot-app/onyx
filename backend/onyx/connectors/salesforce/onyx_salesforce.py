@@ -67,7 +67,7 @@ class OnyxSalesforce(Salesforce):
         return False
 
     @retry_builder(
-        tries=5,
+        tries=6,
         delay=20,
         backoff=1.5,
         max_delay=60,
