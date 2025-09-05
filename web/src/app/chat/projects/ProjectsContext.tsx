@@ -23,6 +23,9 @@ import {
   upsertProjectInstructions as svcUpsertProjectInstructions,
   getProjectDetails as svcGetProjectDetails,
   ProjectDetails,
+  renameProject as svcRenameProject,
+  deleteProject as svcDeleteProject,
+  deleteUserFile as svcDeleteUserFile,
 } from "./projectsService";
 import { Prompt } from "@/app/admin/assistants/interfaces";
 
@@ -32,23 +35,26 @@ interface ProjectsContextType {
   projects: Project[];
   recentFiles: ProjectFile[];
   currentProjectDetails: ProjectDetails | null;
-  currentProjectId: string | null;
+  currentProjectId: number | null;
   isLoading: boolean;
   error: string | null;
   currentMessageFiles: ProjectFile[];
   setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
-  setCurrentProjectId: (projectId: string | null) => void;
+  setCurrentProjectId: (projectId: number | null) => void;
   upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
   createProject: (name: string) => Promise<Project>;
+  renameProject: (projectId: number, name: string) => Promise<Project>;
+  deleteProject: (projectId: number) => Promise<void>;
   uploadFiles: (
     files: File[],
-    projectId?: string | number | null
+    projectId?: number | null
   ) => Promise<CategorizedFiles>;
   getRecentFiles: () => Promise<ProjectFile[]>;
-  getFilesInProject: (projectId: string) => Promise<ProjectFile[]>;
-  refreshCurrentProjectDetails: (projectId: string) => Promise<void>;
+  getFilesInProject: (projectId: number) => Promise<ProjectFile[]>;
+  refreshCurrentProjectDetails: () => Promise<void>;
   refreshRecentFiles: () => Promise<void>;
+  deleteUserFile: (fileId: string) => Promise<void>;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(
@@ -66,7 +72,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
@@ -90,14 +96,13 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   }, []);
 
   // Load full details for current project
-  const refreshCurrentProjectDetails = useCallback(
-    async (projectId: string) => {
-      console.log("refreshing current project details", projectId);
-      const details = await svcGetProjectDetails(projectId);
+  const refreshCurrentProjectDetails = useCallback(async () => {
+    if (currentProjectId) {
+      console.log("refreshing current project details", currentProjectId);
+      const details = await svcGetProjectDetails(currentProjectId);
       setCurrentProjectDetails(details);
-    },
-    [currentProjectId]
-  );
+    }
+  }, [currentProjectId, setCurrentProjectDetails]);
 
   const upsertInstructions = useCallback(
     async (instructions: string) => {
@@ -106,7 +111,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       }
       console.log("upserting instructions", instructions);
       await svcUpsertProjectInstructions(currentProjectId, instructions);
-      await refreshCurrentProjectDetails(currentProjectId);
+      await refreshCurrentProjectDetails();
     },
     [currentProjectId, refreshCurrentProjectDetails]
   );
@@ -129,10 +134,50 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     [fetchProjects]
   );
 
+  const renameProject = useCallback(
+    async (projectId: number, name: string): Promise<Project> => {
+      setError(null);
+      try {
+        const updated = await svcRenameProject(projectId, name);
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
+        return updated;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to rename project";
+        setError(message);
+        throw err;
+      }
+    },
+    [fetchProjects, currentProjectId, refreshCurrentProjectDetails]
+  );
+
+  const deleteProject = useCallback(
+    async (projectId: number): Promise<void> => {
+      setError(null);
+      try {
+        await svcDeleteProject(projectId);
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          setCurrentProjectDetails(null);
+          setCurrentProjectId(null);
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to delete project";
+        setError(message);
+        throw err;
+      }
+    },
+    [fetchProjects, currentProjectId]
+  );
+
   const uploadFiles = useCallback(
     async (
       files: File[],
-      projectId?: string | number | null
+      projectId?: number | null
     ): Promise<CategorizedFiles> => {
       setIsLoading(true);
       setError(null);
@@ -144,7 +189,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
         // If we uploaded into a specific project, refresh that project's files
         if (projectId) {
-          await refreshCurrentProjectDetails(String(projectId));
+          await refreshCurrentProjectDetails();
         }
         // Refresh recent files as well
         await refreshRecentFiles();
@@ -176,7 +221,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   }, []);
 
   const getFilesInProject = useCallback(
-    async (projectId: string): Promise<ProjectFile[]> => {
+    async (projectId: number): Promise<ProjectFile[]> => {
       setError(null);
       try {
         const data: ProjectFile[] = await svcGetFilesInProject(projectId);
@@ -211,7 +256,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   useEffect(() => {
     if (currentProjectId) {
-      refreshCurrentProjectDetails(currentProjectId);
+      refreshCurrentProjectDetails();
     }
   }, [currentProjectId, refreshCurrentProjectDetails]);
 
@@ -222,10 +267,10 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     const latestById = new Map<string, ProjectFile>();
     // Prefer project files first, then recent files as fallback
     (currentProjectDetails?.files || []).forEach((f) => {
-      latestById.set(String(f.id), f);
+      latestById.set(f.id, f);
     });
     recentFiles.forEach((f) => {
-      const key = String(f.id);
+      const key = f.id;
       if (!latestById.has(key)) {
         latestById.set(key, f);
       }
@@ -233,14 +278,14 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
     let changed = false;
     const reconciled = currentMessageFiles.map((f) => {
-      const key = String(f.id);
+      const key = f.id;
       const latest = latestById.get(key);
       if (latest) {
         // Only mark changed if status or other fields differ
         if (
-          String(latest.status) !== String(f.status) ||
-          String(latest.name) !== String(f.name) ||
-          String(latest.file_type) !== String(f.file_type)
+          latest.status !== f.status ||
+          latest.name !== f.name ||
+          latest.file_type !== f.file_type
         ) {
           changed = true;
           return { ...f, ...latest } as ProjectFile;
@@ -258,7 +303,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   useEffect(() => {
     const hasProcessingInProject = Boolean(
       currentProjectDetails?.files?.some(
-        (f) => String(f.status).toLowerCase() === "processing"
+        (f) => f.status.toLowerCase() === "processing"
       )
     );
     const hasProcessingInRecent = recentFiles.some(
@@ -271,7 +316,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       isPollingRef.current = true;
       try {
         if (currentProjectId) {
-          await refreshCurrentProjectDetails(currentProjectId);
+          await refreshCurrentProjectDetails();
         }
         await refreshRecentFiles();
       } finally {
@@ -318,11 +363,21 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       upsertInstructions,
       fetchProjects,
       createProject,
+      renameProject,
+      deleteProject,
       uploadFiles,
       getRecentFiles,
       getFilesInProject,
       refreshCurrentProjectDetails,
       refreshRecentFiles,
+      deleteUserFile: async (fileId: string) => {
+        await svcDeleteUserFile(fileId);
+        // Refresh current project details and recent files to reflect deletion
+        if (currentProjectId) {
+          await refreshCurrentProjectDetails();
+        }
+        await refreshRecentFiles();
+      },
     }),
     [
       projects,
@@ -336,6 +391,8 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       upsertInstructions,
       fetchProjects,
       createProject,
+      renameProject,
+      deleteProject,
       uploadFiles,
       getRecentFiles,
       getFilesInProject,
