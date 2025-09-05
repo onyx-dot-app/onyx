@@ -65,6 +65,7 @@ SLIM_BATCH_SIZE = 1000
 
 ASPX_EXTENSION = ".aspx"
 REQUEST_TIMEOUT = 10
+GRAPH_API_REQUEST_TIMEOUT = 30
 SHAREPOINT_DOWNLOAD_URL_REQUEST_TIMEOUT = 60
 
 
@@ -931,7 +932,10 @@ class SharepointConnector(
         params = {"$expand": "canvasLayout"}
 
         response = requests.get(
-            pages_endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+            pages_endpoint,
+            headers=headers,
+            params=params,
+            timeout=GRAPH_API_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         pages_data = response.json()
@@ -940,7 +944,11 @@ class SharepointConnector(
         # Handle pagination if there are more pages
         while "@odata.nextLink" in pages_data:
             next_url = pages_data["@odata.nextLink"]
-            response = requests.get(next_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            response = requests.get(
+                next_url,
+                headers=headers,
+                timeout=GRAPH_API_REQUEST_TIMEOUT,
+            )
             response.raise_for_status()
             pages_data = response.json()
             all_pages.extend(pages_data.get("value", []))
