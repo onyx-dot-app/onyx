@@ -174,7 +174,6 @@ def bulk_fetch_issues(
         response = jira_client._session.post(bulk_fetch_path, json=payload).json()
     except Exception as e:
         logger.error(f"Error fetching issues: {e}")
-        logger.error(f"Payload was: {payload}")
         raise e
     return [
         Issue(jira_client._options, jira_client._session, raw=issue)
@@ -494,7 +493,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
         # Update checkpoint
         self.update_checkpoint_for_next_run(
-            new_checkpoint, current_offset, starting_offset
+            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
         )
 
         return new_checkpoint
@@ -504,6 +503,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         checkpoint: JiraConnectorCheckpoint,
         current_offset: int,
         starting_offset: int,
+        page_size: int,
     ) -> None:
         if _is_cloud_client(self.jira_client):
             # other updates done in the checkpoint callback
@@ -513,9 +513,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         else:
             checkpoint.offset = current_offset
             # if we didn't retrieve a full batch, we're done
-            checkpoint.has_more = (
-                current_offset - starting_offset == _JIRA_FULL_PAGE_SIZE
-            )
+            checkpoint.has_more = current_offset - starting_offset == page_size
 
     def retrieve_all_slim_documents(
         self,
@@ -565,7 +563,9 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                 if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
-            self.update_checkpoint_for_next_run(checkpoint, current_offset, prev_offset)
+            self.update_checkpoint_for_next_run(
+                checkpoint, current_offset, prev_offset, _JIRA_SLIM_PAGE_SIZE
+            )
             prev_offset = current_offset
 
         if slim_doc_batch:
