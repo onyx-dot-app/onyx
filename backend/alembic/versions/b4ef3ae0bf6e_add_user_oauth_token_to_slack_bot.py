@@ -1,7 +1,7 @@
 """add_user_oauth_token_to_slack_bot
 
 Revision ID: b4ef3ae0bf6e
-Revises: 7ed603b64d5a
+Revises: 9d97fecfab7f
 Create Date: 2025-08-26 17:47:41.788462
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b4ef3ae0bf6e"
-down_revision = "7ed603b64d5a"
+down_revision = "9d97fecfab7f"
 branch_labels = None
 depends_on = None
 
