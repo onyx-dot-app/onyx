@@ -38,3 +38,8 @@ settings.json
 
 # Local .terraform.lock.hcl file
 .terraform.lock.hcl
+
+# python packaging
+/dist/
+/build/
+/*.egg-info/
