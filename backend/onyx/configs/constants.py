@@ -494,7 +494,6 @@ class OnyxCeleryTask:
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
 
-    AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
