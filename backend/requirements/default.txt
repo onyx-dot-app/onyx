@@ -35,14 +35,13 @@ trafilatura==1.12.2
 langchain==0.3.23
 langchain-community==0.3.21
 langchain-core==0.3.51
-langchain-openai==0.2.9
 langchain-text-splitters==0.3.8
 langchainhub==0.1.21
 langgraph==0.2.72
 langgraph-checkpoint==2.0.13
 langgraph-sdk==0.1.44
 lazy_imports==1.0.1
-litellm==1.72.2 
+litellm==1.76.2 
 lxml==5.3.0
 lxml_html_clean==0.2.2
 Mako==1.2.4
