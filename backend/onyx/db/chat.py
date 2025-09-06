@@ -1791,6 +1791,7 @@ def update_db_session_with_messages(
     final_documents: list[SearchDoc] | None = None,
     update_parent_message: bool = True,
     research_answer_purpose: ResearchAnswerPurpose | None = None,
+    commit: bool = False,
 ) -> None:
 
     chat_message = (
@@ -1843,5 +1844,10 @@ def update_db_session_with_messages(
         )
         if parent_chat_message:
             parent_chat_message.latest_child_message = chat_message.id
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
 
     return
