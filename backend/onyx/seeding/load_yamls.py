@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.chat_configs import USER_FOLDERS_YAML
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
+from onyx.db.persona import delete_old_default_personas
 from onyx.db.persona import upsert_persona
 from onyx.db.user_documents import upsert_user_folder
 from onyx.seeding.prebuilt_personas import get_prebuilt_personas
@@ -64,6 +65,10 @@ def load_input_prompts_from_yaml(
 
 def load_builtin_personas(db_session: Session) -> None:
     """Load built-in personas with embedded prompt configuration."""
+
+    # cleanup old default personas before loading
+    delete_old_default_personas(db_session)
+
     logger.info("Loading builtin personas")
     try:
         for prebuilt_persona in get_prebuilt_personas():

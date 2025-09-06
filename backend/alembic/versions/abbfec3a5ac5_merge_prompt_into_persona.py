@@ -18,6 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """NOTE: Prompts without any Personas will just be lost."""
     # Step 1: Add new columns to persona table (only if they don't exist)
 
     # Check if columns exist before adding them
@@ -83,52 +84,7 @@ def upgrade() -> None:
         """
         )
 
-        # Step 4: Handle orphaned prompts (prompts not associated with any persona)
-        # Create new personas for default/system prompts that aren't linked to any persona
-        op.execute(
-            """
-            INSERT INTO persona (
-                name,
-                description,
-                system_prompt,
-                task_prompt,
-                datetime_aware,
-                is_default_prompt,
-                chunks_above,
-                chunks_below,
-                llm_relevance_filter,
-                llm_filter_extraction,
-                recency_bias,
-                builtin_persona,
-                is_visible,
-                deleted,
-                is_public
-            )
-            SELECT
-                p.name,
-                p.description,
-                p.system_prompt,
-                p.task_prompt,
-                p.datetime_aware,
-                p.default_prompt,
-                0,  -- chunks_above default
-                0,  -- chunks_below default
-                false,  -- llm_relevance_filter default
-                false,  -- llm_filter_extraction default
-                'base_decay',  -- recency_bias default
-                p.default_prompt,  -- builtin_persona matches default_prompt
-                NOT p.deleted,  -- is_visible based on deleted status
-                false,  -- deleted default
-                true  -- is_public default
-            FROM prompt p
-            WHERE p.id NOT IN (
-                SELECT DISTINCT prompt_id FROM persona__prompt
-            )
-            AND p.deleted = false
-        """
-        )
-
-        # Step 5: Update chat_message references
+        # Step 3: Update chat_message references
         # Since chat messages referenced prompt_id, we need to update them to use persona_id
         # This is complex as we need to map from prompt_id to persona_id
 
@@ -171,7 +127,7 @@ def upgrade() -> None:
             # Step 7: Drop the prompt_id column from chat_message
             op.drop_column("chat_message", "prompt_id")
 
-    # Step 3: Handle personas without prompts - set default values if needed (always run this)
+    # Step 4: Handle personas without prompts - set default values if needed (always run this)
     op.execute(
         """
         UPDATE persona
@@ -182,15 +138,15 @@ def upgrade() -> None:
     """
     )
 
-    # Step 8: Drop the persona__prompt association table (if it exists)
+    # Step 5: Drop the persona__prompt association table (if it exists)
     if "persona__prompt" in existing_tables:
         op.drop_table("persona__prompt")
 
-    # Step 9: Drop the prompt table (if it exists)
+    # Step 6: Drop the prompt table (if it exists)
     if "prompt" in existing_tables:
         op.drop_table("prompt")
 
-    # Step 10: Make system_prompt and task_prompt non-nullable after migration (only if they exist)
+    # Step 7: Make system_prompt and task_prompt non-nullable after migration (only if they exist)
     if "system_prompt" in existing_columns:
         op.alter_column(
             "persona",
