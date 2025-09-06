@@ -159,7 +159,9 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
         # collect cc_pair_ids
         cc_pair_ids: list[int] = []
         with get_session_with_current_tenant() as db_session:
-            cc_pairs = get_connector_credential_pairs(db_session)
+            cc_pairs = get_connector_credential_pairs(
+                db_session, include_user_files=True
+            )
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
 
