@@ -16,7 +16,7 @@ import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import useSWR from "swr";
-import { useState } from "react";
+import React, { useState } from "react";
 import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Link from "next/link";
@@ -33,21 +33,21 @@ import {
 import { CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/Spinner";
 
-function GenerateReportInput() {
+function GenerateReportInput({
+  onReportGenerated,
+  isWaitingForReport,
+}: {
+  onReportGenerated: () => void;
+  isWaitingForReport: boolean;
+}) {
   const [dateRange, setDateRange] = useState<DateRangePickerValue | undefined>(
     undefined
   );
   const [isLoading, setIsLoading] = useState(false);
 
   const [errorOccurred, setErrorOccurred] = useState<Error | null>(null);
-
-  const download = (bytes: Blob) => {
-    const elm = document.createElement("a");
-    elm.href = URL.createObjectURL(bytes);
-    elm.setAttribute("download", "usage_reports.zip");
-    elm.click();
-  };
 
   const requestReport = async () => {
     setIsLoading(true);
@@ -61,7 +61,7 @@ function GenerateReportInput() {
         period_to = dateRange?.to?.toISOString() ?? new Date().toISOString();
       }
 
-      const res = await fetch("/api/admin/generate-usage-report", {
+      const res = await fetch("/api/admin/usage-report", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -77,13 +77,8 @@ function GenerateReportInput() {
         throw Error(`Received an error: ${res.statusText}`);
       }
 
-      const report = await res.json();
-      const transfer = await fetch(
-        `/api/admin/usage-report/${report.report_name}`
-      );
-
-      const bytes = await transfer.blob();
-      download(bytes);
+      // Trigger refresh of the reports list
+      onReportGenerated();
     } catch (e) {
       setErrorOccurred(e as Error);
     } finally {
@@ -211,12 +206,16 @@ function GenerateReportInput() {
         color={"blue"}
         icon={FiDownloadCloud}
         size="sm"
-        disabled={isLoading}
+        disabled={isLoading || isWaitingForReport}
         onClick={() => requestReport()}
       >
-        Generate Report
+        {isWaitingForReport ? "Generating..." : "Generate Report"}
       </Button>
-      <p className="mt-1 text-xs">This can take a few minutes.</p>
+      <p className="mt-1 text-xs">
+        {isWaitingForReport
+          ? "A report is currently being generated. Please wait..."
+          : 'Report generation runs in the background. Check the "Previous Reports" section below to download when ready.'}
+      </p>
       {errorOccurred && (
         <ErrorCallout
           errorTitle="Something went wrong."
@@ -229,15 +228,48 @@ function GenerateReportInput() {
 
 const USAGE_REPORT_URL = "/api/admin/usage-report";
 
-function UsageReportsTable() {
+function UsageReportsTable({
+  refreshTrigger,
+  isWaitingForReport,
+  onNewReportDetected,
+}: {
+  refreshTrigger: number;
+  isWaitingForReport: boolean;
+  onNewReportDetected: () => void;
+}) {
   const [page, setPage] = useState(1);
   const NUM_IN_PAGE = 10;
+  const [previousReportCount, setPreviousReportCount] = useState<number | null>(
+    null
+  );
 
   const {
     data: usageReportsMetadata,
     error: usageReportsError,
     isLoading: usageReportsIsLoading,
-  } = useSWR<UsageReport[]>(USAGE_REPORT_URL, errorHandlingFetcher);
+    mutate,
+  } = useSWR<UsageReport[]>(USAGE_REPORT_URL, errorHandlingFetcher, {
+    refreshInterval: isWaitingForReport ? 3000 : 0, // Poll every 3 seconds when waiting
+  });
+
+  // Refresh when refreshTrigger changes
+  React.useEffect(() => {
+    if (refreshTrigger > 0) {
+      mutate();
+    }
+  }, [refreshTrigger, mutate]);
+
+  // Detect when a new report appears
+  React.useEffect(() => {
+    if (usageReportsMetadata && previousReportCount !== null) {
+      if (usageReportsMetadata.length > previousReportCount) {
+        onNewReportDetected();
+      }
+    }
+    if (usageReportsMetadata) {
+      setPreviousReportCount(usageReportsMetadata.length);
+    }
+  }, [usageReportsMetadata, previousReportCount, onNewReportDetected]);
 
   const paginatedReports = usageReportsMetadata
     ? usageReportsMetadata
@@ -253,7 +285,7 @@ function UsageReportsTable() {
   return (
     <div>
       <Title className="mb-2 mt-6 mx-auto"> Previous Reports </Title>
-      {usageReportsIsLoading ? (
+      {usageReportsIsLoading && !isWaitingForReport ? (
         <div className="flex justify-center w-full">
           <ThreeDotsLoader />
         </div>
@@ -328,11 +360,94 @@ function UsageReportsTable() {
 }
 
 export default function UsageReports() {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isWaitingForReport, setIsWaitingForReport] = useState(false);
+  const [timeoutMessage, setTimeoutMessage] = useState<string | null>(null);
+  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const handleReportGenerated = () => {
+    setRefreshTrigger((prev) => prev + 1);
+    setIsWaitingForReport(true);
+    setTimeoutMessage(null);
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Set a 15 second timeout
+    timeoutRef.current = setTimeout(() => {
+      setIsWaitingForReport(false);
+      setTimeoutMessage(
+        "Report generation is taking longer than expected. The report will continue generating in the background. Please check back in a few minutes."
+      );
+      timeoutRef.current = null;
+    }, 15000);
+  };
+
+  const handleNewReportDetected = () => {
+    setIsWaitingForReport(false);
+    setTimeoutMessage(null);
+    // Clear the timeout if report completed before timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <div className="mx-auto container">
-      <GenerateReportInput />
-      <Separator />
-      <UsageReportsTable />
-    </div>
+    <>
+      {isWaitingForReport && <Spinner />}
+      <div className="mx-auto container">
+        <GenerateReportInput
+          onReportGenerated={handleReportGenerated}
+          isWaitingForReport={isWaitingForReport}
+        />
+        {timeoutMessage && (
+          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-regular">
+            <div className="flex items-start gap-2">
+              <div className="text-amber-600 dark:text-amber-500 mt-0.5">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <Text className="text-amber-800 dark:text-amber-200 font-medium mb-1">
+                  Report Generation In Progress
+                </Text>
+                <Text className="text-amber-700 dark:text-amber-300 text-sm">
+                  {timeoutMessage}
+                </Text>
+              </div>
+            </div>
+          </div>
+        )}
+        <Separator />
+        <UsageReportsTable
+          refreshTrigger={refreshTrigger}
+          isWaitingForReport={isWaitingForReport}
+          onNewReportDetected={handleNewReportDetected}
+        />
+      </div>
+    </>
   );
 }

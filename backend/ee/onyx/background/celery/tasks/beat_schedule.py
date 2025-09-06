@@ -23,7 +23,7 @@ ee_beat_system_tasks: list[dict] = []
 ee_beat_task_templates: list[dict] = [
     {
         "name": "autogenerate-usage-report",
-        "task": OnyxCeleryTask.AUTOGENERATE_USAGE_REPORT_TASK,
+        "task": OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
         "schedule": timedelta(days=30),
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
@@ -57,7 +57,7 @@ if not MULTI_TENANT:
     ee_tasks_to_schedule = [
         {
             "name": "autogenerate-usage-report",
-            "task": OnyxCeleryTask.AUTOGENERATE_USAGE_REPORT_TASK,
+            "task": OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
             "schedule": timedelta(days=30),  # TODO: change this to config flag
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
