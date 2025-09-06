@@ -1775,7 +1775,7 @@ def create_search_doc_from_saved_search_doc(
 def update_db_session_with_messages(
     db_session: Session,
     chat_message_id: int,
-    chat_session_id: str,
+    chat_session_id: UUID,
     is_agentic: bool | None,
     message: str | None = None,
     message_type: str | None = None,
