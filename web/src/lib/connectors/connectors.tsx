@@ -282,6 +282,80 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  bitbucket: {
+    description: "Configure Bitbucket connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the workspace ID:",
+        label: "Workspace",
+        name: "workspace",
+        optional: false,
+      },
+      {
+        type: "tab",
+        name: "bitbucket_mode",
+        label: "What should be indexed from Bitbucket?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repositories",
+            fields: [
+              {
+                type: "text",
+                query: "Enter repository slug(s):",
+                label: "Repository Slugs",
+                name: "repositories",
+                optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Project(s)",
+            fields: [
+              {
+                type: "text",
+                query: "Enter project key(s):",
+                label: "Project Key(s)",
+                name: "projects",
+                optional: false,
+                description:
+                  "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)",
+              },
+            ],
+          },
+          {
+            value: "workspace",
+            label: "Workspace",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Workspace",
+                name: "workspace_tab",
+                description:
+                  "This connector will index all repositories in the workspace.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        description:
+          "Prune closed PRs after N days (use -1 to disable pruning, 0 to prune immediately)",
+        label: "Prune closed PRs After (Days)",
+        name: "prune_closed_prs_after_days",
+        optional: true,
+        default: -1,
+      },
+    ],
+  },
   gitbook: {
     description: "Configure GitBook connector",
     values: [
@@ -1580,6 +1654,13 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+}
+
+export interface BitbucketConfig {
+  workspace: string;
+  repositories?: string;
+  projects?: string;
+  prune_closed_prs_after_days?: number;
 }
 
 export interface GoogleDriveConfig {
