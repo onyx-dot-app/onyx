@@ -399,7 +399,6 @@ def get_provider_contextual_cost(
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
     _: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
 ) -> list[str]:
     """Fetch available Bedrock models for a specific region and credentials"""
     try:

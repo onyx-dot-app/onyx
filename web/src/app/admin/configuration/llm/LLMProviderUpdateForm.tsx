@@ -13,7 +13,7 @@ import {
   MultiSelectField,
   FileUploadFormField,
 } from "@/components/Field";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
@@ -437,60 +437,45 @@ export function LLMProviderUpdateForm({
           })}
 
           {/* Bedrock-specific fetch models button */}
-          {llmProviderDescriptor.name === "bedrock" &&
-            (() => {
-              // Memoize button disabled state to prevent lag on typing
-              const isButtonDisabled = useMemo(() => {
-                return (
+          {llmProviderDescriptor.name === "bedrock" && (
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  fetchBedrockModels(
+                    formikProps.values,
+                    formikProps.setFieldValue
+                  )
+                }
+                disabled={
                   isFetchingModels ||
                   !formikProps.values.custom_config?.AWS_REGION_NAME
-                );
-              }, [
-                isFetchingModels,
-                formikProps.values.custom_config?.AWS_REGION_NAME,
-                formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
-                formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-              ]);
+                }
+                className="w-fit"
+              >
+                {isFetchingModels ? (
+                  <>
+                    <LoadingAnimation size="text-sm" />
+                    <span className="ml-2">Fetching Models...</span>
+                  </>
+                ) : (
+                  "Fetch Available Models for Region"
+                )}
+              </Button>
 
-              return (
-                <div className="flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      fetchBedrockModels(
-                        formikProps.values,
-                        formikProps.setFieldValue
-                      )
-                    }
-                    disabled={isButtonDisabled}
-                    className="w-fit"
-                  >
-                    {isFetchingModels ? (
-                      <>
-                        <LoadingAnimation size="text-sm" />
-                        <span className="ml-2">Fetching Models...</span>
-                      </>
-                    ) : (
-                      "Fetch Available Models for Region"
-                    )}
-                  </Button>
+              {fetchModelsError && (
+                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+              )}
 
-                  {fetchModelsError && (
-                    <Text className="text-red-600 text-sm">
-                      {fetchModelsError}
-                    </Text>
-                  )}
-
-                  <Text className="text-sm text-gray-600">
-                    Enter your AWS region, then click this button to fetch
-                    available Bedrock models.
-                    <br />
-                    If you're updating your existing provider, you'll need to
-                    click this button to fetch the latest models.
-                  </Text>
-                </div>
-              );
-            })()}
+              <Text className="text-sm text-gray-600">
+                Enter your AWS region, then click this button to fetch available
+                Bedrock models.
+                <br />
+                If you're updating your existing provider, you'll need to click
+                this button to fetch the latest models.
+              </Text>
+            </div>
+          )}
 
           {!firstTimeConfiguration && (
             <>
