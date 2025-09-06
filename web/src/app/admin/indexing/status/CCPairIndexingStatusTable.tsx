@@ -52,18 +52,20 @@ function SummaryRow({
   summary,
   isOpen,
   onToggle,
+  className,
 }: {
   source: ValidSources;
   summary: SourceSummary;
   isOpen: boolean;
   onToggle: () => void;
+  className?: string;
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
     <TableRow
       onClick={onToggle}
-      className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
+      className={`border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-sm !border cursor-pointer ${className || ""}`}
     >
       <TableCell>
         <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
@@ -317,14 +319,14 @@ export function CCPairIndexingStatusTable({
         />
       </TableHeader>
       <TableBody>
-        {ccPairsIndexingStatuses.map((ccPairStatus) => (
+        {ccPairsIndexingStatuses.map((ccPairStatus, index) => (
           <React.Fragment key={ccPairStatus.source}>
-            <br className="mt-4 dark:bg-neutral-700" />
             <SummaryRow
               source={ccPairStatus.source}
               summary={ccPairStatus.summary}
               isOpen={connectorsToggled[ccPairStatus.source] || false}
               onToggle={() => toggleSource(ccPairStatus.source)}
+              className={index > 0 ? "mt-4" : ""}
             />
             {connectorsToggled[ccPairStatus.source] && (
               <>
