@@ -76,6 +76,7 @@ import firefliesIcon from "../../../public/Fireflies.png";
 import gitbookDarkIcon from "../../../public/GitBookDark.png";
 import gitbookLightIcon from "../../../public/GitBookLight.png";
 import sharepointIcon from "../../../public/Sharepoint.png";
+import tallyIcon from "../../../public/Tally.png";
 import teamsIcon from "../../../public/Teams.png";
 import mediawikiIcon from "../../../public/MediaWiki.svg";
 import wikipediaIcon from "../../../public/Wikipedia.png";
@@ -3097,6 +3098,13 @@ export const HighspotIcon = ({
 }: IconProps) => {
   return <LogoIcon size={size} className={className} src={highspotIcon} />;
 };
+
+export const TallyIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={tallyIcon} />
+);
 
 export const PinnedIcon = ({
   size = 16,

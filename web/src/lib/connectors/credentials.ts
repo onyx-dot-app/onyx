@@ -427,6 +427,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   wikipedia: null,
   mediawiki: null,
   web: null,
+  tally: null,
   not_applicable: null,
   ingestion_api: null,
   federated_slack: null,

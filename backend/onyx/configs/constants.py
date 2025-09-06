@@ -197,6 +197,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    TALLY = "tally"
 
     IMAP = "imap"
 

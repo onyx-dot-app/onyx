@@ -854,6 +854,60 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  tally: {
+    description: "Configure Tally connector to sync data from Tally ERP",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Tally XML Server host (default: localhost):",
+        label: "Tally Server Host",
+        name: "tally_host",
+        optional: true,
+      },
+      {
+        type: "number",
+        query: "Enter the Tally XML Server port (default: 9000):",
+        label: "Tally Server Port",
+        name: "tally_port",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Enter the company database name (leave empty for default):",
+        label: "Company Database",
+        name: "company_db",
+        optional: true,
+      },
+      {
+        type: "select",
+        query: "Select the sync mode:",
+        label: "Sync Mode",
+        name: "sync_mode",
+        options: [
+          { name: "incremental", value: "incremental" },
+          { name: "full", value: "full" },
+        ],
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Batch size for processing records (default: 100):",
+        label: "Batch Size",
+        name: "batch_size",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Path to the tally-database-loader submodule:",
+        label: "Loader Path",
+        name: "loader_path",
+        optional: true,
+      },
+    ],
+    overrideDefaultFreq: 60 * 60 * 12, // 12 hours
+  },
   zulip: {
     description: "Configure Zulip connector",
     values: [

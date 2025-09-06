@@ -26,6 +26,7 @@ import {
   SharepointIcon,
   TeamsIcon,
   SlabIcon,
+  TallyIcon,
   ZendeskIcon,
   ZulipIcon,
   MediaWikiIcon,
@@ -378,6 +379,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/file",
     isPopular: true,
+  },
+  tally: {
+    icon: TallyIcon,
+    displayName: "Tally",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/tally",
   },
 
   // Other

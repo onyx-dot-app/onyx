@@ -53,6 +53,7 @@ from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.slab.connector import SlabConnector
 from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.tally.connector import TallyConnector
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.connectors.web.connector import WebConnector
 from onyx.connectors.wikipedia.connector import WikipediaConnector
@@ -124,6 +125,7 @@ def identify_connector_class(
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
+        DocumentSource.TALLY: TallyConnector,
         DocumentSource.IMAP: ImapConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
