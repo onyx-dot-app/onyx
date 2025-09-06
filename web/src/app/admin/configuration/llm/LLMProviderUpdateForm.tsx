@@ -475,8 +475,8 @@ export function LLMProviderUpdateForm({
                 Enter your AWS region, then click this button to fetch available
                 Bedrock models.
                 <br />
-                If you're updating your existing provider, you'll need to click
-                this button to fetch the latest models.
+                If you&apos;re updating your existing provider, you&apos;ll need
+                to click this button to fetch the latest models.
               </Text>
             </div>
           )}
