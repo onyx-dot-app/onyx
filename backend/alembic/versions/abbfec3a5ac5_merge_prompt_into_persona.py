@@ -55,15 +55,14 @@ def upgrade() -> None:
             SET
                 system_prompt = p.system_prompt,
                 task_prompt = p.task_prompt,
-                datetime_aware = p.datetime_aware,
+                datetime_aware = p.datetime_aware
             FROM (
                 -- Get the first prompt for each persona (in case there are multiple)
                 SELECT DISTINCT ON (pp.persona_id)
                     pp.persona_id,
                     pr.system_prompt,
                     pr.task_prompt,
-                    pr.datetime_aware,
-                    pr.default_prompt
+                    pr.datetime_aware
                 FROM persona__prompt pp
                 JOIN prompt pr ON pp.prompt_id = pr.id
                 ORDER BY pp.persona_id, pr.id
@@ -204,7 +203,7 @@ def downgrade() -> None:
             system_prompt,
             task_prompt,
             datetime_aware,
-            is_default_persona,
+            default_prompt,
             deleted,
             user_id
         )
@@ -220,7 +219,7 @@ def downgrade() -> None:
         FROM persona
         WHERE system_prompt IS NOT NULL AND system_prompt != ''
         RETURNING id, name
-    """
+        """
     )
 
     # Step 4: Re-establish persona__prompt relationships
