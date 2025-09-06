@@ -1,0 +1,3 @@
+[submodule "backend/onyx/connectors/tally"]
+	path = backend/onyx/connectors/tally
+	url = https://github.com/dhananjay1405/tally-database-loader
