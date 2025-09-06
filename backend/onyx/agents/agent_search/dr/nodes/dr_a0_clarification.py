@@ -26,7 +26,6 @@ from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -39,6 +38,7 @@ from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.db.chat import update_db_session_with_messages
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Tool
@@ -591,6 +591,7 @@ def clarifier(
                     message=full_answer,
                     update_parent_message=True,
                     research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                    token_count=len(llm_tokenizer.encode(full_answer or "")),
                 )
 
                 db_session.commit()

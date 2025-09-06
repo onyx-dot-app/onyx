@@ -24,7 +24,6 @@ from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_sear
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
 from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.dr.utils import parse_plan_to_dict
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -36,6 +35,7 @@ from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
+from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
