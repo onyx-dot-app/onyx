@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tally to Database Sync</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+        crossorigin="anonymous"></script>
+    <style>
+        .my-app {
+            max-width: 640px;
+        }
+
+        .my-console {
+            height: 20rem;
+            background-color: lightgray;
+            color: darkblue;
+            padding: 0.5rem;
+            overflow-y: scroll;
+        }
+    </style>
+    <script>
+        /**
+         * Convert date from YYYYMMDD format to YYYY-MM-DD
+         * @param {string} dateStr
+         * @return {string}
+         */
+        function convertDateYYYYMMDD(dateStr) {
+            let partYear = dateStr.substring(0, 4);
+            let partMonth = dateStr.substring(4, 6);
+            let partDay = dateStr.substring(6);
+            return partYear + '-' + partMonth + '-' + partDay;
+        }
+
+        /**
+         * Convert date object to YYYY-MM-DD
+         * @param {Date} iDate
+         * @return {string}
+         */
+        function convertDateObjectToText(iDate) {
+            return `${iDate.getFullYear()}-${(iDate.getMonth() + 1).toString().padStart(2, '0')}-${iDate.getDate().toString().padStart(2, '0')}`;
+        }
+
+        function toggleDatabaseRelatedInputs(state = true) {
+            document.getElementById('database_server').disabled = !state;
+            document.getElementById('database_port').disabled = !state;
+            document.getElementById('database_schema').disabled = !state;
+            document.getElementById('database_username').disabled = !state;
+            document.getElementById('database_password').disabled = !state;
+            document.getElementById('database_loadmethod').disabled = !state;
+            document.getElementById('database_ssl_true').disabled = !state;
+            document.getElementById('database_ssl_false').disabled = !state;
+            if (!state) {
+                document.getElementById('tally_sync').value = 'full';
+                tally_sync_onchange(document.getElementById('tally_sync'));
+            }
+            document.getElementById('tally_sync').disabled = !state;
+        }
+
+        function showhideTallyDatabasePanel(state = true) {
+            document.getElementById('pnlDatabase').hidden = !state;
+            document.getElementById('pnlTally').hidden = !state;
+            document.getElementById('btnSaveConfig').disabled = !state;
+            document.getElementById('btnLoadConfig').disabled = !state;
+            if (state) { //sync complete
+                document.getElementById('btnSync').disabled = false;
+                document.getElementById('btnAbort').disabled = true;
+            }
+            else { //sync started
+                document.getElementById('btnSync').disabled = true;
+                document.getElementById('btnAbort').disabled = false;
+            }
+        }
+
+        function prepareConfigObj() {
+            let databaseTechnology = document.getElementById('database_technology').value;
+            let databaseServer = document.getElementById('database_server').value;
+            let databasePort = parseInt(document.getElementById('database_port').value);
+            let databaseSsl = document.getElementById('database_ssl_true').checked === true;
+            let databaseSchema = document.getElementById('database_schema').value;
+            let databaseUsername = document.getElementById('database_username').value;
+            let databasePassword = document.getElementById('database_password').value;
+            let databaseLoadmethod = document.getElementById('database_loadmethod').value;
+            let tallyDefinition = document.getElementById('tally_definition').value;
+            let tallyServer = document.getElementById('tally_server').value;
+            let tallyPort = parseInt(document.getElementById('tally_port').value);
+            let tallyFromdate = document.getElementById('tally_period_auto').checked === true ? 'auto' : document.getElementById('tally_fromdate').value;
+            let tallyTodate = document.getElementById('tally_period_auto').checked === true ? 'auto' : document.getElementById('tally_todate').value;
+            let tallySync = document.getElementById('tally_sync').value;
+            let tallyFrequency = parseInt(document.getElementById('tally_sync').value);
+            let tallyCompany = document.getElementById('tally_company').value;
+
+            objConfig = {
+                database: {
+                    technology: databaseTechnology,
+                    server: databaseServer,
+                    port: isNaN(databasePort) ? 0 : databasePort,
+                    ssl: databaseSsl,
+                    schema: databaseSchema,
+                    username: databaseUsername,
+                    password: databasePassword,
+                    loadmethod: databaseLoadmethod
+                },
+                tally: {
+                    definition: tallyDefinition,
+                    server: tallyServer,
+                    port: isNaN(tallyPort) ? 9000 : tallyPort,
+                    fromdate: tallyFromdate,
+                    todate: tallyTodate,
+                    sync: tallySync,
+                    frequency: isNaN(tallyFrequency) ? 0 : tallyFrequency,
+                    company: tallyCompany
+                }
+            };
+
+            return objConfig;
+        }
+
+        /**
+         * Validate if all the controls have valid values
+         * @return {string}
+         */
+        function validateConfig() {
+            let retval = '';
+            let objConfig = prepareConfigObj();
+            let databaseTechnology = objConfig['database']['technology'];
+            if (databaseTechnology == 'mssql' || databaseTechnology == 'mysql' || databaseTechnology == 'postgres') {
+                if (objConfig['database']['server'] == '') {
+                    retval += 'Databaser server cannot be empty\r\n';
+                }
+                if (objConfig['database']['port'] < 0 || objConfig['database']['port'] > 65535) {
+                    retval += 'Database Port value is invalid\r\n';
+                }
+                if (objConfig['database']['schema'] == '') {
+                    retval += 'Database Schema cannot be empty\r\n';
+                }
+                if (objConfig['database']['username'] == '') {
+                    retval += 'Database username cannot be empty\r\n';
+                }
+                if (objConfig['database']['password'] == '') {
+                    retval += 'Database password cannot be empty\r\n';
+                }
+            }
+            else if (databaseTechnology == 'bigquery') {
+                if (objConfig['database']['schema'] == '') {
+                    retval += 'Database Schema cannot be empty\r\n';
+                }
+            }
+            else if (databaseTechnology == 'adls') {
+                if (objConfig['database']['server'] == '') {
+                    retval += 'Databaser server cannot be empty\r\n';
+                }
+                if (objConfig['database']['schema'] == '') {
+                    retval += 'Database Schema cannot be empty\r\n';
+                }
+            }
+            else;
+
+            if (objConfig['tally']['server'] == '') {
+                retval += 'Tally server cannot be empty\r\n';
+            }
+            if (objConfig['tally']['port'] < 0 || objConfig['tally']['port'] > 65535) {
+                retval += 'Tally Port value is invalid\r\n';
+            }
+            if (objConfig['tally']['fromdate'] != 'auto' && objConfig['tally']['todate'] != 'auto') {
+                if (isNaN(Date.parse(objConfig['tally']['fromdate']))) {
+                    retval += 'Invalid From Date\r\n';
+                }
+                if (isNaN(Date.parse(objConfig['tally']['todate']))) {
+                    retval += 'Invalid To Date\r\n';
+                }
+            }
+
+            return retval;
+        }
+
+        function assignCurrentFinancialYear() {
+            let todayDate = new Date();
+            let startYear = todayDate.getMonth() < 3 ? todayDate.getFullYear() - 1 : todayDate.getFullYear();
+            let startDate = new Date(startYear, 3, 1);
+            let endDate = new Date(startYear + 1, 2, 31);
+            document.getElementById('tally_fromdate').value = convertDateObjectToText(startDate);
+            document.getElementById('tally_todate').value = convertDateObjectToText(endDate);
+        }
+
+        function database_technology_onchange(e) {
+            if (e.value === 'mssql') {
+                document.getElementById('database_port').value = 1433;
+                document.getElementById('database_loadmethod').value = 'file';
+                toggleDatabaseRelatedInputs(true);
+            }
+            else if (e.value === 'mysql') {
+                document.getElementById('database_port').value = 3306;
+                document.getElementById('database_loadmethod').value = 'insert';
+                toggleDatabaseRelatedInputs(true);
+            }
+            else if (e.value === 'postgres') {
+                document.getElementById('database_port').value = 5432;
+                document.getElementById('database_loadmethod').value = 'file';
+                toggleDatabaseRelatedInputs(true);
+            }
+            else if (e.value == 'bigquery') {
+                document.getElementById('database_port').value = 0;
+                document.getElementById('database_loadmethod').value = 'file';
+                toggleDatabaseRelatedInputs(false);
+                document.getElementById('database_schema').disabled = false;
+            }
+            else if (e.value == 'adls') {
+                document.getElementById('database_port').value = 0;
+                document.getElementById('database_loadmethod').value = 'file';
+                toggleDatabaseRelatedInputs(false);
+                document.getElementById('database_server').disabled = false;
+                document.getElementById('database_schema').disabled = false;
+            }
+            else {
+                document.getElementById('database_port').value = 0;
+                document.getElementById('database_loadmethod').value = 'file';
+                toggleDatabaseRelatedInputs(false);
+            }
+        }
+
+        function tally_sync_onchange(e) {
+            let targetDefinitionFile = `tally-export-config${e.value == 'incremental' ? '-incremental' : ''}.yaml`;
+            document.getElementById('tally_definition').value = targetDefinitionFile;
+        }
+
+        function tally_period_onchange(e) {
+            if (e.value === 'auto') {
+                document.getElementById('tally_fromdate').disabled = true;
+                document.getElementById('tally_todate').disabled = true;
+            }
+            else {
+                document.getElementById('tally_fromdate').disabled = false;
+                document.getElementById('tally_todate').disabled = false;
+            }
+        }
+
+        /**
+         * When tally_fromdate changes, if date is 1st April (YYYY-04-01), set tally_todate to 31st March next year
+         * @param {HTMLInputElement} e
+         */
+        function tally_fromdate_onchange(e) {
+            const val = e.value;
+            // Check if date is in format YYYY-MM-DD and is 1st April
+            if (/^\d{4}-04-01$/.test(val)) {
+                const year = parseInt(val.substring(0, 4));
+                const nextYear = year + 1;
+                // 31st March next year
+                const toDate = `${nextYear}-03-31`;
+                document.getElementById('tally_todate').value = toDate;
+            }
+        }
+
+        async function loadConfig() {
+            let resp = await fetch('http://localhost:8997/loadconfig');
+            let respData = await resp.json();
+
+            // database
+            document.getElementById('database_technology').value = respData.database.technology;
+            document.getElementById('database_server').value = respData.database.server;
+            document.getElementById('database_port').value = parseInt(respData.database.port);
+            document.getElementById('database_schema').value = respData.database.schema;
+            document.getElementById('database_username').value = respData.database.username;
+            document.getElementById('database_password').value = respData.database.password;
+            if (respData.database.ssl === true) {
+                document.getElementById('database_ssl_true').checked = true;
+                document.getElementById('database_ssl_false').checked = false;
+            }
+            else {
+                document.getElementById('database_ssl_true').checked = false;
+                document.getElementById('database_ssl_false').checked = true;
+            }
+
+            // tally
+            document.getElementById('tally_definition').value = respData.tally.definition;
+            document.getElementById('tally_server').value = respData.tally.server;
+            document.getElementById('tally_port').value = parseInt(respData.tally.port);
+            document.getElementById('tally_sync').value = respData.tally.sync;
+            document.getElementById('tally_frequency').value = parseInt(respData.tally.frequency);
+            document.getElementById('tally_company').value = respData.tally.company;
+            if (respData.tally.fromdate !== 'auto' && respData.tally.todate !== 'auto') {
+                if (/^\d{8}$/g.test(respData.tally.fromdate)) {
+                    respData.tally.fromdate = convertDateYYYYMMDD(respData.tally.fromdate);
+                }
+                if (/^\d{8}$/g.test(respData.tally.todate)) {
+                    respData.tally.todate = convertDateYYYYMMDD(respData.tally.todate);
+                }
+                document.getElementById('tally_fromdate').value = respData.tally.fromdate;
+                document.getElementById('tally_todate').value = respData.tally.todate;
+                document.getElementById('tally_period_custom').checked = true;
+                document.getElementById('tally_period_auto').checked = false;
+                document.getElementById('tally_period_custom').dispatchEvent(new Event('change'));
+            }
+            else {
+                document.getElementById('tally_period_auto').checked = true;
+                document.getElementById('tally_period_custom').removeAttribute('checked');
+                document.getElementById('tally_period_auto').dispatchEvent(new Event('change'));
+            }
+            document.getElementById('database_technology').dispatchEvent(new Event('change'));
+
+        }
+
+        async function saveConfig() {
+            let objConfig = prepareConfigObj();
+            let resp = await fetch('http://localhost:8997/saveconfig', {
+                method: 'POST',
+                body: JSON.stringify(objConfig, null, 4),
+                mode: "no-cors",
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            let respData = await resp.text();
+        }
+
+        async function sync() {
+            let msg = validateConfig();
+            if (msg) {
+                alert(msg);
+                return;
+            }
+            showhideTallyDatabasePanel(false);
+            document.getElementById('txtConsole').innerHTML = ''; //clear console text
+            let objConfig = prepareConfigObj();
+            let resp = await fetch('http://localhost:8997/sync', {
+                method: 'POST',
+                body: JSON.stringify(objConfig),
+                mode: "no-cors",
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            let respData = await resp.text();
+        }
+
+        async function abort() {
+            let resp = await fetch('http://localhost:8997/abort');
+            let respData = await resp.text();
+        }
+
+        function updateConsole(e) {
+            if (e.data === '~') {
+                showhideTallyDatabasePanel(true);
+            }
+            else {
+                let eTextArea = document.getElementById('txtConsole');
+                eTextArea.innerHTML += e.data.replace(/\r\n/, '<br>');
+                eTextArea.scrollTop = eTextArea.scrollHeight;
+            }
+        }
+
+        function notifyWebsocketDisconnection() {
+            document.getElementById('txtServerError').hidden = false;
+        }
+
+        function notifyWebsocketConnection() {
+            document.getElementById('txtServerError').hidden = true;
+        }
+
+        async function populateCompanyListSuggesation() {
+            let objConfig = prepareConfigObj();
+            let resp = await fetch('http://localhost:8997/list-company', {
+                method: 'POST',
+                body: JSON.stringify({ server: objConfig['tally']['server'], port: objConfig['tally']['port'] }),
+                mode: "no-cors",
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            let respData = await resp.text();
+            const xmlParser = new DOMParser();
+            const xmlDoc = xmlParser.parseFromString(respData, "application/xml");
+            document.getElementById('dl_tally_company').innerHTML = '';
+            xmlDoc.firstChild.childNodes.forEach(p => {
+                if (p.nodeName == 'ROW') {
+                    document.getElementById('dl_tally_company').innerHTML += `<option value="${p.textContent}"></option>`;
+                }
+            });
+        }
+
+        async function checkTallyStatus() {
+            let retval = false;
+            let objConfig = prepareConfigObj();
+            let resp = await fetch('http://localhost:8997/tally-status', {
+                method: 'POST',
+                body: JSON.stringify({ server: objConfig['tally']['server'], port: objConfig['tally']['port'] }),
+                mode: "no-cors"
+            });
+            let respData = await resp.text();
+            if (respData == '') {
+                alert('Unable to communicate with Tally Prime');
+            }
+            else if (respData.includes('TallyPrime Server is Running')) {
+                alert('Tally is running');
+                retval = true;
+            }
+            else {
+                alert('Incompatible version of Tally found running.\r\nKindly use Tally Prime');
+            }
+            return retval;
+        }
+
+        const wsClient = new WebSocket('http://localhost:8998');
+        wsClient.onmessage = updateConsole;
+        wsClient.onclose = notifyWebsocketDisconnection;
+        wsClient.onopen = notifyWebsocketConnection;
+
+        document.onreadystatechange = async (e) => {
+            if (document.readyState == "complete") {
+                assignCurrentFinancialYear();
+                populateCompanyListSuggesation();
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div class="text-center text-danger mt-2" id="txtServerError">Unable to communicate with backend server. Kindly
+        close this browser tab and re-launch run-gui.bat file</div>
+    <div class="container my-app">
+        <h3 class="text-center text-primary mt-5">Tally to Database Sync</h2>
+            <div id="pnlActions" class="mt-5">
+                <div class="mb-2">
+                    <div class="text-center">
+                        <input class="btn btn-success" type="button" id="btnSync" value="Sync" onclick="sync()">
+                        <input class="btn btn-primary" type="button" id="btnSaveConfig" value="Save Config"
+                            onclick="saveConfig()">
+                        <input class="btn btn-info" type="button" id="btnLoadConfig" value="Load Config"
+                            onclick="loadConfig()">
+                        <input class="btn btn-danger" type="button" id="btnAbort" value="Abort" onclick="abort()"
+                            disabled>
+                    </div>
+                </div>
+            </div>
+            <div id="pnlDatabase" class="mt-5">
+                <div class="mb-3">
+                    <h4>Database</h4>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_technology" class="col-sm-3 col-form-label">Technology</label>
+                    <div class="col-sm-9">
+                        <select class="form-select" id="database_technology"
+                            onchange="database_technology_onchange(this)">
+                            <option value="mssql" selected>Microsoft SQL Server</option>
+                            <option value="mysql">MySQL / MariaDB Server</option>
+                            <option value="postgres">PostgreSQL Server</option>
+                            <option value="bigquery">Google BigQuery</option>
+                            <option value="adls">Azure Data Lake</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_server" class="col-sm-3 col-form-label">Server</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="database_server" value="localhost">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_port" class="col-sm-3 col-form-label">Port</label>
+                    <div class="col-sm-9">
+                        <input type="number" class="form-control" id="database_port" value="1433">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_ssl_true" class="col-sm-3 col-form-label">SSL</label>
+                    <div class="col-sm-9">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="database_ssl" id="database_ssl_true"
+                                value="true">
+                            <label class="form-check-label" for="database_ssl_true">Yes</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="database_ssl" id="database_ssl_false"
+                                value="false" checked>
+                            <label class="form-check-label" for="database_ssl_false">No</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_schema" class="col-sm-3 col-form-label">Schema</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="database_schema" value="tallydb">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_username" class="col-sm-3 col-form-label">Username</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="database_username">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_password" class="col-sm-3 col-form-label">Password</label>
+                    <div class="col-sm-9">
+                        <input type="password" class="form-control" id="database_password">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="database_loadmethod" class="col-sm-3 col-form-label">Load Method</label>
+                    <div class="col-sm-9">
+                        <select class="form-select" id="database_loadmethod">
+                            <option value="insert">Insert</option>
+                            <option value="file" selected>File</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div id="pnlTally" class="mt-5">
+                <div class="mb-3">
+                    <h4>Tally</h4>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_definition" class="col-sm-3 col-form-label">Definition</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="tally_definition" value="tally-export-config.yaml">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_server" class="col-sm-3 col-form-label">Server</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="tally_server" value="localhost">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_port" class="col-sm-3 col-form-label">Port</label>
+                    <div class="col-sm-9">
+                        <input type="number" class="form-control" id="tally_port" value="9000">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_period_auto" class="col-sm-3 col-form-label">Period</label>
+                    <div class="col-sm-9">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tally_period" id="tally_period_auto"
+                                value="auto" onchange="tally_period_onchange(this)">
+                            <label class="form-check-label" for="tally_period_auto">Auto</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tally_period" id="tally_period_custom"
+                                value="custom" onchange="tally_period_onchange(this)" checked>
+                            <label class="form-check-label" for="tally_period_custom">Custom</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_fromdate" class="col-sm-3 col-form-label">From Date</label>
+                    <div class="col-sm-9">
+                        <input type="date" class="form-control" id="tally_fromdate" onchange="tally_fromdate_onchange(this)">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_todate" class="col-sm-3 col-form-label">To Date</label>
+                    <div class="col-sm-9">
+                        <input type="date" class="form-control" id="tally_todate">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_sync" class="col-sm-3 col-form-label">Sync</label>
+                    <div class="col-sm-9">
+                        <select class="form-select" id="tally_sync" onchange="tally_sync_onchange(this)">
+                            <option value="full" selected>Full</option>
+                            <option value="incremental">Incremental</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_frequency" class="col-sm-3 col-form-label">Frequency</label>
+                    <div class="col-sm-9">
+                        <input type="number" class="form-control" id="tally_frequency" value="0">
+                    </div>
+                </div>
+                <div class="mb-2 form-group row">
+                    <label for="tally_company" class="col-sm-3 col-form-label">Company</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" id="tally_company" list="dl_tally_company">
+                        <datalist id="dl_tally_company"></datalist>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <input class="btn btn-primary" type="button" value="Reload Company List"
+                        onclick="populateCompanyListSuggesation()">
+                    <input class="btn btn-info" type="button" value="Check Tally Status" onclick="checkTallyStatus()">
+                </div>
+            </div>
+            <div id="pnlConsole" class="mt-5 mb-3">
+                <label for="txtConsole" class="form-label">Output</label>
+                <pre id="txtConsole" class="my-console"></pre>
+            </div>
+    </div>
+</body>
+
+</html>
