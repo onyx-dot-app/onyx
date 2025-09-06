@@ -581,5 +581,6 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.TALLY: "tally - ERP and accounting data (vouchers, ledgers, financial records)",
     DocumentSource.IMAP: "imap - email data",
 }
