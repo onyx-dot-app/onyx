@@ -23,6 +23,7 @@ RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # curl included just for users' convenience
 # zip for Vespa step futher down
 # ca-certificates for HTTPS
+# Node.js needed for Tally connector
 RUN apt-get update && \
     apt-get install -y \
         cmake \
@@ -39,6 +40,9 @@ RUN apt-get update && \
         gcc \
         nano \
         vim && \
+    # Install Node.js for Tally connector
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -107,6 +111,12 @@ COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 COPY ./static /app/static
+
+# Install Tally connector dependencies
+WORKDIR /app/onyx/connectors/tally
+RUN if [ -f package.json ]; then npm install --production; fi
+
+WORKDIR /app
 
 # Escape hatch scripts
 COPY ./scripts/debugging /app/scripts/debugging
