@@ -88,14 +88,18 @@ OPEN_AI_VISIBLE_MODEL_NAMES = [
 BEDROCK_PROVIDER_NAME = "bedrock"
 # need to remove all the weird "bedrock/eu-central-1/anthropic.claude-v1" named
 # models
-BEDROCK_MODEL_NAMES = [
-    model
-    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
-    # litellm has split them into two lists :(
-    for model in litellm.bedrock_models + litellm.bedrock_converse_models
-    if "/" not in model and "embed" not in model
-][::-1]
-BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+BEDROCK_MODEL_NAMES = list(
+    set(
+        [
+            model
+            # bedrock_converse_models are just extensions of the bedrock_models, not sure why
+            # litellm has split them into two lists :(
+            for model in litellm.bedrock_models + litellm.bedrock_converse_models
+            if "/" not in model and "embed" not in model
+        ]
+    )
+)[::-1]
+BEDROCK_DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -226,14 +230,14 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name="AWS_ACCESS_KEY_ID",
                     display_name="AWS Access Key ID",
                     is_required=False,
-                    description="If using AWS IAM roles or a long-term API key, this field can be left blank.",
+                    description="If using IAM role or a long-term API key, leave this field blank.",
                 ),
                 CustomConfigKey(
                     name="AWS_SECRET_ACCESS_KEY",
                     display_name="AWS Secret Access Key",
                     is_required=False,
                     is_secret=True,
-                    description="If using AWS IAM roles or a long-term API key, this field can be left blank.",
+                    description="If using IAM role or a long-term API key, leave this field blank.",
                 ),
                 CustomConfigKey(
                     name="AWS_BEARER_TOKEN_BEDROCK",
@@ -241,8 +245,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     is_required=False,
                     is_secret=True,
                     description=(
-                        "Provide an Amazon Bedrock Long-term API Key. "
-                        "Leave blank to use IAM roles or access keys."
+                        "If using IAM role or access key, leave this field blank."
                     ),
                 ),
             ],
@@ -250,7 +253,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 BEDROCK_PROVIDER_NAME
             ),
             default_model=BEDROCK_DEFAULT_MODEL,
-            default_fast_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
@@ -314,6 +317,7 @@ def fetch_model_configurations_for_provider(
     visible_model_names = (
         fetch_visible_model_names_for_provider_as_set(provider_name) or set()
     )
+
     return [
         ModelConfigurationView(
             name=model_name,
