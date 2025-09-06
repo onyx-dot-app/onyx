@@ -204,7 +204,7 @@ export function LLMProviderUpdateForm({
       setFieldValue("selected_model_names", stillAvailableSelectedModels);
 
       // Set a default model if none is set
-      if (!values.default_model_name && availableModels.length > 0) {
+      if ((!values.default_model_name || !availableModels.includes(values.default_model_name)) && availableModels.length > 0) {
         setFieldValue("default_model_name", availableModels[0]);
       }
 
