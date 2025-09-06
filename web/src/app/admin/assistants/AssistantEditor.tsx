@@ -56,6 +56,7 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useUser } from "@/components/user/UserProvider";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -138,6 +139,7 @@ export function AssistantEditor({
   const { refreshAssistants, isImageGenerationAvailable } =
     useAssistantsContext();
 
+  const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -685,6 +687,15 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
+            if (!isUpdate) {
+              const currentPinnedIds =
+                user?.preferences?.pinned_assistants || [];
+              await toggleAssistantPinnedStatus(
+                currentPinnedIds,
+                assistantId,
+                true
+              );
+            }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
