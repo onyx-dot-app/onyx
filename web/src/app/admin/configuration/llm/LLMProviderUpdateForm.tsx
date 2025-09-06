@@ -196,7 +196,7 @@ export function LLMProviderUpdateForm({
       // Update the descriptor and form values
       llmProviderDescriptor.model_configurations = updatedModelConfigs;
 
-      // Update selected model names to only include previously visible models that are still available
+      // Update selected model names to only include previously visible models that are available
       const previouslySelectedModels = values.selected_model_names || [];
       const stillAvailableSelectedModels = previouslySelectedModels.filter(
         (modelName: string) => availableModels.includes(modelName)
@@ -204,7 +204,11 @@ export function LLMProviderUpdateForm({
       setFieldValue("selected_model_names", stillAvailableSelectedModels);
 
       // Set a default model if none is set
-      if ((!values.default_model_name || !availableModels.includes(values.default_model_name)) && availableModels.length > 0) {
+      if (
+        (!values.default_model_name ||
+          !availableModels.includes(values.default_model_name)) &&
+        availableModels.length > 0
+      ) {
         setFieldValue("default_model_name", availableModels[0]);
       }
 
