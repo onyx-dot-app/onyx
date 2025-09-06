@@ -1,0 +1,32 @@
+{
+  "name": "tally-database-loader",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "overrides": {
+    "whatwg-url": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.1",
+    "@types/pg": "^8.15.4",
+    "@types/pg-copy-streams": "^1.2.5",
+    "@types/ws": "^8.18.1"
+  },
+  "dependencies": {
+    "@azure/storage-file-datalake": "^12.26.0",
+    "@google-cloud/bigquery": "^7.9.0",
+    "js-yaml": "^4.1.0",
+    "mysql2": "^3.14.1",
+    "pg": "^8.16.0",
+    "pg-copy-streams": "^7.0.0",
+    "tedious": "^18.6.1",
+    "ws": "^8.18.2"
+  }
+}
