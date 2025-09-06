@@ -13,9 +13,9 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
+from onyx.db.persona import get_default_prompt
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
-from onyx.db.prompts import get_default_prompt
 from onyx.tools.built_in_tools import get_builtin_tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.errors import EERequiredError

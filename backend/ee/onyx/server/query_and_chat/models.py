@@ -73,7 +73,6 @@ class BasicCreateChatMessageRequest(ChunkContext):
 class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # Last element is the new query. All previous elements are historical context
     messages: list[ThreadMessage]
-    prompt_id: int | None
     persona_id: int
     retrieval_options: RetrievalDetails | None = None
     query_override: str | None = None
@@ -162,7 +161,6 @@ class OneShotQARequest(ChunkContext):
     persona_id: int | None = None
 
     messages: list[ThreadMessage]
-    prompt_id: int | None = None
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
     rerank_settings: RerankingDetails | None = None
 
@@ -181,11 +179,9 @@ class OneShotQARequest(ChunkContext):
     def check_persona_fields(self) -> "OneShotQARequest":
         if self.persona_override_config is None and self.persona_id is None:
             raise ValueError("Exactly one of persona_config or persona_id must be set")
-        elif self.persona_override_config is not None and (
-            self.persona_id is not None or self.prompt_id is not None
-        ):
+        elif self.persona_override_config is not None and (self.persona_id is not None):
             raise ValueError(
-                "If persona_override_config is set, persona_id and prompt_id cannot be set"
+                "If persona_override_config is set, persona_id cannot be set"
             )
         return self
 

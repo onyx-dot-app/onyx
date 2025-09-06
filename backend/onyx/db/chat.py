@@ -30,7 +30,6 @@ from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
 )
 from onyx.agents.agent_search.utils import create_citation_format_list
-from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
@@ -47,7 +46,6 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Prompt
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
@@ -807,7 +805,6 @@ def add_chats_to_session_from_slack_thread(
             citations=chat_message.citations,
             reference_docs=chat_message.search_docs,
             tool_call=chat_message.tool_call,
-            prompt_id=chat_message.prompt_id,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
             alternate_assistant_id=chat_message.alternate_assistant_id,
@@ -897,7 +894,6 @@ def get_or_create_root_message(
     else:
         new_root_message = ChatMessage(
             chat_session_id=chat_session_id,
-            prompt_id=None,
             parent_message=None,
             latest_child_message=None,
             message="",
@@ -941,7 +937,6 @@ def create_new_chat_message(
     chat_session_id: UUID,
     parent_message: ChatMessage,
     message: str,
-    prompt_id: int | None,
     token_count: int,
     message_type: MessageType,
     db_session: Session,
@@ -970,7 +965,7 @@ def create_new_chat_message(
         existing_message.parent_message = parent_message.id
         existing_message.message = message
         existing_message.rephrased_query = rephrased_query
-        existing_message.prompt_id = prompt_id
+        # Note: prompt_id removed - prompt configuration now comes from persona
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.citations = citations
@@ -991,7 +986,7 @@ def create_new_chat_message(
             latest_child_message=None,
             message=message,
             rephrased_query=rephrased_query,
-            prompt_id=prompt_id,
+            # Note: prompt_id removed - prompt configuration now comes from persona
             token_count=token_count,
             message_type=message_type,
             citations=citations,
@@ -1050,33 +1045,6 @@ def attach_files_to_chat_message(
     chat_message.files = files
     if commit:
         db_session.commit()
-
-
-def get_prompt_by_id(
-    prompt_id: int,
-    user: User | None,
-    db_session: Session,
-    include_deleted: bool = False,
-) -> Prompt:
-    stmt = select(Prompt).where(Prompt.id == prompt_id)
-
-    # if user is not specified OR they are an admin, they should
-    # have access to all prompts, so this where clause is not needed
-    if user and user.role != UserRole.ADMIN:
-        stmt = stmt.where(or_(Prompt.user_id == user.id, Prompt.user_id.is_(None)))
-
-    if not include_deleted:
-        stmt = stmt.where(Prompt.deleted.is_(False))
-
-    result = db_session.execute(stmt)
-    prompt = result.scalar_one_or_none()
-
-    if prompt is None:
-        raise ValueError(
-            f"Prompt with ID {prompt_id} does not exist or does not belong to user"
-        )
-
-    return prompt
 
 
 def get_doc_query_identifiers_from_model(

@@ -7,7 +7,6 @@ from pydantic import Field
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
@@ -29,18 +28,20 @@ class PromptSnapshot(BaseModel):
     # Not including persona info, not needed
 
     @classmethod
-    def from_model(cls, prompt: Prompt) -> "PromptSnapshot":
-        if prompt.deleted:
-            raise ValueError("Prompt has been deleted")
+    def from_model(cls, persona: Persona) -> "PromptSnapshot":
+        """Create PromptSnapshot from persona's embedded prompt fields"""
+        if persona.deleted:
+            raise ValueError("Persona has been deleted")
 
         return PromptSnapshot(
-            id=prompt.id,
-            name=prompt.name,
-            description=prompt.description,
-            system_prompt=prompt.system_prompt,
-            task_prompt=prompt.task_prompt,
-            datetime_aware=prompt.datetime_aware,
-            default_prompt=prompt.default_prompt,
+            id=persona.id,
+            name=persona.name,
+            description=persona.description,
+            system_prompt=persona.system_prompt or "",
+            task_prompt=persona.task_prompt or "",
+            include_citations=persona.include_citations,
+            datetime_aware=persona.datetime_aware,
+            default_prompt=persona.is_default_prompt,
         )
 
 
@@ -63,7 +64,7 @@ class PersonaUpsertRequest(BaseModel):
     num_chunks: float
     is_public: bool
     recency_bias: RecencyBiasSetting
-    prompt_ids: list[int]
+    # Note: prompt_ids removed - prompts are now embedded in personas
     llm_filter_extraction: bool
     llm_relevance_filter: bool
     llm_model_provider_override: str | None = None
@@ -175,6 +176,12 @@ class PersonaSnapshot(BaseModel):
     llm_model_version_override: str | None
     num_chunks: float | None
 
+    # Embedded prompt fields (no longer separate prompt_ids)
+    system_prompt: str | None = None
+    task_prompt: str | None = None
+    include_citations: bool = True
+    datetime_aware: bool = True
+
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
         return PersonaSnapshot(
@@ -211,6 +218,10 @@ class PersonaSnapshot(BaseModel):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
+            system_prompt=persona.system_prompt,
+            task_prompt=persona.task_prompt,
+            include_citations=persona.include_citations,
+            datetime_aware=persona.datetime_aware,
         )
 
 
@@ -266,11 +277,17 @@ class FullPersonaSnapshot(PersonaSnapshot):
             ],
             num_chunks=persona.num_chunks,
             search_start_date=persona.search_start_date,
-            prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
+            prompts=[
+                PromptSnapshot.from_model(persona)
+            ],  # Single prompt from persona's embedded fields
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
+            system_prompt=persona.system_prompt,
+            task_prompt=persona.task_prompt,
+            include_citations=persona.include_citations,
+            datetime_aware=persona.datetime_aware,
         )
 
 

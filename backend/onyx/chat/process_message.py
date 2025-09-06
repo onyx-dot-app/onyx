@@ -335,11 +335,8 @@ def stream_chat_message_objects(
                 properties=None,
             )
 
-        # If a prompt override is specified via the API, use that with highest priority
-        # but for saving it, we are just mapping it to an existing prompt
-        prompt_id = new_msg_req.prompt_id
-        if prompt_id is None and persona.prompts:
-            prompt_id = sorted(persona.prompts, key=lambda x: x.id)[-1].id
+        # Note: prompt configuration is now embedded in the persona
+        # No need for separate prompt_id handling
 
         if reference_doc_ids is None and retrieval_options is None:
             raise RuntimeError(
@@ -399,7 +396,6 @@ def stream_chat_message_objects(
             user_message = create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=parent_message,
-                prompt_id=prompt_id,
                 message=message_text,
                 token_count=len(llm_tokenizer_encode_func(message_text)),
                 message_type=MessageType.USER,
@@ -559,18 +555,13 @@ def stream_chat_message_objects(
                 ].datetime_aware,
             )
         elif prompt_override:
-            if not final_msg.prompt:
-                raise ValueError(
-                    "Prompt override cannot be applied, no base prompt found."
-                )
+            # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
-                final_msg.prompt,
+                persona,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(
-                final_msg.prompt or persona.prompts[0]
-            )
+            prompt_config = PromptConfig.from_model(persona)
 
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(

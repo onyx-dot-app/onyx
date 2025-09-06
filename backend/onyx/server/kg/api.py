@@ -142,7 +142,6 @@ def enable_or_disable_kg(
         is_public=is_public,
         llm_filter_extraction=False,
         recency_bias=RecencyBiasSetting.NO_DECAY,
-        prompt_ids=[0],
         document_set_ids=[],
         tool_ids=[search_tool.id, kg_tool.id],
         llm_model_provider_override=None,

@@ -28,7 +28,6 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -46,6 +45,128 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+
+# Compatibility functions for code that previously worked with separate prompts
+def get_default_prompt(db_session: Session) -> Persona:
+    """Returns the default persona which contains prompt configuration"""
+    stmt = select(Persona).where(Persona.is_default_prompt.is_(True))
+    result = db_session.execute(stmt)
+    persona = result.scalar_one_or_none()
+
+    if persona is None:
+        # Fallback to persona with ID 0 if exists
+        stmt = select(Persona).where(Persona.id == 0)
+        result = db_session.execute(stmt)
+        persona = result.scalar_one_or_none()
+
+        if persona is None:
+            raise RuntimeError("Default Prompt/Persona not found")
+
+    return persona
+
+
+def get_prompts_by_ids(prompt_ids: list[int], db_session: Session) -> list[Persona]:
+    """Get personas by IDs (for backward compatibility with prompt IDs)
+    Returns personas that have prompt configuration"""
+    if not prompt_ids:
+        return []
+    personas = db_session.scalars(
+        select(Persona)
+        .where(Persona.id.in_(prompt_ids))
+        .where(Persona.deleted.is_(False))
+    ).all()
+
+    return list(personas)
+
+
+def get_prompt_by_name(
+    prompt_name: str, user: User | None, db_session: Session
+) -> Persona | None:
+    """Get a persona by name that has prompt configuration"""
+    stmt = select(Persona).where(Persona.name == prompt_name)
+
+    # if user is not specified OR they are an admin, they should
+    # have access to all personas, so this where clause is not needed
+    if user and user.role != UserRole.ADMIN:
+        stmt = stmt.where(Persona.user_id == user.id)
+
+    # Order by ID to ensure consistent result when multiple personas exist
+    stmt = stmt.order_by(Persona.id).limit(1)
+    result = db_session.execute(stmt).scalar_one_or_none()
+    return result
+
+
+def build_prompt_name_from_persona_name(persona_name: str) -> str:
+    return f"default-prompt__{persona_name}"
+
+
+def upsert_prompt(
+    db_session: Session,
+    user: User | None,
+    name: str,
+    system_prompt: str,
+    task_prompt: str,
+    datetime_aware: bool,
+    prompt_id: int | None = None,
+    personas: list[Persona] | None = None,
+    include_citations: bool = False,
+    default_prompt: bool = True,
+    # Support backwards compatibility
+    description: str | None = None,
+) -> Persona:
+    """Create or update a persona with prompt configuration.
+    This function maintains backward compatibility with the old prompt system."""
+
+    if description is None:
+        description = f"Default prompt for {name}"
+
+    if prompt_id is not None:
+        persona = db_session.query(Persona).filter_by(id=prompt_id).first()
+    else:
+        persona = get_prompt_by_name(prompt_name=name, user=user, db_session=db_session)
+
+    if persona:
+        if not default_prompt and persona.is_default_prompt:
+            raise ValueError("Cannot update default prompt with non-default.")
+
+        persona.name = name
+        persona.description = description
+        persona.system_prompt = system_prompt
+        persona.task_prompt = task_prompt
+        persona.include_citations = include_citations
+        persona.datetime_aware = datetime_aware
+        persona.is_default_prompt = default_prompt
+
+    else:
+        # Create a new persona with prompt configuration
+        persona = Persona(
+            id=prompt_id,
+            user_id=user.id if user else None,
+            name=name,
+            description=description,
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            include_citations=include_citations,
+            datetime_aware=datetime_aware,
+            is_default_prompt=default_prompt,
+            # Set default values for persona-specific fields
+            num_chunks=None,
+            chunks_above=0,
+            chunks_below=0,
+            llm_relevance_filter=False,
+            llm_filter_extraction=False,
+            recency_bias=RecencyBiasSetting.BASE_DECAY,
+            builtin_persona=default_prompt,
+            is_visible=True,
+            deleted=False,
+        )
+        db_session.add(persona)
+
+    # Flush the session so that the Persona has an ID
+    db_session.flush()
+
+    return persona
 
 
 class PersonaLoadType(Enum):
@@ -223,10 +344,9 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        all_prompt_ids = create_persona_request.prompt_ids
-
-        if not all_prompt_ids:
-            raise ValueError("No prompt IDs provided")
+        # Handle backward compatibility - if prompt_ids are provided, ignore them
+        # since prompts are now embedded in personas
+        pass
 
         # Default persona validation
         if create_persona_request.is_default_persona:
@@ -249,7 +369,7 @@ def create_update_persona(
             db_session=db_session,
             description=create_persona_request.description,
             name=create_persona_request.name,
-            prompt_ids=all_prompt_ids,
+            prompt_ids=None,  # No longer used
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
@@ -578,16 +698,7 @@ def upsert_persona(
         if not user_folders and user_folder_ids:
             raise ValueError("user_folders not found")
 
-    # Fetch and attach prompts by IDs
-    prompts = None
-    if prompt_ids is not None:
-        prompts = db_session.query(Prompt).filter(Prompt.id.in_(prompt_ids)).all()
-
-    if prompts is not None and len(prompts) == 0:
-        raise ValueError(
-            f"Invalid Persona config, no valid prompts "
-            f"specified. Specified IDs were: '{prompt_ids}'"
-        )
+    # Note: prompts are now embedded in personas - prompt_ids parameter is ignored for backward compatibility
 
     labels = None
     if label_ids is not None:
@@ -640,9 +751,7 @@ def upsert_persona(
             existing_persona.document_sets.clear()
             existing_persona.document_sets = document_sets or []
 
-        if prompts is not None:
-            existing_persona.prompts.clear()
-            existing_persona.prompts = prompts
+        # Note: prompts are now embedded in personas - no separate prompts relationship
 
         if tools is not None:
             existing_persona.tools = tools or []
@@ -662,12 +771,7 @@ def upsert_persona(
         persona = existing_persona
 
     else:
-        if not prompts:
-            raise ValueError(
-                "Invalid Persona config. "
-                "Must specify at least one prompt for a new persona."
-            )
-
+        # Create new persona - prompt configuration will be set separately if needed
         new_persona = Persona(
             id=persona_id,
             user_id=user.id if user else None,
@@ -681,7 +785,12 @@ def upsert_persona(
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
             builtin_persona=builtin_persona,
-            prompts=prompts,
+            # Prompt fields are now embedded in the persona
+            system_prompt="",
+            task_prompt="",
+            include_citations=True,
+            datetime_aware=True,
+            is_default_prompt=False,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,

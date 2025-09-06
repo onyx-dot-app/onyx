@@ -3,7 +3,6 @@ import json
 from typing import Any
 from typing import Literal
 from typing import NotRequired
-from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -212,7 +211,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "ChatFolder", back_populates="user"
     )
 
-    prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
     input_prompts: Mapped[list["InputPrompt"]] = relationship(
         "InputPrompt", back_populates="user"
     )
@@ -306,13 +304,6 @@ class Persona__DocumentSet(Base):
     document_set_id: Mapped[int] = mapped_column(
         ForeignKey("document_set.id"), primary_key=True
     )
-
-
-class Persona__Prompt(Base):
-    __tablename__ = "persona__prompt"
-
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    prompt_id: Mapped[int] = mapped_column(ForeignKey("prompt.id"), primary_key=True)
 
 
 class Persona__User(Base):
@@ -2105,10 +2096,8 @@ class ChatMessage(Base):
     latest_child_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     rephrased_query: Mapped[str] = mapped_column(Text, nullable=True)
-    # If None, then there is no answer generation, it's the special case of only
-    # showing the user the retrieved docs
-    prompt_id: Mapped[int | None] = mapped_column(ForeignKey("prompt.id"))
-    # If prompt is None, then token_count is 0 as this message won't be passed into
+    # Note: prompt configuration is now handled through the persona (via chat_session.persona_id or alternate_assistant_id)
+    # If prompt configuration is None, then token_count is 0 as this message won't be passed into
     # the LLM's context (not included in the history of messages)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
@@ -2131,7 +2120,6 @@ class ChatMessage(Base):
     refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
 
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
-    prompt: Mapped[Optional["Prompt"]] = relationship("Prompt")
 
     chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
         "ChatMessageFeedback",
@@ -2476,31 +2464,6 @@ class DocumentSet(Base):
     )
 
 
-class Prompt(Base):
-    __tablename__ = "prompt"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    name: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String)
-    system_prompt: Mapped[str] = mapped_column(String(length=8000))
-    task_prompt: Mapped[str] = mapped_column(String(length=8000))
-    datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Default prompts are configured via backend during deployment
-    # Treated specially (cannot be user edited etc.)
-    default_prompt: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    user: Mapped[User] = relationship("User", back_populates="prompts")
-    personas: Mapped[list["Persona"]] = relationship(
-        "Persona",
-        secondary=Persona__Prompt.__table__,
-        back_populates="prompts",
-    )
-
-
 class Tool(Base):
     __tablename__ = "tool"
 
@@ -2627,16 +2590,20 @@ class Persona(Base):
     )
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Prompt fields merged from Prompt table
+    system_prompt: Mapped[str | None] = mapped_column(
+        String(length=8000), nullable=True
+    )
+    task_prompt: Mapped[str | None] = mapped_column(String(length=8000), nullable=True)
+    include_citations: Mapped[bool] = mapped_column(Boolean, default=True)
+    datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Indicates if this is a default/system prompt configuration
+    is_default_prompt: Mapped[bool] = mapped_column(Boolean, default=False)
+
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
     icon_color: Mapped[str | None] = mapped_column(String, nullable=True)
     icon_shape: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # These are only defaults, users can select from all if desired
-    prompts: Mapped[list[Prompt]] = relationship(
-        "Prompt",
-        secondary=Persona__Prompt.__table__,
-        back_populates="personas",
-    )
     # These are only defaults, users can select from all if desired
     document_sets: Mapped[list[DocumentSet]] = relationship(
         "DocumentSet",

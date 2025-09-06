@@ -132,12 +132,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
     if personas:
         logger.notice("Seeding Personas")
         for persona in personas:
-            if not persona.prompt_ids:
-                raise ValueError(
-                    f"Invalid Persona with name {persona.name}; no prompts exist"
-                )
-
-            upsert_persona(
+            db_persona = upsert_persona(
                 user=None,  # Seeding is done as admin
                 name=persona.name,
                 description=persona.description,
@@ -147,7 +142,6 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                 llm_relevance_filter=persona.llm_relevance_filter,
                 llm_filter_extraction=persona.llm_filter_extraction,
                 recency_bias=RecencyBiasSetting.AUTO,
-                prompt_ids=persona.prompt_ids,
                 document_set_ids=persona.document_set_ids,
                 llm_model_provider_override=persona.llm_model_provider_override,
                 llm_model_version_override=persona.llm_model_version_override,
@@ -157,6 +151,12 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                 tool_ids=persona.tool_ids,
                 display_priority=persona.display_priority,
             )
+            # Set embedded prompt fields from seed
+            db_persona.system_prompt = persona.system_prompt
+            db_persona.task_prompt = persona.task_prompt
+            db_persona.include_citations = persona.include_citations
+            db_persona.datetime_aware = persona.datetime_aware
+            db_session.commit()
 
 
 def _seed_settings(settings: Settings) -> None:
