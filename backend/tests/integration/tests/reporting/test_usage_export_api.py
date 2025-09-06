@@ -44,6 +44,7 @@ class TestUsageExportAPI:
         # Wait for the new report to appear (with timeout)
         max_wait_time = 60  # seconds
         start_time = time.time()
+        current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
             check_response = requests.get(
@@ -99,6 +100,7 @@ class TestUsageExportAPI:
         # Wait for the new report to appear
         max_wait_time = 60
         start_time = time.time()
+        current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
             check_response = requests.get(
@@ -161,6 +163,7 @@ class TestUsageExportAPI:
         # Wait for the new report to appear
         max_wait_time = 15
         start_time = time.time()
+        reports = []
 
         while time.time() - start_time < max_wait_time:
             response = requests.get(
@@ -320,6 +323,7 @@ class TestUsageExportAPI:
         # Wait for all reports to be generated
         max_wait_time = 120
         start_time = time.time()
+        reports = []
 
         while time.time() - start_time < max_wait_time:
             response = requests.get(

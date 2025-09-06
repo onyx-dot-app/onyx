@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from celery import shared_task
 from celery import Task
@@ -40,6 +41,6 @@ def generate_usage_report_task(
     with get_session_with_current_tenant() as db_session:
         create_new_usage_report(
             db_session=db_session,
-            user_id=user_id,
+            user_id=UUID(user_id) if user_id else None,
             period=period,
         )
