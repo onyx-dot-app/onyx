@@ -17,7 +17,7 @@ import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import useSWR from "swr";
 import React, { useState } from "react";
-import { UsageReport, UsageReportGenerationRequest } from "./types";
+import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Link from "next/link";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";

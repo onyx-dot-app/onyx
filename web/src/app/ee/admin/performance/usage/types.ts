@@ -66,8 +66,3 @@ export interface UsageReport {
   period_from: string | null;
   period_to: string | null;
 }
-
-export interface UsageReportGenerationRequest {
-  task_id: string;
-  message: string;
-}
