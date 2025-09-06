@@ -31,9 +31,9 @@ logger = setup_logger()
 class TallyConnector(LoadConnector, PollConnector):
     def __init__(
         self,
-        tally_server: str = "localhost",
+        tally_host: str = "localhost",
         tally_port: int = 9000,
-        company_name: Optional[str] = None,
+        company_db: Optional[str] = None,
         data_types: Optional[list[str]] = None,
         sync_mode: str = "incremental",
         from_date: Optional[str] = None,
@@ -41,9 +41,9 @@ class TallyConnector(LoadConnector, PollConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         **kwargs
     ) -> None:
-        self.tally_server = tally_server
+        self.tally_host = tally_host
         self.tally_port = tally_port
-        self.company_name = company_name or ""
+        self.company_db = company_db or ""
         self.data_types = data_types or ["vouchers", "ledgers"]
         self.sync_mode = sync_mode
         self.from_date = from_date
@@ -73,12 +73,12 @@ class TallyConnector(LoadConnector, PollConnector):
             ]
             
             # Add command line arguments for configuration
-            if self.tally_server != "localhost":
-                cmd.extend(["--tally-server", self.tally_server])
+            if self.tally_host != "localhost":
+                cmd.extend(["--tally-server", self.tally_host])
             if self.tally_port != 9000:
                 cmd.extend(["--tally-port", str(self.tally_port)])
-            if self.company_name:
-                cmd.extend(["--tally-company", self.company_name])
+            if self.company_db:
+                cmd.extend(["--tally-company", self.company_db])
             if self.sync_mode:
                 cmd.extend(["--tally-sync", self.sync_mode])
             if self.from_date:
@@ -167,7 +167,7 @@ Date: {row['voucher_date']}
 Reference: {row['reference_number'] or 'N/A'}
 Amount: {row['amount'] or 0}
 Narration: {row['narration'] or 'N/A'}
-Company: {self.company_name}"""
+Company: {self.company_db}"""
                 
                 doc = Document(
                     id=doc_id,
@@ -179,7 +179,7 @@ Company: {self.company_name}"""
                         "voucher_type": str(row['voucher_type_name'] or ''),
                         "date": str(row['voucher_date'] or ''),
                         "amount": str(row['amount'] or '0'),
-                        "company": str(self.company_name),
+                        "company": str(self.company_db),
                     }
                 )
                 
@@ -219,7 +219,7 @@ Parent Group: {row['parent'] or 'None'}
 Alias: {row['alias'] or 'N/A'}
 Opening Balance: {row['opening_balance'] or 0}
 Closing Balance: {row['closing_balance'] or 0}
-Company: {self.company_name}"""
+Company: {self.company_db}"""
                 
                 doc = Document(
                     id=doc_id,
@@ -230,7 +230,7 @@ Company: {self.company_name}"""
                         "type": "ledger",
                         "group": str(row['parent'] or ''),
                         "balance": str(row['closing_balance'] or '0'),
-                        "company": str(self.company_name),
+                        "company": str(self.company_db),
                     }
                 )
                 
@@ -270,7 +270,7 @@ Parent: {row['parent'] or 'Root'}
 Primary Group: {row['primary_group'] or 'N/A'}
 Is Revenue: {row['is_revenue'] or False}
 Is Deemed Positive: {row['is_deemedpositive'] or False}
-Company: {self.company_name}"""
+Company: {self.company_db}"""
                 
                 doc = Document(
                     id=doc_id,
@@ -281,7 +281,7 @@ Company: {self.company_name}"""
                         "type": "group",
                         "parent": str(row['parent'] or ''),
                         "primary_group": str(row['primary_group'] or ''),
-                        "company": str(self.company_name),
+                        "company": str(self.company_db),
                     }
                 )
                 
@@ -370,7 +370,7 @@ Company: {self.company_name}"""
         # Test Tally XML server connection (optional for initial setup)
         try:
             response = requests.get(
-                f"http://{self.tally_server}:{self.tally_port}",
+                f"http://{self.tally_host}:{self.tally_port}",
                 timeout=5
             )
             if response.status_code == 200:
@@ -379,7 +379,7 @@ Company: {self.company_name}"""
                 logger.warning(f"Tally XML server returned status {response.status_code}")
         except requests.exceptions.ConnectionError:
             logger.warning(
-                f"Cannot connect to Tally XML server at {self.tally_server}:{self.tally_port}. "
+                f"Cannot connect to Tally XML server at {self.tally_host}:{self.tally_port}. "
                 "Ensure Tally is running with XML server enabled before sync operations."
             )
         except requests.exceptions.Timeout:
