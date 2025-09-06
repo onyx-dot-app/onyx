@@ -1,1 +1,0 @@
-node ./dist/server.mjs

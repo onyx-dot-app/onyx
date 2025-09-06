@@ -1,1 +1,0 @@
-node ./dist/index.mjs
