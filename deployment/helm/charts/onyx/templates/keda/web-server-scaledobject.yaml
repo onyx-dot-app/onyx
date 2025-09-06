@@ -1,0 +1,32 @@
+{{- if and .Values.keda.enabled .Values.keda.webServer .Values.keda.webServer.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-web-server-scaledobject
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+    app: web-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx-stack.fullname" . }}
+  pollingInterval: {{ .Values.keda.webServer.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.keda.webServer.cooldownPeriod | default 300 }}
+  minReplicaCount: {{ .Values.keda.webServer.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.keda.webServer.maxReplicas | default 5 }}
+  # Use HPA mode to generate an HPA that works alongside existing HPA infrastructure
+  hpaName: {{ include "onyx-stack.fullname" . }}-web-server-keda-hpa
+  triggers:
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: {{ .Values.keda.webServer.cpuThreshold | default "70" | quote }}
+    {{- if .Values.keda.webServer.memoryThreshold }}
+    - type: memory
+      metadata:
+        type: Utilization
+        value: {{ .Values.keda.webServer.memoryThreshold | quote }}
+    {{- end }}
+{{- end }}

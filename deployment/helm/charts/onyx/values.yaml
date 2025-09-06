@@ -8,6 +8,90 @@ global:
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
 
+keda:
+  # Master switch for all KEDA functionality - disabled by default
+  # KEDA works alongside existing HPA infrastructure using HPA mode
+  # This provides advanced scaling triggers while maintaining HPA stability and coexistence
+  enabled: false
+  
+  # API Server autoscaling configuration
+  # KEDA generates an HPA named: {release}-api-server-keda-hpa
+  # Can coexist with api.autoscaling.* configuration
+  apiServer:
+    enabled: false
+    pollingInterval: 30
+    cooldownPeriod: 300
+    minReplicas: 1
+    maxReplicas: 10
+    cpuThreshold: "70"
+    memoryThreshold: "80"  # Optional: enable memory-based scaling
+  
+  # Web Server autoscaling configuration
+  # KEDA generates an HPA named: {release}-web-server-keda-hpa
+  # Can coexist with webserver.autoscaling.* configuration
+  webServer:
+    enabled: false
+    pollingInterval: 30
+    cooldownPeriod: 300
+    minReplicas: 1
+    maxReplicas: 5
+    cpuThreshold: "70"
+    memoryThreshold: "80"  # Optional: enable memory-based scaling
+  
+  # Slackbot autoscaling configuration
+  # KEDA generates an HPA named: {release}-slackbot-keda-hpa
+  # Can coexist with slackbot.autoscaling.* configuration
+  slackbot:
+    enabled: false
+    pollingInterval: 30
+    cooldownPeriod: 300
+    minReplicas: 1
+    maxReplicas: 3
+    cpuThreshold: "70"
+    memoryThreshold: "80"  # Optional: enable memory-based scaling
+  
+  # Model Servers autoscaling configuration
+  # KEDA generates HPAs for each enabled model server
+  # Can coexist with existing model server autoscaling
+  modelServers:
+    enabled: false
+    # Individual model server configurations can be added here
+    # Example:
+    # inference:
+    #   enabled: false
+    #   pollingInterval: 30
+    #   cooldownPeriod: 300
+    #   minReplicas: 1
+    #   maxReplicas: 5
+    #   cpuThreshold: "70"
+    #   memoryThreshold: "80"
+  
+  # Celery Workers autoscaling configuration
+  # KEDA provides Redis queue-based scaling for high-performance worker management
+  # Can coexist with existing celery worker autoscaling
+  celeryWorkers:
+    enabled: false
+    # Individual worker configurations can be added here
+    # Example:
+    # docprocessing:
+    #   enabled: false
+    #   pollingInterval: 30
+    #   cooldownPeriod: 300
+    #   minReplicas: 1
+    #   maxReplicas: 50
+    # light:
+    #   enabled: false
+    #   pollingInterval: 30
+    #   cooldownPeriod: 300
+    #   minReplicas: 1
+    #   maxReplicas: 10
+    # primary:
+    #   enabled: false
+    #   pollingInterval: 30
+    #   cooldownPeriod: 300
+    #   minReplicas: 1
+    #   maxReplicas: 10
+
 postgresql:
   primary:
     persistence:
