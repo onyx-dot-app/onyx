@@ -20,6 +20,7 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
     GeneratedImage,
@@ -1769,3 +1770,84 @@ def create_search_doc_from_saved_search_doc(
     data.pop("db_doc_id", None)
     # Keep score since SearchDoc has it as an optional field
     return SearchDoc(**data)
+
+
+def update_db_session_with_messages(
+    db_session: Session,
+    chat_message_id: int,
+    chat_session_id: UUID,
+    is_agentic: bool | None,
+    message: str | None = None,
+    message_type: str | None = None,
+    token_count: int | None = None,
+    rephrased_query: str | None = None,
+    prompt_id: int | None = None,
+    citations: dict[int, int] | None = None,
+    error: str | None = None,
+    alternate_assistant_id: int | None = None,
+    overridden_model: str | None = None,
+    research_type: str | None = None,
+    research_plan: dict[str, str] | None = None,
+    final_documents: list[SearchDoc] | None = None,
+    update_parent_message: bool = True,
+    research_answer_purpose: ResearchAnswerPurpose | None = None,
+    commit: bool = False,
+) -> ChatMessage:
+
+    chat_message = (
+        db_session.query(ChatMessage)
+        .filter(
+            ChatMessage.id == chat_message_id,
+            ChatMessage.chat_session_id == chat_session_id,
+        )
+        .first()
+    )
+    if not chat_message:
+        raise ValueError("Chat message with id not found")  # should never happen
+
+    if message:
+        chat_message.message = message
+    if message_type:
+        chat_message.message_type = MessageType(message_type)
+    if token_count:
+        chat_message.token_count = token_count
+    if rephrased_query:
+        chat_message.rephrased_query = rephrased_query
+    if prompt_id:
+        chat_message.prompt_id = prompt_id
+    if citations:
+        # Convert string keys to integers to match database field type
+        chat_message.citations = {int(k): v for k, v in citations.items()}
+    if error:
+        chat_message.error = error
+    if alternate_assistant_id:
+        chat_message.alternate_assistant_id = alternate_assistant_id
+    if overridden_model:
+        chat_message.overridden_model = overridden_model
+    if research_type:
+        chat_message.research_type = ResearchType(research_type)
+    if research_plan:
+        chat_message.research_plan = research_plan
+    if final_documents:
+        chat_message.search_docs = final_documents
+    if is_agentic is not None:
+        chat_message.is_agentic = is_agentic
+
+    if research_answer_purpose:
+        chat_message.research_answer_purpose = research_answer_purpose
+
+    if update_parent_message:
+        parent_chat_message = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.id == chat_message.parent_message)
+            .first()
+        )
+        if parent_chat_message:
+            parent_chat_message.latest_child_message = chat_message.id
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return chat_message

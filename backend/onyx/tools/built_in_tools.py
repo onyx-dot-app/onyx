@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (

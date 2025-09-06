@@ -16,7 +16,6 @@ from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import parse_plan_to_dict
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -24,10 +23,12 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
+from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.utils.logger import setup_logger
 
@@ -93,6 +94,7 @@ def save_iteration(
     final_answer: str,
     all_cited_documents: list[InferenceSection],
     is_internet_marker_dict: dict[str, bool],
+    num_tokens: int,
 ) -> None:
     db_session = graph_config.persistence.db_session
     message_id = graph_config.persistence.message_id
@@ -132,7 +134,7 @@ def save_iteration(
     update_db_session_with_messages(
         db_session=db_session,
         chat_message_id=message_id,
-        chat_session_id=str(graph_config.persistence.chat_session_id),
+        chat_session_id=graph_config.persistence.chat_session_id,
         is_agentic=graph_config.behavior.use_agentic_search,
         message=final_answer,
         citations=citation_dict,
@@ -141,6 +143,7 @@ def save_iteration(
         final_documents=search_docs,
         update_parent_message=True,
         research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+        token_count=num_tokens,
     )
 
     for iteration_preparation in state.iteration_instructions:
@@ -211,6 +214,14 @@ def logging(
     is_internet_marker_dict = aggregated_context.is_internet_marker_dict
 
     final_answer = state.final_answer or ""
+    llm_provider = graph_config.tooling.primary_llm.config.model_provider
+    llm_model_name = graph_config.tooling.primary_llm.config.model_name
+
+    llm_tokenizer = get_tokenizer(
+        model_name=llm_model_name,
+        provider_type=llm_provider,
+    )
+    num_tokens = len(llm_tokenizer.encode(final_answer or ""))
 
     write_custom_event(current_step_nr, OverallStop(), writer)
 
@@ -222,6 +233,7 @@ def logging(
         final_answer,
         all_cited_documents,
         is_internet_marker_dict,
+        num_tokens,
     )
 
     return LoggerUpdate(

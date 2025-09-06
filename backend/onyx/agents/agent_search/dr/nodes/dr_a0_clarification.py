@@ -26,7 +26,6 @@ from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -39,6 +38,7 @@ from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.db.chat import update_db_session_with_messages
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Tool
@@ -115,8 +115,8 @@ def _get_available_tools(
             raise ValueError(f"Tool {tool.name} is not found in the database")
 
         if isinstance(tool, InternetSearchTool):
-            llm_path = DRPath.INTERNET_SEARCH.value
-            path = DRPath.INTERNET_SEARCH
+            llm_path = DRPath.WEB_SEARCH.value
+            path = DRPath.WEB_SEARCH
         elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
@@ -310,7 +310,7 @@ _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
         "name": "run_any_knowledge_retrieval_and_any_action_tool",
         "description": "Use this tool to get ANY external information \
 that is relevant to the question, or for any action to be taken, including image generation. In fact, \
-ANY tool mentioned can be accessed through this generic tool.",
+ANY tool mentioned can be accessed through this generic tool. If in doubt, use this tool.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -529,7 +529,7 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=answer_str,
                     update_parent_message=True,
@@ -586,11 +586,12 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=full_answer,
                     update_parent_message=True,
                     research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                    token_count=len(llm_tokenizer.encode(full_answer or "")),
                 )
 
                 db_session.commit()
@@ -706,7 +707,7 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=clarification_response.clarification_question,
                     update_parent_message=True,
@@ -734,7 +735,7 @@ def clarifier(
         update_db_session_with_messages(
             db_session=db_session,
             chat_message_id=message_id,
-            chat_session_id=str(graph_config.persistence.chat_session_id),
+            chat_session_id=graph_config.persistence.chat_session_id,
             is_agentic=graph_config.behavior.use_agentic_search,
             message=clarification.clarification_question,
             update_parent_message=True,

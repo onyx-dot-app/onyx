@@ -24,7 +24,6 @@ from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_sear
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
 from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.dr.utils import parse_plan_to_dict
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -36,10 +35,12 @@ from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
+from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.llm.utils import check_number_of_tokens
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
 from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
@@ -151,7 +152,7 @@ def save_iteration(
     update_db_session_with_messages(
         db_session=db_session,
         chat_message_id=message_id,
-        chat_session_id=str(graph_config.persistence.chat_session_id),
+        chat_session_id=graph_config.persistence.chat_session_id,
         is_agentic=graph_config.behavior.use_agentic_search,
         message=final_answer,
         citations=citation_dict,
@@ -239,14 +240,17 @@ def closer(
         or "(No chat history yet available)"
     )
 
-    aggregated_context = aggregate_context(
+    aggregated_context_w_docs = aggregate_context(
         state.iteration_responses, include_documents=True
     )
 
-    iteration_responses_string = aggregated_context.context
-    all_cited_documents = aggregated_context.cited_documents
+    aggregated_context_wo_docs = aggregate_context(
+        state.iteration_responses, include_documents=False
+    )
 
-    aggregated_context.is_internet_marker_dict
+    iteration_responses_w_docs_string = aggregated_context_w_docs.context
+    iteration_responses_wo_docs_string = aggregated_context_wo_docs.context
+    all_cited_documents = aggregated_context_w_docs.cited_documents
 
     num_closer_suggestions = state.num_closer_suggestions
 
@@ -256,7 +260,7 @@ def closer(
     ):
         test_info_complete_prompt = TEST_INFO_COMPLETE_PROMPT.build(
             base_question=prompt_question,
-            questions_answers_claims=iteration_responses_string,
+            questions_answers_claims=iteration_responses_wo_docs_string,
             chat_history_string=chat_history_string,
             high_level_plan=(
                 state.plan_of_record.plan
@@ -311,6 +315,29 @@ def closer(
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
     else:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
+
+    estimated_final_answer_prompt_tokens = check_number_of_tokens(
+        final_answer_base_prompt.build(
+            base_question=prompt_question,
+            iteration_responses_string=iteration_responses_w_docs_string,
+            chat_history_string=chat_history_string,
+            uploaded_context=uploaded_context,
+        )
+    )
+
+    # for DR, rely only on sub-answers and claims to save tokens if context is too long
+    # TODO: consider compression step for Thoughtful mode if context is too long.
+    # Should generally not be the case though.
+
+    max_allowed_input_tokens = graph_config.tooling.primary_llm.config.max_input_tokens
+
+    if (
+        estimated_final_answer_prompt_tokens > 0.8 * max_allowed_input_tokens
+        and research_type == ResearchType.DEEP
+    ):
+        iteration_responses_string = iteration_responses_wo_docs_string
+    else:
+        iteration_responses_string = iteration_responses_w_docs_string
 
     final_answer_prompt = final_answer_base_prompt.build(
         base_question=prompt_question,

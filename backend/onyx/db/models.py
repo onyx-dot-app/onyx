@@ -3490,7 +3490,9 @@ class ResearchAgentIterationSubStep(Base):
     )
 
     # Relationships
-    # Note: ChatMessage can be accessed via iteration.primary_message
+    # Note: ChatMessage is accessible via primary_question_id. It is tied to the
+    # primary_question_id in research_agent_iteration, which has a foreign key constraint
+    # to ChatMessage.id.
 
     __table_args__ = (
         ForeignKeyConstraint(
