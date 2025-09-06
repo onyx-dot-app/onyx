@@ -239,6 +239,7 @@ class GitbookConnector(LoadConnector, PollConnector):
 
             while pages:
                 page = pages.pop(0)
+                pages.extend(page.get("pages", []))
 
                 updated_at_raw = page.get("updatedAt")
                 if updated_at_raw is None:
@@ -258,8 +259,6 @@ class GitbookConnector(LoadConnector, PollConnector):
                 if len(current_batch) >= self.batch_size:
                     yield current_batch
                     current_batch = []
-
-                pages.extend(page.get("pages", []))
 
             if current_batch:
                 yield current_batch
