@@ -24,7 +24,6 @@ class PromptSnapshot(BaseModel):
     system_prompt: str
     task_prompt: str
     datetime_aware: bool
-    default_prompt: bool
     # Not including persona info, not needed
 
     @classmethod
@@ -40,7 +39,6 @@ class PromptSnapshot(BaseModel):
             system_prompt=persona.system_prompt or "",
             task_prompt=persona.task_prompt or "",
             datetime_aware=persona.datetime_aware,
-            default_prompt=persona.is_default_prompt,
         )
 
 

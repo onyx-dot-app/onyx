@@ -44,17 +44,6 @@ def upgrade() -> None:
             ),
         )
 
-    if "is_default_prompt" not in existing_columns:
-        op.add_column(
-            "persona",
-            sa.Column(
-                "is_default_prompt",
-                sa.Boolean(),
-                nullable=False,
-                server_default="false",
-            ),
-        )
-
     # Step 2: Migrate data from prompt table to persona table (only if tables exist)
     existing_tables = inspector.get_table_names()
 
@@ -67,7 +56,6 @@ def upgrade() -> None:
                 system_prompt = p.system_prompt,
                 task_prompt = p.task_prompt,
                 datetime_aware = p.datetime_aware,
-                is_default_prompt = p.default_prompt
             FROM (
                 -- Get the first prompt for each persona (in case there are multiple)
                 SELECT DISTINCT ON (pp.persona_id)
@@ -216,7 +204,7 @@ def downgrade() -> None:
             system_prompt,
             task_prompt,
             datetime_aware,
-            default_prompt,
+            is_default_persona,
             deleted,
             user_id
         )
@@ -226,7 +214,7 @@ def downgrade() -> None:
             system_prompt,
             task_prompt,
             datetime_aware,
-            is_default_prompt,
+            is_default_persona,
             deleted,
             user_id
         FROM persona
@@ -257,7 +245,6 @@ def downgrade() -> None:
     )
 
     # Step 7: Remove columns from persona table
-    op.drop_column("persona", "is_default_prompt")
     op.drop_column("persona", "datetime_aware")
     op.drop_column("persona", "task_prompt")
     op.drop_column("persona", "system_prompt")

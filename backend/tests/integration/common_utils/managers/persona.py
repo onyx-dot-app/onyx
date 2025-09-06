@@ -165,7 +165,6 @@ class PersonaManager:
             system_prompt=system_prompt,
             task_prompt=task_prompt,
             datetime_aware=datetime_aware,
-            is_default_prompt=updated_persona_data.get("is_default_prompt", False),
             document_set_ids=updated_persona_data["document_sets"],
             tool_ids=updated_persona_data["tools"],
             llm_model_provider_override=updated_persona_data[

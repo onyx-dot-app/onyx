@@ -120,7 +120,6 @@ def load_builtin_personas(db_session: Session) -> None:
             persona.system_prompt = prebuilt_persona.system_prompt
             persona.task_prompt = prebuilt_persona.task_prompt
             persona.datetime_aware = prebuilt_persona.datetime_aware
-            persona.is_default_prompt = prebuilt_persona.is_default_prompt
 
         db_session.commit()
         logger.info(

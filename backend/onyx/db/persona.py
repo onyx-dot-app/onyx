@@ -663,7 +663,6 @@ def upsert_persona(
             system_prompt="",
             task_prompt="",
             datetime_aware=True,
-            is_default_prompt=False,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,

@@ -129,7 +129,6 @@ class DATestPersona(BaseModel):
     is_public: bool
     llm_filter_extraction: bool
     recency_bias: RecencyBiasSetting
-    is_default_prompt: bool = False
     document_set_ids: list[int]
     tool_ids: list[int]
     llm_model_provider_override: str | None

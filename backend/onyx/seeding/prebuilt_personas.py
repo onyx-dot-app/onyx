@@ -58,9 +58,6 @@ class PrebuiltPersona(BaseModel):
     is_default_persona: bool = Field(
         default=False, description="Whether this is a default persona"
     )
-    is_default_prompt: bool = Field(
-        default=False, description="Whether this uses default prompting"
-    )
     builtin_persona: bool = Field(
         default=True, description="Whether this is a built-in persona"
     )
@@ -110,7 +107,6 @@ PREBUILT_PERSONAS = [
             "If there are no relevant documents, refer to the chat history and your internal knowledge."
         ),
         datetime_aware=True,
-        is_default_prompt=True,
         num_chunks=25,
         llm_relevance_filter=False,
         llm_filter_extraction=True,
@@ -160,7 +156,6 @@ PREBUILT_PERSONAS = [
         ),
         task_prompt="",
         datetime_aware=True,
-        is_default_prompt=True,
         num_chunks=0,  # No search/retrieval
         llm_relevance_filter=True,
         llm_filter_extraction=True,
@@ -214,7 +209,6 @@ PREBUILT_PERSONAS = [
             "directly from the documents."
         ),
         datetime_aware=True,
-        is_default_prompt=True,
         num_chunks=10,
         llm_relevance_filter=True,
         llm_filter_extraction=True,
@@ -272,7 +266,6 @@ PREBUILT_PERSONAS = [
             "If the request is not appropriate or cannot be fulfilled, explain why and suggest alternatives."
         ),
         datetime_aware=True,
-        is_default_prompt=True,
         num_chunks=0,  # No search/retrieval
         llm_relevance_filter=False,
         llm_filter_extraction=False,
@@ -324,7 +317,6 @@ PREBUILT_PERSONAS = [
             "Do not make up any facts, only use what is in the documents."
         ),
         datetime_aware=True,
-        is_default_prompt=True,
         num_chunks=25,
         llm_relevance_filter=False,
         llm_filter_extraction=False,
