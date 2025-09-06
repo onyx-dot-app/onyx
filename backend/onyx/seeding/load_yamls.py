@@ -2,21 +2,19 @@ import yaml
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import INPUT_PROMPT_YAML
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.chat_configs import PERSONAS_YAML
-from onyx.configs.chat_configs import PROMPTS_YAML
 from onyx.configs.chat_configs import USER_FOLDERS_YAML
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
-from onyx.db.models import DocumentSet as DocumentSetDBModel
-from onyx.db.models import Persona
-from onyx.db.models import Tool as ToolDBModel
 from onyx.db.persona import upsert_persona
 from onyx.db.user_documents import upsert_user_folder
+from onyx.seeding.prebuilt_personas import get_prebuilt_personas
+from onyx.tools.built_in_tools import get_builtin_tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 def load_user_folders_from_yaml(
@@ -39,45 +37,6 @@ def load_user_folders_from_yaml(
             assistants=user_folder.get("assistants"),
         )
     db_session.flush()
-
-
-def load_prompts_from_yaml(
-    db_session: Session, prompts_yaml: str = PROMPTS_YAML
-) -> None:
-    """Load prompts as personas with embedded prompt configuration.
-
-    Since prompts are now embedded in personas, this function creates
-    personas with the prompt configuration embedded directly.
-    """
-    with open(prompts_yaml, "r") as file:
-        data = yaml.safe_load(file)
-
-    all_prompts = data.get("prompts", [])
-    for prompt in all_prompts:
-        # Create a persona, then set embedded prompt configuration
-        persona = upsert_persona(
-            user=None,
-            persona_id=(
-                (-1 * prompt.get("id")) if prompt.get("id") is not None else None
-            ),
-            name=prompt["name"],
-            description=prompt["description"].strip(),
-            num_chunks=MAX_CHUNKS_FED_TO_CHAT,
-            llm_relevance_filter=False,
-            llm_filter_extraction=False,
-            recency_bias=RecencyBiasSetting.BASE_DECAY,
-            llm_model_provider_override=None,
-            llm_model_version_override=None,
-            starter_messages=None,
-            builtin_persona=True,
-            is_public=True,
-            db_session=db_session,
-        )
-        persona.system_prompt = prompt["system"].strip()
-        persona.task_prompt = prompt["task"].strip()
-        persona.datetime_aware = prompt.get("datetime_aware", True)
-        persona.is_default_prompt = True
-        db_session.commit()
 
 
 def load_input_prompts_from_yaml(
@@ -103,134 +62,77 @@ def load_input_prompts_from_yaml(
         )
 
 
-def load_personas_from_yaml(
-    db_session: Session,
-    personas_yaml: str = PERSONAS_YAML,
-    default_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
-) -> None:
-    with open(personas_yaml, "r") as file:
-        data = yaml.safe_load(file)
+def load_builtin_personas(db_session: Session) -> None:
+    """Load built-in personas with embedded prompt configuration."""
+    logger.info("Loading builtin personas")
+    try:
+        for prebuilt_persona in get_prebuilt_personas():
+            # Handle tool IDs for image generation
+            tool_ids = None
+            if prebuilt_persona.image_generation:
+                image_tool = get_builtin_tool(db_session, ImageGenerationTool)
+                if image_tool:
+                    tool_ids = [image_tool.id]
+                else:
+                    raise ValueError(
+                        f"Image generation tool not found: {ImageGenerationTool._NAME}"
+                    )
 
-    all_personas = data.get("personas", [])
-
-    for persona in all_personas:
-        doc_set_names = persona["document_sets"]
-        doc_sets: list[DocumentSetDBModel] = [
-            get_or_create_document_set_by_name(db_session, name)
-            for name in doc_set_names
-        ]
-
-        # Assume if user hasn't set any document sets for the persona, the user may want
-        # to later attach document sets to the persona manually, therefore, don't overwrite/reset
-        # the document sets for the persona
-        doc_set_ids: list[int] | None = None
-        if doc_sets:
-            doc_set_ids = [doc_set.id for doc_set in doc_sets]
-        else:
-            doc_set_ids = None
-
-        # Handle embedded prompt configuration
-        # For now, we'll use the first prompt from the YAML or require explicit prompt fields
-        prompt_config = persona.get("prompt_config", {})
-        if not prompt_config and persona.get("prompts"):
-            # If legacy format with prompt names, we'll need to look up the first one
-            # and use its configuration, but this is a temporary compatibility measure
-            prompt_set_names = persona["prompts"]
-            if prompt_set_names:
-                # For now, use default prompt configuration - in production you might want to
-                # look up the actual prompt configuration from a mapping or separate YAML
-                prompt_config = {
-                    "system_prompt": "You are a helpful AI assistant.",
-                    "task_prompt": "Please answer the user's question based on the provided context.",
-                    "include_citations": True,
-                    "datetime_aware": True,
-                }
-
-        p_id = persona.get("id")
-        tool_ids = []
-
-        if persona.get("image_generation"):
-            image_gen_tool = (
-                db_session.query(ToolDBModel)
-                .filter(ToolDBModel.name == ImageGenerationTool.__name__)
-                .first()
+            # Create or update the persona
+            persona = upsert_persona(
+                user=None,
+                # make negative to not clash with user-created personas
+                persona_id=(
+                    (-1 * prebuilt_persona.id)
+                    if prebuilt_persona.id is not None
+                    else None
+                ),
+                name=prebuilt_persona.name,
+                description=prebuilt_persona.description,
+                num_chunks=prebuilt_persona.num_chunks,
+                chunks_above=prebuilt_persona.chunks_above,
+                chunks_below=prebuilt_persona.chunks_below,
+                llm_relevance_filter=prebuilt_persona.llm_relevance_filter,
+                llm_filter_extraction=prebuilt_persona.llm_filter_extraction,
+                recency_bias=prebuilt_persona.recency_bias,
+                llm_model_provider_override=prebuilt_persona.llm_model_provider_override,
+                llm_model_version_override=prebuilt_persona.llm_model_version_override,
+                starter_messages=prebuilt_persona.starter_messages,
+                is_public=True,
+                builtin_persona=True,
+                is_default_persona=prebuilt_persona.is_default_persona,
+                is_visible=prebuilt_persona.is_visible,
+                display_priority=prebuilt_persona.display_priority,
+                icon_color=prebuilt_persona.icon_color,
+                icon_shape=prebuilt_persona.icon_shape,
+                tool_ids=tool_ids,
+                db_session=db_session,
+                commit=False,
             )
-            if image_gen_tool:
-                tool_ids.append(image_gen_tool.id)
 
-        llm_model_provider_override = persona.get("llm_model_provider_override")
-        llm_model_version_override = persona.get("llm_model_version_override")
+            # Set the prompt fields directly on the persona object
+            # These are now embedded in the persona table after the migration
+            persona.system_prompt = prebuilt_persona.system_prompt
+            persona.task_prompt = prebuilt_persona.task_prompt
+            persona.datetime_aware = prebuilt_persona.datetime_aware
+            persona.include_citations = prebuilt_persona.include_citations
+            persona.is_default_prompt = prebuilt_persona.is_default_prompt
 
-        # Set specific overrides for image generation persona
-        if persona.get("image_generation"):
-            llm_model_version_override = "gpt-4o"
-
-        existing_persona = (
-            db_session.query(Persona).filter(Persona.name == persona["name"]).first()
-        )
-
-        # Use existing persona's ID if it exists, otherwise use the ID from YAML
-        persona_id_to_use = (
-            existing_persona.id
-            if existing_persona
-            else ((-1 * p_id) if p_id is not None else None)
-        )
-
-        persona_model = upsert_persona(
-            user=None,
-            persona_id=persona_id_to_use,
-            name=persona["name"],
-            description=persona["description"],
-            num_chunks=(
-                persona.get("num_chunks")
-                if persona.get("num_chunks") is not None
-                else default_chunks
-            ),
-            llm_relevance_filter=persona.get("llm_relevance_filter"),
-            starter_messages=persona.get("starter_messages", []),
-            llm_filter_extraction=persona.get("llm_filter_extraction"),
-            icon_shape=persona.get("icon_shape"),
-            icon_color=persona.get("icon_color"),
-            llm_model_provider_override=llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override,
-            recency_bias=RecencyBiasSetting(persona["recency_bias"]),
-            document_set_ids=doc_set_ids,
-            tool_ids=tool_ids,
-            builtin_persona=True,
-            is_public=True,
-            display_priority=(
-                existing_persona.display_priority
-                if existing_persona is not None
-                and persona.get("display_priority") is None
-                else persona.get("display_priority")
-            ),
-            is_visible=(
-                existing_persona.is_visible
-                if existing_persona is not None
-                else persona.get("is_visible")
-            ),
-            db_session=db_session,
-            is_default_persona=(
-                existing_persona.is_default_persona
-                if existing_persona is not None
-                else persona.get("is_default_persona", False)
-            ),
-        )
-        # Set embedded prompt configuration on persona
-        persona_model.system_prompt = prompt_config.get("system_prompt")
-        persona_model.task_prompt = prompt_config.get("task_prompt")
-        persona_model.include_citations = prompt_config.get("include_citations", True)
-        persona_model.datetime_aware = prompt_config.get("datetime_aware", True)
         db_session.commit()
+        logger.info(
+            f"Successfully loaded {len(get_prebuilt_personas())} builtin personas"
+        )
+    except Exception:
+        db_session.rollback()
+        logger.exception("Error loading builtin personas")
+        raise
 
 
 def load_chat_yamls(
     db_session: Session,
-    prompt_yaml: str = PROMPTS_YAML,
-    personas_yaml: str = PERSONAS_YAML,
     input_prompts_yaml: str = INPUT_PROMPT_YAML,
 ) -> None:
-    load_prompts_from_yaml(db_session, prompt_yaml)
-    load_personas_from_yaml(db_session, personas_yaml)
+    """Load all chat-related YAML configurations and builtin personas."""
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
     load_user_folders_from_yaml(db_session)
+    load_builtin_personas(db_session)

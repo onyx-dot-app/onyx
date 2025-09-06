@@ -72,7 +72,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
-from onyx.db.pydantic_type import PydanticType
+from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -2510,17 +2510,11 @@ class Tool(Base):
     )
 
 
-class StarterMessage(TypedDict):
-    """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
-    in Postgres"""
+class StarterMessage(BaseModel):
+    """Starter message for a persona."""
 
     name: str
     message: str
-
-
-class StarterMessageModel(BaseModel):
-    message: str
-    name: str
 
 
 class Persona__PersonaLabel(Base):
@@ -2566,7 +2560,7 @@ class Persona(Base):
         String, nullable=True
     )
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+        PydanticListType(StarterMessage), nullable=True
     )
     search_start_date: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None

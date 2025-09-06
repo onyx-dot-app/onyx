@@ -610,7 +610,6 @@ def upsert_persona(
     starter_messages: list[StarterMessage] | None,
     is_public: bool,
     db_session: Session,
-    prompt_ids: list[int] | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
