@@ -1751,7 +1751,6 @@ def update_db_session_with_messages(
     message_type: str | None = None,
     token_count: int | None = None,
     rephrased_query: str | None = None,
-    prompt_id: int | None = None,
     citations: dict[int, int] | None = None,
     error: str | None = None,
     alternate_assistant_id: int | None = None,
@@ -1783,8 +1782,8 @@ def update_db_session_with_messages(
         chat_message.token_count = token_count
     if rephrased_query:
         chat_message.rephrased_query = rephrased_query
-    if prompt_id:
-        chat_message.prompt_id = prompt_id
+    # Note: prompt_id has been removed after Prompt/Persona merge
+    # Prompts are now embedded in personas
     if citations:
         # Convert string keys to integers to match database field type
         chat_message.citations = {int(k): v for k, v in citations.items()}

@@ -75,7 +75,6 @@ def load_prompts_from_yaml(
         )
         persona.system_prompt = prompt["system"].strip()
         persona.task_prompt = prompt["task"].strip()
-        persona.include_citations = prompt["include_citations"]
         persona.datetime_aware = prompt.get("datetime_aware", True)
         persona.is_default_prompt = True
         db_session.commit()
@@ -170,9 +169,16 @@ def load_personas_from_yaml(
             db_session.query(Persona).filter(Persona.name == persona["name"]).first()
         )
 
+        # Use existing persona's ID if it exists, otherwise use the ID from YAML
+        persona_id_to_use = (
+            existing_persona.id
+            if existing_persona
+            else ((-1 * p_id) if p_id is not None else None)
+        )
+
         persona_model = upsert_persona(
             user=None,
-            persona_id=(-1 * p_id) if p_id is not None else None,
+            persona_id=persona_id_to_use,
             name=persona["name"],
             description=persona["description"],
             num_chunks=(

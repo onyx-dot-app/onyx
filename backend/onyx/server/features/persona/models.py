@@ -39,7 +39,6 @@ class PromptSnapshot(BaseModel):
             description=persona.description,
             system_prompt=persona.system_prompt or "",
             task_prompt=persona.task_prompt or "",
-            include_citations=persona.include_citations,
             datetime_aware=persona.datetime_aware,
             default_prompt=persona.is_default_prompt,
         )

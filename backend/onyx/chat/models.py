@@ -171,6 +171,7 @@ class PromptOverrideConfig(BaseModel):
     system_prompt: str
     task_prompt: str = ""
     datetime_aware: bool = True
+    include_citations: bool = True
 
 
 class PersonaOverrideConfig(BaseModel):
@@ -281,7 +282,6 @@ class PromptConfig(BaseModel):
             system_prompt=override_system_prompt or model.system_prompt or "",
             task_prompt=override_task_prompt or model.task_prompt or "",
             datetime_aware=model.datetime_aware or True,
-            include_citations=model.include_citations or True,
         )
 
     model_config = ConfigDict(frozen=True)
