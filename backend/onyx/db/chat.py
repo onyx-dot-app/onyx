@@ -1792,7 +1792,7 @@ def update_db_session_with_messages(
     update_parent_message: bool = True,
     research_answer_purpose: ResearchAnswerPurpose | None = None,
     commit: bool = False,
-) -> None:
+) -> ChatMessage:
 
     chat_message = (
         db_session.query(ChatMessage)
