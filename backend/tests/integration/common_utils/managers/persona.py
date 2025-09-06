@@ -236,7 +236,6 @@ class PersonaManager:
                     == persona.llm_model_version_override
                     and fetched_persona.system_prompt == persona.system_prompt
                     and fetched_persona.task_prompt == persona.task_prompt
-                    and fetched_persona.include_citations == persona.include_citations
                     and fetched_persona.datetime_aware == persona.datetime_aware
                     and set(
                         [

@@ -27,9 +27,6 @@ class PrebuiltPersona(BaseModel):
     datetime_aware: bool = Field(
         default=True, description="Whether to include current date/time"
     )
-    include_citations: bool = Field(
-        default=True, description="Whether to include citations"
-    )
 
     # Search and retrieval settings
     num_chunks: float = Field(default=25, description="Number of chunks to retrieve")
@@ -113,7 +110,6 @@ PREBUILT_PERSONAS = [
             "If there are no relevant documents, refer to the chat history and your internal knowledge."
         ),
         datetime_aware=True,
-        include_citations=True,
         is_default_prompt=True,
         num_chunks=25,
         llm_relevance_filter=False,
@@ -164,7 +160,6 @@ PREBUILT_PERSONAS = [
         ),
         task_prompt="",
         datetime_aware=True,
-        include_citations=True,
         is_default_prompt=True,
         num_chunks=0,  # No search/retrieval
         llm_relevance_filter=True,
@@ -219,7 +214,6 @@ PREBUILT_PERSONAS = [
             "directly from the documents."
         ),
         datetime_aware=True,
-        include_citations=True,
         is_default_prompt=True,
         num_chunks=10,
         llm_relevance_filter=True,
@@ -278,7 +272,6 @@ PREBUILT_PERSONAS = [
             "If the request is not appropriate or cannot be fulfilled, explain why and suggest alternatives."
         ),
         datetime_aware=True,
-        include_citations=True,
         is_default_prompt=True,
         num_chunks=0,  # No search/retrieval
         llm_relevance_filter=False,
@@ -331,7 +324,6 @@ PREBUILT_PERSONAS = [
             "Do not make up any facts, only use what is in the documents."
         ),
         datetime_aware=True,
-        include_citations=True,
         is_default_prompt=True,
         num_chunks=25,
         llm_relevance_filter=False,

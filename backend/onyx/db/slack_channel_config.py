@@ -13,7 +13,6 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
-from onyx.db.persona import get_default_prompt
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
 from onyx.tools.built_in_tools import get_builtin_tool
@@ -54,7 +53,6 @@ def create_slack_channel_persona(
 
     # create/update persona associated with the Slack channel
     persona_name = _build_persona_name(channel_name)
-    default_prompt = get_default_prompt(db_session)
     persona = upsert_persona(
         user=None,  # Slack channel Personas are not attached to users
         persona_id=existing_persona_id,
@@ -64,7 +62,6 @@ def create_slack_channel_persona(
         llm_relevance_filter=True,
         llm_filter_extraction=enable_auto_filters,
         recency_bias=RecencyBiasSetting.AUTO,
-        prompt_ids=[default_prompt.id],
         tool_ids=[search_tool.id],
         document_set_ids=document_set_ids,
         llm_model_provider_override=None,

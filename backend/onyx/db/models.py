@@ -2589,7 +2589,6 @@ class Persona(Base):
         String(length=8000), nullable=True
     )
     task_prompt: Mapped[str | None] = mapped_column(String(length=8000), nullable=True)
-    include_citations: Mapped[bool] = mapped_column(Boolean, default=True)
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
     # Indicates if this is a default/system prompt configuration
     is_default_prompt: Mapped[bool] = mapped_column(Boolean, default=False)

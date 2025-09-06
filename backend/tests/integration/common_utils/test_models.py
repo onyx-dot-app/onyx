@@ -141,7 +141,6 @@ class DATestPersona(BaseModel):
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
     task_prompt: str | None = None
-    include_citations: bool = True
     datetime_aware: bool = True
 
 

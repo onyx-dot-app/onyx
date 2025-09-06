@@ -147,7 +147,6 @@ def create_assistant(
     if request.instructions is not None:
         persona.system_prompt = request.instructions
         persona.task_prompt = ""
-        persona.include_citations = True
         persona.datetime_aware = True
         db_session.commit()
 

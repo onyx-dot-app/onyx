@@ -389,7 +389,6 @@ def create_temporary_persona(
         first_prompt = persona_config.prompts[0]
         persona.system_prompt = first_prompt.system_prompt
         persona.task_prompt = first_prompt.task_prompt
-        persona.include_citations = first_prompt.include_citations
         persona.datetime_aware = first_prompt.datetime_aware
 
     persona.tools = []
