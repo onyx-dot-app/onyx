@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,3 +29,20 @@ def fetch_chunk_counts_for_user_files(
         (user_file_id, chunk_counts.get(user_file_id, 0))
         for user_file_id in user_file_ids
     ]
+
+
+def calculate_user_files_token_count(file_ids: list[str], db_session: Session) -> int:
+    """Calculate total token count for specified files and folders"""
+    total_tokens = 0
+
+    # Get tokens from individual files
+    if file_ids:
+        file_tokens = (
+            db_session.query(func.sum(UserFile.token_count))
+            .filter(UserFile.id.in_(file_ids))
+            .scalar()
+            or 0
+        )
+        total_tokens += file_tokens
+
+    return total_tokens

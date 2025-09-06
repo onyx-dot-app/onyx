@@ -90,17 +90,6 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "check-for-user-file-folder-sync",
-        "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
-        "schedule": timedelta(
-            days=1
-        ),  # This should essentially always be triggered manually for user folder updates.
-        "options": {
-            "priority": OnyxCeleryPriority.MEDIUM,
-            "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
         "name": "check-for-pruning",
         "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
         "schedule": timedelta(seconds=20),

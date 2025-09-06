@@ -17,18 +17,12 @@ from onyx.db.document import update_docs_chunk_count__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
-from onyx.db.user_documents import fetch_user_files_for_documents
-from onyx.db.user_documents import fetch_user_folders_for_documents
-from onyx.db.user_documents import update_user_file_token_count__no_commit
-from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
-from onyx.llm.factory import get_default_llms
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -118,15 +112,6 @@ class DocumentIndexingBatchAdapter:
             )
         }
 
-        doc_id_to_user_file_id: dict[str, int | None] = fetch_user_files_for_documents(
-            document_ids=updatable_ids, db_session=self.db_session
-        )
-        doc_id_to_user_folder_id: dict[str, int | None] = (
-            fetch_user_folders_for_documents(
-                document_ids=updatable_ids, db_session=self.db_session
-            )
-        )
-
         doc_id_to_previous_chunk_cnt: dict[str, int] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
@@ -146,53 +131,12 @@ class DocumentIndexingBatchAdapter:
             for document_id in updatable_ids
         }
 
-        try:
-            llm, _ = get_default_llms()
-
-            llm_tokenizer = get_tokenizer(
-                model_name=llm.config.model_name,
-                provider_type=llm.config.model_provider,
-            )
-        except Exception as e:
-            logger.error(f"Error getting tokenizer: {e}")
-            llm_tokenizer = None
-
-        # Calculate token counts for each document by combining all its chunks' content
-        user_file_id_to_token_count: dict[int, int | None] = {}
-        user_file_id_to_raw_text: dict[int, str] = {}
-        for document_id in updatable_ids:
-            # Only calculate token counts for documents that have a user file ID
-
-            user_file_id = doc_id_to_user_file_id.get(document_id)
-            if user_file_id is None:
-                continue
-
-            document_chunks = [
-                chunk
-                for chunk in chunks_with_embeddings
-                if chunk.source_document.id == document_id
-            ]
-            if document_chunks:
-                combined_content = " ".join(
-                    [chunk.content for chunk in document_chunks]
-                )
-                token_count = (
-                    len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
-                )
-                user_file_id_to_token_count[user_file_id] = token_count
-                user_file_id_to_raw_text[user_file_id] = combined_content
-            else:
-                user_file_id_to_token_count[user_file_id] = None
-
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
                 access=doc_id_to_access_info.get(chunk.source_document.id, no_access),
                 document_sets=set(
                     doc_id_to_document_set.get(chunk.source_document.id, [])
-                ),
-                user_folder=doc_id_to_user_folder_id.get(
-                    chunk.source_document.id, None
                 ),
                 boost=(
                     context.id_to_boost_map[chunk.source_document.id]
@@ -209,8 +153,8 @@ class DocumentIndexingBatchAdapter:
             chunks=access_aware_chunks,
             doc_id_to_previous_chunk_cnt=doc_id_to_previous_chunk_cnt,
             doc_id_to_new_chunk_cnt=doc_id_to_new_chunk_cnt,
-            user_file_id_to_raw_text=user_file_id_to_raw_text,
-            user_file_id_to_token_count=user_file_id_to_token_count,
+            user_file_id_to_raw_text={},
+            user_file_id_to_token_count={},
         )
 
     def post_index(
@@ -232,15 +176,6 @@ class DocumentIndexingBatchAdapter:
                 continue
             ids_to_new_updated_at[doc.id] = doc.doc_updated_at
 
-        # Store the plaintext in the file store for faster retrieval
-        # NOTE: this creates its own session to avoid committing the overall
-        # transaction.
-        for user_file_id, raw_text in result.user_file_id_to_raw_text.items():
-            store_user_file_plaintext(
-                user_file_id=user_file_id,
-                plaintext_content=raw_text,
-            )
-
         update_docs_updated_at__no_commit(
             ids_to_new_updated_at=ids_to_new_updated_at, db_session=self.db_session
         )
@@ -252,11 +187,6 @@ class DocumentIndexingBatchAdapter:
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
             doc_id_to_chunk_count=result.doc_id_to_new_chunk_cnt,
-            db_session=self.db_session,
-        )
-
-        update_user_file_token_count__no_commit(
-            user_file_id_to_token_count=result.user_file_id_to_token_count,
             db_session=self.db_session,
         )
 

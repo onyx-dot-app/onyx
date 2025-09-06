@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import os
-import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
@@ -14,7 +13,6 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
-from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -29,11 +27,9 @@ from onyx.chat.prompt_builder.citations_prompt import (
 )
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
-from onyx.connectors.models import InputType
 from onyx.db.chat import add_chats_to_session_from_slack_thread
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
@@ -49,21 +45,15 @@ from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.connector import create_connector
-from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import check_project_ownership
-from onyx.db.user_documents import create_user_files
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import FileDescriptor
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
@@ -71,9 +61,6 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -97,7 +84,6 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -716,122 +702,6 @@ def seed_chat_from_slack(
     return SeedChatFromSlackResponse(
         redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}"
     )
-
-
-"""File upload"""
-
-
-@router.post("/file")
-def upload_files_for_chat(
-    files: list[UploadFile],
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
-) -> dict[str, list[FileDescriptor]]:
-
-    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
-    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    # csv_content_types = {"text/csv"}
-    # text_content_types = {
-    #     "text/plain",
-    #     "text/markdown",
-    #     "text/x-markdown",
-    #     "text/x-config",
-    #     "text/tab-separated-values",
-    #     "application/json",
-    #     "application/xml",
-    #     "text/xml",
-    #     "application/x-yaml",
-    # }
-    # document_content_types = {
-    #     "application/pdf",
-    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    #     "message/rfc822",
-    #     "application/epub+zip",
-    # }
-
-    # allowed_content_types = (
-    #     image_content_types.union(text_content_types)
-    #     .union(document_content_types)
-    #     .union(csv_content_types)
-    # )
-
-    for file in files:
-        if not file.content_type:
-            raise HTTPException(status_code=400, detail="File content type is required")
-
-        if file.content_type not in UploadMimeTypes.ALLOWED_MIME_TYPES:
-            raise HTTPException(status_code=400, detail="Unsupported file type.")
-
-        if (
-            file.content_type in UploadMimeTypes.IMAGE_MIME_TYPES
-            and file.size
-            and file.size > 20 * 1024 * 1024
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Images must be less than 20MB",
-            )
-
-    # 5) Create a user file for each uploaded file
-    user_files = create_user_files(files, RECENT_DOCS_FOLDER_ID, user, db_session)
-    for user_file in user_files:
-        # 6) Create connector
-        connector_base = ConnectorBase(
-            name=f"UserFile-{int(time.time())}",
-            source=DocumentSource.FILE,
-            input_type=InputType.LOAD_STATE,
-            connector_specific_config={
-                "file_locations": [user_file.file_id],
-                "file_names": [user_file.name],
-                "zip_metadata": {},
-            },
-            refresh_freq=None,
-            prune_freq=None,
-            indexing_start=None,
-        )
-        connector = create_connector(
-            db_session=db_session,
-            connector_data=connector_base,
-        )
-
-        # 7) Create credential
-        credential_info = CredentialBase(
-            credential_json={},
-            admin_public=True,
-            source=DocumentSource.FILE,
-            curator_public=True,
-            groups=[],
-            name=f"UserFileCredential-{int(time.time())}",
-            is_user_file=True,
-        )
-        credential = create_credential(credential_info, user, db_session)
-
-        # 8) Create connector credential pair
-        cc_pair = add_credential_to_connector(
-            db_session=db_session,
-            user=user,
-            connector_id=connector.id,
-            credential_id=credential.id,
-            cc_pair_name=f"UserFileCCPair-{int(time.time())}",
-            access_type=AccessType.PRIVATE,
-            auto_sync_options=None,
-            groups=[],
-        )
-        user_file.cc_pair_id = cc_pair.data
-        db_session.commit()
-
-    return {
-        "files": [
-            {
-                "id": user_file.file_id,
-                "type": mime_type_to_chat_file_type(user_file.content_type),
-                "name": user_file.name,
-            }
-            for user_file in user_files
-        ]
-    }
 
 
 @router.get("/file/{file_id:path}")
