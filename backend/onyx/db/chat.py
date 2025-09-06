@@ -1850,4 +1850,4 @@ def update_db_session_with_messages(
     else:
         db_session.flush()
 
-    return
+    return chat_message
