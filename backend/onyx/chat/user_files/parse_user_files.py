@@ -72,7 +72,7 @@ def parse_user_files(
 
     # Calculate token count for the files, need to import here to avoid circular import
     # TODO: fix this
-    from onyx.db.user_documents import calculate_user_files_token_count
+    from onyx.db.user_file import calculate_user_files_token_count
     from onyx.chat.prompt_builder.citations_prompt import (
         compute_max_document_tokens_for_persona,
     )
