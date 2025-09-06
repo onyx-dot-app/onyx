@@ -152,7 +152,7 @@ def save_iteration(
     update_db_session_with_messages(
         db_session=db_session,
         chat_message_id=message_id,
-        chat_session_id=str(graph_config.persistence.chat_session_id),
+        chat_session_id=graph_config.persistence.chat_session_id,
         is_agentic=graph_config.behavior.use_agentic_search,
         message=final_answer,
         citations=citation_dict,

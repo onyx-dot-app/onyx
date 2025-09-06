@@ -529,7 +529,7 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=answer_str,
                     update_parent_message=True,
@@ -586,7 +586,7 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=full_answer,
                     update_parent_message=True,
@@ -707,7 +707,7 @@ def clarifier(
                 update_db_session_with_messages(
                     db_session=db_session,
                     chat_message_id=message_id,
-                    chat_session_id=str(graph_config.persistence.chat_session_id),
+                    chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=clarification_response.clarification_question,
                     update_parent_message=True,
@@ -735,7 +735,7 @@ def clarifier(
         update_db_session_with_messages(
             db_session=db_session,
             chat_message_id=message_id,
-            chat_session_id=str(graph_config.persistence.chat_session_id),
+            chat_session_id=graph_config.persistence.chat_session_id,
             is_agentic=graph_config.behavior.use_agentic_search,
             message=clarification.clarification_question,
             update_parent_message=True,
