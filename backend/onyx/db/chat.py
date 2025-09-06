@@ -1829,7 +1829,7 @@ def update_db_session_with_messages(
         chat_message.research_plan = research_plan
     if final_documents:
         chat_message.search_docs = final_documents
-    if is_agentic:
+    if is_agentic is not None:
         chat_message.is_agentic = is_agentic
 
     if research_answer_purpose:
