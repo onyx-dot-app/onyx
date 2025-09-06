@@ -1233,7 +1233,7 @@ export function ChatPage({
                               )}
                             {enterpriseSettings &&
                               enterpriseSettings.use_custom_logotype && (
-                                <div className="hidden lg:block absolute right-0 bottom-0">
+                                <div className="hidden lg:block fixed right-4 bottom-4 pointer-events-none z-10">
                                   <img
                                     src="/api/enterprise-settings/logotype"
                                     alt="logotype"
