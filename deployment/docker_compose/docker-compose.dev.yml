@@ -136,7 +136,7 @@ services:
       - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
 
       # Vespa Language Forcing
-      # See: https://docs.vespa.ai/en/linguistics.html 
+      # See: https://docs.vespa.ai/en/linguistics.html
       - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
 
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
@@ -283,6 +283,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
         # primarily for testing
       - CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=${CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS:-}
+      - GITLAB_CONNECTOR_INCLUDE_CODE_FILES=true
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
