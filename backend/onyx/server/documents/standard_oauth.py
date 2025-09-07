@@ -33,6 +33,7 @@ _OAUTH_STATE_KEY_FMT = "oauth_state:{state}"
 _OAUTH_STATE_EXPIRATION_SECONDS = 10 * 60  # 10 minutes
 _DESIRED_RETURN_URL_KEY = "desired_return_url"
 _ADDITIONAL_KWARGS_KEY = "additional_kwargs"
+_CREDENTIAL_NAME_KEY = "credential_name"
 
 # Cache for OAuth connectors, populated at module load time
 _OAUTH_CONNECTORS: dict[DocumentSource, type[OAuthConnector]] = {}
@@ -80,7 +81,7 @@ def _get_additional_kwargs(
 
 
 class AuthorizeResponse(BaseModel):
-    redirect_url: str
+    url: str
 
 
 @router.get("/authorize/{source}")
@@ -88,6 +89,7 @@ def oauth_authorize(
     request: Request,
     source: DocumentSource,
     desired_return_url: Annotated[str | None, Query()] = None,
+    credential_name: Annotated[str | None, Query()] = None,
     _: User = Depends(current_user),
 ) -> AuthorizeResponse:
     """Initiates the OAuth flow by redirecting to the provider's auth page"""
@@ -104,8 +106,24 @@ def oauth_authorize(
     # get additional kwargs from request
     # e.g. anything except for desired_return_url
     additional_kwargs = _get_additional_kwargs(
-        request, connector_cls, ["desired_return_url"]
+        request, connector_cls, ["desired_return_url", "credential_name"]
     )
+
+    # For Linear, prepare credentials for OAuth flow
+    linear_creds = None
+    if source == DocumentSource.LINEAR:
+        from onyx.connectors.linear.linear_kv import get_linear_app_cred
+
+        try:
+            creds = get_linear_app_cred()
+            linear_creds = creds
+            # Only inject client_id into additional_kwargs (for storage in state)
+            # client_secret will be provided directly to connector methods
+            if "client_id" not in additional_kwargs:
+                additional_kwargs["client_id"] = creds.client_id
+        except ValueError:
+            # App credentials not configured, will fail later in connector
+            pass
 
     # store state in redis
     if not desired_return_url:
@@ -118,16 +136,25 @@ def oauth_authorize(
             {
                 _DESIRED_RETURN_URL_KEY: desired_return_url,
                 _ADDITIONAL_KWARGS_KEY: additional_kwargs,
+                _CREDENTIAL_NAME_KEY: credential_name,
             }
         ),
         ex=_OAUTH_STATE_EXPIRATION_SECONDS,
     )
 
-    return AuthorizeResponse(
-        redirect_url=connector_cls.oauth_authorization_url(
+    # For Linear, provide full credentials (including secret) to the connector
+    if source == DocumentSource.LINEAR and linear_creds:
+        full_kwargs = additional_kwargs.copy()
+        full_kwargs["client_secret"] = linear_creds.client_secret
+        redirect_url = connector_cls.oauth_authorization_url(
+            base_url, state, full_kwargs
+        )
+    else:
+        redirect_url = connector_cls.oauth_authorization_url(
             base_url, state, additional_kwargs
         )
-    )
+
+    return AuthorizeResponse(url=redirect_url)
 
 
 class CallbackResponse(BaseModel):
@@ -161,16 +188,35 @@ def oauth_callback(
 
     desired_return_url = cast(str, oauth_state[_DESIRED_RETURN_URL_KEY])
     additional_kwargs = cast(dict[str, str], oauth_state[_ADDITIONAL_KWARGS_KEY])
+    credential_name = cast(str | None, oauth_state.get(_CREDENTIAL_NAME_KEY))
 
     base_url = WEB_DOMAIN
-    token_info = connector_cls.oauth_code_to_token(base_url, code, additional_kwargs)
+
+    # For Linear, provide full credentials (including secret) to the connector
+    if source == DocumentSource.LINEAR:
+        from onyx.connectors.linear.linear_kv import get_linear_app_cred
+
+        try:
+            creds = get_linear_app_cred()
+            full_kwargs = additional_kwargs.copy()
+            full_kwargs["client_secret"] = creds.client_secret
+            token_info = connector_cls.oauth_code_to_token(base_url, code, full_kwargs)
+        except ValueError:
+            # App credentials not configured, proceed with stored kwargs
+            token_info = connector_cls.oauth_code_to_token(
+                base_url, code, additional_kwargs
+            )
+    else:
+        token_info = connector_cls.oauth_code_to_token(
+            base_url, code, additional_kwargs
+        )
 
     # Create a new credential with the token info
     credential_data = CredentialBase(
         credential_json=token_info,
         admin_public=True,  # Or based on some logic/parameter
         source=source,
-        name=f"{source.title()} OAuth Credential",
+        name=credential_name or f"{source.title()} OAuth Credential",
     )
 
     credential = create_credential(

@@ -66,6 +66,10 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
 
 
 class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+    class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
+        client_id: str | None = None
+        client_secret: str | None = None
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -81,13 +85,14 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def oauth_authorization_url(
         cls, base_domain: str, state: str, additional_kwargs: dict[str, str]
     ) -> str:
-        if not LINEAR_CLIENT_ID:
-            raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
+        client_id = additional_kwargs.get("client_id") or LINEAR_CLIENT_ID
+        if not client_id:
+            raise ValueError("Linear client_id is not configured")
 
         callback_uri = get_oauth_callback_uri(base_domain, DocumentSource.LINEAR.value)
         return (
             f"https://linear.app/oauth/authorize"
-            f"?client_id={LINEAR_CLIENT_ID}"
+            f"?client_id={client_id}"
             f"&redirect_uri={callback_uri}"
             f"&response_type=code"
             f"&scope=read"
@@ -99,13 +104,19 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def oauth_code_to_token(
         cls, base_domain: str, code: str, additional_kwargs: dict[str, str]
     ) -> dict[str, Any]:
+        client_id = additional_kwargs.get("client_id") or LINEAR_CLIENT_ID
+        client_secret = additional_kwargs.get("client_secret") or LINEAR_CLIENT_SECRET
+
+        if not client_id or not client_secret:
+            raise ValueError("Linear client_id/client_secret is not configured")
+
         data = {
             "code": code,
             "redirect_uri": get_oauth_callback_uri(
                 base_domain, DocumentSource.LINEAR.value
             ),
-            "client_id": LINEAR_CLIENT_ID,
-            "client_secret": LINEAR_CLIENT_SECRET,
+            "client_id": client_id,
+            "client_secret": client_secret,
             "grant_type": "authorization_code",
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -128,10 +139,22 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         }
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        # Support legacy and OAuth styles for maximum compatibility:
+        # - "linear_api_key": pre-formatted header value (legacy env/manual)
+        # - "access_token": OAuth token (Bearer)
+        # - "linear_access_token": manual UI token field (historical naming)
         if "linear_api_key" in credentials:
             self.linear_api_key = cast(str, credentials["linear_api_key"])
         elif "access_token" in credentials:
             self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
+        elif "linear_access_token" in credentials:
+            # Backward compatibility: accept deprecated field and warn
+            logger.warning(
+                "Linear credential field 'linear_access_token' is deprecated; use 'access_token' instead."
+            )
+            self.linear_api_key = "Bearer " + cast(
+                str, credentials["linear_access_token"]
+            )
         else:
             # May need to handle case in the future if the OAuth flow expires
             raise ConnectorMissingCredentialError("Linear")
