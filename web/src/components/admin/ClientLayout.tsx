@@ -220,6 +220,15 @@ const collections = (
               ),
               link: "/admin/configuration/document-processing",
             },
+            {
+              name: (
+                <div className="flex">
+                  <AssistantsIconSkeleton className="text-text-700" size={18} />
+                  <div className="ml-1">Default Assistant</div>
+                </div>
+              ),
+              link: "/admin/configuration/default-assistant",
+            },
             ...(kgExposed
               ? [
                   {

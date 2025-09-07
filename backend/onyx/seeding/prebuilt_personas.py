@@ -86,44 +86,53 @@ class PrebuiltPersona(BaseModel):
 
 # Define the prebuilt personas
 PREBUILT_PERSONAS = [
-    # Search persona (ID 0 - required for OnyxBot)
+    # Unified Assistant (ID 0 - replacing Search persona)
     PrebuiltPersona(
         id=0,
-        name="Search",
-        description="Assistant with access to documents and knowledge from Connected Sources.",
+        name="Assistant",
+        description="Your AI assistant with search, web browsing, and image generation capabilities.",
         system_prompt=(
-            "You are a question answering system that is constantly learning and improving.\n"
+            "You are a helpful AI assistant that is constantly learning and improving.\n"
             "The current date is [[CURRENT_DATETIME]].\n\n"
-            "You can process and comprehend vast amounts of text and utilize this knowledge to provide\n"
+            "You can process and comprehend vast amounts of text and utilize this knowledge to provide "
             "grounded, accurate, and concise answers to diverse queries.\n\n"
+            "You have access to:\n"
+            "1. Document search - to find information from connected sources\n"
+            "2. Web search - to get up-to-date information from the internet\n"
+            "3. Image generation - to create images based on descriptions\n\n"
+            "You give concise responses to simple questions, but provide more thorough responses to "
+            "complex and open-ended questions.\n\n"
+            "You are happy to help with writing, analysis, question answering, math, coding and all sorts "
+            "of other tasks. You use markdown where reasonable and also for coding.\n\n"
             "You always clearly communicate ANY UNCERTAINTY in your answer."
         ),
         task_prompt=(
-            "Answer my query based on the documents provided.\n"
-            "The documents may not all be relevant, ignore any documents that are not directly relevant\n"
+            "Answer the user's query using the appropriate capabilities:\n"
+            "- If documents are provided, use them to answer the question\n"
+            "- If the query requires current information, use web search\n"
+            "- If the query requires image generation, create the requested image\n"
+            "- For general questions, use your knowledge and reasoning\n\n"
+            "The documents may not all be relevant, ignore any documents that are not directly relevant "
             "to the most recent user query.\n\n"
             "I have not read or seen any of the documents and do not want to read them. "
-            "Do not refer to them by Document number.\n\n"
-            "If there are no relevant documents, refer to the chat history and your internal knowledge."
+            "Do not refer to them by Document number."
         ),
         datetime_aware=True,
-        num_chunks=25,
+        num_chunks=25,  # Enable search
         llm_relevance_filter=False,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        icon_shape=23013,
+        icon_shape=23013,  # Keep the search icon
         icon_color="#6FB1FF",
         display_priority=0,
         is_visible=True,
         is_default_persona=True,
+        image_generation=True,  # Enable image generation
         starter_messages=[
+            # Search-related starter messages
             StarterMessage(
                 name="Give me an overview of what's here",
                 message="Sample some documents and tell me what you find.",
-            ),
-            StarterMessage(
-                name="Use AI to solve a work related problem",
-                message="Ask me what problem I would like to solve, then search the knowledge base to help me find a solution.",
             ),
             StarterMessage(
                 name="Find updates on a topic of interest",
@@ -132,47 +141,7 @@ PREBUILT_PERSONAS = [
                     "last activity on the topic if available."
                 ),
             ),
-            StarterMessage(
-                name="Surface contradictions",
-                message=(
-                    "Have me choose a subject. Once I have provided it, check against the knowledge base "
-                    "and point out any inconsistencies. For all your following responses, focus on "
-                    "identifying contradictions."
-                ),
-            ),
-        ],
-    ),
-    # General persona (ID 1)
-    PrebuiltPersona(
-        id=1,
-        name="General",
-        description="Assistant with no search functionalities. Chat directly with the Large Language Model.",
-        system_prompt=(
-            "You are a helpful AI assistant. The current date is [[CURRENT_DATETIME]]\n\n\n"
-            "You give concise responses to very simple questions, but provide more thorough responses to\n"
-            "more complex and open-ended questions.\n\n\n"
-            "You are happy to help with writing, analysis, question answering, math, coding and all sorts\n"
-            "of other tasks. You use markdown where reasonable and also for coding."
-        ),
-        task_prompt="",
-        datetime_aware=True,
-        num_chunks=0,  # No search/retrieval
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
-        icon_shape=50910,
-        icon_color="#FF6F6F",
-        display_priority=1,
-        is_visible=True,
-        is_default_persona=True,
-        starter_messages=[
-            StarterMessage(
-                name="Summarize a document",
-                message=(
-                    "If I have provided a document please summarize it for me. If not, please ask me to "
-                    "upload a document either by dragging it into the input bar or clicking the +file icon."
-                ),
-            ),
+            # General assistant starter messages
             StarterMessage(
                 name="Help me with coding",
                 message='Write me a "Hello World" script in 5 random languages to show off the functionality.',
@@ -184,13 +153,21 @@ PREBUILT_PERSONAS = [
                     "outcomes of the email before proposing a draft."
                 ),
             ),
+            # Image generation starter messages
             StarterMessage(
-                name="Learn something new",
-                message="What is the difference between a Gantt chart, a Burndown chart and a Kanban board?",
+                name="Create visuals for a presentation",
+                message="Generate someone presenting a graph which clearly demonstrates an upwards trajectory.",
+            ),
+            StarterMessage(
+                name="Visualize a product design",
+                message=(
+                    "I want to add a search bar to my Iphone app. Generate me generic examples of how "
+                    "other apps implement this."
+                ),
             ),
         ],
     ),
-    # Paraphrase persona (ID 2)
+    # Paraphrase persona (ID 2) - Keep as non-default
     PrebuiltPersona(
         id=2,
         name="Paraphrase",
@@ -217,7 +194,7 @@ PREBUILT_PERSONAS = [
         icon_color="#6FFF8D",
         display_priority=2,
         is_visible=False,
-        is_default_persona=True,
+        is_default_persona=False,  # Changed to False - not a default
         starter_messages=[
             StarterMessage(
                 name="Document Search",
@@ -246,55 +223,6 @@ PREBUILT_PERSONAS = [
                     "Hello! Could you help me find our official guidelines about client communication? "
                     "I need the exact wording from our documentation."
                 ),
-            ),
-        ],
-    ),
-    # Art/Image Generation persona (ID 3)
-    PrebuiltPersona(
-        id=3,
-        name="Art",
-        description="Assistant for generating images based on descriptions.",
-        system_prompt=(
-            "You are an AI image generation assistant. Your role is to create high-quality images based on user descriptions.\n\n"
-            "For appropriate requests, you will generate an image that matches the user's requirements.\n"
-            "For inappropriate or unsafe requests, you will politely decline and explain why the request cannot be fulfilled.\n\n"
-            "You aim to be helpful while maintaining appropriate content standards."
-        ),
-        task_prompt=(
-            "Based on the user's description, create a high-quality image that accurately reflects their request. \n"
-            "Pay close attention to the specified details, styles, and desired elements.\n\n"
-            "If the request is not appropriate or cannot be fulfilled, explain why and suggest alternatives."
-        ),
-        datetime_aware=True,
-        num_chunks=0,  # No search/retrieval
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.NO_DECAY,
-        icon_shape=234124,
-        icon_color="#9B59B6",
-        image_generation=True,
-        display_priority=3,
-        is_visible=True,
-        is_default_persona=True,
-        starter_messages=[
-            StarterMessage(
-                name="Create visuals for a presentation",
-                message="Generate someone presenting a graph which clearly demonstrates an upwards trajectory.",
-            ),
-            StarterMessage(
-                name="Find inspiration for a marketing campaign",
-                message="Generate an image of two happy individuals sipping on a soda drink in a glass bottle.",
-            ),
-            StarterMessage(
-                name="Visualize a product design",
-                message=(
-                    "I want to add a search bar to my Iphone app. Generate me generic examples of how "
-                    "other apps implement this."
-                ),
-            ),
-            StarterMessage(
-                name="Generate a humorous image response",
-                message="My teammate just made a silly mistake and I want to respond with a facepalm. Can you generate me one?",
             ),
         ],
     ),
