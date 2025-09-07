@@ -146,7 +146,7 @@ def test_load_builtin_personas_creates_expected_personas(db_session: Session) ->
     # load again, verify idempotency
     load_builtin_personas(db_session)
     builtin_personas_after = get_personas(db_session)
-    _validate_all_personas(builtin_personas_after, expected_personas)
+    _validate_all_personas(list(builtin_personas_after), expected_personas)
 
 
 if __name__ == "__main__":
