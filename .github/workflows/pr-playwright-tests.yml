@@ -10,7 +10,6 @@ env:
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   MOCK_LLM_RESPONSE: true
-  PYTEST_PLAYWRIGHT_SKIP_INITIAL_RESET: true
 
 jobs:
   playwright-tests:
@@ -159,12 +158,6 @@ jobs:
             sleep 5
           done
           echo "Finished waiting for service."
-
-      # - name: Run pytest playwright test init
-      #   working-directory: ./backend
-      #   env:
-      #     PYTEST_IGNORE_SKIP: true
-      #   run: pytest -s tests/integration/tests/playwright/test_playwright.py
 
       - name: Run Playwright tests
         working-directory: ./web
