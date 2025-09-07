@@ -253,14 +253,19 @@ class ImageGenerationTool(Tool[None]):
                 extra_headers=build_llm_extra_headers(self.additional_headers),
             )
 
+            if not response.data or len(response.data) == 0:
+                raise RuntimeError("No image data returned from the API")
+
+            image_item = response.data[0].model_dump()
+
             if format == ImageFormat.URL:
-                url = response.data[0]["url"]
+                url = image_item.get("url")
                 image_data = None
             else:
                 url = None
-                image_data = response.data[0]["b64_json"]
+                image_data = image_item.get("b64_json")
 
-            revised_prompt = response.data[0].get("revised_prompt")
+            revised_prompt = image_item.get("revised_prompt")
             if revised_prompt is None:
                 revised_prompt = prompt
 
