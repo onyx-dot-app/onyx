@@ -1,7 +1,7 @@
 """merge prompt into persona
 
 Revision ID: abbfec3a5ac5
-Revises: b329d00a9ea6
+Revises: 8818cf73fa1a
 Create Date: 2024-12-19 12:00:00.000000
 
 """
@@ -91,18 +91,6 @@ def upgrade() -> None:
             col["name"] for col in inspector.get_columns("chat_message")
         ]
         if "prompt_id" in chat_message_columns:
-            # For chat messages with prompt_id but no persona (via chat_session)
-            # we'll need to handle this carefully - set to NULL for now
-            op.execute(
-                """
-                UPDATE chat_message cm
-                SET alternate_assistant_id = pmap.persona_id
-                FROM prompt_to_persona_mapping pmap
-                WHERE cm.prompt_id = pmap.prompt_id
-                AND cm.alternate_assistant_id IS NULL
-            """
-            )
-
             # Step 6: Drop the foreign key constraint on chat_message.prompt_id if it exists
             op.execute(
                 """

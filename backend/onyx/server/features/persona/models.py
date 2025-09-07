@@ -61,7 +61,6 @@ class PersonaUpsertRequest(BaseModel):
     num_chunks: float
     is_public: bool
     recency_bias: RecencyBiasSetting
-    # Note: prompt_ids removed - prompts are now embedded in personas
     llm_filter_extraction: bool
     llm_relevance_filter: bool
     llm_model_provider_override: str | None = None
@@ -83,6 +82,11 @@ class PersonaUpsertRequest(BaseModel):
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
 
+    # prompt fields
+    system_prompt: str | None
+    task_prompt: str | None
+    datetime_aware: bool
+
 
 class MinimalPersonaSnapshot(BaseModel):
     """Minimal persona model optimized for ChatPage.tsx - only includes fields actually used"""
@@ -94,6 +98,9 @@ class MinimalPersonaSnapshot(BaseModel):
     # Used for retrieval capability checking
     tools: list[ToolSnapshot]
     starter_messages: list[StarterMessage] | None
+
+    llm_relevance_filter: bool
+    llm_filter_extraction: bool
 
     # only show document sets in the UI that the assistant has access to
     document_sets: list[DocumentSetSummary]
@@ -125,6 +132,8 @@ class MinimalPersonaSnapshot(BaseModel):
             description=persona.description,
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             starter_messages=persona.starter_messages,
+            llm_relevance_filter=persona.llm_relevance_filter,
+            llm_filter_extraction=persona.llm_filter_extraction,
             document_sets=[
                 DocumentSetSummary.from_model(document_set)
                 for document_set in persona.document_sets
@@ -163,6 +172,8 @@ class PersonaSnapshot(BaseModel):
     is_default_persona: bool
     builtin_persona: bool
     starter_messages: list[StarterMessage] | None
+    llm_relevance_filter: bool
+    llm_filter_extraction: bool
     tools: list[ToolSnapshot]
     labels: list["PersonaLabelSnapshot"]
     owner: MinimalUserSnapshot | None
@@ -195,6 +206,8 @@ class PersonaSnapshot(BaseModel):
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
+            llm_relevance_filter=persona.llm_relevance_filter,
+            llm_filter_extraction=persona.llm_filter_extraction,
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(

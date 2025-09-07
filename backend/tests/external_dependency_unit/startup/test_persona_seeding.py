@@ -16,7 +16,7 @@ from onyx.seeding.prebuilt_personas import get_prebuilt_personas
 from onyx.tools.built_in_tools import load_builtin_tools
 
 
-def _get_comparable_persona_fields():
+def _get_comparable_persona_fields() -> list[str]:
     """Get all comparable fields from Persona model, excluding relationships and non-comparable fields."""
     # Get all column names from the Persona model
     inspector = inspect(Persona)
@@ -35,7 +35,11 @@ def _get_comparable_persona_fields():
     return [field for field in column_names if field not in excluded_fields]
 
 
-def _compare_persona_attributes(created_persona, expected_persona, comparable_fields):
+def _compare_persona_attributes(
+    created_persona: Persona,
+    expected_persona: Persona,
+    comparable_fields: list[str],
+) -> None:
     """Compare all fields between created and expected persona."""
     for field in comparable_fields:
         if field == "id":
@@ -58,7 +62,7 @@ def _compare_persona_attributes(created_persona, expected_persona, comparable_fi
                 assert (
                     actual_value is True
                 ), f"is_public should be True for '{created_persona.name}'"
-        elif hasattr(expected_persona, field):
+        else:
             # Compare field values directly
             expected_value = getattr(expected_persona, field)
             actual_value = getattr(created_persona, field)
@@ -71,7 +75,7 @@ def _compare_persona_attributes(created_persona, expected_persona, comparable_fi
 def _validate_all_personas(
     all_personas: list[Persona],
     expected_personas: list[Persona],
-):
+) -> None:
     """Validate all personas exist with correct attributes."""
     comparable_fields = _get_comparable_persona_fields()
 
@@ -106,7 +110,7 @@ def _validate_all_personas(
                 assert created_persona.starter_messages == []
 
 
-def test_load_builtin_personas_creates_expected_personas(db_session: Session):
+def test_load_builtin_personas_creates_expected_personas(db_session: Session) -> None:
     """Test that load_builtin_personas ensures expected personas with IDs
     exist with correct attributes.
     """

@@ -218,7 +218,6 @@ def create_persona(
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
 
-    # Prompts are now embedded in personas, no separate prompt needed
     persona_snapshot = create_update_persona(
         persona_id=None,
         create_persona_request=persona_upsert_request,
@@ -247,7 +246,7 @@ def update_persona(
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
-    # Prompts are now embedded in personas, no separate prompt needed
+
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
         create_persona_request=persona_upsert_request,

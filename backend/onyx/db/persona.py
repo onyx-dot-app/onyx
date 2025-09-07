@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
+from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -222,10 +223,6 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        # Handle backward compatibility - if prompt_ids are provided, ignore them
-        # since prompts are now embedded in personas
-        pass
-
         # Default persona validation
         if create_persona_request.is_default_persona:
             if not create_persona_request.is_public:
@@ -254,6 +251,9 @@ def create_update_persona(
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
+            system_prompt=create_persona_request.system_prompt,
+            task_prompt=create_persona_request.task_prompt,
+            datetime_aware=create_persona_request.datetime_aware,
             icon_color=create_persona_request.icon_color,
             icon_shape=create_persona_request.icon_shape,
             uploaded_image_id=create_persona_request.uploaded_image_id,
@@ -485,6 +485,10 @@ def upsert_persona(
     llm_model_provider_override: str | None,
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
+    # Embedded prompt fields
+    system_prompt: str | None,
+    task_prompt: str | None,
+    datetime_aware: bool | None,
     is_public: bool,
     db_session: Session,
     document_set_ids: list[int] | None = None,
@@ -618,6 +622,13 @@ def upsert_persona(
             if is_default_persona is not None
             else existing_persona.is_default_persona
         )
+        # Update embedded prompt fields if provided
+        if system_prompt is not None:
+            existing_persona.system_prompt = system_prompt
+        if task_prompt is not None:
+            existing_persona.task_prompt = task_prompt
+        if datetime_aware is not None:
+            existing_persona.datetime_aware = datetime_aware
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -660,9 +671,9 @@ def upsert_persona(
             recency_bias=recency_bias,
             builtin_persona=builtin_persona,
             # Prompt fields are now embedded in the persona
-            system_prompt="",
-            task_prompt="",
-            datetime_aware=True,
+            system_prompt=system_prompt or "",
+            task_prompt=task_prompt or "",
+            datetime_aware=(datetime_aware if datetime_aware is not None else True),
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
@@ -697,10 +708,18 @@ def delete_old_default_personas(
 ) -> None:
     """Note, this locks out the Summarize and Paraphrase personas for now
     Need a more graceful fix later or those need to never have IDs"""
+    OLD_SUFFIX = "_old"
     stmt = (
         update(Persona)
-        .where(Persona.builtin_persona, Persona.id > 0)
-        .values(deleted=True, name=func.concat(Persona.name, "_old"))
+        .where(
+            Persona.builtin_persona,
+            Persona.id > 0,
+            or_(
+                Persona.deleted.is_(False),
+                not_(Persona.name.endswith(OLD_SUFFIX)),
+            ),
+        )
+        .values(deleted=True, name=func.concat(Persona.name, OLD_SUFFIX))
     )
 
     db_session.execute(stmt)

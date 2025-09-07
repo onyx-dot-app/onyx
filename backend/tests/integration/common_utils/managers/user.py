@@ -100,7 +100,9 @@ class UserManager:
             cookies=test_user.cookies,
         )
         me_response.raise_for_status()
-        role = UserRole(me_response.json()["role"])
+        me_response_json = me_response.json()
+        test_user.id = me_response_json["id"]
+        role = UserRole(me_response_json["role"])
         test_user.role = role
 
         return test_user

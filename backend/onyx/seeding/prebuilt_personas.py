@@ -298,33 +298,6 @@ PREBUILT_PERSONAS = [
             ),
         ],
     ),
-    # Additional prompt-only personas (from prompts.yaml)
-    PrebuiltPersona(
-        name="Summarize",
-        description="Summarize relevant information from retrieved context!",
-        system_prompt=(
-            "You are a text summarizing assistant that highlights the most important knowledge from the\n"
-            "context provided, prioritizing the information that relates to the user query.\n"
-            "The current date is [[CURRENT_DATETIME]].\n\n"
-            "You ARE NOT creative and always stick to the provided documents.\n"
-            "If there are no documents, refer to the conversation history.\n\n"
-            "IMPORTANT: YOU ONLY SUMMARIZE THE IMPORTANT INFORMATION FROM THE PROVIDED DOCUMENTS,\n"
-            "NEVER USE YOUR OWN KNOWLEDGE."
-        ),
-        task_prompt=(
-            "Summarize the documents provided in relation to the query below.\n"
-            "NEVER refer to the documents by number, I do not have them in the same order as you.\n"
-            "Do not make up any facts, only use what is in the documents."
-        ),
-        datetime_aware=True,
-        num_chunks=25,
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.BASE_DECAY,
-        display_priority=10,
-        is_visible=False,
-        is_default_persona=False,
-    ),
 ]
 
 

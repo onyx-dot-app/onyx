@@ -45,12 +45,12 @@ class PydanticListType(TypeDecorator):
         self, value: Optional[list[BaseModel]], dialect: Any
     ) -> Optional[list[dict]]:
         if value is not None:
-            return [json.loads(item.json()) for item in value]
+            return [json.loads(item.model_dump_json()) for item in value]
         return None
 
     def process_result_value(
         self, value: Optional[list[dict]], dialect: Any
     ) -> Optional[list[BaseModel]]:
         if value is not None:
-            return [self.pydantic_model.parse_obj(item) for item in value]
+            return [self.pydantic_model.model_validate(item) for item in value]
         return None

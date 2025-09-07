@@ -131,31 +131,35 @@ def _seed_llms(
 def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) -> None:
     if personas:
         logger.notice("Seeding Personas")
-        for persona in personas:
-            db_persona = upsert_persona(
-                user=None,  # Seeding is done as admin
-                name=persona.name,
-                description=persona.description,
-                num_chunks=(
-                    persona.num_chunks if persona.num_chunks is not None else 0.0
-                ),
-                llm_relevance_filter=persona.llm_relevance_filter,
-                llm_filter_extraction=persona.llm_filter_extraction,
-                recency_bias=RecencyBiasSetting.AUTO,
-                document_set_ids=persona.document_set_ids,
-                llm_model_provider_override=persona.llm_model_provider_override,
-                llm_model_version_override=persona.llm_model_version_override,
-                starter_messages=persona.starter_messages,
-                is_public=persona.is_public,
-                db_session=db_session,
-                tool_ids=persona.tool_ids,
-                display_priority=persona.display_priority,
-            )
-            # Set embedded prompt fields from seed
-            db_persona.system_prompt = persona.system_prompt
-            db_persona.task_prompt = persona.task_prompt
-            db_persona.datetime_aware = persona.datetime_aware
+        try:
+            for persona in personas:
+                db_persona = upsert_persona(
+                    user=None,  # Seeding is done as admin
+                    name=persona.name,
+                    description=persona.description,
+                    num_chunks=(
+                        persona.num_chunks if persona.num_chunks is not None else 0.0
+                    ),
+                    llm_relevance_filter=persona.llm_relevance_filter,
+                    llm_filter_extraction=persona.llm_filter_extraction,
+                    recency_bias=RecencyBiasSetting.AUTO,
+                    document_set_ids=persona.document_set_ids,
+                    llm_model_provider_override=persona.llm_model_provider_override,
+                    llm_model_version_override=persona.llm_model_version_override,
+                    starter_messages=persona.starter_messages,
+                    is_public=persona.is_public,
+                    db_session=db_session,
+                    tool_ids=persona.tool_ids,
+                    display_priority=persona.display_priority,
+                )
+                # Set embedded prompt fields from seed
+                db_persona.system_prompt = persona.system_prompt
+                db_persona.task_prompt = persona.task_prompt
+                db_persona.datetime_aware = persona.datetime_aware
             db_session.commit()
+        except Exception:
+            logger.error(f"Failed to seed persona {persona.name}")
+            raise
 
 
 def _seed_settings(settings: Settings) -> None:
