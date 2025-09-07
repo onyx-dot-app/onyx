@@ -842,12 +842,12 @@ S3_FILE_STORE_BUCKET_NAME = (
 )
 S3_FILE_STORE_PREFIX = os.environ.get("S3_FILE_STORE_PREFIX") or "onyx-files"
 # S3_ENDPOINT_URL is for MinIO and other S3-compatible storage. Leave blank for AWS S3.
-S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or "http://localhost:9004"
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
 S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 
 # S3/MinIO Access Keys
-S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID") or "minioadmin"
-S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY") or "minioadmin"
+S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
+S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
