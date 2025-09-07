@@ -33,6 +33,7 @@ import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
+import { Logo } from "@/components/logo/Logo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
@@ -1155,16 +1156,22 @@ export function ChatPage({
                             {showCenteredInput && (
                               <div
                                 data-testid="chat-intro"
-                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
+                                className="row-start-1 self-end flex flex-col items-center text-text-800 justify-center mb-6 transition-opacity duration-300"
                               >
-                                <AssistantIcon
-                                  colorOverride="text-text-800"
-                                  assistant={liveAssistant}
-                                  size="large"
-                                />
-                                <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
-                                  {liveAssistant.name}
-                                </div>
+                                {liveAssistant.id === 0 ? (
+                                  <Logo size="large" />
+                                ) : (
+                                  <div className="flex items-center">
+                                    <AssistantIcon
+                                      colorOverride="text-text-800"
+                                      assistant={liveAssistant}
+                                      size="large"
+                                    />
+                                    <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
+                                      {liveAssistant.name}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                             <div

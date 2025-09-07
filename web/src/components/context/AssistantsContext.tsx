@@ -70,10 +70,11 @@ export const AssistantsProvider: React.FC<{
         .map((id) => assistants.find((assistant) => assistant.id === id))
         .filter(
           (assistant): assistant is MinimalPersonaSnapshot =>
-            assistant !== undefined
+            assistant !== undefined && assistant.id !== 0
         );
     } else {
-      return assistants.filter((a) => a.is_default_persona);
+      // Filter out the unified assistant (ID 0) from the pinned list
+      return assistants.filter((a) => a.is_default_persona && a.id !== 0);
     }
   });
 
@@ -84,10 +85,11 @@ export const AssistantsProvider: React.FC<{
           .map((id) => assistants.find((assistant) => assistant.id === id))
           .filter(
             (assistant): assistant is MinimalPersonaSnapshot =>
-              assistant !== undefined
+              assistant !== undefined && assistant.id !== 0
           );
       } else {
-        return assistants.filter((a) => a.is_default_persona);
+        // Filter out the unified assistant (ID 0) from the pinned list
+        return assistants.filter((a) => a.is_default_persona && a.id !== 0);
       }
     });
   }, [user?.preferences?.pinned_assistants, assistants]);
