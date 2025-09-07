@@ -129,8 +129,7 @@ def test_load_builtin_personas_creates_expected_personas(db_session: Session) ->
     load_builtin_personas(db_session)
 
     # Get state after load attempt
-    all_personas_after = get_personas(db_session)
-    builtin_personas_after = [p for p in all_personas_after if p.builtin_persona]
+    builtin_personas_after = [p for p in get_personas(db_session) if p.builtin_persona]
 
     # If load succeeded, verify all personas exist
     # Get expected personas from the prebuilt personas configuration
@@ -145,8 +144,10 @@ def test_load_builtin_personas_creates_expected_personas(db_session: Session) ->
 
     # load again, verify idempotency
     load_builtin_personas(db_session)
-    builtin_personas_after = get_personas(db_session)
-    _validate_all_personas(list(builtin_personas_after), expected_personas)
+    builtin_personas_after_second_load = [
+        p for p in get_personas(db_session) if p.builtin_persona
+    ]
+    _validate_all_personas(builtin_personas_after_second_load, expected_personas)
 
 
 if __name__ == "__main__":
