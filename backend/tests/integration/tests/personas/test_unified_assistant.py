@@ -39,26 +39,11 @@ def test_unified_assistant(reset: None, admin_user: DATestUser) -> None:
     tools = unified_assistant.tools
     tool_names = [tool.name for tool in tools]
     assert "SearchTool" in tool_names, "SearchTool not found in unified assistant"
-    # ImageGenerationTool and InternetSearchTool may not be available depending on configuration
+    assert (
+        "ImageGenerationTool" in tool_names
+    ), "ImageGenerationTool not found in unified assistant"
+    assert "WebSearchTool" in tool_names, "WebSearchTool not found in unified assistant"
 
-    # Verify starter messages
+    # Verify no starter messages
     starter_messages = unified_assistant.starter_messages or []
-    assert len(starter_messages) > 0, "No starter messages found"
-
-    # Check that we have a mix of message types (search, general, image generation)
-    message_types = []
-    for msg in starter_messages:
-        message_text = str(getattr(msg, "message", "")).lower()
-        if "document" in message_text or "search" in message_text:
-            message_types.append("search")
-        elif (
-            "generate" in message_text
-            or "visual" in message_text
-            or "image" in message_text
-        ):
-            message_types.append("image")
-        else:
-            message_types.append("general")
-
-    # We should have at least 2 different types of messages
-    assert len(set(message_types)) >= 2, "Starter messages lack diversity"
+    assert len(starter_messages) == 0, "Starter messages found"
