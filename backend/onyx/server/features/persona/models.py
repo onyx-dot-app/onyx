@@ -54,9 +54,6 @@ class GenerateStarterMessageRequest(BaseModel):
 class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
-    system_prompt: str
-    task_prompt: str
-    datetime_aware: bool
     document_set_ids: list[int]
     num_chunks: float
     is_public: bool
@@ -83,8 +80,8 @@ class PersonaUpsertRequest(BaseModel):
     user_folder_ids: list[int] | None = None
 
     # prompt fields
-    system_prompt: str | None
-    task_prompt: str | None
+    system_prompt: str
+    task_prompt: str
     datetime_aware: bool
 
 

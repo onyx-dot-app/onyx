@@ -13,6 +13,7 @@ from onyx.db.models import Persona
 from onyx.db.persona import get_personas
 from onyx.seeding.load_yamls import load_builtin_personas
 from onyx.seeding.prebuilt_personas import get_prebuilt_personas
+from onyx.seeding.prebuilt_personas import PrebuiltPersona
 from onyx.tools.built_in_tools import load_builtin_tools
 
 
@@ -74,7 +75,7 @@ def _compare_persona_attributes(
 
 def _validate_all_personas(
     all_personas: list[Persona],
-    expected_personas: list[Persona],
+    expected_personas: list[PrebuiltPersona],
 ) -> None:
     """Validate all personas exist with correct attributes."""
     comparable_fields = _get_comparable_persona_fields()

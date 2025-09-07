@@ -142,14 +142,10 @@ def create_assistant(
         icon_color=None,
         icon_shape=None,
         is_visible=True,
+        system_prompt=request.instructions or "",
+        task_prompt="",
+        datetime_aware=True,
     )
-    # Set embedded prompt fields on persona
-    if request.instructions is not None:
-        persona.system_prompt = request.instructions
-        persona.task_prompt = ""
-        persona.datetime_aware = True
-        db_session.commit()
-
     return persona_to_assistant(persona)
 
 

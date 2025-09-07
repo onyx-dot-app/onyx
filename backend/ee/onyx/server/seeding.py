@@ -151,6 +151,9 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     db_session=db_session,
                     tool_ids=persona.tool_ids,
                     display_priority=persona.display_priority,
+                    system_prompt=persona.system_prompt,
+                    task_prompt=persona.task_prompt,
+                    datetime_aware=persona.datetime_aware,
                 )
                 # Set embedded prompt fields from seed
                 db_persona.system_prompt = persona.system_prompt
