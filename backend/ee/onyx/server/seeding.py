@@ -161,7 +161,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                 db_persona.datetime_aware = persona.datetime_aware
             db_session.commit()
         except Exception:
-            logger.error(f"Failed to seed persona {persona.name}")
+            logger.exception("Failed to seed personas.")
             raise
 
 

@@ -38,7 +38,7 @@ def _get_comparable_persona_fields() -> list[str]:
 
 def _compare_persona_attributes(
     created_persona: Persona,
-    expected_persona: Persona,
+    expected_persona: PrebuiltPersona,
     comparable_fields: list[str],
 ) -> None:
     """Compare all fields between created and expected persona."""
