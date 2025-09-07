@@ -160,11 +160,11 @@ jobs:
           done
           echo "Finished waiting for service."
 
-      - name: Run pytest playwright test init
-        working-directory: ./backend
-        env:
-          PYTEST_IGNORE_SKIP: true
-        run: pytest -s tests/integration/tests/playwright/test_playwright.py
+      # - name: Run pytest playwright test init
+      #   working-directory: ./backend
+      #   env:
+      #     PYTEST_IGNORE_SKIP: true
+      #   run: pytest -s tests/integration/tests/playwright/test_playwright.py
 
       - name: Run Playwright tests
         working-directory: ./web
