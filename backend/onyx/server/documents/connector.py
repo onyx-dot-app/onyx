@@ -17,6 +17,7 @@ from fastapi import Response
 from fastapi import UploadFile
 from google.oauth2.credentials import Credentials  # type: ignore
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -296,12 +297,18 @@ def check_linear_app_credentials_exist(
         creds = get_linear_app_cred()
         return {"client_id": creds.client_id}
     except ValueError:
-        return {}
+        # Align with other connectors: return 404 when not configured
+        raise HTTPException(status_code=404, detail="Linear App Credentials not found")
+
+
+class LinearAppCredentialIn(BaseModel):
+    client_id: str = Field(min_length=1)
+    client_secret: str = Field(min_length=1)
 
 
 @router.put("/admin/connector/linear/app-credential")
 def upsert_linear_app_credentials(
-    app_credentials: dict[str, str], _: User = Depends(current_admin_user)
+    app_credentials: LinearAppCredentialIn, _: User = Depends(current_admin_user)
 ) -> StatusResponse:
     from onyx.connectors.linear.linear_kv import (
         upsert_linear_app_cred,
@@ -310,8 +317,8 @@ def upsert_linear_app_credentials(
 
     try:
         creds = LinearAppCredentials(
-            client_id=app_credentials["client_id"],
-            client_secret=app_credentials["client_secret"],
+            client_id=app_credentials.client_id,
+            client_secret=app_credentials.client_secret,
         )
         upsert_linear_app_cred(creds)
     except ValueError as e:
@@ -327,8 +334,13 @@ def delete_linear_app_credentials(
     _: User = Depends(current_admin_user),
 ) -> StatusResponse:
     from onyx.connectors.linear.linear_kv import delete_linear_app_cred
+    from onyx.key_value_store.interface import KvKeyNotFoundError
 
-    delete_linear_app_cred()
+    try:
+        delete_linear_app_cred()
+    except KvKeyNotFoundError as e:
+        # Align with Google app-credential delete: return 400 on missing key
+        raise HTTPException(status_code=400, detail=str(e))
     return StatusResponse(
         success=True, message="Successfully deleted Linear App Credentials"
     )

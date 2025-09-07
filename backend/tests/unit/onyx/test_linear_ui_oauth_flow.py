@@ -100,10 +100,9 @@ def test_linear_app_credential_management_flow(
         "Linear app credential is not configured"
     )
 
-    # Step 1: Check initial state (no credentials configured)
+    # Step 1: Check initial state (no credentials configured) -> 404
     response = client_app.get("/api/manage/admin/connector/linear/app-credential")
-    assert response.status_code == 200
-    assert response.json() == {}  # Should return empty dict when no credentials
+    assert response.status_code == 404
 
     # Step 2: Configure Linear app credentials
     credentials = {"client_id": "test_client_123", "client_secret": "test_secret_456"}
@@ -136,10 +135,9 @@ def test_linear_app_credential_management_flow(
     assert response.json()["success"] is True
     assert "Successfully deleted Linear App Credentials" in response.json()["message"]
 
-    # Step 5: Verify credentials are deleted
+    # Step 5: Verify credentials are deleted -> 404
     response = client_app.get("/api/manage/admin/connector/linear/app-credential")
-    assert response.status_code == 200
-    assert response.json() == {}  # Should return empty dict after deletion
+    assert response.status_code == 404
 
 
 def test_linear_oauth_authorization_flow_with_credentials(
