@@ -11,7 +11,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { AssistantsIconSkeleton } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
-import { Persona } from "@/lib/types";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { FiCheck, FiX } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
@@ -29,10 +29,9 @@ function DefaultAssistantConfig() {
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
 
   // Fetch all personas
-  const { data: personas, isLoading: isLoadingPersonas } = useSWR<Persona[]>(
-    "/api/persona",
-    errorHandlingFetcher
-  );
+  const { data: personas, isLoading: isLoadingPersonas } = useSWR<
+    MinimalPersonaSnapshot[]
+  >("/api/persona", errorHandlingFetcher);
 
   // Fetch all available tools
   const { data: tools, isLoading: isLoadingTools } = useSWR<Tool[]>(
@@ -134,8 +133,8 @@ function DefaultAssistantConfig() {
       <Title className="mb-2 !text-2xl">Default Assistant Configuration</Title>
       <Text className="mb-6">
         Configure which capabilities are enabled for the default assistant.
-        These settings apply to all users who haven't customized their assistant
-        preferences.
+        These settings apply to all users who haven&apos;t customized their
+        assistant preferences.
       </Text>
 
       <CardSection>

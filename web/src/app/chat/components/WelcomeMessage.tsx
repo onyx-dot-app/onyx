@@ -1,11 +1,11 @@
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Logo } from "@/components/logo/Logo";
-import { Persona } from "@/lib/types";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { useMemo } from "react";
 
 interface WelcomeMessageProps {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
 }
 
 export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
