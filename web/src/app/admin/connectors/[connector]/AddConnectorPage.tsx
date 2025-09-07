@@ -8,10 +8,14 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
+import { getSourceDisplayName } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useRef, useState } from "react";
-import { deleteCredential, linkCredential } from "@/lib/credential";
+import {
+  deleteCredential,
+  forceDeleteCredential,
+  linkCredential,
+} from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
 import { submitGoogleSite } from "./pages/utils/google_site";
 import AdvancedFormPage from "./pages/Advanced";
@@ -45,7 +49,7 @@ import { Formik } from "formik";
 import NavigationRow from "./NavigationRow";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
-import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
+import LinearAppCredential from "./pages/linear/LinearAppCredential";
 import {
   EE_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
@@ -128,21 +132,10 @@ export default function AddConnector({
 }: {
   connector: ConfigurableSources;
 }) {
-  const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
-  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  // (removed unused OAuth URL / visibility states)
   const [isAuthorizing, setIsAuthorizing] = useState(false);
-  const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setCurrentPageUrl(window.location.href);
-    }
-
-    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV)) {
-      const sourceMetadata = getSourceMetadata(connector);
-      if (sourceMetadata?.oauthSupported == true) {
-        setIsAuthorizeVisible(true);
-      }
-    }
+    // no-op; previously used for OAuth popup flow
   }, []);
 
   const router = useRouter();
@@ -157,13 +150,19 @@ export default function AddConnector({
   const { data: credentials } = useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(connector),
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    {
+      refreshInterval: isAuthorizing ? 0 : 5000,
+      revalidateOnFocus: !isAuthorizing,
+    }
   );
 
   const { data: editableCredentials } = useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(connector, true),
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    {
+      refreshInterval: isAuthorizing ? 0 : 5000,
+      revalidateOnFocus: !isAuthorizing,
+    }
   );
 
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
@@ -178,6 +177,14 @@ export default function AddConnector({
   const { popup, setPopup } = usePopup();
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+  // Linear OAuth client config (client_id, client_secret)
+  const [linearAppCred, setLinearAppCred] = useState<{
+    client_id: string;
+    client_secret: string;
+  } | null>(null);
+  const [linearCreateStep, setLinearCreateStep] = useState<1 | 2>(1);
+  const [linearSaving, setLinearSaving] = useState(false);
+  const [credentialName, setCredentialName] = useState("");
 
   // Connector creation timeout management
   const timeoutErrorHappenedRef = useRef<boolean>(false);
@@ -229,18 +236,28 @@ export default function AddConnector({
   };
 
   const onDeleteCredential = async (credential: Credential<any | null>) => {
-    const response = await deleteCredential(credential.id, true);
+    // Try normal delete first; if blocked due to associations, fallback to force delete
+    let response = await deleteCredential(credential.id);
+    if (!response.ok) {
+      // Attempt force delete
+      response = await forceDeleteCredential(credential.id);
+    }
     if (response.ok) {
       setPopup({
         message: "Credential deleted successfully!",
         type: "success",
       });
+      refresh();
     } else {
-      const errorData = await response.json();
-      setPopup({
-        message: errorData.message,
-        type: "error",
-      });
+      try {
+        const errorData = await response.json();
+        setPopup({
+          message: errorData.detail || errorData.message,
+          type: "error",
+        });
+      } catch (e) {
+        setPopup({ message: `Failed to delete credential`, type: "error" });
+      }
     }
   };
 
@@ -258,36 +275,7 @@ export default function AddConnector({
     router.push("/admin/indexing/status?message=connector-created");
   };
 
-  const handleAuthorize = async () => {
-    // authorize button handler
-    // gets an auth url from the server and directs the user to it in a popup
-
-    if (!currentPageUrl) return;
-
-    setIsAuthorizing(true);
-    try {
-      const response = await prepareOAuthAuthorizationRequest(
-        connector,
-        currentPageUrl
-      );
-      if (response.url) {
-        setOauthUrl(response.url);
-        window.open(response.url, "_blank", "noopener,noreferrer");
-      } else {
-        setPopup({ message: "Failed to fetch OAuth URL", type: "error" });
-      }
-    } catch (error: unknown) {
-      // Narrow the type of error
-      if (error instanceof Error) {
-        setPopup({ message: `Error: ${error.message}`, type: "error" });
-      } else {
-        // Handle non-standard errors
-        setPopup({ message: "An unknown error occurred", type: "error" });
-      }
-    } finally {
-      setIsAuthorizing(false);
-    }
-  };
+  // removed legacy handleAuthorize flow; Linear uses standard OAuth redirect
 
   return (
     <Formik
@@ -483,7 +471,9 @@ export default function AddConnector({
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             setPopup({
-              message: `Operation timed out after ${CONNECTOR_CREATION_TIMEOUT_MS / 1000} seconds. Check your configuration for errors?`,
+              message: `Operation timed out after ${
+                CONNECTOR_CREATION_TIMEOUT_MS / 1000
+              } seconds. Check your configuration for errors?`,
               type: "error",
             });
 
@@ -537,6 +527,12 @@ export default function AddConnector({
                         variant="secondary"
                         className="mt-6 text-sm mr-4"
                         onClick={async () => {
+                          // Reset Linear create wizard state on open
+                          if (connector === "linear") {
+                            setLinearCreateStep(1);
+                            setLinearAppCred(null);
+                            setCredentialName("");
+                          }
                           if (oauthDetails && oauthDetails.oauth_enabled) {
                             if (oauthDetails.additional_kwargs.length > 0) {
                               setCreateCredentialFormToggle(true);
@@ -565,23 +561,7 @@ export default function AddConnector({
                       >
                         Create New
                       </Button>
-                      {/* Button to sign in via OAuth */}
-                      {oauthSupportedSources.includes(connector) &&
-                        (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                          <Button
-                            variant="navigate"
-                            onClick={handleAuthorize}
-                            className="mt-6 "
-                            disabled={isAuthorizing}
-                            hidden={!isAuthorizeVisible}
-                          >
-                            {isAuthorizing
-                              ? "Authorizing..."
-                              : `Authorize with ${getSourceDisplayName(
-                                  connector
-                                )}`}
-                          </Button>
-                        )}
+                      {/* No direct authorize button for Linear; use Create flow */}
                     </div>
                   )}
 
@@ -601,10 +581,179 @@ export default function AddConnector({
                             credential
                           </Title>
                           {oauthDetails && oauthDetails.oauth_enabled ? (
-                            <CreateStdOAuthCredential
-                              sourceType={connector}
-                              additionalFields={oauthDetails.additional_kwargs}
-                            />
+                            connector === "linear" ? (
+                              <div className="flex flex-col gap-4">
+                                {linearCreateStep === 1 ? (
+                                  <>
+                                    <Title className="mb-2 text-lg">
+                                      Configure Linear OAuth client
+                                    </Title>
+                                    <LinearAppCredential
+                                      onChange={(vals) =>
+                                        setLinearAppCred(vals)
+                                      }
+                                    />
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        variant="secondary"
+                                        disabled={linearSaving}
+                                        onClick={async () => {
+                                          try {
+                                            setLinearSaving(true);
+                                            const payload = linearAppCred ?? {
+                                              client_id: "",
+                                              client_secret: "",
+                                            };
+                                            if (
+                                              !payload.client_id ||
+                                              !payload.client_secret
+                                            ) {
+                                              setPopup({
+                                                message:
+                                                  "Please enter both Client ID and Client Secret.",
+                                                type: "error",
+                                              });
+                                              return;
+                                            }
+                                            const resp = await fetch(
+                                              "/api/manage/admin/connector/linear/app-credential",
+                                              {
+                                                method: "PUT",
+                                                headers: {
+                                                  "Content-Type":
+                                                    "application/json",
+                                                },
+                                                body: JSON.stringify(payload),
+                                              }
+                                            );
+                                            if (!resp.ok) {
+                                              const txt = await resp.text();
+                                              setPopup({
+                                                message: `Failed to save: ${txt}`,
+                                                type: "error",
+                                              });
+                                              return;
+                                            }
+                                            setPopup({
+                                              message:
+                                                "Saved Linear app credentials",
+                                              type: "success",
+                                            });
+                                            setLinearCreateStep(2);
+                                          } catch (e: any) {
+                                            setPopup({
+                                              message: `Failed to save: ${String(
+                                                e
+                                              )}`,
+                                              type: "error",
+                                            });
+                                          } finally {
+                                            setLinearSaving(false);
+                                          }
+                                        }}
+                                      >
+                                        OK
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        onClick={() =>
+                                          setCreateCredentialFormToggle(false)
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Title className="mb-2 text-lg">
+                                      Name your Linear credential
+                                    </Title>
+                                    <div className="flex flex-col gap-2">
+                                      <label
+                                        className="text-sm"
+                                        htmlFor="linear_cred_name"
+                                      >
+                                        Name
+                                      </label>
+                                      <input
+                                        id="linear_cred_name"
+                                        className="border rounded px-2 py-1"
+                                        value={credentialName}
+                                        onChange={(e) =>
+                                          setCredentialName(e.target.value)
+                                        }
+                                        placeholder="e.g. My Linear OAuth"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        variant="navigate"
+                                        disabled={
+                                          isAuthorizing ||
+                                          credentialName.trim().length === 0
+                                        }
+                                        onClick={async () => {
+                                          setIsAuthorizing(true);
+                                          try {
+                                            const redirectUrl =
+                                              await getConnectorOauthRedirectUrl(
+                                                connector,
+                                                {
+                                                  credential_name:
+                                                    credentialName,
+                                                }
+                                              );
+                                            if (redirectUrl) {
+                                              window.location.href =
+                                                redirectUrl;
+                                            } else {
+                                              setPopup({
+                                                message:
+                                                  "Failed to fetch OAuth URL",
+                                                type: "error",
+                                              });
+                                            }
+                                          } catch (err: any) {
+                                            setPopup({
+                                              message: `OAuth error: ${String(
+                                                err
+                                              )}`,
+                                              type: "error",
+                                            });
+                                          } finally {
+                                            setIsAuthorizing(false);
+                                          }
+                                        }}
+                                      >
+                                        Authorize
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        onClick={() => setLinearCreateStep(1)}
+                                      >
+                                        Back
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        onClick={() =>
+                                          setCreateCredentialFormToggle(false)
+                                        }
+                                      >
+                                        Close
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <CreateStdOAuthCredential
+                                sourceType={connector}
+                                additionalFields={
+                                  oauthDetails.additional_kwargs
+                                }
+                              />
+                            )
                           ) : (
                             <CreateCredential
                               close
