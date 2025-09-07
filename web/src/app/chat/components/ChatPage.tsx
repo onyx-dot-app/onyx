@@ -86,6 +86,7 @@ import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 import { MessagesDisplay } from "./MessagesDisplay";
+import { WelcomeMessage } from "./WelcomeMessage";
 
 export function ChatPage({
   toggle,
@@ -1154,25 +1155,7 @@ export function ChatPage({
                             }`}
                           >
                             {showCenteredInput && (
-                              <div
-                                data-testid="chat-intro"
-                                className="row-start-1 self-end flex flex-col items-center text-text-800 justify-center mb-6 transition-opacity duration-300"
-                              >
-                                {liveAssistant.id === 0 ? (
-                                  <Logo size="large" />
-                                ) : (
-                                  <div className="flex items-center">
-                                    <AssistantIcon
-                                      colorOverride="text-text-800"
-                                      assistant={liveAssistant}
-                                      size="large"
-                                    />
-                                    <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
-                                      {liveAssistant.name}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                              <WelcomeMessage assistant={liveAssistant} />
                             )}
                             <div
                               className={showCenteredInput ? "row-start-2" : ""}

@@ -5,9 +5,11 @@ from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.chat_configs import USER_FOLDERS_YAML
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.db.persona import delete_old_default_personas
+from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import upsert_persona
 from onyx.db.user_documents import upsert_user_folder
-from onyx.seeding.prebuilt_personas import get_prebuilt_personas
+from onyx.seeding.prebuilt_personas import apply_always_updated_fields
+from onyx.seeding.prebuilt_personas import get_default_persona
 from onyx.tools.built_in_tools import get_builtin_tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -64,13 +66,40 @@ def load_input_prompts_from_yaml(
 
 
 def load_builtin_personas(db_session: Session) -> None:
-    """Load built-in personas with embedded prompt configuration."""
-    logger.info("Loading builtin personas")
+    """Load default personas with selective field updates.
+
+    - Always updates core system fields (name, description, prompts, flags)
+    - Only sets admin-controlled fields on initial creation
+    - Preserves admin modifications to tunable parameters
+    """
+    logger.info("Loading default personas")
     try:
-        for prebuilt_persona in get_prebuilt_personas():
-            # Handle tool IDs for image generation
-            tool_ids = None
-            if prebuilt_persona.image_generation:
+        default_persona = get_default_persona()
+
+        # Check if persona already exists
+        persona_id = (
+            0
+            if default_persona.id == 0
+            else (-1 * default_persona.id) if default_persona.id is not None else None
+        )
+
+        existing_persona = None
+        if persona_id is not None:
+            try:
+                existing_persona = get_persona_by_id(
+                    persona_id=persona_id,
+                    user=None,
+                    db_session=db_session,
+                    include_deleted=True,
+                    is_for_edit=True,
+                )
+            except Exception:
+                existing_persona = None
+
+        # Prepare admin-controlled fields and tool_ids based on existence
+        if not existing_persona:
+            # New persona: set admin-controlled fields from defaults
+            if default_persona.image_generation:
                 image_tool = get_builtin_tool(db_session, ImageGenerationTool)
                 if image_tool:
                     tool_ids = [image_tool.id]
@@ -78,55 +107,164 @@ def load_builtin_personas(db_session: Session) -> None:
                     raise ValueError(
                         f"Image generation tool not found: {ImageGenerationTool._NAME}"
                     )
+            else:
+                tool_ids = None
 
-            # Create or update the persona
-            persona = upsert_persona(
-                user=None,
-                # make negative to not clash with user-created personas
-                persona_id=(
-                    (-1 * prebuilt_persona.id)
-                    if prebuilt_persona.id is not None
-                    else None
-                ),
-                name=prebuilt_persona.name,
-                description=prebuilt_persona.description,
-                num_chunks=prebuilt_persona.num_chunks,
-                chunks_above=prebuilt_persona.chunks_above,
-                chunks_below=prebuilt_persona.chunks_below,
-                llm_relevance_filter=prebuilt_persona.llm_relevance_filter,
-                llm_filter_extraction=prebuilt_persona.llm_filter_extraction,
-                recency_bias=prebuilt_persona.recency_bias,
-                llm_model_provider_override=prebuilt_persona.llm_model_provider_override,
-                llm_model_version_override=prebuilt_persona.llm_model_version_override,
-                starter_messages=prebuilt_persona.starter_messages,
-                system_prompt=prebuilt_persona.system_prompt,
-                task_prompt=prebuilt_persona.task_prompt,
-                datetime_aware=prebuilt_persona.datetime_aware,
-                is_public=True,
-                builtin_persona=True,
-                is_default_persona=prebuilt_persona.is_default_persona,
-                is_visible=prebuilt_persona.is_visible,
-                display_priority=prebuilt_persona.display_priority,
-                icon_color=prebuilt_persona.icon_color,
-                icon_shape=prebuilt_persona.icon_shape,
-                tool_ids=tool_ids,
-                db_session=db_session,
-                commit=False,
+            num_chunks = default_persona.num_chunks
+            chunks_above = default_persona.chunks_above
+            chunks_below = default_persona.chunks_below
+            llm_relevance_filter = default_persona.llm_relevance_filter
+            llm_filter_extraction = default_persona.llm_filter_extraction
+            recency_bias = default_persona.recency_bias
+            llm_model_provider_override = default_persona.llm_model_provider_override
+            llm_model_version_override = default_persona.llm_model_version_override
+            starter_messages = default_persona.starter_messages
+            is_visible = default_persona.is_visible
+            display_priority = default_persona.display_priority
+            icon_color = default_persona.icon_color
+            icon_shape = default_persona.icon_shape
+        else:
+            # Existing persona: refresh always-updated fields, preserve admin-controlled fields
+            existing_persona = apply_always_updated_fields(
+                existing_persona, default_persona
             )
 
-            # Set the prompt fields directly on the persona object
-            # These are now embedded in the persona table after the migration
-            persona.system_prompt = prebuilt_persona.system_prompt
-            persona.task_prompt = prebuilt_persona.task_prompt
-            persona.datetime_aware = prebuilt_persona.datetime_aware
+            tool_ids = [tool.id for tool in existing_persona.tools]
+            num_chunks = (
+                existing_persona.num_chunks
+                if existing_persona.num_chunks is not None
+                else default_persona.num_chunks
+            )
+            chunks_above = (
+                existing_persona.chunks_above
+                if existing_persona.chunks_above is not None
+                else default_persona.chunks_above
+            )
+            chunks_below = (
+                existing_persona.chunks_below
+                if existing_persona.chunks_below is not None
+                else default_persona.chunks_below
+            )
+            llm_relevance_filter = (
+                existing_persona.llm_relevance_filter
+                if existing_persona.llm_relevance_filter is not None
+                else default_persona.llm_relevance_filter
+            )
+            llm_filter_extraction = (
+                existing_persona.llm_filter_extraction
+                if existing_persona.llm_filter_extraction is not None
+                else default_persona.llm_filter_extraction
+            )
+            recency_bias = (
+                existing_persona.recency_bias
+                if existing_persona.recency_bias is not None
+                else default_persona.recency_bias
+            )
+            llm_model_provider_override = (
+                existing_persona.llm_model_provider_override
+                if existing_persona.llm_model_provider_override is not None
+                else default_persona.llm_model_provider_override
+            )
+            llm_model_version_override = (
+                existing_persona.llm_model_version_override
+                if existing_persona.llm_model_version_override is not None
+                else default_persona.llm_model_version_override
+            )
+            starter_messages = (
+                existing_persona.starter_messages
+                if existing_persona.starter_messages is not None
+                else default_persona.starter_messages
+            )
+            is_visible = (
+                existing_persona.is_visible
+                if existing_persona.is_visible is not None
+                else default_persona.is_visible
+            )
+            display_priority = (
+                existing_persona.display_priority
+                if existing_persona.display_priority is not None
+                else default_persona.display_priority
+            )
+            icon_color = (
+                existing_persona.icon_color
+                if existing_persona.icon_color is not None
+                else default_persona.icon_color
+            )
+            icon_shape = (
+                existing_persona.icon_shape
+                if existing_persona.icon_shape is not None
+                else default_persona.icon_shape
+            )
+
+        # Single upsert call with appropriate fields
+        upsert_persona(
+            user=None,
+            persona_id=persona_id,
+            # Always updated fields
+            name=(existing_persona.name if existing_persona else default_persona.name),
+            description=(
+                existing_persona.description
+                if existing_persona
+                else default_persona.description
+            ),
+            system_prompt=(
+                existing_persona.system_prompt
+                if existing_persona
+                else default_persona.system_prompt
+            ),
+            task_prompt=(
+                existing_persona.task_prompt
+                if existing_persona
+                else default_persona.task_prompt
+            ),
+            datetime_aware=(
+                existing_persona.datetime_aware
+                if existing_persona
+                else default_persona.datetime_aware
+            ),
+            builtin_persona=(
+                existing_persona.builtin_persona
+                if existing_persona
+                else default_persona.builtin_persona
+            ),
+            is_default_persona=(
+                existing_persona.is_default_persona
+                if existing_persona
+                else default_persona.is_default_persona
+            ),
+            # Admin-controlled fields (conditional)
+            num_chunks=num_chunks,
+            chunks_above=chunks_above,
+            chunks_below=chunks_below,
+            llm_relevance_filter=llm_relevance_filter,
+            llm_filter_extraction=llm_filter_extraction,
+            recency_bias=recency_bias,
+            llm_model_provider_override=llm_model_provider_override,
+            llm_model_version_override=llm_model_version_override,
+            starter_messages=starter_messages,
+            is_visible=is_visible,
+            display_priority=display_priority,
+            icon_color=icon_color,
+            icon_shape=icon_shape,
+            tool_ids=tool_ids,
+            # Common fields
+            is_public=True,
+            db_session=db_session,
+            commit=False,
+        )
+
+        if not existing_persona:
+            logger.info(f"Created new default persona: {default_persona.name}")
+        else:
+            logger.info(
+                f"Updated system fields for existing default persona: {default_persona.name}"
+            )
 
         db_session.commit()
-        logger.info(
-            f"Successfully loaded {len(get_prebuilt_personas())} builtin personas"
-        )
+        logger.info("Successfully loaded default persona")
     except Exception:
         db_session.rollback()
-        logger.exception("Error loading builtin personas")
+        logger.exception("Error loading default persona")
         raise
 
 

@@ -56,8 +56,18 @@ export function ActionItem({
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const label = tool ? tool.display_name || tool.name : providedLabel!;
+  // Generate test ID based on tool name if available
+  const toolName = tool?.name || providedLabel || "";
+  const testIdBase = toolName
+    .toLowerCase()
+    .replace(/tool$/i, "")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   return (
     <div
+      data-testid={`tool-option-${testIdBase}`}
       className={`
       group
       flex 
@@ -678,7 +688,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             overflow-hidden 
             focus:outline-none
           "
-            data-testid="action-popover-trigger"
+            data-testid="action-management-toggle"
             title={open ? undefined : "Configure actions"}
           >
             <SlidersVerticalIcon size={16} className="my-auto flex-none" />
@@ -753,7 +763,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
           </div>
 
           {/* Options */}
-          <div className="pt-2 flex-1 overflow-y-auto mx-1 pb-2 relative">
+          <div
+            data-testid="tool-options"
+            className="pt-2 flex-1 overflow-y-auto mx-1 pb-2 relative"
+          >
             {filteredTools.length === 0 && filteredMCPServers.length === 0 ? (
               <div className="text-center py-1 text-text-400">
                 No matching actions found

@@ -9,10 +9,10 @@ interface WelcomeMessageProps {
 }
 
 export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
-  // Memoize the greeting so it doesn't change on re-renders
+  // Memoize the greeting so it doesn't change on re-renders (only for unified assistant)
   const greeting = useMemo(() => getRandomGreeting(), []);
 
-  // For the unified assistant (ID 0), don't show the name
+  // For the unified assistant (ID 0), show greeting message
   const isUnifiedAssistant = assistant.id === 0;
 
   return (
@@ -20,9 +20,19 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
       data-testid="chat-intro"
       className="row-start-1 self-end flex flex-col items-center text-text-800 justify-center mb-6 transition-opacity duration-300"
     >
-      <div className="flex items-center mb-4">
+      <div className="flex items-center">
         {isUnifiedAssistant ? (
-          <Logo size="large" />
+          <>
+            <div data-testid="onyx-logo">
+              <Logo size="large" />
+            </div>
+            <div
+              data-testid="greeting-message"
+              className="ml-6 text-text-600 text-3xl font-bold max-w-md"
+            >
+              {greeting}
+            </div>
+          </>
         ) : (
           <>
             <AssistantIcon
@@ -30,14 +40,14 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
               assistant={assistant}
               size="large"
             />
-            <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
+            <div
+              data-testid="assistant-name-display"
+              className="ml-4 flex justify-center items-center text-center text-3xl font-bold"
+            >
               {assistant.name}
             </div>
           </>
         )}
-      </div>
-      <div className="text-text-600 text-lg text-center max-w-md">
-        {greeting}
       </div>
     </div>
   );
