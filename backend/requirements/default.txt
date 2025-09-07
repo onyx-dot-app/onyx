@@ -33,7 +33,7 @@ jira==3.10.5
 jsonref==1.1.0
 trafilatura==1.12.2
 langchain==0.3.23
-langchain-community==0.3.21
+langchain-community==0.3.27
 langchain-core==0.3.51
 langchain-text-splitters==0.3.8
 langchainhub==0.1.21
