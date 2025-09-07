@@ -12,6 +12,9 @@ from typing import List
 import requests
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+)
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
@@ -468,7 +471,9 @@ if __name__ == "__main__":
     choice = response.choices[0]
     if choice.message.tool_calls:
         print(choice.message.tool_calls)
-        for tool_response in tools[0].run(
-            **json.loads(choice.message.tool_calls[0].function.arguments)
-        ):
-            print(tool_response)
+        tool_call = choice.message.tool_calls[0]
+        if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+            for tool_response in tools[0].run(
+                **json.loads(tool_call.function.arguments)
+            ):
+                print(tool_response)
