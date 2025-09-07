@@ -285,6 +285,55 @@ def delete_google_service_gmail_account_key(
     )
 
 
+# Linear App Credentials endpoints
+@router.get("/admin/connector/linear/app-credential")
+def check_linear_app_credentials_exist(
+    _: User = Depends(current_curator_or_admin_user),
+) -> dict[str, str]:
+    from onyx.connectors.linear.linear_kv import get_linear_app_cred
+
+    try:
+        creds = get_linear_app_cred()
+        return {"client_id": creds.client_id}
+    except ValueError:
+        return {}
+
+
+@router.put("/admin/connector/linear/app-credential")
+def upsert_linear_app_credentials(
+    app_credentials: dict[str, str], _: User = Depends(current_admin_user)
+) -> StatusResponse:
+    from onyx.connectors.linear.linear_kv import (
+        upsert_linear_app_cred,
+        LinearAppCredentials,
+    )
+
+    try:
+        creds = LinearAppCredentials(
+            client_id=app_credentials["client_id"],
+            client_secret=app_credentials["client_secret"],
+        )
+        upsert_linear_app_cred(creds)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return StatusResponse(
+        success=True, message="Successfully saved Linear App Credentials"
+    )
+
+
+@router.delete("/admin/connector/linear/app-credential")
+def delete_linear_app_credentials(
+    _: User = Depends(current_admin_user),
+) -> StatusResponse:
+    from onyx.connectors.linear.linear_kv import delete_linear_app_cred
+
+    delete_linear_app_cred()
+    return StatusResponse(
+        success=True, message="Successfully deleted Linear App Credentials"
+    )
+
+
 @router.get("/admin/connector/google-drive/service-account-key")
 def check_google_service_account_key_exist(
     _: User = Depends(current_curator_or_admin_user),
