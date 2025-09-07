@@ -15,11 +15,11 @@ logger = setup_logger()
 
 # TODO: Align on separation of Tools and SubAgents. Right now, we're only keeping this around for backwards compatibility.
 QUERY_FIELD = "query"
-_GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Research Agent, not via tool calling."
+_GENERIC_ERROR_MESSAGE = "WebSearchTool should only be used by the Deep Research Agent, not via tool calling."
 
 
-class InternetSearchTool(Tool[None]):
-    _NAME = "run_internet_search"  # TODO: change to run_web_search along with the remaning changes to 'web'
+class WebSearchTool(Tool[None]):
+    _NAME = "run_web_search"  # TODO: change to run_web_search along with the remaning changes to 'web'
     _DESCRIPTION = "Search the web for information. Never call this tool."
     _DISPLAY_NAME = "Web Search"
 

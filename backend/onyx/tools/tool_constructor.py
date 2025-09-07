@@ -49,7 +49,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    WebSearchTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -266,13 +266,13 @@ def construct_tools(
                 ]
 
             # Handle Internet Search Tool
-            elif tool_cls.__name__ == InternetSearchTool.__name__:
+            elif tool_cls.__name__ == WebSearchTool.__name__:
                 if not internet_search_tool_config:
                     internet_search_tool_config = InternetSearchToolConfig()
 
                 try:
                     tool_dict[db_tool_model.id] = [
-                        InternetSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")

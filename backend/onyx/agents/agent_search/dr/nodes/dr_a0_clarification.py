@@ -66,7 +66,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    WebSearchTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -114,7 +114,7 @@ def _get_available_tools(
         else:
             raise ValueError(f"Tool {tool.name} is not found in the database")
 
-        if isinstance(tool, InternetSearchTool):
+        if isinstance(tool, WebSearchTool):
             llm_path = DRPath.WEB_SEARCH.value
             path = DRPath.WEB_SEARCH
         elif isinstance(tool, SearchTool):

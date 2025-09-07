@@ -29,6 +29,8 @@ import {
   NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
   NEXT_PUBLIC_ENABLE_CHROME_EXTENSION,
 } from "../constants";
+import { ToolSnapshot } from "../tools/interfaces";
+import { fetchToolsSS } from "../tools/fetchTools";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -39,6 +41,7 @@ interface FetchChatDataResult {
   tags: Tag[];
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];
+  availableTools: ToolSnapshot[];
   openedFolders: Record<string, boolean>;
   defaultAssistantId?: number;
   sidebarInitiallyVisible: boolean;
@@ -62,6 +65,7 @@ export async function fetchChatData(searchParams: {
     fetchLLMProvidersSS(),
     fetchSS("/folder"),
     fetchSS("/input_prompt?include_public=true"),
+    fetchToolsSS(),
   ];
 
   let results: (
@@ -74,7 +78,8 @@ export async function fetchChatData(searchParams: {
     | [Persona[], string | null]
     | null
     | InputPrompt[]
-  )[] = [null, null, null, null, null, null, null, null, null];
+    | ToolSnapshot[]
+  )[] = [null, null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -99,6 +104,8 @@ export async function fetchChatData(searchParams: {
     console.log("Failed to fetch input prompts");
   }
 
+  const availableTools = (results[9] || []) as ToolSnapshot[];
+
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
   // TODO Validate need
@@ -119,9 +126,11 @@ export async function fetchChatData(searchParams: {
     // Also check for the from=login query parameter
     const isRedirectedFromLogin = searchParams["from"] === "login";
 
-    console.log(
-      `Auth check: authDisabled=${authDisabled}, user=${!!user}, referrer=${referrer}, fromLogin=${isRedirectedFromLogin}`
-    );
+    console.log("Auth check:");
+    console.log("  authDisabled =", authDisabled);
+    console.log("  user =", !!user);
+    console.log("  referrer =", referrer);
+    console.log("  fromLogin =", isRedirectedFromLogin);
 
     // Only redirect if we're not already coming from the login page
     if (
@@ -242,6 +251,7 @@ export async function fetchChatData(searchParams: {
     documentSets,
     tags,
     llmProviders,
+    availableTools,
     folders,
     openedFolders,
     defaultAssistantId,

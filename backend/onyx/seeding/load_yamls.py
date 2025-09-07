@@ -8,12 +8,16 @@ from onyx.db.persona import delete_old_default_personas
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import upsert_persona
 from onyx.db.user_documents import upsert_user_folder
-from onyx.seeding.prebuilt_personas import apply_always_updated_fields
-from onyx.seeding.prebuilt_personas import get_default_persona
+from onyx.seeding.default_persona import apply_always_updated_fields
+from onyx.seeding.default_persona import get_default_persona
 from onyx.tools.built_in_tools import get_builtin_tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    WebSearchTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
 
@@ -99,16 +103,34 @@ def load_builtin_personas(db_session: Session) -> None:
         # Prepare admin-controlled fields and tool_ids based on existence
         if not existing_persona:
             # New persona: set admin-controlled fields from defaults
-            if default_persona.image_generation:
-                image_tool = get_builtin_tool(db_session, ImageGenerationTool)
-                if image_tool:
-                    tool_ids = [image_tool.id]
-                else:
-                    raise ValueError(
-                        f"Image generation tool not found: {ImageGenerationTool._NAME}"
-                    )
+            tool_ids_list: list[int] = []
+
+            internal_search_tool = get_builtin_tool(db_session, SearchTool)
+            if internal_search_tool:
+                tool_ids_list.append(internal_search_tool.id)
             else:
-                tool_ids = None
+                raise ValueError(f"Internal search tool not found: {SearchTool._NAME}")
+
+            image_tool = get_builtin_tool(db_session, ImageGenerationTool)
+            if image_tool:
+                tool_ids_list.append(image_tool.id)
+            else:
+                raise ValueError(
+                    f"Image generation tool not found: {ImageGenerationTool._NAME}"
+                )
+
+            try:
+                web_search_tool = get_builtin_tool(db_session, WebSearchTool)
+                if web_search_tool:
+                    tool_ids_list.append(web_search_tool.id)
+            except Exception:
+                # Do not fail loading personas if internet search providers are not configured
+                # TODO: always attach once web search is configurable in the UI
+                logger.info(
+                    "WebSearchTool not available; skipping attaching to default persona"
+                )
+
+            tool_ids = tool_ids_list or None
 
             num_chunks = default_persona.num_chunks
             chunks_above = default_persona.chunks_above

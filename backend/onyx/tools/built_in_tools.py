@@ -10,7 +10,7 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    WebSearchTool,
 )
 from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.db.models import Persona
@@ -58,13 +58,13 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     *(
         [
             InCodeToolInfo(
-                cls=InternetSearchTool,
+                cls=WebSearchTool,
                 description=(
                     "The Internet Search Action allows the assistant "
                     "to perform internet searches for up-to-date information."
                 ),
-                in_code_tool_id=InternetSearchTool.__name__,
-                display_name=InternetSearchTool._DISPLAY_NAME,
+                in_code_tool_id=WebSearchTool.__name__,
+                display_name=WebSearchTool._DISPLAY_NAME,
             ),
         ]
         if (bool(get_default_provider()))
@@ -139,7 +139,7 @@ def load_builtin_tools(db_session: Session) -> None:
 def get_builtin_tool(
     db_session: Session,
     tool_type: Type[
-        SearchTool | ImageGenerationTool | InternetSearchTool | KnowledgeGraphTool
+        SearchTool | ImageGenerationTool | WebSearchTool | KnowledgeGraphTool
     ],
 ) -> ToolDBModel:
     """

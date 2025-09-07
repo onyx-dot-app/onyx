@@ -33,6 +33,7 @@ import {
   FiLoader,
 } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
+import { useChatContext } from "@/components/context/ChatContext";
 
 interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -147,13 +148,6 @@ interface MCPServer {
   user_authenticated?: boolean;
   auth_template?: any;
   user_credentials?: Record<string, string>;
-}
-
-interface MCPTool {
-  name: string;
-  display_name?: string;
-  description?: string;
-  parameters?: any;
 }
 
 interface MCPServerItemProps {
@@ -419,7 +413,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
     setForcedToolIds,
   } = useAssistantsContext();
 
-  const { isAdmin, isCurator, user } = useUser();
+  const { isAdmin, isCurator } = useUser();
+
+  const { availableTools } = useChatContext();
+  const availableToolIds = availableTools.map((tool) => tool.id);
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -443,8 +440,9 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   };
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
+  // and filter out tools that are not available
   const displayTools = selectedAssistant.tools.filter(
-    (tool) => !tool.mcp_server_id
+    (tool) => !tool.mcp_server_id && availableToolIds.includes(tool.id)
   );
 
   // Fetch MCP servers for the assistant on mount
