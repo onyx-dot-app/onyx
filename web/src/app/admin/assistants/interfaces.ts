@@ -38,6 +38,7 @@ export interface Persona extends MinimalPersonaSnapshot {
   users: MinimalUserSnapshot[];
   groups: number[];
   num_chunks?: number;
+
   // Embedded prompt fields on persona
   system_prompt: string | null;
   task_prompt: string | null;

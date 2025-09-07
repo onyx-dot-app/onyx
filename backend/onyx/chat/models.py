@@ -280,7 +280,9 @@ class PromptConfig(BaseModel):
         return cls(
             system_prompt=override_system_prompt or model.system_prompt or "",
             task_prompt=override_task_prompt or model.task_prompt or "",
-            datetime_aware=model.datetime_aware or True,
+            datetime_aware=(
+                model.datetime_aware if model.datetime_aware is not None else True
+            ),
         )
 
     model_config = ConfigDict(frozen=True)

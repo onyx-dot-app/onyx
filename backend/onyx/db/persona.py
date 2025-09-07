@@ -670,7 +670,6 @@ def upsert_persona(
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
             builtin_persona=builtin_persona,
-            # Prompt fields are now embedded in the persona
             system_prompt=system_prompt or "",
             task_prompt=task_prompt or "",
             datetime_aware=(datetime_aware if datetime_aware is not None else True),

@@ -406,7 +406,7 @@ def clarifier(
         if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
-                + (graph_config.inputs.persona.task_prompt or "")
+                + (graph_config.inputs.persona.task_prompt)
             )
         else:
             assistant_task_prompt = ""

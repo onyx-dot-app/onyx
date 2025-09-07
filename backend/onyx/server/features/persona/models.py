@@ -237,7 +237,6 @@ class PersonaSnapshot(BaseModel):
 # This is used for flows which need to know all settings
 class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
-    prompts: list[PromptSnapshot] = Field(default_factory=list)
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
 
@@ -285,9 +284,6 @@ class FullPersonaSnapshot(PersonaSnapshot):
             ],
             num_chunks=persona.num_chunks,
             search_start_date=persona.search_start_date,
-            prompts=[
-                PromptSnapshot.from_model(persona)
-            ],  # Single prompt from persona's embedded fields
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
             llm_model_provider_override=persona.llm_model_provider_override,
