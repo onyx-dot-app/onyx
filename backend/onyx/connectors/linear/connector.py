@@ -134,24 +134,19 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
 
+        # Normalize to repo convention: prefix provider in key name
+        # Store as 'linear_access_token' (not plain 'access_token')
         return {
-            "access_token": token_data["access_token"],
+            "linear_access_token": token_data["access_token"],
         }
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # Support legacy and OAuth styles for maximum compatibility:
+        # Supported Linear credential fields:
         # - "linear_api_key": pre-formatted header value (legacy env/manual)
-        # - "access_token": OAuth token (Bearer)
-        # - "linear_access_token": manual UI token field (historical naming)
+        # - "linear_access_token": OAuth/manual token (Bearer)
         if "linear_api_key" in credentials:
             self.linear_api_key = cast(str, credentials["linear_api_key"])
-        elif "access_token" in credentials:
-            self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
         elif "linear_access_token" in credentials:
-            # Backward compatibility: accept deprecated field and warn
-            logger.warning(
-                "Linear credential field 'linear_access_token' is deprecated; use 'access_token' instead."
-            )
             self.linear_api_key = "Bearer " + cast(
                 str, credentials["linear_access_token"]
             )

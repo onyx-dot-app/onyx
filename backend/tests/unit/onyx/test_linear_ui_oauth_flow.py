@@ -254,7 +254,7 @@ def test_linear_ui_oauth_end_to_end_flow(
 
     # Step 3: Simulate OAuth callback
     mock_connector_cls.oauth_code_to_token.return_value = {
-        "access_token": "e2e_access_token"
+        "linear_access_token": "e2e_access_token"
     }
 
     mocks["redis"].get.return_value = json.dumps(
@@ -280,6 +280,6 @@ def test_linear_ui_oauth_end_to_end_flow(
     mock_create_credential.assert_called_once()
     call_args = mock_create_credential.call_args[0][0]  # First positional argument
     assert call_args.source == DocumentSource.LINEAR
-    assert call_args.credential_json["access_token"] == "e2e_access_token"
+    assert call_args.credential_json["linear_access_token"] == "e2e_access_token"
 
     print("✅ End-to-end Linear UI OAuth flow completed successfully!")

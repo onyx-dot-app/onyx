@@ -49,7 +49,7 @@ def test_oauth_code_to_token_uses_injected_secrets(mocker: MockerFixture) -> Non
         {"client_id": "CID123", "client_secret": "SECRET456"},
     )
 
-    assert token_data["access_token"] == "ATOKEN123"
+    assert token_data["linear_access_token"] == "ATOKEN123"
 
 
 def test_oauth_authorization_url_preserves_other_params() -> None:
