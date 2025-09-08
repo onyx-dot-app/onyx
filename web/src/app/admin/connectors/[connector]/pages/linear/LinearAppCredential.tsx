@@ -26,6 +26,8 @@ export default function LinearAppCredential({
             onChange({ client_id: json.client_id || "", client_secret: "" });
           }
         }
+      } catch (err) {
+        console.error("Failed to load Linear app credential", err);
       } finally {
         setLoading(false);
       }

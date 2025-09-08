@@ -233,6 +233,7 @@ export default function AddConnector({
   // Credential handler functions
   const refresh = () => {
     mutate(buildSimilarCredentialInfoURL(connector));
+    mutate(buildSimilarCredentialInfoURL(connector, true));
   };
 
   const onDeleteCredential = async (credential: Credential<any | null>) => {
@@ -528,7 +529,7 @@ export default function AddConnector({
                         className="mt-6 text-sm mr-4"
                         onClick={async () => {
                           // Reset Linear create wizard state on open
-                          if (connector === "linear") {
+                          if (connector === ValidSources.Linear) {
                             setLinearCreateStep(1);
                             setLinearAppCred(null);
                             setCredentialName("");
@@ -581,7 +582,7 @@ export default function AddConnector({
                             credential
                           </Title>
                           {oauthDetails && oauthDetails.oauth_enabled ? (
-                            connector === "linear" ? (
+                            connector === ValidSources.Linear ? (
                               <div className="flex flex-col gap-4">
                                 {linearCreateStep === 1 ? (
                                   <>
