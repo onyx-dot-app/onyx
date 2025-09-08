@@ -105,20 +105,11 @@ export async function handleFederatedOAuthCallback(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle federated OAuth callback: ${response.status}`;
-
-    try {
-      const responseBody = await response.text();
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle federated OAuth callback: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response and extract the data field
@@ -155,20 +146,11 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Slack authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Slack authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -193,20 +175,11 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Google Drive authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -233,20 +206,11 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -279,20 +243,11 @@ export async function handleOAuthConfluencePrepareFinalization(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence prepare finalization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence prepare finalization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -321,20 +276,11 @@ export async function handleOAuthConfluenceFinalize(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence finalization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence finalization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -358,20 +304,11 @@ export async function handleOAuthLinearAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Linear authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Linear authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Backend returns { redirect_url: string }; adapt to OAuthBaseCallbackResponse
