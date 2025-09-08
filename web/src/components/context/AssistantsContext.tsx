@@ -62,6 +62,16 @@ export const AssistantsProvider: React.FC<{
     useAssistantPreferences();
   const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
 
+  // Debug: log whenever forced tool selection changes
+  useEffect(() => {
+    try {
+      console.debug(
+        "[AssistantsContext] forcedToolIds updated:",
+        forcedToolIds
+      );
+    } catch {}
+  }, [forcedToolIds]);
+
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
   >(() => {

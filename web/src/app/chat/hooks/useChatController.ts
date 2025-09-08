@@ -878,7 +878,7 @@ export function useChatController({
 
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [llmProviders, liveAssistant, llmManager]
+    [llmProviders, liveAssistant, llmManager, forcedToolIds]
   );
 
   useEffect(() => {
