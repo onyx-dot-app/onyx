@@ -30,11 +30,3 @@ class DefaultAssistantUpdateRequest(BaseModel):
         default=None,
         description="New system prompt (instructions). Can be empty string but not null",
     )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "tool_ids": ["SearchTool", "InternetSearchTool"],
-                "system_prompt": "You are a helpful assistant that provides accurate information.",
-            }
-        }
