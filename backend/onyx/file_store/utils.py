@@ -22,12 +22,12 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
+def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
     """Generate a consistent file name for storing plaintext content of a user file."""
     return f"plaintext_{user_file_id}"
 
 
-def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool:
+def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
     """
     Store plaintext content for a user file in the file store.
 

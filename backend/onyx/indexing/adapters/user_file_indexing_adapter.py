@@ -145,7 +145,7 @@ class UserFileIndexingAdapter:
             llm_tokenizer = None
 
         user_file_id_to_raw_text: dict[str, str] = {}
-        user_file_id_to_token_count: dict[int, int | None] = {}
+        user_file_id_to_token_count: dict[str, int | None] = {}
         for user_file_id in updatable_ids:
             user_file_chunks = [
                 chunk
@@ -156,14 +156,14 @@ class UserFileIndexingAdapter:
                 combined_content = " ".join(
                     [chunk.content for chunk in user_file_chunks]
                 )
-                user_file_id_to_raw_text[user_file_id] = combined_content
+                user_file_id_to_raw_text[str(user_file_id)] = combined_content
                 token_count = (
                     len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
                 )
-                user_file_id_to_token_count[user_file_id] = token_count
+                user_file_id_to_token_count[str(user_file_id)] = token_count
             else:
-                user_file_id_to_raw_text[user_file_id] = None
-                user_file_id_to_token_count[user_file_id] = None
+                user_file_id_to_raw_text[str(user_file_id)] = ""
+                user_file_id_to_token_count[str(user_file_id)] = None
 
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(

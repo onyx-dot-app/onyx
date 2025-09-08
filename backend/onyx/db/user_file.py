@@ -6,7 +6,7 @@ from onyx.db.models import UserFile
 
 
 def fetch_chunk_counts_for_user_files(
-    user_file_ids: list[int],
+    user_file_ids: list[str],
     db_session: Session,
 ) -> list[tuple[str, int]]:
     """
@@ -56,6 +56,6 @@ def fetch_user_project_ids_for_user_files(
     stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
     results = db_session.execute(stmt).scalars().all()
     return {
-        user_file.id: [project.id for project in user_file.projects]
+        str(user_file.id): [project.id for project in user_file.projects]
         for user_file in results
     }
