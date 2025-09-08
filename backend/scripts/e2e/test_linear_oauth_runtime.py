@@ -66,6 +66,10 @@ def run_flow(base_url: str, cookie: str, client_id: str, client_secret: str) -> 
     # 2) Verify they are readable (only client_id exposed)
     creds = get_linear_app_credentials(base_url, cookie)
     _assert(creds.get("client_id") == client_id, "client_id mismatch from GET")
+    _assert(
+        "client_secret" not in creds,
+        "client_secret should not be returned by GET",
+    )
 
     # 3) Request OAuth authorize URL
     redirect_url = get_oauth_authorize_url(base_url, cookie)
