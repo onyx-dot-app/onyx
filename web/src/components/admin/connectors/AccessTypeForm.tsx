@@ -46,18 +46,24 @@ export function AccessTypeForm({
     return method?.disablePermSync === true;
   }, [connector, selectedAuthMethod]);
 
-  useEffect(() => {
-    // Only set default value if access_type.value is not already set
-    if (!access_type.value) {
-      if (!isPaidEnterpriseEnabled) {
-        access_type_helpers.setValue("public");
-      } else if (isAutoSyncSupported) {
-        access_type_helpers.setValue("sync");
-      } else {
-        access_type_helpers.setValue("private");
+  useEffect(
+    () => {
+      // Only set default value if access_type.value is not already set
+      if (!access_type.value) {
+        if (!isPaidEnterpriseEnabled) {
+          access_type_helpers.setValue("public");
+        } else if (isAutoSyncSupported) {
+          access_type_helpers.setValue("sync");
+        } else {
+          access_type_helpers.setValue("private");
+        }
       }
-    }
-  }, [isPaidEnterpriseEnabled, isAutoSyncSupported]);
+    },
+    [
+      // Only run this effect once when the component mounts
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    ]
+  );
 
   const options = [
     {

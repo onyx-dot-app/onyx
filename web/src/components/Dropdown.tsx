@@ -348,7 +348,7 @@ export function DefaultDropdownElement({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning hover:text-warning transition-colors cursor-default">
+                  <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning transition-colors cursor-default">
                     <FiInfo size={14} className="text-warning" />
                   </span>
                 </TooltipTrigger>
