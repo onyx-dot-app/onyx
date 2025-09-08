@@ -660,22 +660,9 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
         # Ensure that the message is a new message of expected type
         event_type = event.get("type")
-        channel_type = event.get("channel_type")
+        event.get("channel_type")
 
-        # Only allow specific event types:
-        # 1. app_mention - when someone uses @OnyxBot
-        # 2. message in DMs (channel_type == "im") - when someone messages the bot directly
-        if event_type == "app_mention":
-            # Someone used @OnyxBot - allow this
-            pass
-        elif event_type == "message" and channel_type == "im":
-            # This is a DM with the bot - allow this
-            pass
-        else:
-            # Block everything else: regular messages in channels, other event types, etc.
-            channel_specific_logger.info(
-                f"Ignoring event: type='{event_type}' channel_type='{channel_type}' - not an app_mention or DM"
-            )
+        if event_type not in ["app_mention", "message"]:
             return False
 
         bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
