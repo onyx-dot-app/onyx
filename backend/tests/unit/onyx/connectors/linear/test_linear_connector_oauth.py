@@ -62,9 +62,3 @@ def test_oauth_authorization_url_preserves_other_params() -> None:
     # Should still work even with extra params
     assert "client_id=CID123" in url
     assert "prompt=consent" in url
-
-
-def test_oauth_code_to_token_preserves_other_params() -> None:
-    # Test that other additional_kwargs are preserved if needed
-    # (Though Linear doesn't use them currently)
-    pass  # Placeholder - can be expanded if Linear adds more OAuth params
