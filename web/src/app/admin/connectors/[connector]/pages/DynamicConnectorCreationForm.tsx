@@ -69,7 +69,10 @@ export default function DynamicConnectionForm({
           )
       )}
 
-      <AccessTypeForm connector={connector} />
+      <AccessTypeForm
+        connector={connector}
+        currentCredential={currentCredential as Credential<any>}
+      />
       <AccessTypeGroupSelector connector={connector} />
 
       {config.advanced_values.length > 0 &&
