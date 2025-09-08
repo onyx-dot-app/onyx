@@ -9,10 +9,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
-from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -69,31 +67,35 @@ def get_federated_retrieval_functions(
             if tenant_slack_bot:
                 federated_retrieval_infos_slack = []
 
-                def slack_wrapper(query: SearchQuery) -> list[InferenceChunk]:
-                    # Use user_token if available, otherwise fall back to bot_token
-                    access_token = (
-                        tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                # Use user_token if available, otherwise fall back to bot_token
+                access_token = tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                if not tenant_slack_bot.user_token:
+                    logger.warning(
+                        f"Using bot_token for Slack search (limited functionality): {tenant_slack_bot.name}"
                     )
-                    if not tenant_slack_bot.user_token:
-                        logger.warning(
-                            f"Using bot_token for Slack search (limited functionality): {tenant_slack_bot.name}"
-                        )
 
-                    result = slack_retrieval(
-                        query=query,
-                        access_token=access_token,
-                        db_session=get_session_with_current_tenant().__enter__(),
-                        limit=MAX_FEDERATED_CHUNKS,
-                        slack_event_context=slack_context,
-                        bot_token=tenant_slack_bot.bot_token,
-                    )
-                    return result
+                # For bot context, we don't need real OAuth credentials
+                credentials = {
+                    "client_id": "bot-context",  # Placeholder for bot context
+                    "client_secret": "bot-context",  # Placeholder for bot context
+                }
 
-                slack_retrieval_function = slack_wrapper
+                # Create Slack federated connector
+                connector = get_federated_connector(
+                    FederatedConnectorSource.FEDERATED_SLACK,
+                    credentials,
+                )
 
                 federated_retrieval_infos_slack.append(
                     FederatedRetrievalInfo(
-                        retrieval_function=slack_retrieval_function,
+                        retrieval_function=lambda query: connector.search(
+                            query,
+                            {},  # Empty entities for Slack context
+                            access_token=access_token,
+                            limit=MAX_FEDERATED_CHUNKS,
+                            slack_event_context=slack_context,
+                            bot_token=tenant_slack_bot.bot_token,
+                        ),
                         source=FederatedConnectorSource.FEDERATED_SLACK,
                     )
                 )
