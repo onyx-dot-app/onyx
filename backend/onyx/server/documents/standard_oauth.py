@@ -110,13 +110,11 @@ def oauth_authorize(
     )
 
     # For Linear, prepare credentials for OAuth flow
-    linear_creds = None
     if source == DocumentSource.LINEAR:
         from onyx.connectors.linear.linear_kv import get_linear_app_cred
 
         try:
             creds = get_linear_app_cred()
-            linear_creds = creds
             # Only inject client_id into additional_kwargs (for storage in state)
             # client_secret will be provided directly to connector methods
             if "client_id" not in additional_kwargs:
@@ -142,17 +140,10 @@ def oauth_authorize(
         ex=_OAUTH_STATE_EXPIRATION_SECONDS,
     )
 
-    # For Linear, provide full credentials (including secret) to the connector
-    if source == DocumentSource.LINEAR and linear_creds:
-        full_kwargs = additional_kwargs.copy()
-        full_kwargs["client_secret"] = linear_creds.client_secret
-        redirect_url = connector_cls.oauth_authorization_url(
-            base_url, state, full_kwargs
-        )
-    else:
-        redirect_url = connector_cls.oauth_authorization_url(
-            base_url, state, additional_kwargs
-        )
+    # For authorization step, do not pass client_secret; only client_id is needed
+    redirect_url = connector_cls.oauth_authorization_url(
+        base_url, state, additional_kwargs
+    )
 
     return AuthorizeResponse(url=redirect_url)
 

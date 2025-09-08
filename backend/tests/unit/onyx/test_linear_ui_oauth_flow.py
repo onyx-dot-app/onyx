@@ -177,13 +177,14 @@ def test_linear_oauth_authorization_flow_with_credentials(
     assert "redirect_uri=" in redirect_url
     assert "scope=read" in redirect_url
 
-    # Verify that connector's oauth_authorization_url was called with injected credentials
+    # Verify that connector's oauth_authorization_url was called with injected client_id only
     mock_connector_cls.oauth_authorization_url.assert_called_once()
     call_args = mock_connector_cls.oauth_authorization_url.call_args[0]
     assert (
         call_args[2]["client_id"] == "test_client_123"
     )  # additional_kwargs should contain client_id
-    assert "client_secret" in call_args[2]  # client_secret should be injected too
+    # client_secret should NOT be included during authorization phase
+    assert "client_secret" not in call_args[2]
 
 
 def test_linear_oauth_authorization_flow_without_credentials(
