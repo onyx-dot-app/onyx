@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
+from onyx.db.models import UserProject
 from onyx.db.projects import CategorizedFilesResult
 from onyx.file_store.models import ChatFileType
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -31,7 +31,7 @@ class UserFileSnapshot(BaseModel):
         return cls(
             id=model.id,
             name=model.name,
-            project_id=model.folder_id,
+            project_id=None,
             user_id=model.user_id,
             file_id=model.file_id,
             created_at=model.created_at,
@@ -74,7 +74,7 @@ class UserProjectSnapshot(BaseModel):
     chat_sessions: list[ChatSessionDetails]
 
     @classmethod
-    def from_model(cls, model: UserFolder) -> "UserProjectSnapshot":
+    def from_model(cls, model: UserProject) -> "UserProjectSnapshot":
         return cls(
             id=model.id,
             name=model.name,

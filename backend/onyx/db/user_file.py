@@ -32,7 +32,7 @@ def fetch_chunk_counts_for_user_files(
 
 
 def calculate_user_files_token_count(file_ids: list[str], db_session: Session) -> int:
-    """Calculate total token count for specified files and folders"""
+    """Calculate total token count for specified files"""
     total_tokens = 0
 
     # Get tokens from individual files
@@ -46,3 +46,16 @@ def calculate_user_files_token_count(file_ids: list[str], db_session: Session) -
         total_tokens += file_tokens
 
     return total_tokens
+
+
+def fetch_user_project_ids_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, list[int]]:
+    """Fetch user project ids for specified user files"""
+    stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
+    results = db_session.execute(stmt).scalars().all()
+    return {
+        user_file.id: [project.id for project in user_file.projects]
+        for user_file in results
+    }

@@ -89,8 +89,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
-RECENT_DOCS_FOLDER_ID = -1
-
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")

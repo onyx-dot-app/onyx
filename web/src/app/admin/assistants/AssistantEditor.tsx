@@ -341,7 +341,6 @@ export function AssistantEditor({
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
-    user_folder_ids: [],
     knowledge_source: !canShowKnowledgeSource
       ? "user_files"
       : !userKnowledgeEnabled

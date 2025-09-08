@@ -16,7 +16,7 @@ from onyx.db.models import Project__UserFile
 from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
+from onyx.db.models import UserProject
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
 from onyx.utils.logger import setup_logger
@@ -40,9 +40,6 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
 ) -> CategorizedFilesResult:
-    """NOTE(rkuo): This function can take -1 (RECENT_DOCS_FOLDER_ID for folder_id.
-    Document what this does?
-    """
 
     # Categorize the files
     categorized_files = categorize_uploaded_files(files)
@@ -61,7 +58,6 @@ def create_user_files(
             id=uuid.uuid4(),
             user_id=user.id if user else None,
             file_id=file_path,
-            document_id=uuid.uuid4(),  # TODO(subash): remove this column
             name=file.filename,
             token_count=categorized_files.acceptable_file_to_token_count[
                 file.filename or ""
@@ -130,8 +126,8 @@ def check_project_ownership(
     project_id: int, user_id: UUID, db_session: Session
 ) -> bool:
     return (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user_id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .first()
         is not None
     )
@@ -161,8 +157,8 @@ def get_project_instructions(db_session: Session, project_id: int | None) -> str
         return None
     try:
         project = (
-            db_session.query(UserFolder)
-            .filter(UserFolder.id == project_id)
+            db_session.query(UserProject)
+            .filter(UserProject.id == project_id)
             .one_or_none()
         )
         if not project or not project.prompt_id:

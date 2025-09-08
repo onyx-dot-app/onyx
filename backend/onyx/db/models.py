@@ -227,8 +227,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
-    folders: Mapped[list["UserFolder"]] = relationship(
-        "UserFolder", back_populates="user"
+    projects: Mapped[list["UserProject"]] = relationship(
+        "UserProject", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
     # MCP servers accessible to this user
@@ -535,10 +535,6 @@ class ConnectorCredentialPair(Base):
         "User",
         back_populates="cc_pairs",
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
-    )
-
-    user_file: Mapped["UserFile"] = relationship(
-        "UserFile", back_populates="cc_pair", uselist=False
     )
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
@@ -2040,11 +2036,11 @@ class ChatSession(Base):
     )
 
     project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_folder.id"), nullable=True
+        ForeignKey("user_project.id"), nullable=True
     )
 
-    project: Mapped["UserFolder"] = relationship(
-        "UserFolder", back_populates="chat_sessions", foreign_keys=[project_id]
+    project: Mapped["UserProject"] = relationship(
+        "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
     )
 
     # the latest "overrides" specified by the user. These take precedence over
@@ -2606,11 +2602,6 @@ class Persona(Base):
         secondary="persona__user_file",
         back_populates="assistants",
     )
-    user_folders: Mapped[list["UserFolder"]] = relationship(
-        "UserFolder",
-        secondary="persona__user_folder",
-        back_populates="assistants",
-    )
     labels: Mapped[list["PersonaLabel"]] = relationship(
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
@@ -2625,15 +2616,6 @@ class Persona(Base):
             unique=True,
             postgresql_where=(builtin_persona == True),  # noqa: E712
         ),
-    )
-
-
-class Persona__UserFolder(Base):
-    __tablename__ = "persona__user_folder"
-
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    user_folder_id: Mapped[int] = mapped_column(
-        ForeignKey("user_folder.id"), primary_key=True
     )
 
 
@@ -3251,15 +3233,15 @@ class Project__UserFile(Base):
     __tablename__ = "project__user_file"
 
     project_id: Mapped[int] = mapped_column(
-        ForeignKey("user_folder.id"), primary_key=True
+        ForeignKey("user_project.id"), primary_key=True
     )
     user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
 
 
-class UserFolder(Base):
-    __tablename__ = "user_folder"
+class UserProject(Base):
+    __tablename__ = "user_project"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
@@ -3268,13 +3250,7 @@ class UserFolder(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    user: Mapped["User"] = relationship(back_populates="folders")
-    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
-    assistants: Mapped[list["Persona"]] = relationship(
-        "Persona",
-        secondary=Persona__UserFolder.__table__,
-        back_populates="user_folders",
-    )
+    user: Mapped["User"] = relationship(back_populates="projects")
     user_files: Mapped[list["UserFile"]] = relationship(
         "UserFile",
         secondary=Project__UserFile.__table__,
@@ -3304,26 +3280,14 @@ class UserFile(Base):
         secondary=Persona__UserFile.__table__,
         back_populates="user_files",
     )
-    folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_folder.id"), nullable=True
-    )
-
     file_id: Mapped[str] = mapped_column(nullable=False)
-    document_id: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow
     )
     user: Mapped["User"] = relationship(back_populates="files")
-    folder: Mapped["UserFolder"] = relationship(back_populates="files")
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
-    )
-    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
-        "ConnectorCredentialPair", back_populates="user_file"
-    )
     file_type: Mapped[str] = mapped_column(String, nullable=False)
 
     status: Mapped[UserFileStatus] = mapped_column(
@@ -3332,7 +3296,6 @@ class UserFile(Base):
         default=UserFileStatus.PROCESSING,
     )
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    boost: Mapped[int] = mapped_column(Integer, nullable=False, default=DEFAULT_BOOST)
     last_accessed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -3340,10 +3303,11 @@ class UserFile(Base):
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    projects: Mapped[list["UserFolder"]] = relationship(
-        "UserFolder",
+    projects: Mapped[list["UserProject"]] = relationship(
+        "UserProject",
         secondary=Project__UserFile.__table__,
         back_populates="user_files",
+        lazy="selectin",
     )
 
 

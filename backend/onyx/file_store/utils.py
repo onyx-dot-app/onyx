@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -21,8 +20,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
-
-RECENT_FOLDER_ID = -1
 
 
 def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
@@ -95,13 +92,6 @@ def load_all_chat_files(
     return files
 
 
-def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFile]:
-    user_files = (
-        db_session.query(UserFile).filter(UserFile.folder_id == folder_id).all()
-    )
-    return [load_user_file(file.id, db_session) for file in user_files]
-
-
 def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = ChatFileType.USER_KNOWLEDGE
     status = "not_loaded"
@@ -164,7 +154,7 @@ def load_in_memory_chat_files(
 ) -> list[InMemoryChatFile]:
     """
     Loads the actual content of user files specified by individual IDs and those
-    within specified folder IDs into memory.
+    within specified project IDs into memory.
 
     Args:
         user_file_ids: A list of specific UserFile IDs to load.
@@ -189,7 +179,7 @@ def get_user_files(
     db_session: Session,
 ) -> list[UserFile]:
     """
-    Fetches UserFile database records based on provided file and folder IDs.
+    Fetches UserFile database records based on provided file and project IDs.
 
     Args:
         user_file_ids: A list of specific UserFile IDs to fetch.
@@ -197,7 +187,7 @@ def get_user_files(
 
     Returns:
         A list containing UserFile SQLAlchemy model objects corresponding to the
-        specified file IDs and all files within the specified folder IDs.
+        specified file IDs and all files within the specified project IDs.
         It does NOT return the actual file content.
     """
     user_files: list[UserFile] = []
@@ -307,39 +297,3 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
 
 def build_frontend_file_url(file_id: str) -> str:
     return f"/api/chat/file/{file_id}"
-
-
-def load_all_persona_files_for_chat(
-    persona_id: int, db_session: Session
-) -> tuple[list[InMemoryChatFile], list[int]]:
-    from onyx.db.models import Persona
-    from sqlalchemy.orm import joinedload
-
-    persona = (
-        db_session.query(Persona)
-        .filter(Persona.id == persona_id)
-        .options(
-            joinedload(Persona.user_files),
-            joinedload(Persona.user_folders).joinedload(UserFolder.files),
-        )
-        .one()
-    )
-
-    persona_file_calls = [
-        (load_user_file, (user_file.id, db_session)) for user_file in persona.user_files
-    ]
-    persona_loaded_files = run_functions_tuples_in_parallel(persona_file_calls)
-
-    persona_folder_files = []
-    persona_folder_file_ids = []
-    for user_folder in persona.user_folders:
-        folder_files = load_user_folder(user_folder.id, db_session)
-        persona_folder_files.extend(folder_files)
-        persona_folder_file_ids.extend([file.id for file in user_folder.files])
-
-    persona_files = list(persona_loaded_files) + persona_folder_files
-    persona_file_ids = [
-        file.id for file in persona.user_files
-    ] + persona_folder_file_ids
-
-    return persona_files, persona_file_ids

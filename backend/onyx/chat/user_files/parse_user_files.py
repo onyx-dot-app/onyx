@@ -25,8 +25,8 @@ def parse_user_files(
     user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
     """
-    Parse user files and folders into in-memory chat files and create search tool override kwargs.
-    Only creates SearchToolOverrideKwargs if token overflow occurs or folders are present.
+    Parse user files and project into in-memory chat files and create search tool override kwargs.
+    Only creates SearchToolOverrideKwargs if token overflow occurs.
 
     Args:
         user_file_ids: List of user file IDs to load
@@ -41,10 +41,10 @@ def parse_user_files(
             loaded user files,
             user file models,
             search tool override kwargs if token
-                overflow or folders present
+                overflow
         )
     """
-    # Return empty results if no files or folders specified
+    # Return empty results if no files or project specified
     if not user_file_ids and not project_id:
         return [], [], None
 
@@ -94,13 +94,13 @@ def parse_user_files(
 
     have_enough_tokens = total_tokens <= available_tokens
 
-    # If we have enough tokens and no folders, we don't need search
+    # If we have enough tokens, we don't need search
     # we can just pass them into the prompt directly
     if have_enough_tokens and False:
         # No search tool override needed - files can be passed directly
         return user_files, user_file_models, None
 
-    # Token overflow or folders present - need to use search tool
+    # Token overflow - need to use search tool
     override_kwargs = SearchToolOverrideKwargs(
         force_no_rerank=have_enough_tokens,
         alternate_db_session=None,

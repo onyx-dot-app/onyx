@@ -13,12 +13,9 @@ import Link from "next/link";
 import { FiCheck, FiX } from "react-icons/fi";
 import { ChatSessionMorePopup } from "./ChatSessionMorePopup";
 import { ShareChatSessionModal } from "@/app/chat/components/modal/ShareChatSessionModal";
-import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
-import { useChatContext } from "@/components/context/ChatContext";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -98,34 +95,6 @@ export function ChatSessionDisplay({
     settings?.settings
   );
 
-  const handleDragStart = (event: React.DragEvent<HTMLAnchorElement>) => {
-    event.dataTransfer.setData(CHAT_SESSION_ID_KEY, chatSession.id.toString());
-    event.dataTransfer.setData(
-      FOLDER_ID_KEY,
-      chatSession.folder_id?.toString() || ""
-    );
-  };
-
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    // Prevent default touch behavior
-    event.preventDefault();
-
-    // Create a custom event to mimic drag start
-    const customEvent = new Event("dragstart", { bubbles: true });
-    (customEvent as any).dataTransfer = new DataTransfer();
-    (customEvent as any).dataTransfer.setData(
-      CHAT_SESSION_ID_KEY,
-      chatSession.id.toString()
-    );
-    (customEvent as any).dataTransfer.setData(
-      FOLDER_ID_KEY,
-      chatSession.folder_id?.toString() || ""
-    );
-
-    // Dispatch the custom event
-    event.currentTarget.dispatchEvent(customEvent);
-  };
-
   return (
     <>
       {isShareModalVisible && (
@@ -160,19 +129,7 @@ export function ChatSessionDisplay({
               : `/chat?chatId=${chatSession.id}`
           }
           scroll={false}
-          draggable={!isMobile}
-          onDragStart={!isMobile ? handleDragStart : undefined}
         >
-          {showDragHandle && (
-            <div
-              className={`${
-                isMobile ? "visible" : "invisible group-hover:visible"
-              } flex-none`}
-              onTouchStart={isMobile ? handleTouchStart : undefined}
-            >
-              <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
-            </div>
-          )}
           <BasicSelectable
             padding="extra"
             isHovered={isHovered}

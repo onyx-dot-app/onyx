@@ -21,6 +21,13 @@ def upgrade() -> None:
     # 0) Ensure UUID generator exists
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
+    # Drop persona__user_folder table
+    try:
+        op.drop_table("persona__user_folder")
+    except Exception:
+        # Table might not exist, that's okay
+        pass
+
     # Drop folder related tables and columns
     # First try to drop the foreign key constraint if it exists
     try:
@@ -128,17 +135,46 @@ def upgrade() -> None:
         remote_cols=["id"],
     )
 
-    # 5) Safe to create new tables referencing the UUID PK
+    # 5) Rename user_folder -> user_project and update dependent FKs/columns
+    try:
+        op.rename_table("user_folder", "user_project")
+    except Exception:
+        # Table might already be renamed
+        pass
+
+    # Drop user_file.folder_id if it exists (we don't keep one-to-many link)
+    try:
+        op.drop_column("user_file", "folder_id")
+    except Exception:
+        pass
+
+    # 6) Safe to create new tables referencing the UUID PK
     op.create_table(
         "project__user_file",
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("user_file_id", psql.UUID(as_uuid=True), nullable=False),
-        sa.ForeignKeyConstraint(["project_id"], ["user_folder.id"]),
+        sa.ForeignKeyConstraint(["project_id"], ["user_project.id"]),
         sa.ForeignKeyConstraint(["user_file_id"], ["user_file.id"]),
         sa.PrimaryKeyConstraint("project_id", "user_file_id"),
     )
 
-    # 6) Add extra columns
+    # 6) Remove CCPair relationship
+    # Drop the foreign key constraint first
+    op.drop_constraint(
+        "user_file_cc_pair_id_fkey",
+        "user_file",
+        type_="foreignkey",
+    )
+    # Drop the unique constraint
+    op.drop_constraint(
+        "user_file_cc_pair_id_key",
+        "user_file",
+        type_="unique",
+    )
+    # Drop the column
+    op.drop_column("user_file", "cc_pair_id")
+
+    # 7) Add extra columns
     op.add_column(
         "user_file",
         sa.Column(
@@ -156,21 +192,22 @@ def upgrade() -> None:
         ),
     )
     op.add_column("user_file", sa.Column("chunk_count", sa.Integer(), nullable=True))
-    op.add_column(
-        "user_file",
-        sa.Column("boost", sa.Integer(), nullable=False, server_default="1"),
-    )
+    # Drop deprecated document_id column if present
+    try:
+        op.drop_column("user_file", "document_id")
+    except Exception:
+        pass
     op.add_column(
         "user_file",
         sa.Column("last_accessed_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column(
-        "user_folder",
+        "user_project",
         sa.Column("prompt_id", sa.Integer(), nullable=True),
     )
     op.create_foreign_key(
-        "user_folder_prompt_id_fkey",
-        "user_folder",
+        "user_project_prompt_id_fkey",
+        "user_project",
         "prompt",
         ["prompt_id"],
         ["id"],
@@ -182,13 +219,29 @@ def upgrade() -> None:
     op.create_foreign_key(
         "chat_session_project_id_fkey",
         "chat_session",
-        "user_folder",
+        "user_project",
         ["project_id"],
         ["id"],
+    )
+    # Add index on project_id for better query performance
+    op.create_index(
+        "ix_chat_session_project_id",
+        "chat_session",
+        ["project_id"],
     )
 
 
 def downgrade() -> None:
+    # Recreate persona__user_folder table
+    op.create_table(
+        "persona__user_folder",
+        sa.Column("persona_id", sa.Integer(), nullable=False),
+        sa.Column("user_folder_id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(["persona_id"], ["persona.id"]),
+        sa.ForeignKeyConstraint(["user_folder_id"], ["user_folder.id"]),
+        sa.PrimaryKeyConstraint("persona_id", "user_folder_id"),
+    )
+
     # Recreate folder related tables and columns
     # First create the chat_folder table
     op.create_table(
@@ -223,13 +276,21 @@ def downgrade() -> None:
 
     # Drop extra columns
     op.drop_column("user_file", "last_accessed_at")
-    op.drop_column("user_file", "boost")
+    # Recreate document_id on downgrade
+    try:
+        op.add_column(
+            "user_file", sa.Column("document_id", sa.String(), nullable=False)
+        )
+    except Exception:
+        pass
     op.drop_column("user_file", "chunk_count")
     op.drop_column("user_file", "status")
     op.execute("DROP TYPE IF EXISTS userfilestatus")
 
     # Drop association table
     op.drop_table("project__user_file")
+    # Drop index before dropping the column
+    op.drop_index("ix_chat_session_project_id", table_name="chat_session")
     op.drop_column("chat_session", "project_id")
     # Recreate an integer PK (best-effort; original values aren’t retained)
     op.drop_constraint(
@@ -279,4 +340,41 @@ def downgrade() -> None:
         existing_type=sa.Integer(),
     )
 
-    op.drop_column("user_folder", "prompt_id")
+    # Restore CCPair relationship
+    op.add_column(
+        "user_file",
+        sa.Column("cc_pair_id", sa.Integer(), nullable=True),
+    )
+    op.create_unique_constraint(
+        "user_file_cc_pair_id_key",
+        "user_file",
+        ["cc_pair_id"],
+    )
+    op.create_foreign_key(
+        "user_file_cc_pair_id_fkey",
+        "user_file",
+        "connector_credential_pair",
+        ["cc_pair_id"],
+        ["id"],
+    )
+
+    # Rename user_project back to user_folder and revert related changes
+    try:
+        op.drop_constraint(
+            "user_project_prompt_id_fkey", "user_project", type_="foreignkey"
+        )
+    except Exception:
+        pass
+    try:
+        op.drop_column("user_project", "prompt_id")
+    except Exception:
+        pass
+    # Recreate user_file.folder_id (nullable) since we dropped it on upgrade
+    try:
+        op.add_column("user_file", sa.Column("folder_id", sa.Integer(), nullable=True))
+    except Exception:
+        pass
+    try:
+        op.rename_table("user_project", "user_folder")
+    except Exception:
+        pass

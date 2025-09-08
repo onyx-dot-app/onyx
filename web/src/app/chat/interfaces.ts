@@ -95,7 +95,7 @@ export interface ChatSession {
   time_created: string;
   time_updated: string;
   shared_status: ChatSessionSharedStatus;
-  folder_id: number | null;
+  project_id: number | null;
   current_alternate_model: string;
   current_temperature_override: number | null;
 }
