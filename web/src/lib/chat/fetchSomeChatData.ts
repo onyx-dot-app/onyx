@@ -15,7 +15,6 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Folder } from "@/app/chat/components/folders/interfaces";
 import { personaComparator } from "@/app/admin/assistants/lib";
 import { cookies } from "next/headers";
 import {
@@ -35,8 +34,6 @@ interface FetchChatDataResult {
   assistants?: Persona[];
   tags?: Tag[];
   llmProviders?: LLMProviderDescriptor[];
-  folders?: Folder[];
-  openedFolders?: Record<string, boolean>;
   defaultAssistantId?: number;
   toggleSidebar?: boolean;
   finalDocumentSidebarInitialWidth?: number;
@@ -51,8 +48,7 @@ type FetchOption =
   | "documentSets"
   | "assistants"
   | "tags"
-  | "llmProviders"
-  | "folders";
+  | "llmProviders";
 
 /*
 NOTE: currently unused, but leaving here for future use.
@@ -71,7 +67,6 @@ export async function fetchSomeChatData(
     assistants: fetchAssistantsSS,
     tags: () => fetchSS("/query/valid-tags"),
     llmProviders: fetchLLMProvidersSS,
-    folders: () => fetchSS("/folder"),
   };
 
   // Always fetch auth type metadata
@@ -143,11 +138,6 @@ export async function fetchSomeChatData(
       case "llmProviders":
         result.llmProviders = result || [];
         break;
-      case "folders":
-        result.folders = result?.ok
-          ? ((await result.json()) as { folders: Folder[] }).folders
-          : [];
-        break;
     }
   }
 
@@ -185,13 +175,6 @@ export async function fetchSomeChatData(
           )
       );
     }
-  }
-
-  if (fetchOptions.includes("folders")) {
-    const openedFoldersCookie = requestCookies.get("openedFolders");
-    result.openedFolders = openedFoldersCookie
-      ? JSON.parse(openedFoldersCookie.value)
-      : {};
   }
 
   const defaultAssistantIdRaw = searchParams["assistantId"];

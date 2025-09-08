@@ -456,8 +456,6 @@ class OnyxCeleryTask:
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
     )
 
-    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
-
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"

@@ -1007,45 +1007,6 @@ export function useChatController({
     fetchMaxTokens();
   }, [liveAssistant]);
 
-  //TODO(subash): add this for projects
-  // fetch # of document tokens for the selected files
-  // useEffect(() => {
-  //   const calculateTokensAndUpdateSearchMode = async () => {
-  //     if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-  //       try {
-  //         // Prepare the query parameters for the API call
-  //         const fileIds = selectedFiles.map((file: FileResponse) => file.id);
-  //         const folderIds = selectedFolders.map(
-  //           (folder: FolderResponse) => folder.id
-  //         );
-
-  //         // Build the query string
-  //         const queryParams = new URLSearchParams();
-  //         fileIds.forEach((id) =>
-  //           queryParams.append("file_ids", id.toString())
-  //         );
-  //         folderIds.forEach((id) =>
-  //           queryParams.append("folder_ids", id.toString())
-  //         );
-
-  //         // Make the API call to get token estimate
-  //         const response = await fetch(
-  //           `/api/user/file/token-estimate?${queryParams.toString()}`
-  //         );
-
-  //         if (!response.ok) {
-  //           console.error("Failed to fetch token estimate");
-  //           return;
-  //         }
-  //       } catch (error) {
-  //         console.error("Error calculating tokens:", error);
-  //       }
-  //     }
-  //   };
-
-  //   calculateTokensAndUpdateSearchMode();
-  // }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
-
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
   const imageFileInMessageHistory = useMemo(() => {

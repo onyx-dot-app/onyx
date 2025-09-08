@@ -54,8 +54,6 @@ export default async function Layout({
           availableDocumentSets: documentSets,
           availableTags: tags,
           llmProviders,
-          folders,
-          openedFolders,
           shouldShowWelcomeModal,
           defaultAssistantId,
         }}
