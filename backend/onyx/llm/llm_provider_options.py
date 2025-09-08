@@ -92,7 +92,7 @@ BEDROCK_MODEL_NAMES = [
     model
     # bedrock_converse_models are just extensions of the bedrock_models, not sure why
     # litellm has split them into two lists :(
-    for model in litellm.bedrock_models + litellm.bedrock_converse_models
+    for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
     if "/" not in model and "embed" not in model
 ][::-1]
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -121,8 +121,11 @@ VERTEXAI_DEFAULT_MODEL = "gemini-2.0-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.0-flash-lite"
 VERTEXAI_MODEL_NAMES = [
     # 2.5 pro models
-    "gemini-2.5-pro-preview-06-05",
-    "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    # "gemini-2.5-pro-preview-06-05",
+    # "gemini-2.5-pro-preview-05-06",
     # 2.0 flash-lite models
     VERTEXAI_DEFAULT_FAST_MODEL,
     "gemini-2.0-flash-lite-001",
@@ -261,7 +264,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
                     description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/gen_ai_configs/vertex_ai) for all possible values.",
+                    "[Vertex AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) for all possible values.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,

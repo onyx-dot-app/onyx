@@ -90,7 +90,6 @@ STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
 # Internet Search
-BING_API_KEY = os.environ.get("BING_API_KEY") or None
 EXA_API_KEY = os.environ.get("EXA_API_KEY") or None
 
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)

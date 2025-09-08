@@ -116,12 +116,30 @@ variable "s3_bucket_names" {
 
 variable "irsa_service_account_namespace" {
   type        = string
-  description = "Namespace where the IRSA-enabled Kubernetes service account for S3 access will be created"
+  description = "Namespace for IRSA-enabled Kubernetes service accounts (used by S3 and RDS)"
   default     = "onyx"
 }
 
 variable "irsa_service_account_name" {
   type        = string
-  description = "Name of the IRSA-enabled Kubernetes service account for S3 access"
-  default     = "onyx-s3-access"
+  description = "Name of the IRSA-enabled Kubernetes service account for workload access (S3 + optional RDS)"
+  default     = "onyx-workload-access"
+}
+
+variable "enable_rds_iam_for_service_account" {
+  type        = bool
+  description = "Whether to create a dedicated RDS IRSA role and service account (grants rds-db:connect)"
+  default     = false
+}
+
+variable "rds_db_username" {
+  type        = string
+  description = "Database username to allow via rds-db:connect"
+  default     = null
+}
+
+variable "rds_db_connect_arn" {
+  type        = string
+  description = "Full rds-db:connect ARN to allow (required when enable_rds_iam_for_service_account is true)"
+  default     = null
 }

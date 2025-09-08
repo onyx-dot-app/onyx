@@ -14,8 +14,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_SEPARATOR
@@ -138,17 +136,6 @@ def search_objects(
 
     except Exception as e:
         raise ValueError(f"Error in search_objects: {e}")
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=" Researching the individual objects for each source type... ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
 
     return SearchSourcesObjectsUpdate(
         analysis_objects=object_list,

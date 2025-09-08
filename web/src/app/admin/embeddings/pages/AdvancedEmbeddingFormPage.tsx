@@ -184,11 +184,6 @@ const AdvancedEmbeddingFormPage = forwardRef<
                         function (value) {
                           const enableContextualRag =
                             this.parent.enable_contextual_rag;
-                          console.log(
-                            "enableContextualRag2",
-                            enableContextualRag
-                          );
-                          console.log("value2", value);
                           return !enableContextualRag || value !== null;
                         }
                       ),

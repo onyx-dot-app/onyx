@@ -27,9 +27,6 @@ prompts:
     # If the [[CURRENT_DATETIME]] is set, the date/time is inserted there instead
     # Format looks like: "October 16, 2023 14:30"
     datetime_aware: true
-    # Prompts the LLM to include citations in the for [1], [2] etc.
-    # which get parsed to match the passed in sources
-    include_citations: true
 
   - name: "ImageGeneration"
     description: "Generates images from user descriptions!"
@@ -46,7 +43,6 @@ prompts:
 
       If the request is not appropriate or cannot be fulfilled, explain why and suggest alternatives.
     datetime_aware: true
-    include_citations: false
 
   - name: "OnlyLLM"
     description: "Chat directly with the LLM!"
@@ -62,7 +58,6 @@ prompts:
       of other tasks. You use markdown where reasonable and also for coding.
     task: ""
     datetime_aware: true
-    include_citations: true
 
   - name: "Summarize"
     description: "Summarize relevant information from retrieved context!"
@@ -81,7 +76,6 @@ prompts:
       NEVER refer to the documents by number, I do not have them in the same order as you.
       Do not make up any facts, only use what is in the documents.
     datetime_aware: true
-    include_citations: true
 
   - name: "Paraphrase"
     description: "Recites information from retrieved context! Least creative but most safe!"
@@ -100,4 +94,3 @@ prompts:
       Provide EXACT quotes from the provided documents above. Do not generate any new text that is not
       directly from the documents.
     datetime_aware: true
-    include_citations: true

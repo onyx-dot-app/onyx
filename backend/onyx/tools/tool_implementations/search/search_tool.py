@@ -83,11 +83,12 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
     _NAME = "run_search"
-    _DISPLAY_NAME = "Search Tool"
+    _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
 
     def __init__(
         self,
+        tool_id: int,
         db_session: Session,
         user: User | None,
         persona: Persona,
@@ -170,6 +171,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 doc_pruning_config=document_pruning_config,
             )
         )
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

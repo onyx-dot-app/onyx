@@ -9,8 +9,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolCallOutput
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AnswerPacket
 from onyx.tools.message import build_tool_message
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.tool_runner import ToolRunner
@@ -22,10 +20,6 @@ logger = setup_logger()
 
 class ToolCallException(Exception):
     """Exception raised for errors during tool calls."""
-
-
-def emit_packet(packet: AnswerPacket, writer: StreamWriter) -> None:
-    write_custom_event("basic_response", packet, writer)
 
 
 def call_tool(
@@ -49,16 +43,12 @@ def call_tool(
     )
     tool_kickoff = tool_runner.kickoff()
 
-    emit_packet(tool_kickoff, writer)
-
     try:
         tool_responses = []
         for response in tool_runner.tool_responses():
             tool_responses.append(response)
-            emit_packet(response, writer)
 
         tool_final_result = tool_runner.tool_final_result()
-        emit_packet(tool_final_result, writer)
     except Exception as e:
         raise ToolCallException(
             f"Error during tool call for {tool.display_name}: {e}"

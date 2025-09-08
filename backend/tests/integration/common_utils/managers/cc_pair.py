@@ -11,7 +11,8 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.server.documents.models import CCPairFullInfo
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import ConnectorIndexingStatus
+from onyx.server.documents.models import ConnectorIndexingStatusLite
+from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import DocumentSyncStatus
 from tests.integration.common_utils.config import api_config
@@ -180,29 +181,54 @@ class CCPairManager:
     def get_indexing_status_by_id(
         cc_pair_id: int,
         user_performing_action: DATestUser | None = None,
-    ) -> ConnectorIndexingStatus | None:
-        response = requests.get(
+    ) -> ConnectorIndexingStatusLite | None:
+        response = requests.post(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=(
                 user_performing_action.headers
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            json={"get_all_connectors": True},
         )
         response.raise_for_status()
-        for cc_pair_json in response.json():
-            cc_pair = ConnectorIndexingStatus(**cc_pair_json)
-            if cc_pair.cc_pair_id == cc_pair_id:
-                return cc_pair
+        indexing_status_response = response.json()
+        for connectors_by_source in indexing_status_response:
+            connectors = connectors_by_source["indexing_statuses"]
+            for connector in connectors:
+                if connector["cc_pair_id"] == cc_pair_id:
+                    return ConnectorIndexingStatusLite(**connector)
 
         return None
 
     @staticmethod
     def get_indexing_statuses(
         user_performing_action: DATestUser | None = None,
-    ) -> list[ConnectorIndexingStatus]:
-        response = requests.get(
+    ) -> list[ConnectorIndexingStatusLite]:
+        response = requests.post(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+            json={"get_all_connectors": True},
+        )
+        response.raise_for_status()
+        indexing_status_response = response.json()
+        indexing_statuses = []
+        for connectors_by_source in indexing_status_response:
+            connectors = connectors_by_source["indexing_statuses"]
+            for connector in connectors:
+                indexing_statuses.append(ConnectorIndexingStatusLite(**connector))
+        return indexing_statuses
+
+    @staticmethod
+    def get_connector_statuses(
+        user_performing_action: DATestUser | None = None,
+    ) -> list[ConnectorStatus]:
+        response = requests.get(
+            f"{API_SERVER_URL}/manage/admin/connector/status",
             headers=(
                 user_performing_action.headers
                 if user_performing_action
@@ -210,7 +236,7 @@ class CCPairManager:
             ),
         )
         response.raise_for_status()
-        return [ConnectorIndexingStatus(**cc_pair) for cc_pair in response.json()]
+        return [ConnectorStatus(**status) for status in response.json()]
 
     @staticmethod
     def verify(
@@ -218,7 +244,7 @@ class CCPairManager:
         verify_deleted: bool = False,
         user_performing_action: DATestUser | None = None,
     ) -> None:
-        all_cc_pairs = CCPairManager.get_indexing_statuses(user_performing_action)
+        all_cc_pairs = CCPairManager.get_connector_statuses(user_performing_action)
         for retrieved_cc_pair in all_cc_pairs:
             if retrieved_cc_pair.cc_pair_id == cc_pair.id:
                 if verify_deleted:

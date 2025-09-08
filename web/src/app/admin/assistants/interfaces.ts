@@ -14,7 +14,6 @@ export interface Prompt {
   description: string;
   system_prompt: string;
   task_prompt: string;
-  include_citations: boolean;
   datetime_aware: boolean;
   default_prompt: boolean;
 }

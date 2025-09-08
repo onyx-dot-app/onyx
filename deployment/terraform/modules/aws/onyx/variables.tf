@@ -87,6 +87,18 @@ variable "redis_auth_token" {
   sensitive   = true
 }
 
+variable "enable_iam_auth" {
+  type        = bool
+  description = "Enable AWS IAM authentication for the RDS Postgres instance and wire IRSA policies"
+  default     = false
+}
+
+variable "rds_db_connect_arn" {
+  type        = string
+  description = "Full rds-db:connect ARN to pass to the EKS module. Required when enable_rds_iam_auth is true."
+  default     = null
+}
+
 # WAF Configuration Variables
 variable "waf_rate_limit_requests_per_5_minutes" {
   type        = number

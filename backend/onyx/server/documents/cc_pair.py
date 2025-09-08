@@ -30,6 +30,7 @@ from onyx.db.connector_credential_pair import remove_credential_from_connector
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
+from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
@@ -37,7 +38,7 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
-from onyx.db.index_attempt import count_index_attempts_for_connector
+from onyx.db.index_attempt import count_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
@@ -72,20 +73,22 @@ def get_cc_pair_index_attempts(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
-    )
-    if not cc_pair:
-        raise HTTPException(
-            status_code=400, detail="CC Pair not found for current user permissions"
+    if user:
+        user_has_access = verify_user_has_access_to_cc_pair(
+            cc_pair_id, db_session, user, get_editable=False
         )
-    total_count = count_index_attempts_for_connector(
+        if not user_has_access:
+            raise HTTPException(
+                status_code=400, detail="CC Pair not found for current user permissions"
+            )
+
+    total_count = count_index_attempts_for_cc_pair(
         db_session=db_session,
-        connector_id=cc_pair.connector_id,
+        cc_pair_id=cc_pair_id,
     )
     index_attempts = get_paginated_index_attempts_for_cc_pair_id(
         db_session=db_session,
-        connector_id=cc_pair.connector_id,
+        cc_pair_id=cc_pair_id,
         page=page_num,
         page_size=page_size,
     )
@@ -142,9 +145,9 @@ def get_cc_pair_full_info(
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
-        number_of_index_attempts=count_index_attempts_for_connector(
+        number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
-            connector_id=cc_pair.connector_id,
+            cc_pair_id=cc_pair_id,
         ),
         last_index_attempt=latest_attempt,
         latest_deletion_attempt=get_deletion_attempt_snapshot(

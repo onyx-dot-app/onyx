@@ -1,37 +1,30 @@
-from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
-from onyx.agents.agent_search.run_graph import run_agent_search_graph
-from onyx.agents.agent_search.run_graph import run_basic_graph
-from onyx.agents.agent_search.run_graph import run_dc_graph
-from onyx.agents.agent_search.run_graph import run_kb_graph
-from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import AnswerPacket
+from onyx.agents.agent_search.run_graph import run_dr_graph
 from onyx.chat.models import AnswerStream
+from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
-from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
-from onyx.configs.chat_configs import USE_DIV_CON_AGENT
-from onyx.configs.constants import BASIC_KEY
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -40,8 +33,6 @@ from onyx.utils.gpu_utils import fast_gpu_status_request
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-BASIC_SQ_KEY = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
 
 
 class Answer:
@@ -68,9 +59,11 @@ class Answer:
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
         use_agentic_search: bool = False,
+        research_type: ResearchType | None = None,
+        research_plan: dict[str, Any] | None = None,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
-        self._processed_stream: list[AnswerPacket] | None = None
+        self._processed_stream: list[AnswerStreamPart] | None = None
         self._is_cancelled = False
 
         search_tools = [tool for tool in (tools or []) if isinstance(tool, SearchTool)]
@@ -124,6 +117,9 @@ class Answer:
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
             kg_config_settings=get_kg_config_settings(),
+            research_type=(
+                ResearchType.DEEP if use_agentic_search else ResearchType.THOUGHTFUL
+            ),
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
@@ -138,28 +134,10 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search and (
-            self.graph_config.inputs.persona
-            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("KG Beta")
-        ):
-            run_langgraph = run_kb_graph
-        elif self.graph_config.behavior.use_agentic_search:
-            run_langgraph = run_agent_search_graph
-        elif (
-            self.graph_config.inputs.persona
-            and USE_DIV_CON_AGENT
-            and self.graph_config.inputs.persona.description.startswith(
-                "DivCon Beta Agent"
-            )
-        ):
-            run_langgraph = run_dc_graph
-        else:
-            run_langgraph = run_basic_graph
+        # TODO: add toggle in UI with customizable TimeBudget
+        stream = run_dr_graph(self.graph_config)
 
-        stream = run_langgraph(self.graph_config)
-
-        processed_stream = []
+        processed_stream: list[AnswerStreamPart] = []
         for packet in stream:
             if self.is_cancelled():
                 packet = StreamStopInfo(stop_reason=StreamStopReason.CANCELLED)
@@ -170,38 +148,6 @@ class Answer:
         self._processed_stream = processed_stream
 
     @property
-    def llm_answer(self) -> str:
-        answer = ""
-        for packet in self.processed_streamed_output:
-            # handle basic answer flow, plus level 0 agent answer flow
-            # since level 0 is the first answer the user sees and therefore the
-            # child message of the user message in the db (so it is handled
-            # like a basic flow answer)
-            if (isinstance(packet, OnyxAnswerPiece) and packet.answer_piece) or (
-                isinstance(packet, AgentAnswerPiece)
-                and packet.answer_piece
-                and packet.answer_type == "agent_level_answer"
-                and packet.level == 0
-            ):
-                answer += packet.answer_piece
-
-        return answer
-
-    def llm_answer_by_level(self) -> dict[int, str]:
-        answer_by_level: dict[int, str] = defaultdict(str)
-        for packet in self.processed_streamed_output:
-            if (
-                isinstance(packet, AgentAnswerPiece)
-                and packet.answer_piece
-                and packet.answer_type == "agent_level_answer"
-            ):
-                assert packet.level is not None
-                answer_by_level[packet.level] += packet.answer_piece
-            elif isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
-                answer_by_level[BASIC_KEY[0]] += packet.answer_piece
-        return answer_by_level
-
-    @property
     def citations(self) -> list[CitationInfo]:
         citations: list[CitationInfo] = []
         for packet in self.processed_streamed_output:
@@ -209,23 +155,6 @@ class Answer:
                 citations.append(packet)
 
         return citations
-
-    def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
-        citations_by_subquestion: dict[SubQuestionKey, list[CitationInfo]] = (
-            defaultdict(list)
-        )
-        basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
-        for packet in self.processed_streamed_output:
-            if isinstance(packet, CitationInfo):
-                if packet.level_question_num is not None and packet.level is not None:
-                    citations_by_subquestion[
-                        SubQuestionKey(
-                            level=packet.level, question_num=packet.level_question_num
-                        )
-                    ].append(packet)
-                elif packet.level is None:
-                    citations_by_subquestion[basic_subq_key].append(packet)
-        return citations_by_subquestion
 
     def is_cancelled(self) -> bool:
         if self._is_cancelled:

@@ -16,6 +16,8 @@ export interface AuthMethodOption<TFields> {
   label: string;
   fields: TFields;
   description?: string;
+  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
+  disablePermSync?: boolean;
 }
 export interface CredentialTemplateWithAuth<TFields> {
   authentication_method?: string;
@@ -59,6 +61,11 @@ export interface BookstackCredentialJson {
   bookstack_base_url: string;
   bookstack_api_token_id: string;
   bookstack_api_token_secret: string;
+}
+
+export interface OutlineCredentialJson {
+  outline_base_url: string;
+  outline_api_token: string;
 }
 
 export interface ConfluenceCredentialJson {
@@ -225,7 +232,6 @@ export interface DiscordCredentialJson {
 
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
-  freshdesk_password: string;
   freshdesk_api_key: string;
 }
 
@@ -268,6 +274,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bookstack_api_token_id: "",
     bookstack_api_token_secret: "",
   } as BookstackCredentialJson,
+  outline: {
+    outline_base_url: "",
+    outline_api_token: "",
+  } as OutlineCredentialJson,
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
@@ -316,6 +326,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+        disablePermSync: true,
       },
       {
         value: "certificate",
@@ -328,6 +339,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
@@ -356,6 +368,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     clickup_api_token: "",
     clickup_team_id: "",
   } as ClickupCredentialJson,
+
   s3: {
     authentication_method: "access_key",
     authMethods: [
@@ -366,6 +379,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
           aws_access_key_id: "",
           aws_secret_access_key: "",
         },
+        disablePermSync: false,
       },
       {
         value: "iam_role",
@@ -373,6 +387,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {
           aws_role_arn: "",
         },
+        disablePermSync: false,
       },
       {
         value: "assume_role",
@@ -380,6 +395,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {},
         description:
           "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,
@@ -400,7 +416,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as OCICredentialJson,
   freshdesk: {
     freshdesk_domain: "",
-    freshdesk_password: "",
     freshdesk_api_key: "",
   } as FreshdeskCredentialJson,
   fireflies: {
@@ -453,6 +468,11 @@ export const credentialDisplayNames: Record<string, string> = {
   bookstack_base_url: "Bookstack Base URL",
   bookstack_api_token_id: "Bookstack API Token ID",
   bookstack_api_token_secret: "Bookstack API Token Secret",
+
+  // Outline
+  outline_base_url:
+    "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
+  outline_api_token: "Outline API Token",
 
   // Confluence
   confluence_username: "Confluence Username",
@@ -573,7 +593,6 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Freshdesk
   freshdesk_domain: "Freshdesk Domain",
-  freshdesk_password: "Freshdesk Password",
   freshdesk_api_key: "Freshdesk API Key",
 
   // Fireflies

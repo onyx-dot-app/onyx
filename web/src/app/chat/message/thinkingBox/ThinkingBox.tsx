@@ -14,7 +14,7 @@ import {
   cleanThinkingContent,
   hasPartialThinkingTokens,
   isThinkingComplete,
-} from "../../utils/thinkingTokens";
+} from "../../services/thinkingTokens";
 import "./ThinkingBox.css";
 
 interface ThinkingBoxProps {
@@ -294,7 +294,10 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
             >
               <ReactMarkdown
                 className="prose dark:prose-invert max-w-full"
-                remarkPlugins={[remarkGfm, remarkMath]}
+                remarkPlugins={[
+                  remarkGfm,
+                  [remarkMath, { singleDollarTextMath: false }],
+                ]}
                 rehypePlugins={[
                   [rehypePrism, { ignoreMissing: true }],
                   rehypeKatex,

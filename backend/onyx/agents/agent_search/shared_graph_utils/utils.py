@@ -32,12 +32,13 @@ from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswer
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
-from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
+from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
+from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
@@ -59,6 +60,7 @@ from onyx.context.search.models import SearchRequest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
+from onyx.db.tools import get_tool_by_name
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.llm.interfaces import LLM
@@ -73,6 +75,8 @@ from onyx.prompts.agent_search import (
     HISTORY_CONTEXT_SUMMARY_PROMPT,
 )
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_constructor import SearchToolConfig
@@ -190,6 +194,7 @@ def get_test_config(
     prompt_config = PromptConfig.from_model(persona.prompts[0])
 
     search_tool = SearchTool(
+        tool_id=get_tool_by_name(SearchTool._NAME, db_session).id,
         db_session=db_session,
         user=None,
         persona=persona,
@@ -353,7 +358,7 @@ def dispatch_main_answer_stop_info(level: int, writer: StreamWriter) -> None:
         stream_type=StreamType.MAIN_ANSWER,
         level=level,
     )
-    write_custom_event("stream_finished", stop_event, writer)
+    write_custom_event(0, stop_event, writer)
 
 
 def retrieve_search_docs(
@@ -438,9 +443,38 @@ class CustomStreamEvent(TypedDict):
 
 
 def write_custom_event(
-    name: str, event: AnswerPacket, stream_writer: StreamWriter
+    ind: int,
+    event: PacketObj | StreamStopInfo | MessageResponseIDInfo | StreamingError,
+    stream_writer: StreamWriter,
 ) -> None:
-    stream_writer(CustomStreamEvent(event="on_custom_event", name=name, data=event))
+    # For types that are in PacketObj, wrap in Packet
+    # For types like StreamStopInfo that frontend handles directly, stream directly
+    if hasattr(event, "stop_reason"):  # StreamStopInfo
+        stream_writer(
+            CustomStreamEvent(
+                event="on_custom_event",
+                data=event,
+                name="",
+            )
+        )
+    else:
+        try:
+            stream_writer(
+                CustomStreamEvent(
+                    event="on_custom_event",
+                    data=Packet(ind=ind, obj=cast(PacketObj, event)),
+                    name="",
+                )
+            )
+        except Exception:
+            # Fallback: stream directly if Packet wrapping fails
+            stream_writer(
+                CustomStreamEvent(
+                    event="on_custom_event",
+                    data=event,
+                    name="",
+                )
+            )
 
 
 def relevance_from_docs(

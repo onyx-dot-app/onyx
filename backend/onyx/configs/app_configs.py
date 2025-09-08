@@ -38,6 +38,9 @@ DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
+# If set to true, will show extra/uncommon connectors in the "Other" category
+SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
+
 # Controls whether to allow admin query history reports with:
 # 1. associated user emails
 # 2. anonymized user emails
@@ -231,9 +234,12 @@ try:
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
+# RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
-
+# Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
+# Note: This is separate from RDS IAM auth as they use different authentication mechanisms
+USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
@@ -606,6 +612,10 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # exception without aborting the attempt.
 INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
+# Maximum number of user file connector credential pairs to index in a single batch
+# Setting this number too high may overload the indexing process
+USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
+
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
@@ -832,12 +842,12 @@ S3_FILE_STORE_BUCKET_NAME = (
 )
 S3_FILE_STORE_PREFIX = os.environ.get("S3_FILE_STORE_PREFIX") or "onyx-files"
 # S3_ENDPOINT_URL is for MinIO and other S3-compatible storage. Leave blank for AWS S3.
-S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or "http://localhost:9004"
 S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 
 # S3/MinIO Access Keys
-S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
-S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID") or "minioadmin"
+S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY") or "minioadmin"
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

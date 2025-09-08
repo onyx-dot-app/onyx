@@ -24,6 +24,7 @@ ignore_errors = true
 
 [tool.ruff]
 line-length = 130
+target-version = "py311"
 
 [tool.ruff.lint]
 ignore = []

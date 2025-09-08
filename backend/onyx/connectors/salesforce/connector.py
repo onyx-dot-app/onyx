@@ -32,6 +32,7 @@ from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.connectors.salesforce.utils import get_sqlite_db_path
+from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
@@ -920,8 +921,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
                 # Get custom fields for parent type
                 field_set = set(custom_fields)
-                # these are expected and used during doc conversion
-                field_set.add(NAME_FIELD)
+                # used during doc conversion
+                # field_set.add(NAME_FIELD) # does not always exist
+                field_set.add(ID_FIELD)
                 field_set.add(MODIFIED_FIELD)
 
                 # Use only the specified fields
@@ -985,7 +987,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 ):
                     field_set = set(config_fields)
                     # these are expected and used during doc conversion
-                    field_set.add(NAME_FIELD)
+                    # field_set.add(NAME_FIELD) # does not always exist
+                    field_set.add(ID_FIELD)
                     field_set.add(MODIFIED_FIELD)
                     queryable_fields = field_set
                 else:

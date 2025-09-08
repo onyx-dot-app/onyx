@@ -300,7 +300,7 @@ export const DriveJsonUploadSection = ({
         <a
           className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm"
           target="_blank"
-          href="https://docs.onyx.app/connectors/google_drive#authorization"
+          href="https://docs.onyx.app/admin/connectors/official/google_drive/overview"
           rel="noreferrer"
         >
           <FiLink className="h-3 w-3" />

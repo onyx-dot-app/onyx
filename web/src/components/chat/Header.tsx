@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { UserDropdown } from "../UserDropdown";
 import { FiShare2 } from "react-icons/fi";
 import { SetStateAction, useContext, useEffect } from "react";
@@ -6,12 +7,12 @@ import { ChatSession } from "@/app/chat/interfaces";
 import Link from "next/link";
 import { pageType } from "@/components/sidebar/types";
 import { useRouter } from "next/navigation";
-import { ChatBanner } from "@/app/chat/ChatBanner";
+import { ChatBanner } from "@/app/chat/components/ChatBanner";
 import LogoWithText from "../header/LogoWithText";
 import { NewChatIcon } from "../icons/icons";
 import { SettingsContext } from "../settings/SettingsProvider";
 
-export default function FunctionalHeader({
+const FunctionalHeader = React.memo(function FunctionalHeader({
   page,
   removeHeight,
   currentChatSession,
@@ -35,28 +36,6 @@ export default function FunctionalHeader({
   documentSidebarVisible?: boolean;
 }) {
   const settings = useContext(SettingsContext);
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey) {
-        switch (event.key.toLowerCase()) {
-          case "u":
-            event.preventDefault();
-            window.open(
-              `/${page}` +
-                (currentChatSession
-                  ? `?assistantId=${currentChatSession.persona_id}`
-                  : ""),
-              "_self"
-            );
-            break;
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [page, currentChatSession]);
   const router = useRouter();
 
   const handleNewChat = () => {
@@ -216,4 +195,6 @@ export default function FunctionalHeader({
       </div>
     </div>
   );
-}
+});
+
+export default FunctionalHeader;

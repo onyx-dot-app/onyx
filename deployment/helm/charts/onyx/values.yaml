@@ -339,11 +339,6 @@ celery_beat:
     app: celery-beat
   deploymentLabels:
     app: celery-beat
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -367,11 +362,6 @@ celery_worker_heavy:
     app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -395,11 +385,6 @@ celery_worker_docprocessing:
     app: celery-worker-docprocessing
   deploymentLabels:
     app: celery-worker-docprocessing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -423,11 +408,6 @@ celery_worker_light:
     app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -451,11 +431,6 @@ celery_worker_monitoring:
     app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -479,11 +454,6 @@ celery_worker_primary:
     app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -507,11 +477,6 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   deploymentLabels:
     app: celery-worker-user-files-indexing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 2000m
@@ -548,6 +513,7 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
@@ -558,11 +524,6 @@ celery_worker_docfetching:
     app: celery-worker-docfetching
   deploymentLabels:
     app: celery-worker-docfetching
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -675,7 +636,9 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
-  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  # For sending verification emails, true or false
+  REQUIRE_EMAIL_VERIFICATION: ""
+  # If unspecified then defaults to 'smtp.gmail.com'
   SMTP_SERVER: ""
   # For sending verification emails, if unspecified then defaults to '587'
   SMTP_PORT: ""
@@ -723,7 +686,8 @@ configMap:
   CONTINUE_ON_CONNECTOR_FAILURE: ""
   EXPERIMENTAL_CHECKPOINTING_ENABLED: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
-  JIRA_API_VERSION: ""
+  JIRA_CLOUD_API_VERSION: ""
+  JIRA_SERVER_API_VERSION: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Worker Parallelism

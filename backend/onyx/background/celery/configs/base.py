@@ -12,6 +12,7 @@ from onyx.configs.app_configs import REDIS_PORT
 from onyx.configs.app_configs import REDIS_SSL
 from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
 from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
+from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 
@@ -25,7 +26,7 @@ REDIS_SCHEME = "redis"
 
 # SSL-specific query parameters for Redis URL
 SSL_QUERY_PARAMS = ""
-if REDIS_SSL:
+if REDIS_SSL and not USE_REDIS_IAM_AUTH:
     REDIS_SCHEME = "rediss"
     SSL_QUERY_PARAMS = f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
     if REDIS_SSL_CA_CERTS:

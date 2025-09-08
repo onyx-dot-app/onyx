@@ -235,7 +235,6 @@ def create_persona(
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
         datetime_aware=persona_upsert_request.datetime_aware,
-        include_citations=persona_upsert_request.include_citations,
         prompt_id=prompt_id,
     )
     prompt_snapshot = PromptSnapshot.from_model(prompt)
@@ -282,7 +281,6 @@ def update_persona(
         datetime_aware=persona_upsert_request.datetime_aware,
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
-        include_citations=persona_upsert_request.include_citations,
         prompt_id=prompt_id,
     )
     prompt_snapshot = PromptSnapshot.from_model(prompt)

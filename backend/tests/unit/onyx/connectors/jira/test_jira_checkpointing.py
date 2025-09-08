@@ -17,8 +17,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -41,6 +43,10 @@ def jira_connector(
     )
     connector._jira_client = mock_jira_client
     connector._jira_client.client_info.return_value = jira_base_url
+    connector._jira_client._options = MagicMock()
+    connector._jira_client._options.return_value = {
+        "rest_api_version": JIRA_SERVER_API_VERSION
+    }
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
 
@@ -361,7 +367,15 @@ def test_retrieve_all_slim_documents(
             InsufficientPermissionsError,
             "Your Jira token does not have sufficient permissions",
         ),
-        (404, ConnectorValidationError, "Jira project not found"),
+        (
+            # This test used to check for 404 project not found, but the jira validation logic for 404
+            # now returns an UnexpectedValidationError when no error text is provided.
+            # There's no point in passing the expected message and asserting it exists in the raised error
+            # If tested in the UI, wrong project key will still produce the expected error.
+            404,
+            UnexpectedValidationError,
+            "Unexpected Jira error during validation",
+        ),
         (
             429,
             ConnectorValidationError,

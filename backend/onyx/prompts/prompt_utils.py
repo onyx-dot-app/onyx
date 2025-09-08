@@ -76,7 +76,8 @@ def build_task_prompt_reminders(
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
     base_task = prompt.task_prompt
-    citation_or_nothing = citation_str if prompt.include_citations else ""
+    # Citations are always enabled
+    citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
 

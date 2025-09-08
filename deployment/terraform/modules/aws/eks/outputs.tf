@@ -11,7 +11,7 @@ output "cluster_certificate_authority_data" {
   sensitive = true
 }
 
-output "s3_access_role_arn" {
-  description = "ARN of the IAM role for S3 access"
-  value       = length(module.irsa-s3-access) > 0 ? module.irsa-s3-access[0].iam_role_arn : null
+output "workload_irsa_role_arn" {
+  description = "ARN of the IAM role for workloads (S3 + optional RDS)"
+  value       = length(module.irsa-workload-access) > 0 ? module.irsa-workload-access[0].iam_role_arn : null
 }

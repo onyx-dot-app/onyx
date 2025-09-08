@@ -128,6 +128,12 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     assert target_test_doc.title == test_data["title"]
 
 
+@pytest.mark.skip(
+    reason=(
+        "All Salesforce tests need to be re-thought + made less flakey. "
+        "We need to handle credential resets + the rate limits (move to a smaller dataset)"
+    )
+)
 def test_salesforce_connector_poll_source(
     salesforce_connector: SalesforceConnector,
 ) -> None:

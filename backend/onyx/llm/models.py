@@ -6,6 +6,7 @@ from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.utils import build_content_with_imgs
@@ -25,6 +26,7 @@ class PreviousMessage(BaseModel):
     files: list[InMemoryChatFile]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None
+    research_answer_purpose: ResearchAnswerPurpose | None
 
     @classmethod
     def from_chat_message(
@@ -52,6 +54,7 @@ class PreviousMessage(BaseModel):
                 else None
             ),
             refined_answer_improvement=chat_message.refined_answer_improvement,
+            research_answer_purpose=chat_message.research_answer_purpose,
         )
 
     def to_langchain_msg(self) -> BaseMessage:
@@ -81,4 +84,5 @@ class PreviousMessage(BaseModel):
             files=[],
             tool_call=None,
             refined_answer_improvement=None,
+            research_answer_purpose=None,
         )

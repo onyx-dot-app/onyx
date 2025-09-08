@@ -5,7 +5,7 @@ import {
   NotificationType,
 } from "@/app/admin/settings/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { useAssistants } from "../context/AssistantsContext";
+import { useAssistantsContext } from "../context/AssistantsContext";
 import { useUser } from "../user/UserProvider";
 import { XIcon } from "../icons/icons";
 import { Spinner } from "@phosphor-icons/react";
@@ -22,7 +22,7 @@ export const Notifications = ({
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const router = useRouter();
-  const { refreshAssistants } = useAssistants();
+  const { refreshAssistants } = useAssistantsContext();
 
   const { refreshUser } = useUser();
   const [personas, setPersonas] = useState<Record<number, Persona> | undefined>(

@@ -61,3 +61,9 @@ variable "tags" {
   description = "Tags to apply to RDS resources"
   default     = {}
 }
+
+variable "enable_rds_iam_auth" {
+  type        = bool
+  description = "Enable AWS IAM database authentication for this RDS instance"
+  default     = false
+}

@@ -24,7 +24,6 @@ class PromptSnapshot(BaseModel):
     description: str
     system_prompt: str
     task_prompt: str
-    include_citations: bool
     datetime_aware: bool
     default_prompt: bool
     # Not including persona info, not needed
@@ -40,7 +39,6 @@ class PromptSnapshot(BaseModel):
             description=prompt.description,
             system_prompt=prompt.system_prompt,
             task_prompt=prompt.task_prompt,
-            include_citations=prompt.include_citations,
             datetime_aware=prompt.datetime_aware,
             default_prompt=prompt.default_prompt,
         )
@@ -63,7 +61,6 @@ class PersonaUpsertRequest(BaseModel):
     datetime_aware: bool
     document_set_ids: list[int]
     num_chunks: float
-    include_citations: bool
     is_public: bool
     recency_bias: RecencyBiasSetting
     prompt_ids: list[int]

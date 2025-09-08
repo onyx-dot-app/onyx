@@ -38,7 +38,6 @@ def prompt_config() -> PromptConfig:
         system_prompt="System prompt",
         task_prompt="Task prompt",
         datetime_aware=False,
-        include_citations=True,
     )
 
 

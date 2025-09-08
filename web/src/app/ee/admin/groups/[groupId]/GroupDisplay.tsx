@@ -296,7 +296,7 @@ export const GroupDisplay = ({
       </div>
 
       <TooltipProvider>
-        <Tooltip delayDuration={0}>
+        <Tooltip>
           <TooltipTrigger asChild>
             <Button
               size="sm"
@@ -408,7 +408,7 @@ export const GroupDisplay = ({
       </div>
 
       <TooltipProvider>
-        <Tooltip delayDuration={0}>
+        <Tooltip>
           <TooltipTrigger asChild>
             <Button
               size="sm"

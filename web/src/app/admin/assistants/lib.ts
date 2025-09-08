@@ -9,7 +9,6 @@ interface PersonaUpsertRequest {
   datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
-  include_citations: boolean;
   is_public: boolean;
   recency_bias: string;
   prompt_ids: number[];
@@ -42,7 +41,6 @@ export interface PersonaUpsertParameters {
   datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
-  include_citations: boolean;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
@@ -107,7 +105,6 @@ function buildPersonaUpsertRequest(
     task_prompt,
     document_set_ids,
     num_chunks,
-    include_citations,
     is_public,
     groups,
     existing_prompt_id,
@@ -129,7 +126,6 @@ function buildPersonaUpsertRequest(
     task_prompt,
     document_set_ids,
     num_chunks,
-    include_citations,
     is_public,
     uploaded_image_id,
     groups,

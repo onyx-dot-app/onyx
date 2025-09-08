@@ -7,10 +7,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    get_doc_information_for_entity,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import KGSourceDivisionType
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
@@ -23,7 +19,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import SubQueryPiece
 from onyx.configs.kg_configs import KG_MAX_SEARCH_DOCUMENTS
 from onyx.configs.kg_configs import KG_OBJECT_SOURCE_RESEARCH_TIMEOUT
 from onyx.context.search.models import InferenceSection
@@ -44,8 +39,6 @@ def process_individual_deep_search(
     LangGraph node to start the agentic search process.
     """
 
-    _KG_STEP_NR = 4
-
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
@@ -58,7 +51,7 @@ def process_individual_deep_search(
     if not search_tool:
         raise ValueError("search_tool is not provided")
 
-    research_nr = state.research_nr
+    state.research_nr
 
     if segment_type == KGSourceDivisionType.ENTITY.value:
 
@@ -96,18 +89,6 @@ def process_individual_deep_search(
 
         kg_entity_filters = None
         kg_relationship_filters = None
-
-    # Step 4 - stream out the research query
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query=f"{get_doc_information_for_entity(object).semantic_entity_name}",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=research_nr + 1,
-        ),
-        writer,
-    )
 
     if source_filters and (len(source_filters) > KG_MAX_SEARCH_DOCUMENTS):
         logger.debug(

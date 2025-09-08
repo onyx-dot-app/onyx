@@ -151,7 +151,7 @@ def add_chat_to_folder_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{folder_id}/remove-chat-session/")
+@router.post("/{folder_id}/remove-chat-session")
 def remove_chat_from_folder_endpoint(
     request: FolderChatSessionRequest,
     folder_id: int = Path(

@@ -17,8 +17,6 @@ from typing import NamedTuple
 from zipfile import BadZipFile
 
 import chardet
-from docx import Document as DocxDocument
-from fastapi import UploadFile
 from markitdown import FileConversionException
 from markitdown import MarkItDown
 from markitdown import UnsupportedFormatException
@@ -26,14 +24,12 @@ from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
-from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
-from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -604,27 +600,6 @@ def extract_text_and_images(
     except Exception as e:
         logger.exception(f"Failed to extract text/images from {file_name}: {e}")
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
-
-
-def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
-    """
-    Helper to convert docx to a .txt file in the same filestore.
-    """
-    file.file.seek(0)
-    docx_content = file.file.read()
-    doc = DocxDocument(BytesIO(docx_content))
-
-    # Extract text from the document
-    all_paras = [p.text for p in doc.paragraphs]
-    text_content = "\n".join(all_paras)
-
-    file_id = file_store.save_file(
-        content=BytesIO(text_content.encode("utf-8")),
-        display_name=file.filename,
-        file_origin=FileOrigin.CONNECTOR,
-        file_type="text/plain",
-    )
-    return file_id
 
 
 def docx_to_txt_filename(file_path: str) -> str:

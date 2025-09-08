@@ -17,6 +17,14 @@ def get_tools(db_session: Session) -> list[Tool]:
     return list(db_session.scalars(select(Tool)).all())
 
 
+def get_tools_by_mcp_server_id(mcp_server_id: int, db_session: Session) -> list[Tool]:
+    return list(
+        db_session.scalars(
+            select(Tool).where(Tool.mcp_server_id == mcp_server_id)
+        ).all()
+    )
+
+
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     tool = db_session.scalar(select(Tool).where(Tool.id == tool_id))
     if not tool:
@@ -31,7 +39,7 @@ def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
     return tool
 
 
-def create_tool(
+def create_tool__no_commit(
     name: str,
     description: str | None,
     openapi_schema: dict[str, Any] | None,
@@ -52,7 +60,7 @@ def create_tool(
         passthrough_auth=passthrough_auth,
     )
     db_session.add(new_tool)
-    db_session.commit()
+    db_session.flush()  # Don't commit yet, let caller decide when to commit
     return new_tool
 
 
@@ -89,10 +97,10 @@ def update_tool(
     return tool
 
 
-def delete_tool(tool_id: int, db_session: Session) -> None:
+def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")
 
     db_session.delete(tool)
-    db_session.commit()
+    db_session.flush()  # Don't commit yet, let caller decide when to commit

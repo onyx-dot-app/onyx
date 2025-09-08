@@ -33,7 +33,7 @@ class LLMProviderManager:
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
             provider=provider or "openai",
-            default_model_name=default_model_name or "gpt-4o-mini",
+            default_model_name=default_model_name or "gpt-4o",
             api_key=api_key or os.environ["OPENAI_API_KEY"],
             api_base=api_base,
             api_version=api_version,
