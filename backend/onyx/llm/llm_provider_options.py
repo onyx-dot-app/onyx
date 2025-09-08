@@ -264,7 +264,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
                     description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/gen_ai_configs/vertex_ai) for all possible values.",
+                    "[Vertex AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) for all possible values.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,

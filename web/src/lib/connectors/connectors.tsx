@@ -663,7 +663,7 @@ export const connectorConfigs: Record<
                   "\n    }" +
                   "\n  }" +
                   "\n}" +
-                  "\n\n[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.",
+                  "\n\n[See our docs](https://docs.onyx.app/admin/connectors/official/salesforce) for more details.",
               },
             ],
           },
