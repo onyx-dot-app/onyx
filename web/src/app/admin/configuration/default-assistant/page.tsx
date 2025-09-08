@@ -12,6 +12,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
+import { Button } from "@/components/ui/button";
 
 interface DefaultAssistantConfiguration {
   tool_ids: string[];
@@ -32,7 +33,7 @@ const AVAILABLE_TOOLS = [
       "Enable searching through connected documents and knowledge sources",
   },
   {
-    id: "InternetSearchTool",
+    id: "WebSearchTool",
     display_name: "Web Search",
     description:
       "Enable web search for current information and online resources",
@@ -164,6 +165,14 @@ function DefaultAssistantConfig() {
                 placeholder="Enter custom instructions for the assistant..."
                 disabled={isSaving}
               />
+              <div className="flex justify-between items-center mt-2">
+                <div className="text-sm text-gray-500">
+                  {systemPrompt.length} characters
+                </div>
+                <Button onClick={handleSaveSystemPrompt} disabled={isSaving}>
+                  Save Instructions
+                </Button>
+              </div>
             </div>
           </div>
 

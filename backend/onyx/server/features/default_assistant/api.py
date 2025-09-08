@@ -43,7 +43,7 @@ def get_default_assistant_configuration(
     )
 
 
-@router.patch("/")
+@router.patch("")
 def update_default_assistant(
     update_request: DefaultAssistantUpdateRequest,
     _: User = Depends(current_admin_user),

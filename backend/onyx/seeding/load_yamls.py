@@ -79,26 +79,19 @@ def load_builtin_personas(db_session: Session) -> None:
     logger.info("Loading default personas")
     try:
         default_persona = get_default_persona()
-
-        # Check if persona already exists
-        persona_id = (
-            0
-            if default_persona.id == 0
-            else (-1 * default_persona.id) if default_persona.id is not None else None
-        )
-
-        existing_persona = None
-        if persona_id is not None:
-            try:
-                existing_persona = get_persona_by_id(
-                    persona_id=persona_id,
-                    user=None,
-                    db_session=db_session,
-                    include_deleted=True,
-                    is_for_edit=True,
-                )
-            except Exception:
+        try:
+            existing_persona = get_persona_by_id(
+                persona_id=default_persona.id,
+                user=None,
+                db_session=db_session,
+                include_deleted=True,
+                is_for_edit=True,
+            )
+            # handle case where empty persona exists
+            if not existing_persona.name:
                 existing_persona = None
+        except Exception:
+            existing_persona = None
 
         # Prepare admin-controlled fields and tool_ids based on existence
         if not existing_persona:
@@ -221,7 +214,7 @@ def load_builtin_personas(db_session: Session) -> None:
         # Single upsert call with appropriate fields
         upsert_persona(
             user=None,
-            persona_id=persona_id,
+            persona_id=default_persona.id,
             # Always updated fields
             name=(existing_persona.name if existing_persona else default_persona.name),
             description=(

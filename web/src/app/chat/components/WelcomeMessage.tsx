@@ -40,7 +40,7 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
             </div>
             <div
               data-testid="greeting-message"
-              className="ml-6 text-text-600 text-3xl font-bold max-w-md"
+              className="ml-6 text-text-600 dark:text-neutral-100 text-3xl font-bold max-w-md"
             >
               {greeting}
             </div>
