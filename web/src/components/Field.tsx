@@ -110,7 +110,9 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
 
   return (
     <span
-      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
+      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${
+        hasNewlines ? "whitespace-pre-wrap" : ""
+      }`}
     >
       {children}
     </span>

@@ -45,7 +45,9 @@ export function useReIndexModal(
       // Show appropriate notification based on result
       if (result.success) {
         setPopup({
-          message: `${fromBeginning ? "Complete re-indexing" : "Indexing update"} started successfully`,
+          message: `${
+            fromBeginning ? "Complete re-indexing" : "Indexing update"
+          } started successfully`,
           type: "success",
         });
       } else {
@@ -98,7 +100,9 @@ export default function ReIndexModal({
     try {
       // First show immediate feedback with a popup
       setPopup({
-        message: `Starting ${fromBeginning ? "complete re-indexing" : "indexing update"}...`,
+        message: `Starting ${
+          fromBeginning ? "complete re-indexing" : "indexing update"
+        }...`,
         type: "info",
       });
 

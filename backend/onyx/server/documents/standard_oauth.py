@@ -177,8 +177,9 @@ def oauth_callback(
 
     connector_cls = oauth_connectors[source]
 
-    # get state from redis
-    redis_client = get_redis_client()
+    # get state from redis (use the same tenant scoping as in authorize)
+    tenant_id = get_current_tenant_id()
+    redis_client = get_redis_client(tenant_id=tenant_id)
     oauth_state_bytes = cast(
         bytes, redis_client.get(_OAUTH_STATE_KEY_FMT.format(state=state))
     )

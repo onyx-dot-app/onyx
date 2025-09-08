@@ -81,7 +81,11 @@ function ExpandedToolItem({
           )}
 
           <div
-            className={`${expandedText ? "text-sm " + STANDARD_TEXT_COLOR : "text-xs text-text-600"}`}
+            className={`${
+              expandedText
+                ? "text-sm " + STANDARD_TEXT_COLOR
+                : "text-xs text-text-600"
+            }`}
           >
             {expandedText || content}
           </div>

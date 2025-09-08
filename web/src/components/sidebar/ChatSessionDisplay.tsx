@@ -370,7 +370,9 @@ export function ChatSessionDisplay({
                                     )}
                                     {chatSession.folder_id !== null && (
                                       <DefaultDropdownElement
-                                        name={`Move out of ${parentFolderName ?? "group"}?`}
+                                        name={`Move out of ${
+                                          parentFolderName ?? "group"
+                                        }?`}
                                         icon={FiArrowRight}
                                         onSelect={handleMoveOutOfFolder}
                                       />
