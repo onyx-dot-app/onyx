@@ -23,6 +23,18 @@ RUN mkdir -p /app && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
 
+
+# --- add toolchain needed for Rust/Python builds (fastuuid) ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    rustc cargo \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         --retries 5 \
