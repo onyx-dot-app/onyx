@@ -19,7 +19,7 @@ _GENERIC_ERROR_MESSAGE = "WebSearchTool should only be used by the Deep Research
 
 
 class WebSearchTool(Tool[None]):
-    _NAME = "run_web_search"  # TODO: change to run_web_search along with the remaning changes to 'web'
+    _NAME = "run_web_search"
     _DESCRIPTION = "Search the web for information. Never call this tool."
     _DISPLAY_NAME = "Web Search"
 

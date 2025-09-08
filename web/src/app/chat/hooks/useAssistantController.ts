@@ -41,7 +41,7 @@ export function useAssistantController({
 
   // Current assistant is decided based on this ordering
   // 1. Alternative assistant (assistant selected explicitly by user)
-  // 2. Selected assistant (assistnat default in this chat session)
+  // 2. Selected assistant (assistant default in this chat session)
   // 3. Unified assistant (ID 0) if available
   // 4. First pinned assistants (ordered list of pinned assistants)
   // 5. Available assistants (ordered list of available assistants)

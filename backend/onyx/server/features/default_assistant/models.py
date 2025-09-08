@@ -4,10 +4,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
-# Valid built-in tool IDs that can be toggled for the default assistant
-VALID_BUILTIN_TOOL_IDS = ["SearchTool", "WebSearchTool", "ImageGenerationTool"]
-
-
 class DefaultAssistantConfiguration(BaseModel):
     """Simplified view of default assistant configuration for admin UI."""
 
@@ -24,7 +20,7 @@ class DefaultAssistantUpdateRequest(BaseModel):
 
     tool_ids: list[int] | None = Field(
         default=None,
-        description="List of tool IDs to enable. If provided, must be from VALID_BUILTIN_TOOL_IDS",
+        description="List of tool IDs to enable. Must be Web Search, Internal Search, or Image Generation",
     )
     system_prompt: str | None = Field(
         default=None,

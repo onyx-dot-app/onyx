@@ -144,8 +144,6 @@ DEFAULT_PERSONA = DefaultPersona(
     display_priority=0,
     is_visible=True,
     is_default_persona=True,
-    image_generation=True,
-    web_search=True,
     # no starter messages by default, let the admin configure if they want
     starter_messages=[],
 )
