@@ -80,10 +80,19 @@ def run_flow(base_url: str, cookie: str, client_id: str, client_secret: str) -> 
         "client_secret" not in redirect_url, "client_secret leaked into authorize URL"
     )
 
-    # 5) Grab state for optional manual callback testing (not executed here)
-    state = _parse_state_from_redirect(redirect_url)
-    print("Authorize URL:", redirect_url)
-    print("Extracted state:", state or "<not found>")
+    # 5) Print an URL with redacted state to avoid leaking sensitive data
+    try:
+        parsed = urllib.parse.urlparse(redirect_url)
+        q = urllib.parse.parse_qs(parsed.query)
+        if "state" in q:
+            q["state"] = ["<redacted>"]
+        safe_url = urllib.parse.urlunparse(
+            parsed._replace(query=urllib.parse.urlencode(q, doseq=True))
+        )
+    except Exception:
+        safe_url = "<redacted>"
+
+    print("Authorize URL:", safe_url)
 
 
 def parse_args() -> Tuple[str, str, str, str]:
