@@ -23,11 +23,6 @@ RUN mkdir -p /app && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
 
-# install rust and cargo, needed for `pip install` of `litellm`
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cargo rustc pkg-config \
- && rm -rf /var/lib/apt/lists/*
-
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         --retries 5 \
