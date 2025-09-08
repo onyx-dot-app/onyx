@@ -198,10 +198,10 @@ const collections = (
               name: (
                 <div className="flex">
                   <ChatIcon className="text-text-700" size={18} />
-                  <div className="ml-1">Chat Settings</div>
+                  <div className="ml-1">Default Assistant</div>
                 </div>
               ),
-              link: "/admin/configuration/chat-settings",
+              link: "/admin/configuration/default-assistant",
             },
             {
               name: (

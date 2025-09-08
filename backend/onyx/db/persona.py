@@ -891,3 +891,63 @@ def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
     if persona is None:
         raise ValueError(f"Persona with ID {persona_id} does not exist")
     return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)
+
+
+def get_default_assistant(db_session: Session) -> Persona | None:
+    """Fetch the default assistant (persona with is_default_persona=True)."""
+    return (
+        db_session.query(Persona)
+        .options(selectinload(Persona.tools))
+        .filter(Persona.is_default_persona == True)  # noqa: E712
+        .one_or_none()
+    )
+
+
+def update_default_assistant_configuration(
+    db_session: Session,
+    tool_ids: list[str] | None = None,
+    system_prompt: str | None = None,
+) -> Persona:
+    """Update only tools and system_prompt for the default assistant.
+
+    Args:
+        db_session: Database session
+        tool_ids: List of tool IDs to enable (if None, tools are not updated)
+        system_prompt: New system prompt (if None, system prompt is not updated)
+
+    Returns:
+        Updated Persona object
+
+    Raises:
+        ValueError: If default assistant not found or invalid tool IDs provided
+    """
+    # Valid built-in tool IDs
+    VALID_BUILTIN_TOOL_IDS = ["SearchTool", "InternetSearchTool", "ImageGenerationTool"]
+
+    # Get the default assistant
+    persona = get_default_assistant(db_session)
+    if not persona:
+        raise ValueError("Default assistant not found")
+
+    # Update system prompt if provided
+    if system_prompt is not None:
+        persona.system_prompt = system_prompt
+
+    # Update tools if provided
+    if tool_ids is not None:
+        # Validate tool IDs
+        invalid_tools = [tid for tid in tool_ids if tid not in VALID_BUILTIN_TOOL_IDS]
+        if invalid_tools:
+            raise ValueError(f"Invalid tool IDs: {invalid_tools}")
+
+        # Clear existing tool associations
+        persona.tools = []
+
+        # Add new tool associations
+        for tool_id in tool_ids:
+            tool = db_session.query(Tool).filter(Tool.name == tool_id).one_or_none()
+            if tool:
+                persona.tools.append(tool)
+
+    db_session.commit()
+    return persona
