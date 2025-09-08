@@ -170,8 +170,11 @@ def build_vespa_filters(
     # Document sets
     filter_str += _build_or_filters(DOCUMENT_SETS, filters.document_set)
 
-    # New: user_file_ids as integer filters
-    filter_str += _build_or_filters(DOCUMENT_ID, filters.user_file_ids)
+    # Convert UUIDs to strings for user_file_ids
+    user_file_ids_str = (
+        [str(uuid) for uuid in filters.user_file_ids] if filters.user_file_ids else None
+    )
+    filter_str += _build_or_filters(DOCUMENT_ID, user_file_ids_str)
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
