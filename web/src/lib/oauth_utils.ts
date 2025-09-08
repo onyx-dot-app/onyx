@@ -276,9 +276,6 @@ export async function handleOAuthConfluencePrepareFinalization(
 
   const response = await fetch(url, {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 
   if (!response.ok) {
