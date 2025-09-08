@@ -22,6 +22,8 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
+  NewChatIcon,
+  ChatIcon,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -195,6 +197,15 @@ const collections = (
             {
               name: (
                 <div className="flex">
+                  <ChatIcon className="text-text-700" size={18} />
+                  <div className="ml-1">Chat Settings</div>
+                </div>
+              ),
+              link: "/admin/configuration/chat-settings",
+            },
+            {
+              name: (
+                <div className="flex">
                   <CpuIconSkeleton className="text-text-700" size={18} />
                   <div className="ml-1">LLM</div>
                 </div>
@@ -219,15 +230,6 @@ const collections = (
                 </div>
               ),
               link: "/admin/configuration/document-processing",
-            },
-            {
-              name: (
-                <div className="flex">
-                  <AssistantsIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">Default Assistant</div>
-                </div>
-              ),
-              link: "/admin/configuration/default-assistant",
             },
             ...(kgExposed
               ? [

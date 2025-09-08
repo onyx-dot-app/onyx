@@ -3,6 +3,7 @@ import { Logo } from "@/components/logo/Logo";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { useMemo } from "react";
+import { cn } from "@/lib/utils";
 
 interface WelcomeMessageProps {
   assistant: MinimalPersonaSnapshot;
@@ -18,7 +19,18 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
   return (
     <div
       data-testid="chat-intro"
-      className="row-start-1 self-end flex flex-col items-center text-text-800 justify-center mb-6 transition-opacity duration-300"
+      className={cn(
+        "row-start-1",
+        "self-end",
+        "flex",
+        "flex-col",
+        "items-center",
+        "text-text-800",
+        "justify-center",
+        "mb-6",
+        "transition-opacity",
+        "duration-300"
+      )}
     >
       <div className="flex items-center">
         {isUnifiedAssistant ? (

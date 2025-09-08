@@ -6,14 +6,13 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { AssistantsIconSkeleton } from "@/components/icons/icons";
-import CardSection from "@/components/admin/CardSection";
+import { ChatIcon } from "@/components/icons/icons";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { FiCheck, FiX } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 interface Tool {
   id: number;
@@ -51,16 +50,38 @@ function DefaultAssistantConfig() {
     }
   }, [defaultAssistant]);
 
-  const handleToggleTool = (toolId: number) => {
-    setEnabledTools((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId);
-      } else {
-        newSet.add(toolId);
-      }
-      return newSet;
+  const persistEnabledTools = async (toolIds: number[]) => {
+    if (!defaultAssistant) return;
+    const response = await fetch(`/api/persona/${defaultAssistant.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool_ids: toolIds }),
     });
+    if (!response.ok) {
+      throw new Error("Failed to update assistant");
+    }
+  };
+
+  const handleToggleTool = async (toolId: number) => {
+    if (!defaultAssistant || isSaving) return;
+    setIsSaving(true);
+    const previous = new Set(enabledTools);
+    const next = new Set(enabledTools);
+    if (next.has(toolId)) {
+      next.delete(toolId);
+    } else {
+      next.add(toolId);
+    }
+    setEnabledTools(next);
+    try {
+      await persistEnabledTools(Array.from(next));
+      await mutate("/api/persona");
+    } catch (e) {
+      setEnabledTools(previous);
+      setPopup({ message: "Failed to save. Please try again.", type: "error" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -129,41 +150,31 @@ function DefaultAssistantConfig() {
   return (
     <div>
       {popup}
-
-      <Title className="mb-2 !text-2xl">Default Assistant Configuration</Title>
-      <Text className="mb-6">
-        Configure which capabilities are enabled for the default assistant.
-        These settings apply to all users who haven&apos;t customized their
-        assistant preferences.
-      </Text>
-
-      <CardSection>
+      <div className="max-w-4xl w-full">
         <div className="space-y-6">
           <div>
-            <Title className="mb-4 !text-lg">Assistant Details</Title>
-            <div className="space-y-2">
-              <div>
-                <Text className="font-semibold">Name:</Text>
-                <Text className="text-text-700">{defaultAssistant.name}</Text>
-              </div>
-              <div>
-                <Text className="font-semibold">Description:</Text>
-                <Text className="text-text-700">
-                  {defaultAssistant.description}
-                </Text>
-              </div>
-            </div>
+            <p className="text-base font-normal text-2xl">Default Assistant</p>
+            <Text className="mb-2 text-text-dark">
+              Configure which capabilities are enabled for the default assistant
+              in chat. These settings apply to all users who haven&apos;t
+              customized their assistant preferences.
+            </Text>
           </div>
 
+          <Separator />
+
           <div>
-            <Title className="mb-4 !text-lg">Available Capabilities</Title>
-            <div className="space-y-4">
+            <p className="block font-medium text-sm mb-2">
+              Available Capabilities
+            </p>
+            <div className="space-y-3">
               {searchTool && (
                 <ToolToggle
                   tool={searchTool}
                   enabled={enabledTools.has(searchTool.id)}
                   onToggle={() => handleToggleTool(searchTool.id)}
                   description="Enable searching through connected documents and knowledge sources"
+                  disabled={isSaving}
                 />
               )}
 
@@ -173,6 +184,7 @@ function DefaultAssistantConfig() {
                   enabled={enabledTools.has(internetSearchTool.id)}
                   onToggle={() => handleToggleTool(internetSearchTool.id)}
                   description="Enable web search for current information and online resources"
+                  disabled={isSaving}
                 />
               )}
 
@@ -182,17 +194,12 @@ function DefaultAssistantConfig() {
                   enabled={enabledTools.has(imageGenerationTool.id)}
                   onToggle={() => handleToggleTool(imageGenerationTool.id)}
                   description="Enable AI image generation based on text descriptions"
+                  disabled={isSaving}
                 />
               )}
             </div>
           </div>
         </div>
-      </CardSection>
-
-      <div className="mt-6 flex gap-2">
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save Configuration"}
-        </Button>
       </div>
     </div>
   );
@@ -203,49 +210,35 @@ function ToolToggle({
   enabled,
   onToggle,
   description,
+  disabled,
 }: {
   tool: Tool;
   enabled: boolean;
   onToggle: () => void;
   description: string;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-start space-x-4 p-4 rounded-lg border border-border">
-      <button
-        onClick={onToggle}
-        className={`mt-1 flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
-          enabled
-            ? "bg-success-500 text-white"
-            : "bg-background-100 border border-border-300"
-        }`}
-      >
-        {enabled ? <FiCheck size={16} /> : <FiX size={16} />}
-      </button>
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <Text className="font-semibold">{tool.display_name}</Text>
-          <span
-            className={`px-2 py-0.5 rounded text-xs font-medium ${
-              enabled
-                ? "bg-success-100 text-success-700"
-                : "bg-background-100 text-text-500"
-            }`}
-          >
-            {enabled ? "Enabled" : "Disabled"}
-          </span>
-        </div>
+    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+      <div className="flex-1 pr-4">
+        <div className="text-sm font-medium">{tool.display_name}</div>
         <Text className="text-sm text-text-600 mt-1">{description}</Text>
       </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={onToggle}
+        disabled={disabled}
+      />
     </div>
   );
 }
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
+    <div className="mx-auto max-w-4xl">
       <AdminPageTitle
-        title="Default Assistant"
-        icon={<AssistantsIconSkeleton size={32} className="my-auto" />}
+        title="Chat Settings"
+        icon={<ChatIcon size={32} className="my-auto" />}
       />
       <DefaultAssistantConfig />
     </div>
