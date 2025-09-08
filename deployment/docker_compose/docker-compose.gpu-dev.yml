@@ -77,7 +77,6 @@ services:
       # We do not recommend changing this value
       - SYSTEM_RECURSION_LIMIT=${SYSTEM_RECURSION_LIMIT:-}
       # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.onyx.app/more/telemetry
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
       - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
@@ -208,7 +207,6 @@ services:
       - DANSWER_BOT_MAX_WAIT_TIME=${DANSWER_BOT_MAX_WAIT_TIME:-}
       # Logging
       # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.onyx.app/more/telemetry
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
       - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging

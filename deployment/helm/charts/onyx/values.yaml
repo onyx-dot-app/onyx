@@ -702,7 +702,6 @@ configMap:
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
-  # https://docs.onyx.app/more/telemetry
   DISABLE_TELEMETRY: ""
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""
