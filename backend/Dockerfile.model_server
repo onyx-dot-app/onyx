@@ -23,17 +23,21 @@ RUN mkdir -p /app && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
 
-
 # --- add toolchain needed for Rust/Python builds (fastuuid) ---
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    rustc cargo \
-    libssl-dev \
-    libffi-dev \
-    python3-dev \
-    curl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN set -eux; \
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        pkg-config \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    # Install latest stable Rust (supports Cargo.lock v4)
+    && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
+    && rustc --version && cargo --version
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
