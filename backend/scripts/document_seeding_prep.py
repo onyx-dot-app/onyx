@@ -38,7 +38,7 @@ for d in raw_docs:
     title = (d.get("title") or "").strip()
     content = d.get("content") or ""
     url = d.get("url") or ""
-    chunk_ind = int(d.get("chunk_ind", 0) or 0)
+    chunk_ind = int(d.get("chunk_ind", 0))
 
     title_emb = list(model.encode(f"search_document: {title}"))
     content_emb = list(model.encode(f"search_document: {title}\n{content}"))
