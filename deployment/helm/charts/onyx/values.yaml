@@ -599,6 +599,7 @@ letsencrypt:
   enabled: false
   email: "abc@abc.com"
 
+# -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
@@ -610,7 +611,7 @@ auth:
     # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       POSTGRES_PASSWORD: "postgres_password"
-    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       postgres_password: "postgres"
   redis:
@@ -623,7 +624,7 @@ auth:
     # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       REDIS_PASSWORD: redis_password
-    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       redis_password: "password"
   objectstorage:
@@ -637,7 +638,7 @@ auth:
     secretKeys:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
-    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       s3_aws_access_key_id: "minioadmin"
       s3_aws_secret_access_key: "minioadmin"
@@ -653,7 +654,7 @@ auth:
       OAUTH_CLIENT_ID: "oauth_client_id"
       OAUTH_CLIENT_SECRET: "oauth_client_secret"
       OAUTH_COOKIE_SECRET: "oauth_cookie_secret"
-    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       oauth_client_id: ""
       oauth_client_secret: ""
@@ -668,7 +669,7 @@ auth:
     # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       SMTP_PASS: "smtp_pass"
-    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       smtp_pass: ""
 
