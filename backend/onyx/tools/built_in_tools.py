@@ -60,7 +60,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
             InCodeToolInfo(
                 cls=WebSearchTool,
                 description=(
-                    "The Internet Search Action allows the assistant "
+                    "The Web Search Action allows the assistant "
                     "to perform internet searches for up-to-date information."
                 ),
                 in_code_tool_id=WebSearchTool.__name__,
@@ -94,6 +94,10 @@ who reports to them.",
         else []
     ),
 ]
+
+
+def get_built_in_tool_ids() -> list[str]:
+    return [tool["in_code_tool_id"] for tool in BUILT_IN_TOOLS]
 
 
 def load_builtin_tools(db_session: Session) -> None:

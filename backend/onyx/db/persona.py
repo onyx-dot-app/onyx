@@ -905,7 +905,7 @@ def get_default_assistant(db_session: Session) -> Persona | None:
 
 def update_default_assistant_configuration(
     db_session: Session,
-    tool_ids: list[str] | None = None,
+    tool_ids: list[int] | None = None,
     system_prompt: str | None = None,
 ) -> Persona:
     """Update only tools and system_prompt for the default assistant.
@@ -921,9 +921,6 @@ def update_default_assistant_configuration(
     Raises:
         ValueError: If default assistant not found or invalid tool IDs provided
     """
-    # Valid built-in tool IDs
-    VALID_BUILTIN_TOOL_IDS = ["SearchTool", "InternetSearchTool", "ImageGenerationTool"]
-
     # Get the default assistant
     persona = get_default_assistant(db_session)
     if not persona:
@@ -935,19 +932,18 @@ def update_default_assistant_configuration(
 
     # Update tools if provided
     if tool_ids is not None:
-        # Validate tool IDs
-        invalid_tools = [tid for tid in tool_ids if tid not in VALID_BUILTIN_TOOL_IDS]
-        if invalid_tools:
-            raise ValueError(f"Invalid tool IDs: {invalid_tools}")
-
         # Clear existing tool associations
         persona.tools = []
 
         # Add new tool associations
         for tool_id in tool_ids:
-            tool = db_session.query(Tool).filter(Tool.name == tool_id).one_or_none()
-            if tool:
-                persona.tools.append(tool)
+            tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
+            if not tool:
+                raise ValueError(f"Tool with ID {tool_id} not found")
+            if tool.in_code_tool_id is None:
+                raise ValueError(f"Tool with ID {tool_id} is not a built-in tool")
+
+            persona.tools.append(tool)
 
     db_session.commit()
     return persona

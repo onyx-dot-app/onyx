@@ -15,41 +15,33 @@ import { SubLabel } from "@/components/Field";
 import { Button } from "@/components/ui/button";
 
 interface DefaultAssistantConfiguration {
-  tool_ids: string[];
+  tool_ids: number[];
   system_prompt: string;
 }
 
 interface DefaultAssistantUpdateRequest {
-  tool_ids?: string[];
+  tool_ids?: number[];
   system_prompt?: string;
 }
 
-// Hardcoded tool definitions for the frontend
-const AVAILABLE_TOOLS = [
-  {
-    id: "SearchTool",
-    display_name: "Internal Search",
-    description:
-      "Enable searching through connected documents and knowledge sources",
-  },
-  {
-    id: "WebSearchTool",
-    display_name: "Web Search",
-    description:
-      "Enable web search for current information and online resources",
-  },
-  {
-    id: "ImageGenerationTool",
-    display_name: "Image Generation",
-    description: "Enable AI image generation based on text descriptions",
-  },
-];
+interface AvailableTool {
+  id: number;
+  in_code_tool_id: string;
+  display_name: string;
+  description: string;
+}
+
+// Tools are now fetched from the backend dynamically
 
 function DefaultAssistantConfig() {
   const { popup, setPopup } = usePopup();
   const [isSaving, setIsSaving] = useState(false);
-  const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
+  const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
   const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const { data: availableTools } = useSWR<AvailableTool[]>(
+    "/api/admin/default-assistant/available-tools",
+    errorHandlingFetcher
+  );
 
   // Fetch default assistant configuration
   const {
@@ -82,7 +74,7 @@ function DefaultAssistantConfig() {
     }
   };
 
-  const handleToggleTool = async (toolId: string) => {
+  const handleToggleTool = async (toolId: number) => {
     if (isSaving) return;
     setIsSaving(true);
     const previous = new Set(enabledTools);
@@ -181,7 +173,7 @@ function DefaultAssistantConfig() {
           <div>
             <p className="block font-medium text-sm mb-2">Actions</p>
             <div className="space-y-3">
-              {AVAILABLE_TOOLS.map((tool) => (
+              {(availableTools || []).map((tool) => (
                 <ToolToggle
                   key={tool.id}
                   tool={tool}
@@ -205,7 +197,8 @@ function ToolToggle({
   disabled,
 }: {
   tool: {
-    id: string;
+    id: number;
+    in_code_tool_id: string;
     display_name: string;
     description: string;
   };

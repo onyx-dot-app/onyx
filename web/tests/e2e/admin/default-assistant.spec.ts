@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../utils/auth";
+import {
+  TOOL_IDS,
+  waitForUnifiedGreeting,
+  openActionManagement,
+} from "../utils/tools";
 
 test.describe("Default Assistant Admin Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -24,7 +29,7 @@ test.describe("Default Assistant Admin Page", () => {
       page.getByRole("heading", { name: "Default Assistant" })
     ).toBeVisible();
     await expect(page.locator("text=Actions")).toBeVisible();
-    await expect(page.locator("text=Instructions")).toBeVisible();
+    await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
   });
 
   test("should toggle Internal Search tool on and off", async ({ page }) => {
@@ -145,11 +150,11 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should edit and save system prompt", async ({ page }) => {
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Find the textarea
     const textarea = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
 
     // Get initial value
@@ -170,11 +175,11 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Refresh page to verify persistence
     await page.reload();
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Check that new value persisted
     const textareaAfter = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
     await expect(textareaAfter).toHaveValue(testPrompt);
 
@@ -188,11 +193,11 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should allow empty system prompt", async ({ page }) => {
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Find the textarea
     const textarea = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
 
     // Get initial value to restore later
@@ -212,11 +217,11 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Refresh page to verify persistence
     await page.reload();
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Check that empty value persisted
     const textareaAfter = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
     await expect(textareaAfter).toHaveValue("");
 
@@ -230,11 +235,11 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should handle very long system prompt gracefully", async ({ page }) => {
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Find the textarea
     const textarea = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
 
     // Get initial value to restore later
@@ -266,11 +271,11 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should display character count for system prompt", async ({ page }) => {
-    await page.waitForSelector("text=System Prompt (Instructions)");
+    await page.waitForSelector("text=Instructions");
 
     // Find the textarea
     const textarea = page.locator(
-      'textarea[placeholder*="Enter custom instructions"]'
+      'textarea[placeholder*="Enter custom instructions for the assistant"]'
     );
 
     // Type some text
@@ -311,14 +316,14 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should toggle all tools and verify in chat", async ({ page }) => {
-    await page.waitForSelector("text=Document Search");
+    await page.waitForSelector("text=Internal Search");
 
     // Store initial states
     const toolStates: Record<string, string | null> = {};
 
     // Get initial states of all tools
     for (const toolName of [
-      "Document Search",
+      "Internal Search",
       "Web Search",
       "Image Generation",
     ]) {
@@ -332,7 +337,7 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Disable all tools
     for (const toolName of [
-      "Document Search",
+      "Internal Search",
       "Web Search",
       "Image Generation",
     ]) {
@@ -347,18 +352,20 @@ test.describe("Default Assistant Admin Page", () => {
       }
     }
 
-    // Navigate to chat to verify tools are disabled
+    // Navigate to chat to verify tools are disabled and initial load greeting
     await page.goto("http://localhost:3000/chat");
-    await page.waitForSelector('[placeholder*="Ask"]', { timeout: 5000 });
+    await waitForUnifiedGreeting(page);
+    // With everything disabled, the Action Management toggle should not exist
+    await expect(page.locator(TOOL_IDS.actionToggle)).toHaveCount(0);
 
     // Go back and re-enable all tools
     await page.goto(
       "http://localhost:3000/admin/configuration/default-assistant"
     );
-    await page.waitForSelector("text=Document Search");
+    await page.waitForSelector("text=Internal Search");
 
     for (const toolName of [
-      "Document Search",
+      "Internal Search",
       "Web Search",
       "Image Generation",
     ]) {
@@ -373,9 +380,22 @@ test.describe("Default Assistant Admin Page", () => {
       }
     }
 
+    // Navigate to chat and verify the Action Management toggle and actions exist
+    await page.goto("http://localhost:3000/chat");
+    await waitForUnifiedGreeting(page);
+    await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
+    await openActionManagement(page);
+    expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
+    expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
+    expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+
+    await page.goto(
+      "http://localhost:3000/admin/configuration/default-assistant"
+    );
+
     // Restore original states
     for (const toolName of [
-      "Document Search",
+      "Internal Search",
       "Web Search",
       "Image Generation",
     ]) {

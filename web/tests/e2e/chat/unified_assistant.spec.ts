@@ -6,20 +6,14 @@ import {
   startNewChat,
   verifyAssistantIsChosen,
 } from "../utils/chatActions";
-import { GREETING_MESSAGES } from "../../../src/lib/chat/greetingMessages";
+import {
+  GREETING_MESSAGES,
+  TOOL_IDS,
+  waitForUnifiedGreeting,
+  openActionManagement,
+} from "../utils/tools";
 
-// Tool-related test selectors
-const TOOL_IDS = {
-  actionToggle: '[data-testid="action-management-toggle"]',
-  options: '[data-testid="tool-options"]',
-  searchOption: '[data-testid="tool-option-search"]',
-  webSearchOption: '[data-testid="tool-option-websearch"]',
-  imageGenerationOption: '[data-testid="tool-option-imagegeneration"]',
-  toggleInput: 'input[type="checkbox"], input[type="radio"], [role="switch"]',
-  adminSearchConfig: '[data-testid="config-tool-search"]',
-  adminWebSearchConfig: '[data-testid="config-tool-web-search"]',
-  adminImageGenConfig: '[data-testid="config-tool-image-generation"]',
-} as const;
+// Tool-related test selectors now imported from shared utils
 
 test.describe("Unified Assistant Tests", () => {
   test.beforeEach(async ({ page }) => {
@@ -37,11 +31,7 @@ test.describe("Unified Assistant Tests", () => {
       page,
     }) => {
       // Look for greeting message - should be one from the predefined list
-      const greetingElement = await page.waitForSelector(
-        '[data-testid="greeting-message"]',
-        { timeout: 5000 }
-      );
-      const greetingText = await greetingElement.textContent();
+      const greetingText = await waitForUnifiedGreeting(page);
 
       // Verify the greeting is from the predefined list
       expect(GREETING_MESSAGES).toContain(greetingText?.trim());
@@ -51,23 +41,14 @@ test.describe("Unified Assistant Tests", () => {
       page,
     }) => {
       // Get initial greeting
-      const greetingElement = await page.waitForSelector(
-        '[data-testid="greeting-message"]',
-        { timeout: 5000 }
-      );
-      const initialGreeting = await greetingElement.textContent();
+      const initialGreeting = await waitForUnifiedGreeting(page);
 
       // Reload the page
       await page.reload();
       await page.waitForLoadState("networkidle");
 
       // Get greeting after reload
-      const greetingElementAfterReload = await page.waitForSelector(
-        '[data-testid="greeting-message"]',
-        { timeout: 5000 }
-      );
-      const greetingAfterReload =
-        await greetingElementAfterReload.textContent();
+      const greetingAfterReload = await waitForUnifiedGreeting(page);
 
       // Both greetings should be valid but might differ after reload
       expect(GREETING_MESSAGES).toContain(initialGreeting?.trim());
@@ -269,23 +250,10 @@ test.describe("Unified Assistant Tests", () => {
     test("should show all three tool options when clicked", async ({
       page,
     }) => {
-      // Click action management toggle
-      await page.click(TOOL_IDS.actionToggle);
-
-      // Wait for tool options to appear
-      await page.waitForSelector(TOOL_IDS.options, {
-        timeout: 5000,
-      });
-
-      // Check for all three tools using the correct test IDs
-      // The test IDs are generated from tool names with processing
-      const searchToolOption = await page.$(TOOL_IDS.searchOption);
-      const webSearchOption = await page.$(TOOL_IDS.webSearchOption);
-      const imageGenOption = await page.$(TOOL_IDS.imageGenerationOption);
-
-      expect(searchToolOption).toBeTruthy();
-      expect(webSearchOption).toBeTruthy();
-      expect(imageGenOption).toBeTruthy();
+      await openActionManagement(page);
+      expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
+      expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
+      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
     });
 
     test("should be able to toggle tools on and off", async ({ page }) => {
@@ -442,10 +410,7 @@ test.describe("End-to-End Unified Assistant Flow", () => {
     expect(aiResponse).toBeTruthy();
 
     // Open action management and verify tools
-    await page.click('[data-testid="action-management-toggle"]');
-    await page.waitForSelector('[data-testid="tool-options"]', {
-      timeout: 5000,
-    });
+    await openActionManagement(page);
 
     // Close action management
     await page.keyboard.press("Escape");

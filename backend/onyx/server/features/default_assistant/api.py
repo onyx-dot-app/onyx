@@ -7,12 +7,20 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import Tool as ToolDBModel
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
 from onyx.db.persona import update_default_assistant_configuration
+from onyx.server.features.default_assistant.models import AvailableTool
 from onyx.server.features.default_assistant.models import DefaultAssistantConfiguration
 from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
-from onyx.server.features.default_assistant.models import VALID_BUILTIN_TOOL_IDS
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    WebSearchTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,8 +42,8 @@ def get_default_assistant_configuration(
     if not persona:
         raise HTTPException(status_code=404, detail="Default assistant not found")
 
-    # Extract tool IDs from the persona's tools
-    tool_ids = [tool.name for tool in persona.tools]
+    # Extract DB tool IDs from the persona's tools
+    tool_ids = [tool.id for tool in persona.tools]
 
     return DefaultAssistantConfiguration(
         tool_ids=tool_ids,
@@ -62,17 +70,6 @@ def update_default_assistant(
         404: If default assistant not found
     """
     # Validate tool IDs if provided
-    if update_request.tool_ids is not None:
-        invalid_tools = [
-            tid for tid in update_request.tool_ids if tid not in VALID_BUILTIN_TOOL_IDS
-        ]
-        if invalid_tools:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid tool IDs provided: {invalid_tools}. "
-                f"Valid tool IDs are: {VALID_BUILTIN_TOOL_IDS}",
-            )
-
     try:
         # Update the default assistant
         updated_persona = update_default_assistant_configuration(
@@ -82,7 +79,7 @@ def update_default_assistant(
         )
 
         # Return the updated configuration
-        tool_ids = [tool.name for tool in updated_persona.tools]
+        tool_ids = [tool.id for tool in updated_persona.tools]
         return DefaultAssistantConfiguration(
             tool_ids=tool_ids,
             system_prompt=updated_persona.system_prompt or "",
@@ -92,3 +89,38 @@ def update_default_assistant(
         if "Default assistant not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/available-tools")
+def list_available_tools(
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[AvailableTool]:
+    """List available built-in tools that can be enabled for the default assistant."""
+    tools = (
+        db_session.query(ToolDBModel)
+        .filter(ToolDBModel.in_code_tool_id.isnot(None))
+        .all()
+    )
+    ORDERED_TOOL_IDS = [
+        SearchTool.__name__,
+        WebSearchTool.__name__,
+        ImageGenerationTool.__name__,
+    ]
+    tool_by_in_code_id = {
+        tool.in_code_tool_id: tool
+        for tool in tools
+        if tool.in_code_tool_id in ORDERED_TOOL_IDS
+    }
+    ordered_tools = [
+        tool_by_in_code_id[t] for t in ORDERED_TOOL_IDS if t in tool_by_in_code_id
+    ]
+    return [
+        AvailableTool(
+            id=tool.id,
+            in_code_tool_id=tool.in_code_tool_id or "",
+            display_name=tool.display_name or tool.name,
+            description=tool.description or "",
+        )
+        for tool in ordered_tools
+    ]
