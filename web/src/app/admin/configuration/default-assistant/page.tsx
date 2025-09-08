@@ -28,7 +28,7 @@ interface DefaultAssistantUpdateRequest {
 const AVAILABLE_TOOLS = [
   {
     id: "SearchTool",
-    display_name: "Document Search",
+    display_name: "Internal Search",
     description:
       "Enable searching through connected documents and knowledge sources",
   },

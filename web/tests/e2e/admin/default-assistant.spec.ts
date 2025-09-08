@@ -27,12 +27,12 @@ test.describe("Default Assistant Admin Page", () => {
     await expect(page.locator("text=Instructions")).toBeVisible();
   });
 
-  test("should toggle Document Search tool on and off", async ({ page }) => {
-    await page.waitForSelector("text=Document Search");
+  test("should toggle Internal Search tool on and off", async ({ page }) => {
+    await page.waitForSelector("text=Internal Search");
 
     // Find the Document Search toggle
     const searchToggle = page
-      .locator("text=Document Search")
+      .locator("text=Internal Search")
       .locator("..")
       .locator("..")
       .locator('[role="switch"]');
@@ -48,11 +48,11 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Refresh page to verify persistence
     await page.reload();
-    await page.waitForSelector("text=Document Search");
+    await page.waitForSelector("text=Internal Search");
 
     // Check that state persisted
     const searchToggleAfter = page
-      .locator("text=Document Search")
+      .locator("text=Internal Search")
       .locator("..")
       .locator("..")
       .locator('[role="switch"]');
