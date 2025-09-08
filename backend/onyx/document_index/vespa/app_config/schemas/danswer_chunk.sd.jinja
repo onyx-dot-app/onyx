@@ -176,6 +176,11 @@ schema {{ schema_name }} {
             rank: filter
             attribute: fast-search
         }
+        field user_project type array<int> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
     }
 
     # If using different tokenization settings, the fieldset has to be removed, and the field must

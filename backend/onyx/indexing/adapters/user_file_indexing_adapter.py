@@ -14,6 +14,7 @@ from onyx.connectors.models import Document
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.db.user_file import fetch_chunk_counts_for_user_files
+from onyx.db.user_file import fetch_user_project_ids_for_user_files
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -105,6 +106,10 @@ class UserFileIndexingAdapter:
         )
 
         updatable_ids = [doc.id for doc in context.updatable_docs]
+        user_file_id_to_project_ids = fetch_user_project_ids_for_user_files(
+            user_file_ids=updatable_ids,
+            db_session=self.db_session,
+        )
         user_file_id_to_access: dict[str, DocumentAccess] = get_access_for_user_files(
             user_file_ids=updatable_ids,
             db_session=self.db_session,
@@ -165,7 +170,9 @@ class UserFileIndexingAdapter:
                 index_chunk=chunk,
                 access=user_file_id_to_access.get(chunk.source_document.id, no_access),
                 document_sets=set(),
-                user_folder=None,
+                user_project=user_file_id_to_project_ids.get(
+                    chunk.source_document.id, []
+                ),
                 # we are going to index userfiles only once, so we just set the boost to the default
                 boost=DEFAULT_BOOST,
                 tenant_id=tenant_id,

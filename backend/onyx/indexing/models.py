@@ -108,7 +108,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
-    user_folder: int | None
+    user_project: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
 
@@ -118,7 +118,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         index_chunk: IndexChunk,
         access: "DocumentAccess",
         document_sets: set[str],
-        user_folder: int | None,
+        user_project: list[int],
         boost: int,
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
@@ -128,7 +128,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             **index_chunk_data,
             access=access,
             document_sets=document_sets,
-            user_folder=user_folder,
+            user_project=user_project,
             boost=boost,
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,

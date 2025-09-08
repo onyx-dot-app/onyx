@@ -17,7 +17,7 @@ from onyx.db.models import ChatSession
 from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
+from onyx.db.models import UserProject
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.prompts import upsert_prompt
 from onyx.server.features.persona.models import PromptSnapshot
@@ -39,7 +39,9 @@ def get_projects(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserProjectSnapshot]:
-    projects = db_session.query(UserFolder).filter(UserFolder.user_id == user.id).all()
+    projects = (
+        db_session.query(UserProject).filter(UserProject.user_id == user.id).all()
+    )
     return [UserProjectSnapshot.from_model(project) for project in projects]
 
 
@@ -49,7 +51,7 @@ def create_project(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
-    project = UserFolder(name=name, user_id=user.id)
+    project = UserProject(name=name, user_id=user.id)
     db_session.add(project)
     db_session.commit()
     return UserProjectSnapshot.from_model(project)
@@ -83,8 +85,8 @@ def get_project(
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     project = (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
         .one_or_none()
     )
     if project is None:
@@ -114,8 +116,8 @@ def get_project_instructions(
 ) -> PromptSnapshot:
 
     project = (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
         .one_or_none()
     )
 
@@ -143,8 +145,8 @@ def upsert_project_instructions(
     """Create or update a Prompt that stores this project's instructions."""
     # Ensure the project exists and belongs to the user
     project = (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
         .one_or_none()
     )
     if project is None:
@@ -202,8 +204,8 @@ def update_project(
     db_session: Session = Depends(get_session),
 ):
     project = (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
         .one_or_none()
     )
     if project is None:
@@ -226,8 +228,8 @@ def delete_project(
     db_session: Session = Depends(get_session),
 ) -> Response:
     project = (
-        db_session.query(UserFolder)
-        .filter(UserFolder.id == project_id, UserFolder.user_id == user.id)
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
         .one_or_none()
     )
     if project is None:
@@ -240,10 +242,6 @@ def delete_project(
     # Unlink many-to-many user files association (Project__UserFile)
     for uf in list(project.user_files):
         project.user_files.remove(uf)
-
-    # Unlink one-to-many folder relationship on UserFile if used
-    for f in list(project.files):
-        f.folder_id = None
 
     db_session.delete(project)
     db_session.commit()

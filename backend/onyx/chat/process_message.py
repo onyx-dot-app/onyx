@@ -449,7 +449,7 @@ def stream_chat_message_objects(
                     user_file_ids.append(file["user_file_id"])
 
         # Load in user files into memory and create search tool override kwargs if needed
-        # if we have enough tokens and no folders, we don't need to use search
+        # if we have enough tokens, we don't need to use search
         # we can just pass them into the prompt directly
         (
             in_memory_user_files,
