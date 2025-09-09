@@ -58,16 +58,16 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page
     .locator('button[role="combobox"] > span:has-text("User Default")')
     .click();
-  await page.getByLabel("GPT 5").getByText("GPT 5").click();
+  await page.getByLabel("GPT 5 Mini").getByText("GPT 5 Mini").click();
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify custom assistant uses its specified model
   await page.locator("#onyx-chat-input-textarea").fill("");
-  await verifyCurrentModel(page, "GPT 5");
+  await verifyCurrentModel(page, "GPT 5 Mini");
 
   // Ensure model persistence for custom assistant
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "GPT 5");
+  await verifyCurrentModel(page, "GPT 5 Mini");
 
   // Switch back to Art Assistant and verify its model
   await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
