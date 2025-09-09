@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
+from io import StringIO
 from typing import Any
 from urllib.parse import urljoin
 
@@ -331,8 +332,6 @@ class GithubPagesConnector(LoadConnector, CheckpointedConnector[GithubPagesCheck
 
             # Process the content using existing Onyx file processing utilities
             try:
-                from io import StringIO
-
                 file_io = StringIO(file_content)
                 processed_text = extract_file_text(
                     file_io, file_info["name"], break_on_unprocessable=False
