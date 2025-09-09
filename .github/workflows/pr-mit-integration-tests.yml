@@ -11,6 +11,15 @@ on:
       - "release/**"
 
 env:
+  # AWS ECR Configuration
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # e.g., 123456789012.dkr.ecr.us-east-2.amazonaws.com
+
+  # AWS ECR Configuration
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
+
+  # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
@@ -106,11 +115,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
@@ -121,7 +135,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
 
   build-model-server-image:
@@ -130,11 +144,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
@@ -145,7 +164,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test-onyx-model-server:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
           outputs: type=registry
           provenance: false
@@ -157,11 +176,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Download OpenAPI artifacts
         uses: actions/download-artifact@v4
@@ -178,7 +202,7 @@ jobs:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/amd64
-          tags: onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
 
   integration-tests-mit:
@@ -201,7 +225,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Log in to Docker Hub (for web-server image)
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -211,10 +246,12 @@ jobs:
         run: |
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
+          # Web server still from DockerHub (public image)
           (docker pull onyxdotapp/onyx-web-server:latest) &
-          (docker pull onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull onyxdotapp/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          # Other images from ECR
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
@@ -222,9 +259,9 @@ jobs:
 
           # Re-tag with expected names for docker-compose
           docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
-          docker tag onyxdotapp/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag onyxdotapp/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag onyxdotapp/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       - name: Start Docker containers
