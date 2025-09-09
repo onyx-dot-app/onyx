@@ -685,7 +685,7 @@ particular, make sure the keys are "tool" and "questions", and DO NOT refer to \
 {{
    "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "next_step": {{"tool": "<Select directly and exclusively from the following options: ---tool_choice_options---.",
+   "next_step": {{"tool": "<Select directly and exclusively from the following options: ---tool_choice_options---.>",
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example:
 ---tool_question_hints---

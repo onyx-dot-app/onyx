@@ -564,7 +564,7 @@ def orchestrator(
             current_step_nr += 1
 
         except Exception as e:
-            logger.error(f"Error in orchestration next step purpose: {e}")
+            logger.error("Error in orchestration next step purpose.")
             raise e
 
         purpose = cast(str, merge_content(*purpose_tokens))
