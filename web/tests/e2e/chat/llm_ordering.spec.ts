@@ -39,7 +39,7 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyAssistantIsChosen(page, "Art");
   await verifyCurrentModel(page, "GPT 4o");
 
-  // Test another new chat: Should use user's default model (o3 Mini)
+  // Test another new chat: Should use user's default model (GPT 5)
   await startNewChat(page);
   await verifyCurrentModel(page, "GPT 5");
 
