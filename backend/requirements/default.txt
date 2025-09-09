@@ -1,5 +1,5 @@
 aioboto3==14.0.0
-aiohttp==3.11.16
+aiohttp==3.12.14
 alembic==1.10.4
 asyncpg==0.30.0
 atlassian-python-api==3.41.16
