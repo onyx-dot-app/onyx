@@ -11,11 +11,9 @@ on:
       - "release/**"
 
 env:
-  # AWS ECR Configuration
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
+  # AWS ECR Configuration. Use us-west-2 since blacksmith is located there.
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # e.g., 123456789012.dkr.ecr.us-east-2.amazonaws.com
-
-  # AWS ECR Configuration
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
 
