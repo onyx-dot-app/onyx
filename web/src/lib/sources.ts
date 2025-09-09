@@ -244,7 +244,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: LinearIcon,
     displayName: "Linear",
     category: SourceCategory.TicketingAndTaskManagement,
-    docs: "https://docs.onyx.app/connectors/linear",
+    docs: "https://docs.onyx.app/admin/connectors/official/linear",
     oauthSupported: true,
   },
   freshdesk: {
