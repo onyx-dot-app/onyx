@@ -687,15 +687,18 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
-            if (!isUpdate) {
-              const currentPinnedIds =
-                user?.preferences?.pinned_assistants || [];
-              await toggleAssistantPinnedStatus(
-                currentPinnedIds,
-                assistantId,
-                true
-              );
-            }
+            // TODO: re-enable this once we figure out a way to better
+            // handle the `undefined` pinned_assistants case. `undefined` pinned assistants
+            // means the default ordering (admin specified)
+            // if (!isUpdate) {
+            //   const currentPinnedIds =
+            //     user?.preferences?.pinned_assistants || [];
+            //   await toggleAssistantPinnedStatus(
+            //     currentPinnedIds,
+            //     assistantId,
+            //     true
+            //   );
+            // }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
