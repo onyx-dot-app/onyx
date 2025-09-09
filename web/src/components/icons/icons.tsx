@@ -1275,12 +1275,7 @@ export const OutlineIcon = ({
   />
 );
 
-export const GithubPagesIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <FaGithub size={size} className={cn(className, "text-black")} />
-);
+export const GithubPagesIcon = GithubIcon;
 
 export const ConfluenceIcon = ({
   size = 16,
