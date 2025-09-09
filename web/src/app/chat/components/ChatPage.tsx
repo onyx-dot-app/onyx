@@ -136,6 +136,8 @@ export function ChatPage({
     setCurrentMessageFiles,
     setCurrentProjectId,
     currentProjectId,
+    lastFailedFiles,
+    clearLastFailedFiles,
   } = useProjectsContext();
 
   const { height: screenHeight } = useScreenSize();
@@ -261,6 +263,21 @@ export function ChatPage({
   }, [availableSources, federatedConnectorsData]);
 
   const { popup, setPopup } = usePopup();
+
+  // Show popup if any files failed in ProjectsContext reconciliation
+  useEffect(() => {
+    if (lastFailedFiles && lastFailedFiles.length > 0) {
+      const names = lastFailedFiles.map((f) => f.name).join(", ");
+      setPopup({
+        type: "error",
+        message:
+          lastFailedFiles.length === 1
+            ? `File failed and was removed: ${names}`
+            : `Files failed and were removed: ${names}`,
+      });
+      clearLastFailedFiles();
+    }
+  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
 
   useEffect(() => {
     const projectId = searchParams?.get("projectid");

@@ -26,6 +26,7 @@ import {
   renameProject as svcRenameProject,
   deleteProject as svcDeleteProject,
   deleteUserFile as svcDeleteUserFile,
+  getUserFileStatuses as svcGetUserFileStatuses,
 } from "./projectsService";
 import { Prompt } from "@/app/admin/assistants/interfaces";
 
@@ -55,6 +56,8 @@ interface ProjectsContextType {
   refreshCurrentProjectDetails: () => Promise<void>;
   refreshRecentFiles: () => Promise<void>;
   deleteUserFile: (fileId: string) => Promise<void>;
+  lastFailedFiles: ProjectFile[];
+  clearLastFailedFiles: () => void;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(
@@ -80,6 +83,10 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   );
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
+  const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
+    new Set()
+  );
 
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     setError(null);
@@ -174,39 +181,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     [fetchProjects, currentProjectId]
   );
 
-  const uploadFiles = useCallback(
-    async (
-      files: File[],
-      projectId?: number | null
-    ): Promise<CategorizedFiles> => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const uploaded: CategorizedFiles = await svcUploadFiles(
-          files,
-          projectId
-        );
-
-        // If we uploaded into a specific project, refresh that project's files
-        if (projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        // Refresh recent files as well
-        await refreshRecentFiles();
-
-        return uploaded;
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to upload files";
-        setError(message);
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
-
   const getRecentFiles = useCallback(async (): Promise<ProjectFile[]> => {
     setError(null);
     try {
@@ -219,6 +193,52 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       return [];
     }
   }, []);
+
+  const refreshRecentFiles = useCallback(async () => {
+    const files = await getRecentFiles();
+    setRecentFiles(files);
+  }, [getRecentFiles]);
+
+  const uploadFiles = useCallback(
+    async (
+      files: File[],
+      projectId?: number | null
+    ): Promise<CategorizedFiles> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const uploaded: CategorizedFiles = await svcUploadFiles(
+          files,
+          projectId
+        );
+        const uploadedFiles = uploaded.user_files || [];
+        // Track these uploaded file IDs for targeted polling
+        if (uploadedFiles.length > 0) {
+          setTrackedUploadIds((prev) => {
+            const next = new Set(prev);
+            for (const f of uploadedFiles) next.add(f.id);
+            return next;
+          });
+        }
+
+        // Refresh canonical sources instead of manual merges
+        if (projectId && currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
+        await refreshRecentFiles();
+
+        return uploaded;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to upload files";
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
+  );
 
   const getFilesInProject = useCallback(
     async (projectId: number): Promise<ProjectFile[]> => {
@@ -235,11 +255,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     },
     []
   );
-
-  const refreshRecentFiles = useCallback(async () => {
-    const files = await getRecentFiles();
-    setRecentFiles(files);
-  }, [getRecentFiles]);
 
   useEffect(() => {
     // Initial load
@@ -260,7 +275,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     }
   }, [currentProjectId, refreshCurrentProjectDetails]);
 
-  // Keep currentMessageFiles in sync with latest file statuses from backend (key by id only)
+  // Keep currentMessageFiles in sync with latest file statuses from backend (key by id)
   useEffect(() => {
     if (currentMessageFiles.length === 0) return;
 
@@ -277,10 +292,21 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     });
 
     let changed = false;
-    const reconciled = currentMessageFiles.map((f) => {
+    const reconciled: ProjectFile[] = [];
+    const newlyFailed: ProjectFile[] = [];
+    for (const f of currentMessageFiles) {
       const key = f.id;
       const latest = latestById.get(key);
       if (latest) {
+        const latestStatus = String(latest.status).toLowerCase();
+        // Drop files that have transitioned to failed
+        if (latestStatus === "failed") {
+          if (String(f.status).toLowerCase() !== "failed") {
+            newlyFailed.push(latest);
+          }
+          changed = true;
+          continue;
+        }
         // Only mark changed if status or other fields differ
         if (
           latest.status !== f.status ||
@@ -288,37 +314,143 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
           latest.file_type !== f.file_type
         ) {
           changed = true;
-          return { ...f, ...latest } as ProjectFile;
+          reconciled.push({ ...f, ...latest } as ProjectFile);
+          continue;
         }
       }
-      return f;
-    });
+      reconciled.push(f);
+    }
 
-    if (changed) {
+    if (newlyFailed.length > 0) {
+      setLastFailedFiles(newlyFailed);
+    }
+
+    if (changed || reconciled.length !== currentMessageFiles.length) {
       setCurrentMessageFiles(reconciled);
     }
   }, [recentFiles, currentProjectDetails?.files]);
 
-  // Poll every second while any file is processing
+  // Targeted polling for tracked uploaded files only
   useEffect(() => {
-    const hasProcessingInProject = Boolean(
-      currentProjectDetails?.files?.some(
-        (f) => f.status.toLowerCase() === "processing"
-      )
-    );
-    const hasProcessingInRecent = recentFiles.some(
-      (f) => String(f.status).toLowerCase() === "processing"
-    );
-    const shouldPoll = hasProcessingInProject || hasProcessingInRecent;
+    const ids = Array.from(trackedUploadIds);
+    const shouldPoll = ids.length > 0;
 
-    const runRefresh = async () => {
+    const poll = async () => {
       if (isPollingRef.current) return;
       isPollingRef.current = true;
       try {
-        if (currentProjectId) {
-          await refreshCurrentProjectDetails();
+        const statuses = await svcGetUserFileStatuses(ids);
+        if (!statuses || statuses.length === 0) return;
+
+        // Build maps for quick lookup
+        const statusById = new Map(statuses.map((f) => [f.id, f]));
+
+        // Update currentMessageFiles inline based on polled statuses
+        setCurrentMessageFiles((prev) => {
+          let changed = false;
+          const next: ProjectFile[] = [];
+          const newlyFailedLocal: ProjectFile[] = [];
+          for (const f of prev) {
+            const latest = statusById.get(f.id);
+            if (latest) {
+              const latestStatus = String(latest.status).toLowerCase();
+              if (latestStatus === "failed") {
+                if (String(f.status).toLowerCase() !== "failed") {
+                  newlyFailedLocal.push(latest);
+                }
+                changed = true;
+                continue;
+              }
+              if (
+                latest.status !== f.status ||
+                latest.name !== f.name ||
+                latest.file_type !== f.file_type
+              ) {
+                next.push({ ...f, ...latest } as ProjectFile);
+                changed = true;
+                continue;
+              }
+            }
+            next.push(f);
+          }
+          if (newlyFailedLocal.length > 0) {
+            setLastFailedFiles(newlyFailedLocal);
+          }
+          return changed || next.length !== prev.length ? next : prev;
+        });
+
+        // Update currentProjectDetails.files with latest statuses
+        setCurrentProjectDetails((prev) => {
+          if (!prev || !prev.files || prev.files.length === 0) return prev;
+          let changed = false;
+          const nextFiles = prev.files.map((f) => {
+            const latest = statusById.get(f.id);
+            if (latest) {
+              if (
+                latest.status !== f.status ||
+                latest.name !== f.name ||
+                latest.file_type !== f.file_type
+              ) {
+                changed = true;
+                return { ...f, ...latest } as ProjectFile;
+              }
+            }
+            return f;
+          });
+          return changed
+            ? ({ ...prev, files: nextFiles } as ProjectDetails)
+            : prev;
+        });
+
+        // Update recent files list inline as well
+        setRecentFiles((prev) => {
+          if (prev.length === 0) return prev;
+          let changed = false;
+          const map = new Map(prev.map((f) => [f.id, f]));
+          for (const latest of statuses) {
+            const id = latest.id;
+            if (map.has(id)) {
+              const prevVal = map.get(id)!;
+              if (
+                latest.status !== prevVal.status ||
+                latest.name !== prevVal.name ||
+                latest.file_type !== prevVal.file_type
+              ) {
+                map.set(id, latest);
+                changed = true;
+              }
+            }
+          }
+          return changed ? Array.from(map.values()) : prev;
+        });
+
+        // Remove completed/failed from tracking
+        const remaining = new Set(trackedUploadIds);
+        const newlyFailed: ProjectFile[] = [];
+        for (const f of statuses) {
+          const s = String(f.status).toLowerCase();
+          if (s === "completed") {
+            remaining.delete(f.id);
+          } else if (s === "failed") {
+            remaining.delete(f.id);
+            newlyFailed.push(f);
+          }
         }
-        await refreshRecentFiles();
+        if (newlyFailed.length > 0) {
+          setLastFailedFiles(newlyFailed);
+        }
+        const trackingChanged = remaining.size !== trackedUploadIds.size;
+        if (trackingChanged) {
+          setTrackedUploadIds(remaining);
+        }
+
+        // If all tracked uploads finished (completed or failed), do a single refresh
+        if (remaining.size === 0) {
+          if (currentProjectId) {
+            await refreshCurrentProjectDetails();
+          }
+          await refreshRecentFiles();
+        }
       } finally {
         isPollingRef.current = false;
       }
@@ -326,8 +458,8 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
     if (shouldPoll && pollIntervalRef.current === null) {
       // Kick once immediately, then start interval
-      runRefresh();
-      pollIntervalRef.current = window.setInterval(runRefresh, 3000);
+      poll();
+      pollIntervalRef.current = window.setInterval(poll, 3000);
     }
 
     if (!shouldPoll && pollIntervalRef.current !== null) {
@@ -342,8 +474,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       }
     };
   }, [
-    recentFiles,
-    currentProjectDetails,
+    trackedUploadIds,
     currentProjectId,
     refreshCurrentProjectDetails,
     refreshRecentFiles,
@@ -370,6 +501,8 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       getFilesInProject,
       refreshCurrentProjectDetails,
       refreshRecentFiles,
+      lastFailedFiles,
+      clearLastFailedFiles: () => setLastFailedFiles([]),
       deleteUserFile: async (fileId: string) => {
         await svcDeleteUserFile(fileId);
         // Refresh current project details and recent files to reflect deletion
@@ -398,6 +531,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       getFilesInProject,
       refreshCurrentProjectDetails,
       refreshRecentFiles,
+      lastFailedFiles,
     ]
   );
 

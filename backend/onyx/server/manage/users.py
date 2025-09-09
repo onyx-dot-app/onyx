@@ -42,6 +42,7 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.user_preferences import activate_user
@@ -902,6 +903,7 @@ def get_recent_files(
     user_files = (
         db_session.query(UserFile)
         .filter(UserFile.user_id == user.id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

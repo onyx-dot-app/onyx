@@ -192,6 +192,34 @@ export async function deleteUserFile(fileId: string): Promise<void> {
   }
 }
 
+export async function getUserFile(fileId: string): Promise<ProjectFile> {
+  const response = await fetch(
+    `/api/user/projects/file/${encodeURIComponent(fileId)}`
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error((errorData as any).detail || "Failed to fetch file");
+  }
+  return response.json();
+}
+
+export async function getUserFileStatuses(
+  fileIds: string[]
+): Promise<ProjectFile[]> {
+  const response = await fetch(`/api/user/projects/file/statuses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_ids: fileIds }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as any).detail || "Failed to fetch file statuses"
+    );
+  }
+  return response.json();
+}
+
 export async function getSessionProjectTokenCount(
   chatSessionId: string
 ): Promise<number> {

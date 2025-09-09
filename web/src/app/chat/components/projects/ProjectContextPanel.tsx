@@ -103,7 +103,6 @@ export default function ProjectContextPanel() {
     currentProjectId,
     uploadFiles,
     recentFiles,
-    refreshCurrentProjectDetails,
   } = useProjectsContext();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -192,6 +191,11 @@ export default function ProjectContextPanel() {
                 Array.from(files),
                 currentProjectId
               );
+              // Replace temp entries with backend entries (by index) so keys become backend IDs. This will prevent flickering.
+              setTempProjectFiles((prev) => [
+                ...prev.slice(0, -tempFiles.length),
+                ...result.user_files,
+              ]);
               const unsupported = result?.unsupported_files || [];
               const nonAccepted = result?.non_accepted_files || [];
               if (unsupported.length > 0 || nonAccepted.length > 0) {
@@ -207,7 +211,6 @@ export default function ProjectContextPanel() {
                   message: `Some files were not uploaded. ${parts.join(" | ")}`,
                 });
               }
-              await refreshCurrentProjectDetails();
             } finally {
               setIsUploading(false);
               setTempProjectFiles([]);
@@ -221,11 +224,20 @@ export default function ProjectContextPanel() {
       (currentProjectDetails?.files &&
         currentProjectDetails.files.length > 0) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {[...tempProjectFiles, ...(currentProjectDetails?.files || [])]
-            .slice(0, 3)
-            .map((f) => (
-              <FileCard key={f.id} file={f} />
-            ))}
+          {(() => {
+            const byId = new Map<string, ProjectFile>();
+            // Prefer backend files when available
+            (currentProjectDetails?.files || []).forEach((f) =>
+              byId.set(f.id, f)
+            );
+            // Add temp files only if a backend file with same id doesn't exist yet
+            tempProjectFiles.forEach((f) => {
+              if (!byId.has(f.id)) byId.set(f.id, f);
+            });
+            return Array.from(byId.values())
+              .slice(0, 3)
+              .map((f) => <FileCard key={f.id} file={f} />);
+          })()}
           {[...(currentProjectDetails?.files || [])].length > 3 && (
             <button
               className="flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm text-left"
