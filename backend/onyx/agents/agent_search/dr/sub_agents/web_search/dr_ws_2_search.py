@@ -25,6 +25,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_MULTIPLIER
 from onyx.prompts.dr_prompts import WEB_SEARCH_URL_SELECTION_PROMPT
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.utils.logger import setup_logger
@@ -108,7 +109,7 @@ def web_search(
             agent_decision_prompt + (assistant_task_prompt or ""),
         ),
         schema=WebSearchAnswer,
-        timeout_override=30,
+        timeout_override=int(50 * TF_DR_TIMEOUT_MULTIPLIER),
     )
     results_to_open = [
         (search_query, search_results[i])

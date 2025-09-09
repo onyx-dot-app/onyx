@@ -489,7 +489,7 @@ def clarifier(
                 )
 
                 answer_tokens, _, _ = run_with_timeout(
-                    int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                    int(120 * TF_DR_TIMEOUT_MULTIPLIER),
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=create_question_prompt(
@@ -502,7 +502,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                        timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                         ind=current_step_nr,
                         context_docs=None,
                         replace_citations=True,
@@ -646,7 +646,7 @@ def clarifier(
                         assistant_system_prompt, clarification_prompt
                     ),
                     schema=ClarificationGenerationResponse,
-                    timeout_override=int(25 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(50 * TF_DR_TIMEOUT_MULTIPLIER),
                     # max_tokens=1500,
                 )
             except Exception as e:
@@ -675,7 +675,7 @@ def clarifier(
                 )
 
                 _, _, _ = run_with_timeout(
-                    int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                    int(120 * TF_DR_TIMEOUT_MULTIPLIER),
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=repeat_prompt,
@@ -684,7 +684,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                        timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                         answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
                         # max_tokens=None,

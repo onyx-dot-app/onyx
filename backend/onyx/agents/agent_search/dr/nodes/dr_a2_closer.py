@@ -277,7 +277,7 @@ def closer(
                 test_info_complete_prompt + (assistant_task_prompt or ""),
             ),
             schema=TestInfoCompleteResponse,
-            timeout_override=40,
+            timeout_override=int(80 * TF_DR_TIMEOUT_MULTIPLIER),
             # max_tokens=1000,
         )
 
@@ -354,7 +354,7 @@ def closer(
 
     try:
         streamed_output, _, citation_infos = run_with_timeout(
-            int(240 * TF_DR_TIMEOUT_MULTIPLIER),
+            int(300 * TF_DR_TIMEOUT_MULTIPLIER),
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=create_question_prompt(
@@ -366,7 +366,7 @@ def closer(
                 agent_answer_level=0,
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
-                timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                 answer_piece=StreamingType.MESSAGE_DELTA.value,
                 ind=current_step_nr,
                 context_docs=all_context_llmdocs,

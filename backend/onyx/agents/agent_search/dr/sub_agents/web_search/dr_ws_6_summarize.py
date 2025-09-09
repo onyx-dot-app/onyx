@@ -17,6 +17,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_MULTIPLIER
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.utils.logger import setup_logger
@@ -66,7 +67,7 @@ def is_summarize(
                 assistant_system_prompt, search_prompt + (assistant_task_prompt or "")
             ),
             schema=SearchAnswer,
-            timeout_override=40,
+            timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
         )
         answer_string = search_answer_json.answer
         claims = search_answer_json.claims or []

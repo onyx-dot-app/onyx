@@ -13,6 +13,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_MULTIPLIER
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_PREP_PROMPT
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_USE_PROMPT
 from onyx.prompts.dr_prompts import OKTA_TOOL_USE_SPECIAL_PROMPT
@@ -68,7 +69,7 @@ def generic_internal_tool_act(
             tool_use_prompt,
             tools=[generic_internal_tool.tool_definition()],
             tool_choice="required",
-            timeout_override=40,
+            timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
         )
 
         # make sure we got a tool call
@@ -113,7 +114,7 @@ def generic_internal_tool_act(
     )
     answer_string = str(
         graph_config.tooling.primary_llm.invoke(
-            tool_summary_prompt, timeout_override=40
+            tool_summary_prompt, timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER)
         ).content
     ).strip()
 

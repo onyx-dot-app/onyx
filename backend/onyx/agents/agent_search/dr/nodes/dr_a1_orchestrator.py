@@ -226,7 +226,7 @@ def orchestrator(
             reasoning_tokens: list[str] = [""]
 
             reasoning_tokens, _, _ = run_with_timeout(
-                int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                int(120 * TF_DR_TIMEOUT_MULTIPLIER),
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
@@ -237,7 +237,7 @@ def orchestrator(
                     agent_answer_level=0,
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
-                    timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                     answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                     # max_tokens=None,
@@ -323,7 +323,7 @@ def orchestrator(
                         decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
-                    timeout_override=int(35 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(50 * TF_DR_TIMEOUT_MULTIPLIER),
                     # max_tokens=2500,
                 )
                 next_step = orchestrator_action.next_step
@@ -394,7 +394,7 @@ def orchestrator(
             )
 
             _, _, _ = run_with_timeout(
-                int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                int(120 * TF_DR_TIMEOUT_MULTIPLIER),
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=repeat_plan_prompt,
@@ -403,7 +403,7 @@ def orchestrator(
                     agent_answer_level=0,
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
-                    timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                     answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                 ),
@@ -452,7 +452,7 @@ def orchestrator(
                         decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
-                    timeout_override=int(15 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
                     # max_tokens=1500,
                 )
                 next_step = orchestrator_action.next_step
@@ -486,7 +486,7 @@ def orchestrator(
         )
 
         _, _, _ = run_with_timeout(
-            int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+            int(120 * TF_DR_TIMEOUT_MULTIPLIER),
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=repeat_reasoning_prompt,
@@ -495,7 +495,7 @@ def orchestrator(
                 agent_answer_level=0,
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
-                timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                 answer_piece=StreamingType.REASONING_DELTA.value,
                 ind=current_step_nr,
                 # max_tokens=None,
@@ -536,7 +536,7 @@ def orchestrator(
             )
 
             purpose_tokens, _, _ = run_with_timeout(
-                int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                int(120 * TF_DR_TIMEOUT_MULTIPLIER),
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
@@ -548,7 +548,7 @@ def orchestrator(
                     agent_answer_level=0,
                     agent_answer_question_num=0,
                     agent_answer_type="agent_level_answer",
-                    timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
                     answer_piece=StreamingType.REASONING_DELTA.value,
                     ind=current_step_nr,
                     # max_tokens=None,
