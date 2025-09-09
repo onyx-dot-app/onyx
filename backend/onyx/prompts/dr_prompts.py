@@ -485,10 +485,15 @@ research is required. Make sure that the answer is specific to what is needed, a
 BUILDS ON TOP of the learnings so far in order to get new targeted information that gets us to be able \
 to answer the original question.
 
-Please format your answer as a json dictionary in the following format:
+Please format your answer as a json dictionary in the format below.
+Note:
+ - in the "next_step" field below, please return a dictionary as described below. In \
+particular, make sure the keys are "tool" and "questions", and DO NOT refer to \
+<parameter name="tool"> tool_name" or something like that. Keys are "tool" and "questions".
+
 {{
    "reasoning": "<keep empty, as it is already available>",
-   "next_step": {{"tool": "<---tool_choice_options--->",
+   "next_step": {{"tool": "<Select directly and exclusively from the following options: ---tool_choice_options---.>",
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example:
 ---tool_question_hints---]>
@@ -671,11 +676,16 @@ the request to the CLOSER tool is an option if you think the information is suff
 Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
 {DONE_STANDARD[ResearchType.DEEP]}
 
-Please format your answer as a json dictionary in the following format:
+Please format your answer as a json dictionary in the format below.
+Note:
+ - in the "next_step" field below, please return a dictionary as described below. In \
+particular, make sure the keys are "tool" and "questions", and DO NOT refer to \
+<parameter name="tool"> tool_name" or something like that. Keys are "tool" and "questions".
+
 {{
    "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "next_step": {{"tool": "<---tool_choice_options--->",
+   "next_step": {{"tool": "<Select directly and exclusively from the following options: ---tool_choice_options---.",
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example:
 ---tool_question_hints---

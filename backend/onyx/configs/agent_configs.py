@@ -381,4 +381,8 @@ AGENT_MAX_TOKENS_HISTORY_SUMMARY = int(
 
 TF_DR_TIMEOUT_MULTIPLIER = float(os.environ.get("TF_DR_TIMEOUT_MULTIPLIER") or 1.0)
 
+TF_DR_DEFAULT_THOUGHTFUL = not (
+    (os.environ.get("TF_DR_DEFAULT_THOUGHTFUL") or "True").lower() == "false"
+)
+
 GRAPH_VERSION_NAME: str = "a"

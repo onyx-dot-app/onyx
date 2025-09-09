@@ -171,11 +171,36 @@ def orchestrator(
     reasoning_result = "(No reasoning result provided yet.)"
     tool_calls_string = "(No tool calls provided yet.)"
 
-    if research_type == ResearchType.THOUGHTFUL:
+    if research_type in [ResearchType.THOUGHTFUL, ResearchType.FAST]:
         if iteration_nr == 1:
-            remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[ResearchType.THOUGHTFUL]
+            remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[research_type]
 
-        elif iteration_nr > 1:
+        elif remaining_time_budget <= 0:
+            return OrchestrationUpdate(
+                tools_used=[DRPath.CLOSER.value],
+                current_step_nr=current_step_nr,
+                query_list=[],
+                iteration_nr=iteration_nr,
+                log_messages=[
+                    get_langgraph_node_log_string(
+                        graph_component="main",
+                        node_name="orchestrator",
+                        node_start_time=node_start_time,
+                    )
+                ],
+                plan_of_record=plan_of_record,
+                remaining_time_budget=remaining_time_budget,
+                iteration_instructions=[
+                    IterationInstructions(
+                        iteration_nr=iteration_nr,
+                        plan=None,
+                        reasoning="Time to wrap up.",
+                        purpose="",
+                    )
+                ],
+            )
+
+        elif iteration_nr > 1 and remaining_time_budget > 0:
             # for each iteration past the first one, we need to see whether we
             # have enough information to answer the question.
             # if we do, we can stop the iteration and return the answer.
@@ -321,7 +346,7 @@ def orchestrator(
             reasoning_result = "Time to wrap up."
             next_tool_name = DRPath.CLOSER.value
 
-    else:
+    elif research_type == ResearchType.DEEP:
         if iteration_nr == 1 and not plan_of_record:
             # by default, we start a new iteration, but if there is a feedback request,
             # we start a new iteration 0 again (set a bit later)
@@ -500,47 +525,52 @@ def orchestrator(
 
     purpose_tokens: list[str] = [""]
 
-    try:
+    if research_type in [ResearchType.THOUGHTFUL, ResearchType.DEEP]:
 
-        write_custom_event(
-            current_step_nr,
-            ReasoningStart(),
-            writer,
-        )
+        try:
 
-        purpose_tokens, _, _ = run_with_timeout(
-            int(80 * TF_DR_TIMEOUT_MULTIPLIER),
-            lambda: stream_llm_answer(
-                llm=graph_config.tooling.primary_llm,
-                prompt=create_question_prompt(
-                    decision_system_prompt,
-                    orchestration_next_step_purpose_prompt,
+            write_custom_event(
+                current_step_nr,
+                ReasoningStart(),
+                writer,
+            )
+
+            purpose_tokens, _, _ = run_with_timeout(
+                int(80 * TF_DR_TIMEOUT_MULTIPLIER),
+                lambda: stream_llm_answer(
+                    llm=graph_config.tooling.primary_llm,
+                    prompt=create_question_prompt(
+                        decision_system_prompt,
+                        orchestration_next_step_purpose_prompt,
+                    ),
+                    event_name="basic_response",
+                    writer=writer,
+                    agent_answer_level=0,
+                    agent_answer_question_num=0,
+                    agent_answer_type="agent_level_answer",
+                    timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
+                    answer_piece=StreamingType.REASONING_DELTA.value,
+                    ind=current_step_nr,
+                    # max_tokens=None,
                 ),
-                event_name="basic_response",
-                writer=writer,
-                agent_answer_level=0,
-                agent_answer_question_num=0,
-                agent_answer_type="agent_level_answer",
-                timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
-                answer_piece=StreamingType.REASONING_DELTA.value,
-                ind=current_step_nr,
-                # max_tokens=None,
-            ),
-        )
+            )
 
-        write_custom_event(
-            current_step_nr,
-            SectionEnd(),
-            writer,
-        )
+            write_custom_event(
+                current_step_nr,
+                SectionEnd(),
+                writer,
+            )
 
-        current_step_nr += 1
+            current_step_nr += 1
 
-    except Exception as e:
-        logger.error(f"Error in orchestration next step purpose: {e}")
-        raise e
+        except Exception as e:
+            logger.error(f"Error in orchestration next step purpose: {e}")
+            raise e
 
-    purpose = cast(str, merge_content(*purpose_tokens))
+        purpose = cast(str, merge_content(*purpose_tokens))
+
+    elif research_type == ResearchType.FAST:
+        purpose = f"Answering the question using the {next_tool_name}"
 
     if not next_tool_name:
         raise ValueError("The next step has not been defined. This should not happen.")

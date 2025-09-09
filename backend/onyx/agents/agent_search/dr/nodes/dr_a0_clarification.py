@@ -613,7 +613,7 @@ def clarifier(
 
     clarification = None
 
-    if research_type != ResearchType.THOUGHTFUL:
+    if research_type == ResearchType.DEEP:
         result = _get_existing_clarification_request(graph_config)
         if result is not None:
             clarification, original_question, chat_history_string = result

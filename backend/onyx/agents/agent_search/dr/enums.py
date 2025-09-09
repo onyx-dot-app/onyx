@@ -8,6 +8,7 @@ class ResearchType(str, Enum):
     LEGACY_AGENTIC = "LEGACY_AGENTIC"  # only used for legacy agentic search migrations
     THOUGHTFUL = "THOUGHTFUL"
     DEEP = "DEEP"
+    FAST = "FAST"
 
 
 class ResearchAnswerPurpose(str, Enum):
