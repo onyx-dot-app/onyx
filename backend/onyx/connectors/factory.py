@@ -25,6 +25,7 @@ from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.freshdesk.connector import FreshdeskConnector
 from onyx.connectors.gitbook.connector import GitbookConnector
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github_pages.connector import GithubPagesConnector
 from onyx.connectors.gitlab.connector import GitlabConnector
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.gong.connector import GongConnector
@@ -88,6 +89,7 @@ def identify_connector_class(
         DocumentSource.GITBOOK: GitbookConnector,
         DocumentSource.GOOGLE_DRIVE: GoogleDriveConnector,
         DocumentSource.BOOKSTACK: BookstackConnector,
+        DocumentSource.GITHUB_PAGES: GithubPagesConnector,
         DocumentSource.OUTLINE: OutlineConnector,
         DocumentSource.CONFLUENCE: ConfluenceConnector,
         DocumentSource.JIRA: JiraConnector,

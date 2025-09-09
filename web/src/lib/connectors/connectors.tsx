@@ -5,7 +5,13 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
+  const loadStateConnectors = [
+    "web",
+    "xenforo",
+    "file",
+    "airtable",
+    "github_pages",
+  ];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -179,6 +185,43 @@ export const connectorConfigs: Record<
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  github_pages: {
+    description: "Configure GitHub Pages connector",
+    subtext: "Index all pages from a GitHub Pages website using the GitHub API",
+    values: [
+      {
+        type: "text",
+        query: "Enter the repository owner/organization name:",
+        label: "Repository Owner",
+        name: "repo_owner",
+        optional: false,
+        description:
+          "The GitHub username or organization that owns the repository",
+      },
+      {
+        type: "text",
+        query: "Enter the repository name:",
+        label: "Repository Name",
+        name: "repo_name",
+        optional: false,
+        description:
+          "The name of the repository containing the GitHub Pages site",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include README files:",
+        label: "Include README Files",
+        name: "include_readme",
+        optional: true,
+        default: true,
+        description:
+          "Whether to include README.md files when indexing the site",
+      },
+    ],
+    overrideDefaultFreq: 60 * 60 * 24, // 24 hours
   },
   github: {
     description: "Configure GitHub connector",
@@ -1595,6 +1638,12 @@ export interface GmailConfig {}
 export interface BookstackConfig {}
 
 export interface OutlineConfig {}
+
+export interface GithubPagesConfig {
+  repo_owner: string;
+  repo_name: string;
+  include_readme?: boolean;
+}
 
 export interface ConfluenceConfig {
   wiki_base: string;
