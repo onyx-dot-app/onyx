@@ -212,7 +212,7 @@ jobs:
         build-integration-image,
       ]
     # See https://runs-on.com/runners/linux/
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-32vcpu-ubuntu-2404
 
     strategy:
       fail-fast: false
