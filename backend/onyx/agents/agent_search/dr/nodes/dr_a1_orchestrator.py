@@ -524,6 +524,7 @@ def orchestrator(
     )
 
     purpose_tokens: list[str] = [""]
+    purpose = ""
 
     if research_type in [ResearchType.THOUGHTFUL, ResearchType.DEEP]:
 
