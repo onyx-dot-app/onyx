@@ -142,15 +142,14 @@ class CreateChatMessageRequest(ChunkContext):
     use_agentic_search: bool = False
 
     skip_gen_ai_answer_generation: bool = False
+    # Slack context for federated search
+    slack_context: SlackContext | None = None
 
     # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
     allowed_tool_ids: list[int] | None = None
 
     # List of tool IDs we MUST use.
     forced_tool_ids: list[int] | None = None
-
-    # Slack context for federated search
-    slack_context: SlackContext | None = None
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
