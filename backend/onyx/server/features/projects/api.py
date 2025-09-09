@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import Prompt
 from onyx.db.models import User
@@ -103,6 +104,7 @@ def get_files_in_project(
     user_files = (
         db_session.query(UserFile)
         .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user.id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
         .all()
     )
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
@@ -273,6 +275,53 @@ def delete_user_file(
     db_session.delete(user_file)
     db_session.commit()
     return Response(status_code=204)
+
+
+@router.get("/file/{file_id}", response_model=UserFileSnapshot)
+def get_user_file(
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> UserFileSnapshot:
+    """Fetch a single user file by ID for the current user.
+
+    Includes files in any status (including FAILED) to allow status polling.
+    """
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .one_or_none()
+    )
+    if user_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return UserFileSnapshot.from_model(user_file)
+
+
+class UserFileIdsRequest(BaseModel):
+    file_ids: list[UUID]
+
+
+@router.post("/file/statuses", response_model=list[UserFileSnapshot])
+def get_user_file_statuses(
+    body: UserFileIdsRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    """Fetch statuses for a set of user file IDs owned by the current user.
+
+    Includes files in any status so the client can detect transitions to FAILED.
+    """
+    if not body.file_ids:
+        return []
+
+    user_files = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user.id)
+        .filter(UserFile.id.in_(body.file_ids))
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
 
 @router.post("/{project_id}/move_chat_session")
