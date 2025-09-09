@@ -188,3 +188,11 @@ class LLMCost(BaseModel):
     provider: str
     model_name: str
     cost: float
+
+
+class BedrockModelsRequest(BaseModel):
+    aws_region_name: str
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_bearer_token_bedrock: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider

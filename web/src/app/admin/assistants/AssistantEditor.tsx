@@ -56,6 +56,7 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useUser } from "@/components/user/UserProvider";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -138,6 +139,7 @@ export function AssistantEditor({
   const { refreshAssistants, isImageGenerationAvailable } =
     useAssistantsContext();
 
+  const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -685,6 +687,18 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
+            // TODO: re-enable this once we figure out a way to better
+            // handle the `undefined` pinned_assistants case. `undefined` pinned assistants
+            // means the default ordering (admin specified)
+            // if (!isUpdate) {
+            //   const currentPinnedIds =
+            //     user?.preferences?.pinned_assistants || [];
+            //   await toggleAssistantPinnedStatus(
+            //     currentPinnedIds,
+            //     assistantId,
+            //     true
+            //   );
+            // }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
@@ -1769,7 +1783,7 @@ export function AssistantEditor({
                         setFieldValue("task_prompt", e.target.value);
                       }}
                       explanationText="Learn about prompting in our docs!"
-                      explanationLink="https://docs.onyx.app/guides/assistants"
+                      explanationLink="https://docs.onyx.app/admin/agents/overview"
                       className="[&_textarea]:placeholder:text-text-muted/50"
                     />
                   </>

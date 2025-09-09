@@ -8,15 +8,23 @@ import {
   useState,
 } from "react";
 import { ChevronDownIcon, PlusIcon } from "./icons/icons";
-import { FiCheck, FiChevronDown } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 export interface Option<T> {
   name: string;
   value: T;
   description?: string;
-  metadata?: { [key: string]: any };
   icon?: React.FC<{ size?: number; className?: string }>;
+  // Domain-specific flag: when false, render as disabled (used by AccessTypeForm)
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export type StringOrNumberOption = Option<string | number>;
@@ -294,6 +302,8 @@ export function DefaultDropdownElement({
   onSelect,
   isSelected,
   includeCheckbox = false,
+  disabled = false,
+  disabledReason,
 }: {
   name: string | JSX.Element;
   icon?: React.FC<{ size?: number; className?: string }>;
@@ -301,6 +311,8 @@ export function DefaultDropdownElement({
   onSelect?: () => void;
   isSelected?: boolean;
   includeCheckbox?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   return (
     <div
@@ -312,13 +324,13 @@ export function DefaultDropdownElement({
         py-1.5 
         my-1
         select-none 
-        cursor-pointer 
+        ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}
         bg-transparent 
         rounded
         text-text-dark
-        hover:bg-accent-background-hovered
+        ${disabled ? "" : "hover:bg-accent-background-hovered"}
       `}
-      onClick={onSelect}
+      onClick={disabled ? undefined : onSelect}
     >
       <div>
         <div className="flex">
@@ -332,6 +344,24 @@ export function DefaultDropdownElement({
           )}
           {icon && icon({ size: 16, className: "mr-2 h-4 w-4 my-auto" })}
           {name}
+          {disabled && disabledReason && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning transition-colors cursor-default">
+                    <FiInfo size={14} className="text-warning" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="right"
+                  className="max-w-64 text-white dark:text-black"
+                  backgroundColor="bg-black dark:bg-white"
+                >
+                  {disabledReason}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
         {description && <div className="text-xs">{description}</div>}
       </div>
@@ -402,8 +432,6 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
       <div
         ref={ref}
         className={`
-        border 
-        border 
         rounded-lg 
         flex 
         flex-col 
@@ -430,6 +458,8 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
               onSelect={() => handleSelect(option.value)}
               isSelected={isSelected}
               icon={option.icon}
+              disabled={option.disabled}
+              disabledReason={option.disabledReason}
             />
           );
         })}

@@ -16,6 +16,8 @@ export interface AuthMethodOption<TFields> {
   label: string;
   fields: TFields;
   description?: string;
+  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
+  disablePermSync?: boolean;
 }
 export interface CredentialTemplateWithAuth<TFields> {
   authentication_method?: string;
@@ -325,6 +327,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+        disablePermSync: true,
       },
       {
         value: "certificate",
@@ -337,6 +340,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
@@ -376,6 +380,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
           aws_access_key_id: "",
           aws_secret_access_key: "",
         },
+        disablePermSync: false,
       },
       {
         value: "iam_role",
@@ -383,6 +388,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {
           aws_role_arn: "",
         },
+        disablePermSync: false,
       },
       {
         value: "assume_role",
@@ -390,6 +396,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {},
         description:
           "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,

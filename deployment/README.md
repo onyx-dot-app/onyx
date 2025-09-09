@@ -18,7 +18,7 @@ The two options provided here are the easiest ways to get Onyx up and running.
 
 All the features of Onyx are fully available regardless of the deployment option.
 
-For information on setting up connectors, check out https://docs.onyx.app/connectors/overview
+For information on setting up connectors, check out https://docs.onyx.app/admin/connectors/overview
 
 ## Docker Compose:
 
@@ -67,7 +67,7 @@ intent is for you to customize the deployment to fit your own needs.
 
 Requirements: a Kubernetes cluster, kubectl, and helm.
 
-Guide: https://docs.onyx.app/production/aws/eks#installing-the-services
+Guide: https://docs.onyx.app/deployment/deployment_guides/aws/eks
 
 **NOTE: This setup does not explicitly enable https, the assumption is you would have this already set up for your
 prod cluster.**

@@ -18,9 +18,6 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Add NODE_OPTIONS argument
-ARG NODE_OPTIONS
-
 # pull in source code / package.json / package-lock.json
 COPY . .
 
@@ -85,6 +82,9 @@ ENV NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=${NEXT_PUBLIC_INCLUDE_ERROR_POP
 
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+
+# Add NODE_OPTIONS argument
+ARG NODE_OPTIONS
 
 # Use NODE_OPTIONS in the build command
 RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build

@@ -1,10 +1,10 @@
-aioboto3==14.0.0
+aioboto3==15.1.0
 aiohttp==3.11.16
 alembic==1.10.4
 asyncpg==0.30.0
 atlassian-python-api==3.41.16
 beautifulsoup4==4.12.3
-boto3==1.36.23
+boto3==1.39.11
 celery==5.5.1
 chardet==5.2.0
 chonkie==1.0.10
@@ -93,7 +93,7 @@ zulip==0.8.2
 hubspot-api-client==8.1.0
 asana==5.0.8
 dropbox==11.36.2
-boto3-stubs[s3]==1.34.133
+boto3-stubs[s3]==1.39.11
 shapely==2.0.6
 stripe==10.12.0
 urllib3==2.2.3
