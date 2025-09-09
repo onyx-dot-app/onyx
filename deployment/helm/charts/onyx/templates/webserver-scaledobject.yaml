@@ -1,0 +1,35 @@
+{{- if .Values.webserver.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-webserver
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "onyx-stack.fullname" . }}
+  minReplicaCount: {{ .Values.webserver.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.webserver.autoscaling.maxReplicas }}
+  pollingInterval: {{ .Values.webserver.autoscaling.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.webserver.autoscaling.cooldownPeriod | default 300 }}
+  idleReplicaCount: {{ .Values.webserver.autoscaling.idleReplicaCount | default 0 }}
+  fallback:
+    failureThreshold: {{ .Values.webserver.autoscaling.failureThreshold | default 3 }}
+    replicas: {{ .Values.webserver.autoscaling.fallbackReplicas | default 1 }}
+  triggers:
+    {{- if .Values.webserver.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: "{{ .Values.webserver.autoscaling.targetCPUUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.webserver.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metadata:
+        type: Utilization
+        value: "{{ .Values.webserver.autoscaling.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.webserver.autoscaling.customTriggers }}
+    {{- toYaml .Values.webserver.autoscaling.customTriggers | nindent 4 }}
+    {{- end }}
+{{- end }}
