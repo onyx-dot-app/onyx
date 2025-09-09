@@ -20,7 +20,8 @@ from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.onyxbot.slack.listener import process_message
 from onyx.onyxbot.slack.models import ChannelType
-from onyx.tools.built_in_tools import get_search_tool
+from onyx.tools.built_in_tools import get_builtin_tool
+from onyx.tools.built_in_tools import SearchTool
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -65,10 +66,14 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     persona_prompt = Persona__Prompt(persona_id=persona.id, prompt_id=prompt.id)
     db_session.add(persona_prompt)
 
-    search_tool = get_search_tool(db_session)
-    if search_tool:
-        persona_tool = Persona__Tool(persona_id=persona.id, tool_id=search_tool.id)
-        db_session.add(persona_tool)
+    try:
+        search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
+        if search_tool:
+            persona_tool = Persona__Tool(persona_id=persona.id, tool_id=search_tool.id)
+            db_session.add(persona_tool)
+    except RuntimeError:
+        # SearchTool not found, skip adding it
+        pass
 
     db_session.commit()
 
