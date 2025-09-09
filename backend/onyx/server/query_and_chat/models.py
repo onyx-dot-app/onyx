@@ -147,7 +147,7 @@ class CreateChatMessageRequest(ChunkContext):
 
     # Slack context for federated search
     slack_context: SlackContext | None = None
-      
+
     # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
     allowed_tool_ids: list[int] | None = None
 
