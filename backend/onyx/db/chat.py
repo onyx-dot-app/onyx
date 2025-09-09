@@ -1403,7 +1403,7 @@ def translate_db_message_to_packets(
             )  # sorted iterations
             for research_iteration in research_iterations:
 
-                if research_iteration.iteration_nr > 1:
+                if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
                     # first iteration does noty need to be reasoned for
                     packet_list.extend(
                         create_reasoning_packets(research_iteration.reasoning, step_nr)
@@ -1530,19 +1530,21 @@ def translate_db_message_to_packets(
                         )
                         step_nr += 1
 
-        packet_list.extend(
-            create_message_packets(
-                message_text=chat_message.message,
-                final_documents=[
-                    translate_db_search_doc_to_server_search_doc(doc)
-                    for doc in chat_message.search_docs
-                ],
-                step_nr=step_nr,
-                is_legacy_agentic=chat_message.research_type
-                == ResearchType.LEGACY_AGENTIC,
+        # Only create message packets if there's actual message content
+        if chat_message.message:
+            packet_list.extend(
+                create_message_packets(
+                    message_text=chat_message.message,
+                    final_documents=[
+                        translate_db_search_doc_to_server_search_doc(doc)
+                        for doc in chat_message.search_docs
+                    ],
+                    step_nr=step_nr,
+                    is_legacy_agentic=chat_message.research_type
+                    == ResearchType.LEGACY_AGENTIC,
+                )
             )
-        )
-        step_nr += 1
+            step_nr += 1
 
         # Stream Search results in case there were no substeps (example: legacy agentic and legacy search)
         if len(citation_info_list) > 0 and len(research_iterations) == 0:
