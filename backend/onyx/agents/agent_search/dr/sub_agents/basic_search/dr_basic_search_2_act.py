@@ -225,9 +225,9 @@ def basic_search(
             claims,
         ) = extract_document_citations(answer_string, claims)
 
-        if (citation_numbers and max(citation_numbers) > len(retrieved_docs)) or min(
-            citation_numbers
-        ) < 1:
+        if citation_numbers and (
+            (max(citation_numbers) > len(retrieved_docs)) or min(citation_numbers) < 1
+        ):
             raise ValueError("Citation numbers are out of range for retrieved docs.")
 
         cited_documents = {

@@ -1480,15 +1480,6 @@ and your task will be to decide which tools to use and which requests should be 
 to them.
 """
 
-
-"""
-# We do not want to be too aggressive here because for example questions about other users is
-# usually fine (i.e. 'what did my team work on last week?') with permissions handled within \
-# the system. But some inspection as best practice should be done.
-# Also, a number of these things would not work anyway given db and other permissions, but it would be \
-# best practice to reject them so that they can also be captured/monitored.
-# QUERY_EVALUATION_PROMPT = f"""
-
 WEB_SEARCH_URL_SELECTION_PROMPT = PromptTemplate(
     f"""
     You are tasked with gathering information from the web with search query:
