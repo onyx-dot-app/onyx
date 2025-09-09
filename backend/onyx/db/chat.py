@@ -1404,7 +1404,7 @@ def translate_db_message_to_packets(
             for research_iteration in research_iterations:
 
                 if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
-                    # first iteration does noty need to be reasoned for
+                    # first iteration does not need to be reasoned for
                     packet_list.extend(
                         create_reasoning_packets(research_iteration.reasoning, step_nr)
                     )
