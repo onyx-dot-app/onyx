@@ -33,6 +33,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_MULTIPLIER
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
@@ -353,7 +354,7 @@ def closer(
 
     try:
         streamed_output, _, citation_infos = run_with_timeout(
-            240,
+            int(240 * TF_DR_TIMEOUT_MULTIPLIER),
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=create_question_prompt(
@@ -365,7 +366,7 @@ def closer(
                 agent_answer_level=0,
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
-                timeout_override=60,
+                timeout_override=int(60 * TF_DR_TIMEOUT_MULTIPLIER),
                 answer_piece=StreamingType.MESSAGE_DELTA.value,
                 ind=current_step_nr,
                 context_docs=all_context_llmdocs,
