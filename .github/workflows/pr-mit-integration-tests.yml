@@ -236,18 +236,10 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Log in to Docker Hub (for web-server image)
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
       - name: Pull Docker images
         run: |
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
-          # Web server still from DockerHub (public image)
-          (docker pull onyxdotapp/onyx-web-server:latest) &
           # Other images from ECR
           (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
           (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
@@ -258,12 +250,12 @@ jobs:
           echo "All Docker images pulled successfully"
 
           # Re-tag with expected names for docker-compose
-          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
           docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
           docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
           docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
+      # NOTE: don't need web server for integration tests
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -274,7 +266,16 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d
+          docker compose -f docker-compose.dev.yml -p onyx-stack up \
+            relational_db \
+            index \
+            cache \
+            minio \
+            api_server \
+            inference_model_server \
+            indexing_model_server \
+            background \
+            -d
         id: start_docker
 
       - name: Wait for service to be ready
