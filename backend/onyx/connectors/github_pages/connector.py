@@ -774,7 +774,7 @@ class GithubPagesConnector(LoadConnector, CheckpointedConnector[GithubPagesCheck
                 error_msg = f"GitHub API error (status={e.status}) for {self.repo_owner}/{self.repo_name}: {e.data}"
 
             logger.error(error_msg)
-            raise ConnectorMissingCredentialError(error_msg)
+            raise ConnectorValidationError(error_msg)
         except Exception as e:
             error_msg = f"Unexpected error processing GitHub Pages for {self.repo_owner}/{self.repo_name}: {e}"
             logger.error(error_msg)
