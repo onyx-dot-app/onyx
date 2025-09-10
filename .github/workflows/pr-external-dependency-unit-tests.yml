@@ -46,8 +46,8 @@ jobs:
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
-    # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    # Use larger runner with more resources for Vespa
+    runs-on: [runs-on, runner=16cpu-linux-x64, "run-id=${{ github.run_id }}"]
     
     strategy:
       fail-fast: false
@@ -84,18 +84,23 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
 
+      - name: Wait for services
+        run: |
+          echo "Waiting for services to be ready..."
+          sleep 30
+          
+          # Wait for Vespa specifically
+          echo "Waiting for Vespa to be ready..."
+          timeout 300 bash -c 'until curl -f -s http://localhost:8081/ApplicationStatus > /dev/null 2>&1; do echo "Vespa not ready, waiting..."; sleep 10; done' || echo "Vespa timeout - continuing anyway"
+          
+          echo "Services should be ready now"
+
       - name: Run migrations
         run: |
           cd backend
           # Run migrations to head
           alembic upgrade head
           alembic heads --verbose
-
-      - name: Wait for Vespa to be ready
-        run: |
-          echo "Waiting for Vespa to be ready..."
-          timeout 120 bash -c 'until curl -f http://localhost:8081/ApplicationStatus; do sleep 2; done'
-          echo "Vespa is ready!"
 
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
