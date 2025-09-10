@@ -47,6 +47,14 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     def llm_name(self) -> str:
         return self.display_name
 
+    def is_available(self) -> bool:
+        """
+        Whether this tool is currently available for use given
+        the state of the system. Default: available.
+        Subclasses may override to perform dynamic checks.
+        """
+        return True
+
     """For LLMs which support explicit tool calling"""
 
     @abc.abstractmethod

@@ -1,7 +1,10 @@
 from collections.abc import Generator
 from typing import Any
 
+from typing_extensions import override
+
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -41,6 +44,11 @@ class WebSearchTool(Tool[None]):
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @override
+    def is_available(self) -> bool:
+        """Available only if EXA API key is configured."""
+        return bool(EXA_API_KEY)
 
     def tool_definition(self) -> dict:
         return {

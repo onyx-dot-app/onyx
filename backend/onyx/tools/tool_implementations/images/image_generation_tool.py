@@ -8,12 +8,15 @@ from typing import cast
 import requests
 from litellm import image_generation  # type: ignore
 from pydantic import BaseModel
+from typing_extensions import override
 
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
@@ -135,6 +138,21 @@ class ImageGenerationTool(Tool[None]):
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @override
+    def is_available(self) -> bool:
+        """Available if an OpenAI LLM provider is configured in the system."""
+        try:
+            with get_session_with_current_tenant() as db_session:
+                providers = fetch_existing_llm_providers(db_session)
+            return any(
+                provider.provider == "openai" and provider.api_key is not None
+                for provider in providers
+            )
+        except Exception:
+            # If we can't access the DB context, be conservative
+            logger.exception("Error checking if image generation is available")
+            return False
 
     def tool_definition(self) -> dict:
         return {
