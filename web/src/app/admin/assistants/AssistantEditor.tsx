@@ -3,6 +3,8 @@
 import React from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
+import i18n from "@/i18n/init";
+import k from "../../../i18n/keys";
 import {
   CCPairBasicInfo,
   DocumentSet,
@@ -747,22 +749,20 @@ export function AssistantEditor({
               <p className="text-base font-normal text-2xl">
                 {existingPersona ? (
                   <>
-                    Редактировать ассистента <b>{existingPersona.name}</b>
+                    {i18n.t(k.EDIT_ASSISTANT)} <b>{existingPersona.name}</b>
                   </>
                 ) : (
-                  "Создание нового ассистента"
+                  i18n.t(k.CREATE_NEW_ASSISTANT)
                 )}
               </p>
               <div className="max-w-4xl w-full">
                 <Separator />
                 <div className="flex gap-x-2 items-center">
                   <div className="block font-medium text-sm">
-                    Значок ассистента
+                    {i18n.t(k.ASSISTANT_ICON)}
                   </div>
                 </div>
-                <SubLabel>
-                  Значок, который будет визуально представлять вашего ассистента
-                </SubLabel>
+                <SubLabel>{i18n.t(k.ASSISTANT_ICON_DESCRIPTION)}</SubLabel>
                 <div className="flex gap-x-2 items-center">
                   <div
                     className="p-4 cursor-pointer  rounded-full flex  "
@@ -775,14 +775,14 @@ export function AssistantEditor({
                     {values.uploaded_image ? (
                       <img
                         src={URL.createObjectURL(values.uploaded_image)}
-                        alt="Загрузить значок ассистента"
+                        alt={i18n.t(k.UPLOAD_ASSISTANT_ICON)}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : existingPersona?.uploaded_image_id &&
                       !removePersonaImage ? (
                       <img
                         src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                        alt="Загрузить значок ассистента"
+                        alt={i18n.t(k.UPLOAD_ASSISTANT_ICON)}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (
@@ -811,7 +811,9 @@ export function AssistantEditor({
                       }}
                     >
                       <CameraIcon size={14} />
-                      Загрузить {values.uploaded_image && "новое "}изображение
+                      {values.uploaded_image
+                        ? i18n.t(k.UPLOAD_NEW_IMAGE)
+                        : i18n.t(k.UPLOAD_ASSISTANT_ICON)}
                     </Button>
 
                     {values.uploaded_image && (
@@ -827,9 +829,9 @@ export function AssistantEditor({
                       >
                         <TrashIcon className="h-3 w-3" />
                         {removePersonaImage
-                          ? "Вернуться к предыдущему"
-                          : "Удалить"}
-                        Изображение
+                          ? i18n.t(k.RETURN_TO_PREVIOUS)
+                          : i18n.t(k.DELETE)}
+                        {i18n.t(k.IMAGE)}
                       </Button>
                     )}
 
@@ -853,7 +855,7 @@ export function AssistantEditor({
                           }}
                         >
                           <NewChatIcon size={14} />
-                          Генерировать значок
+                          {i18n.t(k.GENERATE_ICON)}
                         </Button>
                       )}
 
@@ -872,7 +874,7 @@ export function AssistantEditor({
                           }}
                         >
                           <SwapIcon className="h-3 w-3" />
-                          Вернуться к предыдущему изображению
+                          {i18n.t(k.RETURN_TO_PREVIOUS_IMAGE)}
                         </Button>
                       )}
 
@@ -890,7 +892,7 @@ export function AssistantEditor({
                           }}
                         >
                           <TrashIcon className="h-3 w-3" />
-                          Удалить изображение
+                          {i18n.t(k.DELETE_IMAGE)}
                         </Button>
                       )}
                   </div>
@@ -900,8 +902,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="name"
-                label="Название"
-                placeholder="Копирайтер"
+                label={i18n.t(k.TITLE_LABEL)}
+                placeholder={i18n.t(k.TITLE_PLACEHOLDER)}
                 aria-label="assistant-name-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
@@ -909,8 +911,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="description"
-                label="Описание"
-                placeholder="Используйте этого помощника для составления профессиональных писем"
+                label={i18n.t(k.DESCRIPTION_LABEL)}
+                placeholder={i18n.t(k.DESCRIPTION_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
@@ -919,9 +921,9 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-4xl"
                 name="system_prompt"
-                label="Инструкции"
+                label={i18n.t(k.INSTRUCTIONS_LABEL)}
                 isTextArea={true}
-                placeholder="Вы профессиональный помощник по написанию писем, который всегда использует вежливый восторженный тон, подчеркивает элементы действий и оставляет пробелы для человека для заполнения, когда у вас есть неизвестные"
+                placeholder={i18n.t(k.INSTRUCTIONS_PLACEHOLDER)}
                 data-testid="assistant-instructions-input"
                 className="[&_textarea]:placeholder:text-text-muted/50"
               />

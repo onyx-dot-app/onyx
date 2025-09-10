@@ -229,16 +229,14 @@ export const connectorConfigs: Record<
                 label: i18n.t(k.PAGE_ID),
                 name: "page_id",
                 default: "",
-                description:
-                  "Конкретный идентификатор страницы для индексации (например, `131368`)",
+                description: i18n.t(k.SPECIFIC_PAGE_ID_FOR_INDEXING),
               },
               {
                 type: "checkbox",
-                query: "Следует ли индексировать страницы рекурсивно?",
-                label: "Индексировать рекурсивно",
+                query: i18n.t(k.SHOULD_INDEX_PAGES_RECURSIVELY),
+                label: i18n.t(k.INDEX_RECURSIVELY),
                 name: "index_recursively",
-                description:
-                  "Если этот параметр установлен, мы будем индексировать страницу, указанную идентификатором страницы, а также все ее дочерние страницы.",
+                description: i18n.t(k.INDEX_PAGE_AND_CHILDREN_DESCRIPTION),
                 optional: false,
                 default: true,
               },
@@ -246,16 +244,15 @@ export const connectorConfigs: Record<
           },
           {
             value: "cql",
-            label: "CQL-запрос",
+            label: i18n.t(k.CQL_QUERY),
             fields: [
               {
                 type: "text",
-                query: "Введите CQL-запрос (необязательно):",
-                label: "CQL-запрос",
+                query: i18n.t(k.ENTER_CQL_QUERY_OPTIONAL),
+                label: i18n.t(k.CQL_QUERY_LABEL),
                 name: "cql_query",
                 default: "",
-                description:
-                  "ВАЖНО: В настоящее время мы поддерживаем только запросы CQL, возвращающие объекты типа «страница». Это означает, что все запросы CQL должны содержать «type=page» в качестве единственного фильтра типа. Также важно, чтобы не использовались фильтры для «lastModified», так как это вызовет проблемы с нашей логикой опроса коннектора. Мы по-прежнему будем получать все вложения и комментарии для страниц, возвращаемых запросом CQL. Любые фильтры «lastmodified» будут перезаписаны. Подробнее см. на странице https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/.",
+                description: i18n.t(k.CQL_QUERY_IMPORTANT_NOTE),
               },
             ],
           },
@@ -266,84 +263,78 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira: {
-    description: "Настроить коннектор Jira",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_JIRA_CONNECTOR),
+    subtext: i18n.t(k.JIRA_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта Jira:",
-        label: "URL-адрес проекта Jira",
+        query: i18n.t(k.ENTER_JIRA_PROJECT_URL),
+        label: i18n.t(k.JIRA_PROJECT_URL_LABEL),
         name: "jira_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   redmine: {
-    description: "Настроить коннектор Redmine",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_REDMINE_CONNECTOR),
+    subtext: i18n.t(k.REDMINE_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта Redmine:",
-        label: "Название redmine",
+        query: i18n.t(k.ENTER_REDMINE_PROJECT_URL),
+        label: i18n.t(k.REDMINE_NAME_LABEL),
         name: "redmine_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   bitrix: {
-    description: "Настроить bitrix коннектор",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_BITRIX_CONNECTOR),
+    subtext: i18n.t(k.BITRIX_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта bitrix:",
-        label: "bitrix название",
+        query: i18n.t(k.ENTER_BITRIX_PROJECT_URL),
+        label: i18n.t(k.BITRIX_NAME_LABEL),
         name: "bitrix_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   file: {
-    description: "Конфигурация файлового коннектора",
+    description: i18n.t(k.FILE_CONNECTOR_CONFIGURATION),
     values: [
       {
         type: "file",
-        query: "Введите местоположение файлов:",
-        label: "Расположение файлов",
+        query: i18n.t(k.ENTER_FILE_LOCATION),
+        label: i18n.t(k.FILE_LOCATION_LABEL),
         name: "file_locations",
         optional: false,
       },
@@ -351,16 +342,15 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   notion: {
-    description: "Настроить коннектор Notion",
+    description: i18n.t(k.CONFIGURE_NOTION_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите идентификатор корневой страницы",
-        label: "Корневой Page ID",
+        query: i18n.t(k.ENTER_ROOT_PAGE_ID),
+        label: i18n.t(k.ROOT_PAGE_ID_LABEL),
         name: "root_page_id",
         optional: true,
-        description:
-          "Если указано, будет индексировать только указанную страницу + все ее дочерние страницы. Если оставить пустым, будут индексироваться все страницы, к которым интеграции был предоставлен доступ.",
+        description: i18n.t(k.ROOT_PAGE_ID_DESCRIPTION),
       },
     ],
     advanced_values: [],
@@ -549,28 +539,28 @@ export const connectorConfigs: Record<
       },
       {
         type: "text",
-        query: "Введите таблицу:",
-        label: "Таблица",
+        query: i18n.t(k.ENTER_TABLE),
+        label: i18n.t(k.TABLE_LABEL),
         name: "table_name",
       },
       {
         type: "text",
-        query: "Введите столбцы:",
-        label: "Столбцы с текстом",
+        query: i18n.t(k.ENTER_COLUMNS_TEXT),
+        label: i18n.t(k.TEXT_COLUMNS_LABEL),
         name: "conten_columns",
         optional: true,
       },
       {
         type: "text",
-        query: "Введите столбцы:",
-        label: "Столбцы метаданных",
+        query: i18n.t(k.ENTER_COLUMNS_METADATA),
+        label: i18n.t(k.METADATA_COLUMNS_LABEL),
         name: "metadata_columns",
         optional: true,
       },
       {
         type: "text",
-        query: "Введите запрос:",
-        label: "SQL-запрос",
+        query: i18n.t(k.ENTER_SQL_QUERY),
+        label: i18n.t(k.SQL_QUERY_LABEL),
         name: "query",
         optional: true,
       },
@@ -618,8 +608,8 @@ export function createConnectorValidationSchema(
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
-    access_type: Yup.string().required("Требуется тип доступа"),
-    name: Yup.string().required("Требуется имя коннектора"),
+    access_type: Yup.string().required(i18n.t(k.ACCESS_TYPE_REQUIRED)),
+    name: Yup.string().required(i18n.t(k.CONNECTOR_NAME_REQUIRED)),
     ...[...configuration.values, ...configuration.advanced_values].reduce(
       (acc, field) => {
         let schema: any =
@@ -634,7 +624,9 @@ export function createConnectorValidationSchema(
             : Yup.string();
 
         if (!field.optional) {
-          schema = schema.required(`Требуется ${field.label}`);
+          schema = schema.required(
+            `${i18n.t(k.FIELD_REQUIRED)} ${field.label}`
+          );
         }
 
         acc[field.name] = schema;
@@ -644,13 +636,10 @@ export function createConnectorValidationSchema(
     ),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      0,
-      "Частота обрезки должна быть неотрицательной"
-    ),
+    pruneFreq: Yup.number().min(0, i18n.t(k.CHUNK_SIZE_MUST_BE_NON_NEGATIVE)),
     refreshFreq: Yup.number().min(
       0,
-      "Частота обновления должна быть неотрицательной"
+      i18n.t(k.REFRESH_FREQUENCY_MUST_BE_NON_NEGATIVE)
     ),
   });
 

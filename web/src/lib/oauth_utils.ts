@@ -130,13 +130,17 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
     let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Прочитать тело как текст
-      errorDetails += `\nТело ответа: ${responseBody}`;
+      const responseBody = await response.text(); // ${i18n.t(k.READ_RESPONSE_BODY_AS_TEXT)}
+      errorDetails += `\n${i18n.t(k.RESPONSE_BODY)}: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
+        errorDetails += `\n${i18n.t(k.FAILED_TO_READ_RESPONSE_BODY)}: ${
+          err.message
+        }`;
       } else {
-        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
+        errorDetails += `\n${i18n.t(
+          k.FAILED_TO_READ_RESPONSE_BODY_UNKNOWN_ERROR
+        )}`;
       }
     }
 
@@ -270,16 +274,22 @@ export async function handleOAuthConfluenceFinalize(
   });
 
   if (!response.ok) {
-    let errorDetails = `Не удалось обработать ответ на финализацию OAuth Confluence: ${response.status}`;
+    let errorDetails = `${i18n.t(
+      k.FAILED_TO_PROCESS_OAUTH_CONFLUENCE_RESPONSE
+    )}: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Прочитать тело как текст
-      errorDetails += `\nТело ответа: ${responseBody}`;
+      const responseBody = await response.text(); // ${i18n.t(k.READ_RESPONSE_BODY_AS_TEXT)}
+      errorDetails += `\n${i18n.t(k.RESPONSE_BODY)}: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
+        errorDetails += `\n${i18n.t(k.FAILED_TO_READ_RESPONSE_BODY)}: ${
+          err.message
+        }`;
       } else {
-        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
+        errorDetails += `\n${i18n.t(
+          k.FAILED_TO_READ_RESPONSE_BODY_UNKNOWN_ERROR
+        )}`;
       }
     }
 
