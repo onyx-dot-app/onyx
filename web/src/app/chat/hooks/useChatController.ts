@@ -819,6 +819,10 @@ export function useChatController({
       currentMessageTree,
       currentChatState,
       llmProviders,
+      // Ensure latest forced tools are used when submitting
+      forcedToolIds,
+      // Keep tool preference-derived values fresh
+      assistantPreferences,
     ]
   );
 
