@@ -66,11 +66,12 @@ jobs:
           --set=postgresql.primary.persistence.enabled=false \
           --set=redis.enabled=true \
           --set=webserver.replicaCount=1 \
-          --set=api.replicaCount=1 \
+          --set=api.replicaCount=0 \
           --set=inferenceCapability.replicaCount=0 \
           --set=indexCapability.replicaCount=0 \
           --set=celery_beat.replicaCount=0 \
           --set=celery_worker_heavy.replicaCount=0 \
+          --set=celery_worker_docfetching.replicaCount=0 \
           --set=celery_worker_docprocessing.replicaCount=0 \
           --set=celery_worker_light.replicaCount=0 \
           --set=celery_worker_monitoring.replicaCount=0 \
