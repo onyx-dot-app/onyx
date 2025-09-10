@@ -14,9 +14,7 @@ from onyx.db.models import FederatedConnector
 from onyx.db.models import LLMProvider
 from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
-from onyx.db.models import Persona__Prompt
 from onyx.db.models import Persona__Tool
-from onyx.db.models import Prompt
 from onyx.db.models import SlackBot
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
@@ -56,17 +54,8 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     db_session.add(persona_doc_set)
     db_session.commit()
 
-    prompt = Prompt(
-        name="default_prompt",
-        description="Default prompt for testing",
-        system_prompt="You are a helpful assistant.",
-        task_prompt="Answer the user's question based on the provided context.",
-    )
-    db_session.add(prompt)
-    db_session.flush()
-
-    persona_prompt = Persona__Prompt(persona_id=persona.id, prompt_id=prompt.id)
-    db_session.add(persona_prompt)
+    persona.system_prompt = "You are a helpful assistant."
+    persona.task_prompt = "Answer the user's question based on the provided context."
 
     try:
         search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
