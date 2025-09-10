@@ -75,6 +75,7 @@ class SearchToolOverrideKwargs(BaseModel):
     precomputed_is_keyword: bool | None = None
     precomputed_keywords: list[str] | None = None
     user_file_ids: list[UUID] | None = None
+    project_id: int | None = None
     document_sources: list[DocumentSource] | None = None
     time_cutoff: datetime | None = None
     expanded_queries: QueryExpansions | None = None

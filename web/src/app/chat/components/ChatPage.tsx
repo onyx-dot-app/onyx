@@ -87,6 +87,7 @@ import { MessagesDisplay } from "./MessagesDisplay";
 import { WelcomeMessage } from "./WelcomeMessage";
 import ProjectContextPanel from "./projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { getProjectTokenCount } from "@/app/chat/projects/projectsService";
 
 import ProjectChatSessionList from "./projects/ProjectChatSessionList";
 
@@ -136,6 +137,7 @@ export function ChatPage({
     setCurrentMessageFiles,
     setCurrentProjectId,
     currentProjectId,
+    currentProjectDetails,
     lastFailedFiles,
     clearLastFailedFiles,
   } = useProjectsContext();
@@ -758,6 +760,35 @@ export function ChatPage({
     }
   }, [currentProjectId, showCenteredInput]);
 
+  // When no chat session exists but a project is selected, fetch the
+  // total tokens for the project's files so upload UX can compare
+  // against available context similar to session-based flows.
+  const [projectContextTokenCount, setProjectContextTokenCount] = useState(0);
+  // Fetch project-level token count when no chat session exists.
+  // Note: useEffect cannot be async, so we define an inner async function (run)
+  // and invoke it. The `cancelled` guard prevents setting state after the
+  // component unmounts or when the dependencies change and a newer effect run
+  // supersedes an older in-flight request.
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!existingChatSessionId && currentProjectId !== null) {
+        try {
+          const total = await getProjectTokenCount(currentProjectId);
+          if (!cancelled) setProjectContextTokenCount(total || 0);
+        } catch {
+          if (!cancelled) setProjectContextTokenCount(0);
+        }
+      } else {
+        setProjectContextTokenCount(0);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingChatSessionId, currentProjectId, currentProjectDetails?.files]);
+
   // handle error case where no assistants are available
   if (noAssistants) {
     return (
@@ -1175,7 +1206,9 @@ export function ChatPage({
                                 onSubmit={handleChatInputSubmit}
                                 chatState={currentChatState}
                                 currentSessionFileTokenCount={
-                                  currentSessionFileTokenCount
+                                  existingChatSessionId
+                                    ? currentSessionFileTokenCount
+                                    : projectContextTokenCount
                                 }
                                 availableContextTokens={availableContextTokens}
                                 selectedAssistant={

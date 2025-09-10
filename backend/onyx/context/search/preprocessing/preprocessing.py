@@ -173,6 +173,7 @@ def retrieval_preprocessing(
 
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
+        project_id=user_file_filters.project_id,
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
         time_cutoff=time_filter or predicted_time_cutoff,

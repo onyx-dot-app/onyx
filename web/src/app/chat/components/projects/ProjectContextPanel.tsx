@@ -30,8 +30,13 @@ import { UserFileStatus } from "../../projects/projectsService";
 import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
-export function FileCard({ file }: { file: ProjectFile }) {
-  const { deleteUserFile } = useProjectsContext();
+export function FileCard({
+  file,
+  removeFile,
+}: {
+  file: ProjectFile;
+  removeFile: (fileId: string) => void;
+}) {
   const typeLabel = useMemo(() => {
     if (!file.file_type) return "";
     const parts = String(file.file_type).split("/");
@@ -43,21 +48,17 @@ export function FileCard({ file }: { file: ProjectFile }) {
     String(file.status).toLowerCase() === "processing" ||
     String(file.status).toLowerCase() === "uploading";
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isProcessing) return;
-    try {
-      await deleteUserFile(file.id);
-    } catch (err) {
-      // Swallow; parent poll/refresh will sync state
-    }
+    removeFile(file.id);
   };
 
   return (
     <div className="relative flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm">
       {!isProcessing && (
         <button
-          onClick={handleDelete}
+          onClick={handleRemoveFile}
           title="Delete file"
           aria-label="Delete file"
           className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm hover:opacity-90"
@@ -103,6 +104,7 @@ export default function ProjectContextPanel() {
     currentProjectId,
     uploadFiles,
     recentFiles,
+    unlinkFileFromProject,
   } = useProjectsContext();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -236,7 +238,20 @@ export default function ProjectContextPanel() {
             });
             return Array.from(byId.values())
               .slice(0, 3)
-              .map((f) => <FileCard key={f.id} file={f} />);
+              .map((f) => (
+                <FileCard
+                  key={f.id}
+                  file={f}
+                  removeFile={async (fileId: string) => {
+                    if (!currentProjectId) return;
+                    try {
+                      await unlinkFileFromProject(currentProjectId, fileId);
+                    } catch (e) {
+                      // noop; context will surface errors if needed
+                    }
+                  }}
+                />
+              ));
           })()}
           {[...(currentProjectDetails?.files || [])].length > 3 && (
             <button

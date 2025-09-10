@@ -195,6 +195,13 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     }
   };
 
+  const handleRemoveMessageFile = useCallback(
+    (fileId: string) => {
+      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
+    },
+    [setCurrentMessageFiles]
+  );
+
   const { llmProviders, inputPrompts } = useChatContext();
   const [showPrompts, setShowPrompts] = useState(false);
   const [showStickyBanner, setShowStickyBanner] = useState(false);
@@ -444,7 +451,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 <div className="px-4 pt-4">
                   <div className="flex flex-wrap gap-2">
                     {currentMessageFiles.map((file) => (
-                      <FileCard key={file.id} file={file} />
+                      <FileCard
+                        key={file.id}
+                        file={file}
+                        removeFile={handleRemoveMessageFile}
+                      />
                     ))}
                   </div>
                 </div>

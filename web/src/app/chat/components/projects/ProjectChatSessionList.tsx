@@ -6,6 +6,13 @@ import { MessageSquareText } from "lucide-react";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
+import { InfoIcon } from "@/components/icons/icons";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 function formatRelativeTime(isoDate: string): string {
   const date = new Date(isoDate);
@@ -69,18 +76,52 @@ export default function ProjectChatSessionList() {
                   <MessageSquareText className="h-5 w-5 text-text-400" />
                 </div>
                 <div className="flex flex-col overflow-hidden">
-                  <span
-                    className="text-sm font-medium text-text-darker truncate"
-                    title={chat.name}
-                  >
-                    {chat.name || "Unnamed Chat"}
-                  </span>
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span
+                      className="text-sm font-medium text-text-darker truncate"
+                      title={chat.name}
+                    >
+                      {chat.name || "Unnamed Chat"}
+                    </span>
+                    {(() => {
+                      const personaIdToDefault =
+                        currentProjectDetails?.persona_id_to_is_default || {};
+                      const isDefault = personaIdToDefault[chat.persona_id];
+                      if (isDefault === false) {
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center text-amber-600 dark:text-yellow-500 cursor-default flex-shrink-0">
+                                  <InfoIcon
+                                    size={14}
+                                    className="text-amber-600 dark:text-yellow-500"
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="center">
+                                <p className="max-w-[220px] text-sm">
+                                  Project files and instructions aren’t applied
+                                  here because this chat uses a custom
+                                  assistant.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                   <span className="text-xs text-text-400 truncate">
                     Last message {formatRelativeTime(chat.time_updated)}
                   </span>
                 </div>
               </div>
-              <div onClick={(e) => e.preventDefault()}>
+              <div
+                className="flex items-center gap-2"
+                onClick={(e) => e.preventDefault()}
+              >
                 <ChatSessionMorePopup
                   chatSession={chat}
                   projectId={currentProjectId}

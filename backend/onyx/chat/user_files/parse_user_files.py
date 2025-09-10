@@ -106,7 +106,10 @@ def parse_user_files(
         alternate_db_session=None,
         retrieved_sections_callback=None,
         skip_query_analysis=have_enough_tokens,
-        user_file_ids=user_file_ids + project_user_file_ids or [],
+        user_file_ids=user_file_ids or [],
+        project_id=(
+            project_id if persona.is_default_persona else None
+        ),  # if the persona is not default, we don't want to use the project files
     )
 
     return user_files, user_file_models, override_kwargs

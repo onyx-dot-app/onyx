@@ -19,6 +19,7 @@ from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
+from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.prompts import upsert_prompt
 from onyx.server.features.persona.models import PromptSnapshot
@@ -110,6 +111,41 @@ def get_files_in_project(
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
 
+@router.delete("/{project_id}/files/{file_id}")
+def unlink_user_file_from_project(
+    project_id: int,
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Unlink an existing user file from a specific project for the current user.
+
+    Does not delete the underlying file; only removes the association.
+    """
+    project = (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .one_or_none()
+    )
+    if user_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Remove the association if it exists
+    if user_file in project.user_files:
+        project.user_files.remove(user_file)
+        db_session.commit()
+
+    return Response(status_code=204)
+
+
 @router.get("/{project_id}/instructions")
 def get_project_instructions(
     project_id: int,
@@ -179,6 +215,7 @@ class ProjectPayload(BaseModel):
     project: UserProjectSnapshot
     files: list[UserFileSnapshot] | None = None
     instructions: PromptSnapshot | None = None
+    persona_id_to_is_default: dict[int, bool] | None = None
 
 
 @router.get("/{project_id}/details", response_model=ProjectPayload)
@@ -190,7 +227,21 @@ def get_project_details(
     project = get_project(project_id, user, db_session)
     files = get_files_in_project(project_id, user, db_session)
     instructions = get_project_instructions(project_id, user, db_session)
-    return ProjectPayload(project=project, files=files, instructions=instructions)
+    persona_ids = [
+        session.persona_id
+        for session in project.chat_sessions
+        if session.persona_id is not None
+    ]
+    personas = get_personas_by_ids(persona_ids, db_session)
+    persona_id_to_is_default = {
+        persona.id: persona.is_default_persona for persona in personas
+    }
+    return ProjectPayload(
+        project=project,
+        files=files,
+        instructions=instructions,
+        persona_id_to_is_default=persona_id_to_is_default,
+    )
 
 
 class UpdateProjectRequest(BaseModel):
@@ -388,6 +439,36 @@ def get_chat_session_project_token_count(
         .filter(
             UserFile.user_id == user.id,
             UserFile.projects.any(id=chat_session.project_id),
+        )
+        .scalar()
+        or 0
+    )
+
+    return TokenCountResponse(total_tokens=int(total_tokens))
+
+
+@router.get("/{project_id}/token-count", response_model=TokenCountResponse)
+def get_project_token_count(
+    project_id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> TokenCountResponse:
+    """Return sum of token_count for all user files in the given project for the current user."""
+
+    # Verify the project belongs to the current user
+    project = (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    total_tokens = (
+        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
+        .filter(
+            UserFile.user_id == user.id,
+            UserFile.projects.any(id=project_id),
         )
         .scalar()
         or 0

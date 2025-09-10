@@ -210,6 +210,7 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
     createProject,
     projects,
     currentProjectId,
+    currentProjectDetails,
     renameProject,
     deleteProject,
   } = useProjectsContext();
@@ -270,6 +271,13 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
                   isSelected={chatSession.id == chatSessionId}
                   showDragHandle={false}
                   projectId={p.id}
+                  isCustomAssistant={
+                    currentProjectId === p.id &&
+                    !!currentProjectDetails?.persona_id_to_is_default &&
+                    currentProjectDetails.persona_id_to_is_default[
+                      chatSession.persona_id
+                    ] === false
+                  }
                 />
               ))
             ) : (

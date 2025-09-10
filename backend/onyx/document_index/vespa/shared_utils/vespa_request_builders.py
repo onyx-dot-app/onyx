@@ -14,6 +14,7 @@ from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -136,6 +137,18 @@ def build_vespa_filters(
             return f"!({DOC_UPDATED_AT} < {cutoff_secs}) and "
         return f"({DOC_UPDATED_AT} >= {cutoff_secs}) and "
 
+    def _build_user_project_filter(
+        project_id: int | None,
+    ) -> str:
+        if project_id is None:
+            return ""
+        try:
+            pid = int(project_id)
+        except Exception:
+            return ""
+        # Vespa YQL 'contains' expects a string literal; quote the integer
+        return f'({USER_PROJECT} contains "{pid}") and '
+
     # Start building the filter string
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
@@ -175,6 +188,9 @@ def build_vespa_filters(
         [str(uuid) for uuid in filters.user_file_ids] if filters.user_file_ids else None
     )
     filter_str += _build_or_filters(DOCUMENT_ID, user_file_ids_str)
+
+    # User project filter (array<int> attribute membership)
+    filter_str += _build_user_project_filter(filters.project_id)
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
