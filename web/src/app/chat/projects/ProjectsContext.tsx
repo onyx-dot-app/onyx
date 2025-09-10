@@ -28,6 +28,7 @@ import {
   deleteUserFile as svcDeleteUserFile,
   getUserFileStatuses as svcGetUserFileStatuses,
   unlinkFileFromProject as svcUnlinkFileFromProject,
+  linkFileToProject as svcLinkFileToProject,
 } from "./projectsService";
 import { Prompt } from "@/app/admin/assistants/interfaces";
 
@@ -58,6 +59,10 @@ interface ProjectsContextType {
   refreshRecentFiles: () => Promise<void>;
   deleteUserFile: (fileId: string) => Promise<void>;
   unlinkFileFromProject: (projectId: number, fileId: string) => Promise<void>;
+  linkFileToProject?: (
+    projectId: number,
+    fileId: string
+  ) => Promise<ProjectFile>;
   lastFailedFiles: ProjectFile[];
   clearLastFailedFiles: () => void;
 }
@@ -519,6 +524,14 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
           await refreshCurrentProjectDetails();
         }
         await refreshRecentFiles();
+      },
+      linkFileToProject: async (projectId: number, fileId: string) => {
+        const file = await svcLinkFileToProject(projectId, fileId);
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
+        await refreshRecentFiles();
+        return file;
       },
     }),
     [

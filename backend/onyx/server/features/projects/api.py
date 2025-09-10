@@ -146,6 +146,41 @@ def unlink_user_file_from_project(
     return Response(status_code=204)
 
 
+@router.post("/{project_id}/files/{file_id}", response_model=UserFileSnapshot)
+def link_user_file_to_project(
+    project_id: int,
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+):
+    """Link an existing user file to a specific project for the current user.
+
+    Creates the association in the Project__UserFile join table if it does not exist.
+    Returns the linked user file snapshot.
+    """
+    project = (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .one_or_none()
+    )
+    if user_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if user_file not in project.user_files:
+        project.user_files.append(user_file)
+        db_session.commit()
+
+    return UserFileSnapshot.from_model(user_file)
+
+
 @router.get("/{project_id}/instructions")
 def get_project_instructions(
     project_id: int,
