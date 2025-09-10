@@ -647,7 +647,7 @@ def clarifier(
                         assistant_system_prompt, clarification_prompt
                     ),
                     schema=ClarificationGenerationResponse,
-                    timeout_override=int(TF_DR_TIMEOUT_SHORT),
+                    timeout_override=TF_DR_TIMEOUT_SHORT,
                     # max_tokens=1500,
                 )
             except Exception as e:

@@ -67,7 +67,7 @@ def is_summarize(
                 assistant_system_prompt, search_prompt + (assistant_task_prompt or "")
             ),
             schema=SearchAnswer,
-            timeout_override=int(TF_DR_TIMEOUT_SHORT),
+            timeout_override=TF_DR_TIMEOUT_SHORT,
         )
         answer_string = search_answer_json.answer
         claims = search_answer_json.claims or []

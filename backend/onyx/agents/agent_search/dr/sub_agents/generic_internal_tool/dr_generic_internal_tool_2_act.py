@@ -69,7 +69,7 @@ def generic_internal_tool_act(
             tool_use_prompt,
             tools=[generic_internal_tool.tool_definition()],
             tool_choice="required",
-            timeout_override=int(TF_DR_TIMEOUT_SHORT),
+            timeout_override=TF_DR_TIMEOUT_SHORT,
         )
 
         # make sure we got a tool call
@@ -114,7 +114,7 @@ def generic_internal_tool_act(
     )
     answer_string = str(
         graph_config.tooling.primary_llm.invoke(
-            tool_summary_prompt, timeout_override=int(TF_DR_TIMEOUT_SHORT)
+            tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
         ).content
     ).strip()
 

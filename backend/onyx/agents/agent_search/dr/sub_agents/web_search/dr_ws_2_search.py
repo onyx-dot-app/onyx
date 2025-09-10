@@ -109,7 +109,7 @@ def web_search(
             agent_decision_prompt + (assistant_task_prompt or ""),
         ),
         schema=WebSearchAnswer,
-        timeout_override=int(TF_DR_TIMEOUT_SHORT),
+        timeout_override=TF_DR_TIMEOUT_SHORT,
     )
     results_to_open = [
         (search_query, search_results[i])

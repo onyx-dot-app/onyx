@@ -327,7 +327,7 @@ def orchestrator(
                         decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
-                    timeout_override=int(TF_DR_TIMEOUT_SHORT),
+                    timeout_override=TF_DR_TIMEOUT_SHORT,
                     # max_tokens=2500,
                 )
                 next_step = orchestrator_action.next_step
@@ -378,7 +378,7 @@ def orchestrator(
                         plan_generation_prompt,
                     ),
                     schema=OrchestrationPlan,
-                    timeout_override=int(TF_DR_TIMEOUT_SHORT),
+                    timeout_override=TF_DR_TIMEOUT_SHORT,
                     # max_tokens=3000,
                 )
             except Exception as e:

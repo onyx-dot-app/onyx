@@ -126,7 +126,7 @@ def custom_tool_act(
     )
     answer_string = str(
         graph_config.tooling.primary_llm.invoke(
-            tool_summary_prompt, timeout_override=int(TF_DR_TIMEOUT_SHORT)
+            tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
         ).content
     ).strip()
 

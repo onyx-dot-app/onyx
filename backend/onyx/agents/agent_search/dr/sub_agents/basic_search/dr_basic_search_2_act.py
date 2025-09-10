@@ -96,7 +96,7 @@ def basic_search(
                 assistant_system_prompt, base_search_processing_prompt
             ),
             schema=BaseSearchProcessingResponse,
-            timeout_override=int(TF_DR_TIMEOUT_SHORT),
+            timeout_override=TF_DR_TIMEOUT_SHORT,
             # max_tokens=100,
         )
     except Exception as e:
