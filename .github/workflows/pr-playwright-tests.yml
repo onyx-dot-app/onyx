@@ -45,7 +45,7 @@ jobs:
           context: ./web
           file: ./web/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/playwright-test-onyx-web-server:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}
           push: true
 
   build-backend-image:
@@ -74,7 +74,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/playwright-test-onyx-backend:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}
           push: true
 
   build-model-server-image:
@@ -103,7 +103,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/playwright-test-onyx-model-server:test-${{ github.run_id }}
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}
           push: true
 
   playwright-tests:
@@ -131,18 +131,18 @@ jobs:
         run: |
           # Pull all images from ECR in parallel
           echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.ECR_REGISTRY }}/playwright-test-onyx-web-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/playwright-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/playwright-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
           echo "All Docker images pulled successfully"
 
           # Re-tag with expected names for docker-compose
-          docker tag ${{ env.ECR_REGISTRY }}/playwright-test-onyx-web-server:test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.ECR_REGISTRY }}/playwright-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.ECR_REGISTRY }}/playwright-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
 
       - name: Setup node
         uses: actions/setup-node@v4
