@@ -337,7 +337,7 @@ export function ChatSessionDisplay({
                                   <>
                                     {showShareModal && (
                                       <DefaultDropdownElement
-                                        name="Share"
+                                        name="Поделиться"
                                         icon={FiShare2}
                                         onSelect={() =>
                                           showShareModal(chatSession)
@@ -346,13 +346,13 @@ export function ChatSessionDisplay({
                                     )}
                                     {!search && (
                                       <DefaultDropdownElement
-                                        name="Rename"
+                                        name="Переименовать"
                                         icon={FiEdit2}
                                         onSelect={() => setIsRenamingChat(true)}
                                       />
                                     )}
                                     <DefaultDropdownElement
-                                      name="Delete"
+                                      name="Удалить"
                                       icon={FiTrash}
                                       onSelect={handleDeleteClick}
                                     />

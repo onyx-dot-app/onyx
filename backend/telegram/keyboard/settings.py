@@ -1,8 +1,16 @@
+from enum import Enum
 from typing import Sequence
 
 from telebot import types
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 from onyx.db.models import Persona, LLMProvider
+
+
+class MENU_BUTTONS_TXT(Enum):
+    edit_model = "Выбор модели"
+    restart = "Рестарт"
+    edit_persona = "Выбор ассистента"
 
 
 def settings_constructor_for_personas(personas: Sequence[Persona]) -> types.InlineKeyboardMarkup:
@@ -23,3 +31,12 @@ def settings_constructor_for_llm_providers(llm_providers: Sequence[LLMProvider])
 
     return keyboard
 
+
+def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    assistant_btn = KeyboardButton(MENU_BUTTONS_TXT.edit_persona.value)
+    model_btn = KeyboardButton(MENU_BUTTONS_TXT.edit_model.value)
+    restart_btn = KeyboardButton(MENU_BUTTONS_TXT.restart.value)
+
+    keyboard.add(assistant_btn, model_btn, restart_btn)
+    return keyboard

@@ -85,8 +85,7 @@ const UserRoleDropdown = ({
                 (!isPaidEnterpriseFeaturesEnabled &&
                   role === UserRole.GLOBAL_CURATOR) ||
                 role === UserRole.CURATOR ||
-                role === UserRole.LIMITED ||
-                role === UserRole.SLACK_USER;
+                role === UserRole.LIMITED;
 
               // Always show the current role
               const isCurrentRole = user.role === role;

@@ -9,16 +9,25 @@ from onyx.db.telegram import get_user_telegram_settings, get_user_telegram_api_k
 from telegram.states.chat import ChatStates
 from telegram.utils.database import with_session
 from telegram.utils.telegram import request_answer_from_smartsearch
+from telegram.keyboard.settings import MENU_BUTTONS_TXT
 
 
 def handler(bot: AsyncTeleBot):
-    @bot.message_handler(state=ChatStates.MAIN, commands=['restart'], auth=True)
+    @bot.message_handler(
+        state=ChatStates.MAIN,
+        func=lambda msg: msg.text in ['/restart', MENU_BUTTONS_TXT.restart.value],
+        auth=True,
+    )
     async def handle_restart(message: Message, state: StateContext):
         await state.delete()
         await bot.send_message(message.from_user.id,
                                "Новый чат успешно начат!\n\nВведите /menu для просмотра списка команд.")
 
-    @bot.message_handler(state=ChatStates.MAIN, auth=True, content_types=['text', 'document'])
+    @bot.message_handler(
+        state=ChatStates.MAIN,
+        auth=True,
+        content_types=['text', 'document']
+    )
     @with_session
     async def handel_messages(message: Message, session: Session, state: StateContext):
         if message.document:

@@ -20,6 +20,8 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
+import i18n from "@/i18n/init";
+import k from "../i18n/keys";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -39,7 +41,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
   },
   file: {
     icon: FileIcon,
-    displayName: "Файл",
+    displayName: i18n.t(k.FILE_SOURCE),
     category: SourceCategory.ImportedKnowledge,
     adminUrl: "file",
   },

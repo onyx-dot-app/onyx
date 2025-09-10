@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from typing import Any
+from typing import Any, Literal
 from typing import cast
 from typing import Dict
 from typing import List
@@ -407,7 +407,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_with_tenant(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id)
+            #verify_email_in_whitelist(account_email, tenant_id)
             verify_email_domain(account_email)
 
             if MULTI_TENANT:
@@ -450,11 +450,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    user_count = await get_user_count()
+                    if (
+                        user_count == 0
+                        or account_email in get_default_admin_user_emails()
+                    ):
+                        role = UserRole.ADMIN
+                    else:
+                        role = UserRole.BASIC
                     password = self.password_helper.generate()
                     user_dict = {
                         "email": account_email,
                         "hashed_password": self.password_helper.hash(password),
                         "is_verified": is_verified_by_default,
+                        "role": role,
                     }
 
                     user = await self.user_db.create(user_dict)
@@ -1170,6 +1179,8 @@ def create_onyx_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[Literal["plain", "S256"]] = None,
 ) -> APIRouter:
     return get_oauth_router(
         oauth_client,
@@ -1179,6 +1190,8 @@ def create_onyx_oauth_router(
         redirect_url,
         associate_by_email,
         is_verified_by_default,
+        code_challenge,
+        code_challenge_method,
     )
 
 
@@ -1190,6 +1203,8 @@ def get_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[Literal["plain", "S256"]] = None,
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1235,6 +1250,8 @@ def get_oauth_router(
             authorize_redirect_url,
             state,
             scopes,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
         )
 
         # For Google OAuth, add parameters to request refresh tokens

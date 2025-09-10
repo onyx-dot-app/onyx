@@ -118,13 +118,13 @@ export const SettingsPanel = ({
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
-          label="Использовать SmartSearch как страницу новой вкладки"
+          label={i18n.t(k.USE_SMARTSEARCH_NEW_TAB)}
         />
 
         <SidebarSwitch
           checked={showShortcuts}
           onCheckedChange={setShowShortcuts}
-          label="Показать закладки"
+          label={i18n.t(k.SHOW_BOOKMARKS)}
         />
 
         <h3 className="text-sm font-semibold mt-6 mb-2">{i18n.t(k.THEME)}</h3>
@@ -135,16 +135,16 @@ export const SettingsPanel = ({
         >
           <RadioOption
             value="light"
-            label="Светлая тема"
-            description="Светлая тема"
+            label={i18n.t(k.LIGHT_THEME)}
+            description={i18n.t(k.LIGHT_THEME_DESC)}
             groupValue={theme}
             onChange={toggleTheme}
           />
 
           <RadioOption
             value="dark"
-            label="Темная тема"
-            description="Темная тема"
+            label={i18n.t(k.DARK_THEME)}
+            description={i18n.t(k.DARK_THEME_DESC)}
             groupValue={theme}
             onChange={toggleTheme}
           />

@@ -1060,7 +1060,11 @@ export function AssistantEditor({
                               </div>
                             )}
                             <button
-                              onClick={() => setFilePickerModalOpen(true)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                event.preventDefault();
+                                setFilePickerModalOpen(true);
+                              }}
                               className="text-primary hover:underline"
                             >
                               + Добавить файлы пользователя
@@ -1740,6 +1744,7 @@ export function AssistantEditor({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
                                   const label = labels.find(
                                     (l) => l.name === option.value
                                   );

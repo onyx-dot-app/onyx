@@ -3,6 +3,8 @@ import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelecto
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
+import i18n from "@/i18n/init";
+import k from "../../i18n/keys";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -136,24 +138,23 @@ export const connectorConfigs: Record<
   ConnectionConfiguration
 > = {
   web: {
-    description: "Настроить веб-коннектор",
+    description: i18n.t(k.CONFIGURE_WEB_CONNECTOR),
     values: [
       {
         type: "text",
-        query:
-          "Введите URL-адрес веб-сайта для копирования, например https://duc-smartsearch.ru/:",
+        query: i18n.t(k.ENTER_WEBSITE_URL_FOR_CRAWLING),
         label: "URL",
         name: "base_url",
         optional: false,
       },
       {
         type: "select",
-        query: "Выберите тип веб-коннектора:",
-        label: "Метод сбора",
+        query: i18n.t(k.SELECT_WEB_CONNECTOR_TYPE),
+        label: i18n.t(k.COLLECTION_METHOD),
         name: "web_connector_type",
         options: [
-          { name: "рекурсивный", value: "recursive" },
-          { name: "одиночный", value: "single" },
+          { name: i18n.t(k.RECURSIVE), value: "recursive" },
+          { name: i18n.t(k.SINGLE), value: "single" },
           { name: "sitemap", value: "sitemap" },
         ],
       },
@@ -162,74 +163,70 @@ export const connectorConfigs: Record<
     overrideDefaultFreq: 60 * 60 * 24,
   },
   bookstack: {
-    description: "Настроить коннектор Bookstack",
+    description: i18n.t(k.CONFIGURE_BOOKSTACK_CONNECTOR),
     values: [],
     advanced_values: [],
   },
   confluence: {
-    description: "Настроить коннектор Confluence",
+    description: i18n.t(k.CONFIGURE_CONFLUENCE_CONNECTOR),
     values: [
       {
         type: "checkbox",
-        query: "Это Confluence Cloud?",
-        label: "Облачный",
+        query: i18n.t(k.IS_CONFLUENCE_CLOUD),
+        label: i18n.t(k.CLOUD),
         name: "is_cloud",
         optional: false,
         default: true,
-        description:
-          "Проверьте, является ли экземпляром Confluence Cloud, снимите флажок для Confluence Server/Data Center.",
+        description: i18n.t(k.CHECK_IF_CONFLUENCE_CLOUD),
       },
       {
         type: "text",
-        query: "Введите URL-адрес вики:",
+        query: i18n.t(k.ENTER_WIKI_URL),
         label: "Wiki URL",
         name: "wiki_base",
         optional: false,
-        description:
-          " URL вашего экземпляра Confluence (например, https://your-domain.atlassian.net/wiki)",
+        description: i18n.t(k.CONFLUENCE_URL_EXAMPLE),
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "Как нам следует индексировать ваш Confluence?",
+        label: i18n.t(k.HOW_TO_INDEX_CONFLUENCE),
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "Все",
+            label: i18n.t(k.ALL),
             fields: [
               {
                 type: "string_tab",
-                label: "Все",
+                label: i18n.t(k.ALL),
                 name: "everything",
-                description:
-                  "Этот коннектор проиндексирует все страницы, к которым есть доступ по предоставленным учетным данным!",
+                description: i18n.t(k.CONNECTOR_WILL_INDEX_ALL_PAGES),
               },
             ],
           },
           {
             value: "space",
-            label: "Пространство",
+            label: i18n.t(k.SPACE),
             fields: [
               {
                 type: "text",
-                query: "Введите пространство:",
-                label: "Ключ пространства",
+                query: i18n.t(k.ENTER_SPACE),
+                label: i18n.t(k.SPACE_KEY),
                 name: "space",
                 default: "",
-                description:
-                  "Ключ пространства Confluence для индексации (например, `KB`).",
+                description: i18n.t(k.CONFLUENCE_SPACE_KEY_EXAMPLE),
               },
             ],
           },
           {
             value: "page",
-            label: "Страница",
+            label: i18n.t(k.PAGE),
             fields: [
               {
                 type: "text",
-                query: "Введите идентификатор страницы:",
-                label: "Идентификатор страницы",
+                query: i18n.t(k.ENTER_PAGE_ID),
+                label: i18n.t(k.PAGE_ID),
                 name: "page_id",
                 default: "",
                 description:
