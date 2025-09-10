@@ -198,6 +198,25 @@ export async function unlinkFileFromProject(
   }
 }
 
+export async function linkFileToProject(
+  projectId: number,
+  fileId: string
+): Promise<ProjectFile> {
+  const response = await fetch(
+    `/api/user/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(
+      fileId
+    )}`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as any).detail || "Failed to link file to project"
+    );
+  }
+  return response.json();
+}
+
 export async function deleteUserFile(fileId: string): Promise<void> {
   const response = await fetch(
     `/api/user/projects/file/${encodeURIComponent(fileId)}`,
