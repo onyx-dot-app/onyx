@@ -105,6 +105,7 @@ export default function ProjectContextPanel() {
     uploadFiles,
     recentFiles,
     unlinkFileFromProject,
+    linkFileToProject,
   } = useProjectsContext();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -163,6 +164,11 @@ export default function ProjectContextPanel() {
           showTriggerLabel
           triggerLabel="Add Files"
           recentFiles={recentFiles}
+          onPickRecent={async (file) => {
+            if (!currentProjectId) return;
+            if (!linkFileToProject) return;
+            await linkFileToProject(currentProjectId, file.id);
+          }}
           handleUploadChange={async (
             e: React.ChangeEvent<HTMLInputElement>
           ) => {
@@ -244,11 +250,7 @@ export default function ProjectContextPanel() {
                   file={f}
                   removeFile={async (fileId: string) => {
                     if (!currentProjectId) return;
-                    try {
-                      await unlinkFileFromProject(currentProjectId, fileId);
-                    } catch (e) {
-                      // noop; context will surface errors if needed
-                    }
+                    await unlinkFileFromProject(currentProjectId, fileId);
                   }}
                 />
               ));
