@@ -1,4 +1,4 @@
-{{- if gt .Values.webserver.replicaCount 0 }}
+{{- if gt (int .Values.webserver.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
