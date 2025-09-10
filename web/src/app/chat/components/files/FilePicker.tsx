@@ -150,7 +150,11 @@ export default function FilePicker({
             <Files size={32} />
             <DialogTitle>Recent Files</DialogTitle>
           </DialogHeader>
-          <FilesList recentFiles={recentFiles} onPickRecent={onPickRecent} />
+          <FilesList
+            recentFiles={recentFiles}
+            onPickRecent={onPickRecent}
+            handleUploadChange={handleUploadChange}
+          />
         </DialogContent>
       </Dialog>
     </div>
