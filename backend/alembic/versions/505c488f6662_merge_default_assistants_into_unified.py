@@ -30,7 +30,7 @@ UNIFIED_ASSISTANT_NUM_CHUNKS = 25
 UNIFIED_ASSISTANT_DISPLAY_PRIORITY = 0
 UNIFIED_ASSISTANT_LLM_FILTER_EXTRACTION = True
 UNIFIED_ASSISTANT_LLM_RELEVANCE_FILTER = False
-UNIFIED_ASSISTANT_RECENCY_BIAS = "auto"
+UNIFIED_ASSISTANT_RECENCY_BIAS = "AUTO"  # NOTE: needs to be capitalized
 UNIFIED_ASSISTANT_CHUNKS_ABOVE = 0
 UNIFIED_ASSISTANT_CHUNKS_BELOW = 0
 UNIFIED_ASSISTANT_DATETIME_AWARE = True
@@ -67,6 +67,9 @@ INSERT_DICT: dict[str, Any] = {
     "chunks_below": UNIFIED_ASSISTANT_CHUNKS_BELOW,
     "datetime_aware": UNIFIED_ASSISTANT_DATETIME_AWARE,
 }
+
+GENERAL_ASSISTANT_ID = -1
+ART_ASSISTANT_ID = -3
 
 
 class UserRow(NamedTuple):
@@ -139,13 +142,13 @@ def upgrade() -> None:
                 INSERT_DICT,
             )
 
-        # Step 2: Mark old default assistants as deleted
+        # Step 2: Mark ALL builtin assistants as deleted (except the unified assistant ID 0)
         conn.execute(
             sa.text(
                 """
                 UPDATE persona
                 SET deleted = true, is_visible = false, is_default_persona = false
-                WHERE id IN (1, 3)
+                WHERE builtin_persona = true AND id != 0
             """
             )
         )
@@ -213,18 +216,31 @@ def upgrade() -> None:
                 {"tool_id": web_search_tool[0]},
             )
 
-        # Step 4: Migrate existing chat sessions from old assistants to unified assistant
+        # Step 4: Migrate existing chat sessions from all builtin assistants to unified assistant
         conn.execute(
             sa.text(
                 """
                 UPDATE chat_session
                 SET persona_id = 0
-                WHERE persona_id IN (1, 3) AND deleted = false
+                WHERE persona_id IN (
+                    SELECT id FROM persona WHERE builtin_persona = true AND id != 0
+                )
             """
             )
         )
 
-        # Step 5: Migrate user preferences - remove references to assistants 1 and 3
+        # Step 5: Migrate user preferences - remove references to all builtin assistants
+        # First, get all builtin assistant IDs (except 0)
+        builtin_assistants_result = conn.execute(
+            sa.text(
+                """
+                SELECT id FROM persona
+                WHERE builtin_persona = true AND id != 0
+            """
+            )
+        ).fetchall()
+        builtin_assistant_ids = [row[0] for row in builtin_assistants_result]
+
         # Get all users with preferences
         users_result = conn.execute(
             sa.text(
@@ -241,43 +257,43 @@ def upgrade() -> None:
             user_id: UUID = user.id
             updates: dict[str, Any] = {}
 
-            # Remove 1 and 3 from chosen_assistants
+            # Remove all builtin assistants from chosen_assistants
             if user.chosen_assistants:
                 new_chosen: list[int] = [
                     assistant_id
                     for assistant_id in user.chosen_assistants
-                    if assistant_id not in [1, 3]
+                    if assistant_id not in builtin_assistant_ids
                 ]
                 if new_chosen != user.chosen_assistants:
                     updates["chosen_assistants"] = json.dumps(new_chosen)
 
-            # Remove 1 and 3 from visible_assistants
+            # Remove all builtin assistants from visible_assistants
             if user.visible_assistants:
                 new_visible: list[int] = [
                     assistant_id
                     for assistant_id in user.visible_assistants
-                    if assistant_id not in [1, 3]
+                    if assistant_id not in builtin_assistant_ids
                 ]
                 if new_visible != user.visible_assistants:
                     updates["visible_assistants"] = json.dumps(new_visible)
 
-            # Add 1 and 3 to hidden_assistants
+            # Add all builtin assistants to hidden_assistants
             if user.hidden_assistants:
                 new_hidden: list[int] = list(user.hidden_assistants)
-                for old_id in [1, 3]:
+                for old_id in builtin_assistant_ids:
                     if old_id not in new_hidden:
                         new_hidden.append(old_id)
                 if new_hidden != user.hidden_assistants:
                     updates["hidden_assistants"] = json.dumps(new_hidden)
             else:
-                updates["hidden_assistants"] = json.dumps([1, 3])
+                updates["hidden_assistants"] = json.dumps(builtin_assistant_ids)
 
-            # Remove 1 and 3 from pinned_assistants
+            # Remove all builtin assistants from pinned_assistants
             if user.pinned_assistants:
                 new_pinned: list[int] = [
                     assistant_id
                     for assistant_id in user.pinned_assistants
-                    if assistant_id not in [1, 3]
+                    if assistant_id not in builtin_assistant_ids
                 ]
                 if new_pinned != user.pinned_assistants:
                     updates["pinned_assistants"] = json.dumps(new_pinned)
@@ -307,7 +323,7 @@ def downgrade() -> None:
     conn.execute(sa.text("BEGIN"))
 
     try:
-        # Restore the three default assistants by updating their visibility flags
+        # Only restore General (ID -1) and Art (ID -3) assistants
         # Step 1: Keep Search assistant (ID 0) as default but restore original state
         conn.execute(
             sa.text(
@@ -321,7 +337,7 @@ def downgrade() -> None:
             )
         )
 
-        # Step 2: Restore General assistant (ID 1)
+        # Step 2: Restore General assistant (ID -1)
         conn.execute(
             sa.text(
                 """
@@ -329,12 +345,13 @@ def downgrade() -> None:
                 SET deleted = false,
                     is_visible = true,
                     is_default_persona = true
-                WHERE id = 1
+                WHERE id = :general_assistant_id
             """
-            )
+            ),
+            {"general_assistant_id": GENERAL_ASSISTANT_ID},
         )
 
-        # Step 3: Restore Art assistant (ID 3)
+        # Step 3: Restore Art assistant (ID -3)
         conn.execute(
             sa.text(
                 """
@@ -342,15 +359,17 @@ def downgrade() -> None:
                 SET deleted = false,
                     is_visible = true,
                     is_default_persona = true
-                WHERE id = 3
+                WHERE id = :art_assistant_id
             """
-            )
+            ),
+            {"art_assistant_id": ART_ASSISTANT_ID},
         )
 
         # Note: We don't restore the original tool associations, names, or descriptions
         # as those would require more complex logic to determine original state.
         # We also cannot restore original chat session persona_ids as we don't
         # have the original mappings.
+        # Other builtin assistants remain deleted as per the requirement.
 
         # Commit transaction
         conn.execute(sa.text("COMMIT"))

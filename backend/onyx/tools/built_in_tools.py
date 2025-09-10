@@ -24,7 +24,7 @@ logger = setup_logger()
 
 
 # same as d09fc20a3c66_seed_builtin_tools.py
-BUILD_IN_TOOL_MAP = {
+BUILT_IN_TOOL_MAP: dict[str, Type[Tool]] = {
     SearchTool.__name__: SearchTool,
     ImageGenerationTool.__name__: ImageGenerationTool,
     WebSearchTool.__name__: WebSearchTool,
@@ -34,7 +34,7 @@ BUILD_IN_TOOL_MAP = {
 
 
 def get_built_in_tool_ids() -> list[str]:
-    return list(BUILD_IN_TOOL_MAP.keys())
+    return list(BUILT_IN_TOOL_MAP.keys())
 
 
 def get_builtin_tool(
@@ -48,8 +48,8 @@ def get_builtin_tool(
     """
     tool_id = next(
         (
-            tool["in_code_tool_id"]
-            for tool, tool_cls in BUILD_IN_TOOL_MAP.items()
+            in_code_tool_id
+            for in_code_tool_id, tool_cls in BUILT_IN_TOOL_MAP.items()
             if tool_cls.__name__ == tool_type.__name__
         ),
         None,
@@ -74,4 +74,4 @@ _built_in_tools_cache: dict[str, Type[Tool]] | None = None
 
 
 def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[Tool]:
-    return BUILD_IN_TOOL_MAP[in_code_tool_id]
+    return BUILT_IN_TOOL_MAP[in_code_tool_id]

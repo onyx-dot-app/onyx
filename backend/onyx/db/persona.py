@@ -894,11 +894,14 @@ def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
 
 
 def get_default_assistant(db_session: Session) -> Persona | None:
-    """Fetch the default assistant (persona with is_default_persona=True)."""
+    """Fetch the default assistant (persona with builtin_persona=True)."""
     return (
         db_session.query(Persona)
         .options(selectinload(Persona.tools))
-        .filter(Persona.is_default_persona == True)  # noqa: E712
+        .filter(Persona.builtin_persona.is_(True))
+        # NOTE: need to add this since we had prior builtin personas
+        # that have since been deleted
+        .filter(Persona.deleted.is_(False))
         .one_or_none()
     )
 

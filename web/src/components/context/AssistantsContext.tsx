@@ -31,6 +31,7 @@ interface AssistantsContextProps {
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
 
+  // assistants that the user has explicitly pinned
   pinnedAssistants: MinimalPersonaSnapshot[];
   setPinnedAssistants: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
 
@@ -61,16 +62,6 @@ export const AssistantsProvider: React.FC<{
   const { assistantPreferences, setSpecificAssistantPreferences } =
     useAssistantPreferences();
   const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
-
-  // Debug: log whenever forced tool selection changes
-  useEffect(() => {
-    try {
-      console.debug(
-        "[AssistantsContext] forcedToolIds updated:",
-        forcedToolIds
-      );
-    } catch {}
-  }, [forcedToolIds]);
 
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
@@ -147,7 +138,9 @@ export const AssistantsProvider: React.FC<{
   } = useMemo(() => {
     const { visibleAssistants, hiddenAssistants } = classifyAssistants(
       user,
-      assistants
+      // remove the unified assistant (ID 0) from the list of assistants, it should not be shown
+      // anywhere on the chat page
+      assistants.filter((assistant) => assistant.id !== 0)
     );
 
     const finalAssistants = user

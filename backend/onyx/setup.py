@@ -54,7 +54,6 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
-from onyx.tools.built_in_tools import refresh_built_in_tools_cache
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX
@@ -289,10 +288,6 @@ def setup_postgres(db_session: Session) -> None:
     logger.notice("Loading input prompts and user folders")
     load_input_prompts_from_yaml(db_session, INPUT_PROMPT_YAML)
     load_user_folders_from_yaml(db_session, USER_FOLDERS_YAML)
-
-    # Tools and personas are now seeded via migrations
-    # Just refresh the cache for runtime usage
-    refresh_built_in_tools_cache(db_session)
 
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows
