@@ -56,6 +56,8 @@ jobs:
 
     env:
       PYTHONPATH: ./backend
+      # Disable model server for external dependency tests
+      MODEL_SERVER_HOST: "disabled"
 
     steps:
       - name: Checkout code
