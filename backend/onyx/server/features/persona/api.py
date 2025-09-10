@@ -18,7 +18,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import StarterMessageModel as StarterMessage
+from onyx.db.models import StarterMessage
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.db.persona import create_assistant_label
@@ -36,8 +36,6 @@ from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared_users
 from onyx.db.persona import update_persona_visibility
-from onyx.db.prompts import build_prompt_name_from_persona_name
-from onyx.db.prompts import upsert_prompt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.secondary_llm_flows.starter_message_creation import (
@@ -52,7 +50,6 @@ from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -221,31 +218,12 @@ def create_persona(
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
 
-    prompt_id = (
-        persona_upsert_request.prompt_ids[0]
-        if persona_upsert_request.prompt_ids
-        and len(persona_upsert_request.prompt_ids) > 0
-        else None
-    )
-
-    prompt = upsert_prompt(
-        db_session=db_session,
-        user=user,
-        name=build_prompt_name_from_persona_name(persona_upsert_request.name),
-        system_prompt=persona_upsert_request.system_prompt,
-        task_prompt=persona_upsert_request.task_prompt,
-        datetime_aware=persona_upsert_request.datetime_aware,
-        prompt_id=prompt_id,
-    )
-    prompt_snapshot = PromptSnapshot.from_model(prompt)
-    persona_upsert_request.prompt_ids = [prompt.id]
     persona_snapshot = create_update_persona(
         persona_id=None,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
     )
-    persona_snapshot.prompts = [prompt_snapshot]
     create_milestone_and_report(
         user=user,
         distinct_id=tenant_id or "N/A",
@@ -268,30 +246,13 @@ def update_persona(
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
-    prompt_id = (
-        persona_upsert_request.prompt_ids[0]
-        if persona_upsert_request.prompt_ids
-        and len(persona_upsert_request.prompt_ids) > 0
-        else None
-    )
-    prompt = upsert_prompt(
-        db_session=db_session,
-        user=user,
-        name=build_prompt_name_from_persona_name(persona_upsert_request.name),
-        datetime_aware=persona_upsert_request.datetime_aware,
-        system_prompt=persona_upsert_request.system_prompt,
-        task_prompt=persona_upsert_request.task_prompt,
-        prompt_id=prompt_id,
-    )
-    prompt_snapshot = PromptSnapshot.from_model(prompt)
-    persona_upsert_request.prompt_ids = [prompt.id]
+
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
     )
-    persona_snapshot.prompts = [prompt_snapshot]
     return persona_snapshot
 
 

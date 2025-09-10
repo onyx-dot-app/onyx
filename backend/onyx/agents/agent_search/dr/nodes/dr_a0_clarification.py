@@ -399,15 +399,14 @@ def clarifier(
     else:
         active_source_type_descriptions_str = ""
 
-    if graph_config.inputs.persona and len(graph_config.inputs.persona.prompts) > 0:
+    if graph_config.inputs.persona:
         assistant_system_prompt = (
-            graph_config.inputs.persona.prompts[0].system_prompt
-            or DEFAULT_DR_SYSTEM_PROMPT
+            graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
         ) + "\n\n"
-        if graph_config.inputs.persona.prompts[0].task_prompt:
+        if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
-                + graph_config.inputs.persona.prompts[0].task_prompt
+                + (graph_config.inputs.persona.task_prompt)
             )
         else:
             assistant_task_prompt = ""

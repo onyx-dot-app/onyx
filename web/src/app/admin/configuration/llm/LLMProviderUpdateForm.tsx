@@ -48,6 +48,8 @@ export function LLMProviderUpdateForm({
 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [fetchModelsError, setFetchModelsError] = useState<string>("");
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
@@ -97,6 +99,9 @@ export function LLMProviderUpdateForm({
         (llmProviderDescriptor.model_configurations
           .filter((modelConfiguration) => modelConfiguration.is_visible)
           .map((modelConfiguration) => modelConfiguration.name) as string[]),
+
+    // Helper field to force re-renders when model list updates
+    _modelListUpdated: 0,
   };
 
   // Setup validation schema if required
@@ -179,6 +184,99 @@ export function LLMProviderUpdateForm({
     );
   };
 
+  const fetchBedrockModels = async (values: any, setFieldValue: any) => {
+    if (llmProviderDescriptor.name !== "bedrock") {
+      return;
+    }
+
+    setIsFetchingModels(true);
+    setFetchModelsError("");
+
+    try {
+      const response = await fetch("/api/admin/llm/bedrock/available-models", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          aws_region_name: values.custom_config?.AWS_REGION_NAME,
+          aws_access_key_id: values.custom_config?.AWS_ACCESS_KEY_ID,
+          aws_secret_access_key: values.custom_config?.AWS_SECRET_ACCESS_KEY,
+          aws_bearer_token_bedrock:
+            values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
+          provider_name: existingLlmProvider?.name, // Save models to existing provider if editing
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to fetch models");
+      }
+
+      const availableModels: string[] = await response.json();
+
+      // Update the model configurations with the fetched models
+      const updatedModelConfigs = availableModels.map((modelName) => {
+        // Find existing configuration to preserve is_visible setting
+        const existingConfig = llmProviderDescriptor.model_configurations.find(
+          (config) => config.name === modelName
+        );
+
+        return {
+          name: modelName,
+          is_visible: existingConfig?.is_visible ?? false, // Preserve existing visibility or default to false
+          max_input_tokens: null,
+          supports_image_input: false, // Will be determined by the backend
+        };
+      });
+
+      // Update the descriptor and form values
+      llmProviderDescriptor.model_configurations = updatedModelConfigs;
+
+      // Update selected model names to only include previously visible models that are available
+      const previouslySelectedModels = values.selected_model_names || [];
+      const stillAvailableSelectedModels = previouslySelectedModels.filter(
+        (modelName: string) => availableModels.includes(modelName)
+      );
+      setFieldValue("selected_model_names", stillAvailableSelectedModels);
+
+      // Set a default model if none is set
+      if (
+        (!values.default_model_name ||
+          !availableModels.includes(values.default_model_name)) &&
+        availableModels.length > 0
+      ) {
+        setFieldValue("default_model_name", availableModels[0]);
+      }
+
+      // Clear fast model if it's not in the new list
+      if (
+        values.fast_default_model_name &&
+        !availableModels.includes(values.fast_default_model_name)
+      ) {
+        setFieldValue("fast_default_model_name", null);
+      }
+
+      // Force a re-render by updating a timestamp or counter
+      setFieldValue("_modelListUpdated", Date.now());
+
+      setPopup?.({
+        message: `Successfully fetched ${availableModels.length} models for the selected region (including cross-region inference models).`,
+        type: "success",
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      setFetchModelsError(errorMessage);
+      setPopup?.({
+        message: `Failed to fetch models: ${errorMessage}`,
+        type: "error",
+      });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  };
+
   return (
     <Formik
       initialValues={initialValues}
@@ -191,6 +289,7 @@ export function LLMProviderUpdateForm({
           selected_model_names: visibleModels,
           model_configurations: modelConfigurations,
           target_uri,
+          _modelListUpdated,
           ...rest
         } = values;
 
@@ -390,6 +489,7 @@ export function LLMProviderUpdateForm({
                       </ReactMarkdown>
                     }
                     placeholder={customConfigKey.default_value || undefined}
+                    type={customConfigKey.is_secret ? "password" : "text"}
                   />
                 </div>
               );
@@ -406,6 +506,47 @@ export function LLMProviderUpdateForm({
               throw new Error("Unreachable; there should only exist 2 options");
             }
           })}
+
+          {/* Bedrock-specific fetch models button */}
+          {llmProviderDescriptor.name === "bedrock" && (
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  fetchBedrockModels(
+                    formikProps.values,
+                    formikProps.setFieldValue
+                  )
+                }
+                disabled={
+                  isFetchingModels ||
+                  !formikProps.values.custom_config?.AWS_REGION_NAME
+                }
+                className="w-fit"
+              >
+                {isFetchingModels ? (
+                  <>
+                    <LoadingAnimation size="text-sm" />
+                    <span className="ml-2">Fetching Models...</span>
+                  </>
+                ) : (
+                  "Fetch Available Models for Region"
+                )}
+              </Button>
+
+              {fetchModelsError && (
+                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+              )}
+
+              <Text className="text-sm text-gray-600">
+                Enter your AWS region, then click this button to fetch available
+                Bedrock models.
+                <br />
+                If you&apos;re updating your existing provider, you&apos;ll need
+                to click this button to fetch the latest models.
+              </Text>
+            </div>
+          )}
 
           {!firstTimeConfiguration && (
             <>

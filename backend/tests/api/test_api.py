@@ -73,7 +73,6 @@ def test_handle_send_message_simple_with_history(client: TestClient) -> None:
 
     # Yoda
     req["persona_id"] = 1
-    req["prompt_id"] = 4
     messages.append(
         {
             "message": "Answer questions for you, I can. "

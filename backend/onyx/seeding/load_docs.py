@@ -182,7 +182,7 @@ def seed_initial_documents(
         source=DocumentSource.WEB,
         input_type=InputType.LOAD_STATE,
         connector_specific_config={
-            "base_url": "https://docs.onyx.app/more/use_cases",
+            "base_url": "https://docs.onyx.app/",
             "web_connector_type": "recursive",
         },
         refresh_freq=None,  # Never refresh by default

@@ -46,7 +46,6 @@ def send_message_v0(
         parent_message_id=parent_message_id,
         message=message,
         file_descriptors=[],
-        prompt_id=None,
         search_doc_ids=[],
         retrieval_options=retrieval_options,
     )

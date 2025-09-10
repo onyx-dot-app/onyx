@@ -191,7 +191,7 @@ def get_test_config(
         bypass_acl=False,
     )
 
-    prompt_config = PromptConfig.from_model(persona.prompts[0])
+    prompt_config = PromptConfig.from_model(persona)
 
     search_tool = SearchTool(
         tool_id=get_tool_by_name(SearchTool._NAME, db_session).id,
@@ -273,19 +273,17 @@ def get_test_config(
 def get_persona_agent_prompt_expressions(
     persona: Persona | None,
 ) -> PersonaPromptExpressions:
-    if persona is None or len(persona.prompts) == 0:
-        # TODO base_prompt should be None, but no time to properly fix
+    if persona is None:
         return PersonaPromptExpressions(
             contextualized_prompt=ASSISTANT_SYSTEM_PROMPT_DEFAULT, base_prompt=""
         )
 
-    # Only a 1:1 mapping between personas and prompts currently
-    prompt = persona.prompts[0]
-    prompt_config = PromptConfig.from_model(prompt)
+    # Prompts are now embedded directly on the Persona model
+    prompt_config = PromptConfig.from_model(persona)
     datetime_aware_system_prompt = handle_onyx_date_awareness(
         prompt_str=prompt_config.system_prompt,
         prompt_config=prompt_config,
-        add_additional_info_if_no_tag=prompt.datetime_aware,
+        add_additional_info_if_no_tag=persona.datetime_aware,
     )
 
     return PersonaPromptExpressions(

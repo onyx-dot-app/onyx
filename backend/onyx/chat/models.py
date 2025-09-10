@@ -30,7 +30,7 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 if TYPE_CHECKING:
-    from onyx.db.models import Prompt
+    from onyx.db.models import Persona
 
 
 class LlmDoc(BaseModel):
@@ -185,7 +185,7 @@ class PersonaOverrideConfig(BaseModel):
     llm_model_version_override: str | None = None
 
     prompts: list[PromptOverrideConfig] = Field(default_factory=list)
-    prompt_ids: list[int] = Field(default_factory=list)
+    # Note: prompt_ids removed - prompts are now embedded in personas
 
     document_set_ids: list[int] = Field(default_factory=list)
     tools: list[ToolConfig] = Field(default_factory=list)
@@ -270,7 +270,7 @@ class PromptConfig(BaseModel):
 
     @classmethod
     def from_model(
-        cls, model: "Prompt", prompt_override: PromptOverride | None = None
+        cls, model: "Persona", prompt_override: PromptOverride | None = None
     ) -> "PromptConfig":
         override_system_prompt = (
             prompt_override.system_prompt if prompt_override else None
@@ -278,8 +278,8 @@ class PromptConfig(BaseModel):
         override_task_prompt = prompt_override.task_prompt if prompt_override else None
 
         return cls(
-            system_prompt=override_system_prompt or model.system_prompt,
-            task_prompt=override_task_prompt or model.task_prompt,
+            system_prompt=override_system_prompt or model.system_prompt or "",
+            task_prompt=override_task_prompt or model.task_prompt or "",
             datetime_aware=model.datetime_aware,
         )
 

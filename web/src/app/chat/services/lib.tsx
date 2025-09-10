@@ -519,8 +519,6 @@ export function processRawChatHistory(
       packets: packetsForMessage || [],
     };
 
-    console.log("packetsForMessage", packetsForMessage);
-
     messages.set(messageInfo.message_id, message);
 
     if (messageInfo.parent_message !== null) {

@@ -26,7 +26,6 @@ class PersonaManager:
         llm_filter_extraction: bool = True,
         recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO,
         datetime_aware: bool = False,
-        prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
         llm_model_provider_override: str | None = None,
@@ -52,7 +51,6 @@ class PersonaManager:
             is_public=is_public,
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
-            prompt_ids=prompt_ids or [0],
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
@@ -83,7 +81,9 @@ class PersonaManager:
             is_public=is_public,
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
-            prompt_ids=prompt_ids or [],
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
@@ -106,7 +106,6 @@ class PersonaManager:
         llm_filter_extraction: bool | None = None,
         recency_bias: RecencyBiasSetting | None = None,
         datetime_aware: bool = False,
-        prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
         llm_model_provider_override: str | None = None,
@@ -127,17 +126,19 @@ class PersonaManager:
             datetime_aware=datetime_aware,
             num_chunks=num_chunks or persona.num_chunks,
             llm_relevance_filter=llm_relevance_filter or persona.llm_relevance_filter,
-            is_public=is_public or persona.is_public,
-            llm_filter_extraction=llm_filter_extraction
-            or persona.llm_filter_extraction,
+            is_public=persona.is_public if is_public is None else is_public,
+            llm_filter_extraction=(
+                llm_filter_extraction or persona.llm_filter_extraction
+            ),
             recency_bias=recency_bias or persona.recency_bias,
-            prompt_ids=prompt_ids or persona.prompt_ids,
             document_set_ids=document_set_ids or persona.document_set_ids,
             tool_ids=tool_ids or persona.tool_ids,
-            llm_model_provider_override=llm_model_provider_override
-            or persona.llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override
-            or persona.llm_model_version_override,
+            llm_model_provider_override=(
+                llm_model_provider_override or persona.llm_model_provider_override
+            ),
+            llm_model_version_override=(
+                llm_model_version_override or persona.llm_model_version_override
+            ),
             users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
             label_ids=label_ids or persona.label_ids,
@@ -164,7 +165,9 @@ class PersonaManager:
             is_public=updated_persona_data["is_public"],
             llm_filter_extraction=updated_persona_data["llm_filter_extraction"],
             recency_bias=recency_bias or persona.recency_bias,
-            prompt_ids=[prompt["id"] for prompt in updated_persona_data["prompts"]],
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
             document_set_ids=updated_persona_data["document_sets"],
             tool_ids=updated_persona_data["tools"],
             llm_model_provider_override=updated_persona_data[
@@ -220,36 +223,162 @@ class PersonaManager:
         )
         for fetched_persona in all_personas:
             if fetched_persona.id == persona.id:
-                return (
-                    fetched_persona.name == persona.name
-                    and fetched_persona.description == persona.description
-                    and fetched_persona.num_chunks == persona.num_chunks
-                    and fetched_persona.llm_relevance_filter
-                    == persona.llm_relevance_filter
-                    and fetched_persona.is_public == persona.is_public
-                    and fetched_persona.llm_filter_extraction
-                    == persona.llm_filter_extraction
-                    and fetched_persona.llm_model_provider_override
-                    == persona.llm_model_provider_override
-                    and fetched_persona.llm_model_version_override
-                    == persona.llm_model_version_override
-                    and set([prompt.id for prompt in fetched_persona.prompts])
-                    == set(persona.prompt_ids)
-                    and set(
-                        [
-                            document_set.id
-                            for document_set in fetched_persona.document_sets
-                        ]
+                mismatches: list[tuple[str, object, object]] = []
+
+                if fetched_persona.name != persona.name:
+                    mismatches.append(("name", persona.name, fetched_persona.name))
+                if fetched_persona.description != persona.description:
+                    mismatches.append(
+                        (
+                            "description",
+                            persona.description,
+                            fetched_persona.description,
+                        )
                     )
-                    == set(persona.document_set_ids)
-                    and set([tool.id for tool in fetched_persona.tools])
-                    == set(persona.tool_ids)
-                    and set(user.email for user in fetched_persona.users)
-                    == set(persona.users)
-                    and set(fetched_persona.groups) == set(persona.groups)
-                    and {label.id for label in fetched_persona.labels}
-                    == set(persona.label_ids)
-                )
+                if fetched_persona.num_chunks != persona.num_chunks:
+                    mismatches.append(
+                        ("num_chunks", persona.num_chunks, fetched_persona.num_chunks)
+                    )
+                if fetched_persona.llm_relevance_filter != persona.llm_relevance_filter:
+                    mismatches.append(
+                        (
+                            "llm_relevance_filter",
+                            persona.llm_relevance_filter,
+                            fetched_persona.llm_relevance_filter,
+                        )
+                    )
+                if fetched_persona.is_public != persona.is_public:
+                    mismatches.append(
+                        ("is_public", persona.is_public, fetched_persona.is_public)
+                    )
+                if (
+                    fetched_persona.llm_filter_extraction
+                    != persona.llm_filter_extraction
+                ):
+                    mismatches.append(
+                        (
+                            "llm_filter_extraction",
+                            persona.llm_filter_extraction,
+                            fetched_persona.llm_filter_extraction,
+                        )
+                    )
+                if (
+                    fetched_persona.llm_model_provider_override
+                    != persona.llm_model_provider_override
+                ):
+                    mismatches.append(
+                        (
+                            "llm_model_provider_override",
+                            persona.llm_model_provider_override,
+                            fetched_persona.llm_model_provider_override,
+                        )
+                    )
+                if (
+                    fetched_persona.llm_model_version_override
+                    != persona.llm_model_version_override
+                ):
+                    mismatches.append(
+                        (
+                            "llm_model_version_override",
+                            persona.llm_model_version_override,
+                            fetched_persona.llm_model_version_override,
+                        )
+                    )
+                if fetched_persona.system_prompt != persona.system_prompt:
+                    mismatches.append(
+                        (
+                            "system_prompt",
+                            persona.system_prompt,
+                            fetched_persona.system_prompt,
+                        )
+                    )
+                if fetched_persona.task_prompt != persona.task_prompt:
+                    mismatches.append(
+                        (
+                            "task_prompt",
+                            persona.task_prompt,
+                            fetched_persona.task_prompt,
+                        )
+                    )
+                if fetched_persona.datetime_aware != persona.datetime_aware:
+                    mismatches.append(
+                        (
+                            "datetime_aware",
+                            persona.datetime_aware,
+                            fetched_persona.datetime_aware,
+                        )
+                    )
+
+                fetched_document_set_ids = {
+                    document_set.id for document_set in fetched_persona.document_sets
+                }
+                expected_document_set_ids = set(persona.document_set_ids)
+                if fetched_document_set_ids != expected_document_set_ids:
+                    mismatches.append(
+                        (
+                            "document_set_ids",
+                            sorted(expected_document_set_ids),
+                            sorted(fetched_document_set_ids),
+                        )
+                    )
+
+                fetched_tool_ids = {tool.id for tool in fetched_persona.tools}
+                expected_tool_ids = set(persona.tool_ids)
+                if fetched_tool_ids != expected_tool_ids:
+                    mismatches.append(
+                        (
+                            "tool_ids",
+                            sorted(expected_tool_ids),
+                            sorted(fetched_tool_ids),
+                        )
+                    )
+
+                fetched_user_emails = {user.email for user in fetched_persona.users}
+                expected_user_emails = set(persona.users)
+                if fetched_user_emails != expected_user_emails:
+                    mismatches.append(
+                        (
+                            "users",
+                            sorted(expected_user_emails),
+                            sorted(fetched_user_emails),
+                        )
+                    )
+
+                fetched_group_ids = set(fetched_persona.groups)
+                expected_group_ids = set(persona.groups)
+                if fetched_group_ids != expected_group_ids:
+                    mismatches.append(
+                        (
+                            "groups",
+                            sorted(expected_group_ids),
+                            sorted(fetched_group_ids),
+                        )
+                    )
+
+                fetched_label_ids = {label.id for label in fetched_persona.labels}
+                expected_label_ids = set(persona.label_ids)
+                if fetched_label_ids != expected_label_ids:
+                    mismatches.append(
+                        (
+                            "label_ids",
+                            sorted(expected_label_ids),
+                            sorted(fetched_label_ids),
+                        )
+                    )
+
+                if mismatches:
+                    print(
+                        f"Persona verification failed for id={persona.id}. Fields mismatched:"
+                    )
+                    for field_name, expected_value, actual_value in mismatches:
+                        print(
+                            f" - {field_name}: expected {expected_value!r}, got {actual_value!r}"
+                        )
+                    return False
+                return True
+        print(
+            f"Persona verification failed: persona with id={persona.id} not found in fetched results."
+        )
         return False
 
     @staticmethod

@@ -39,7 +39,6 @@ def get_answer_from_query(
 
     new_message_request = OneShotQARequest(
         messages=messages,
-        prompt_id=0,
         persona_id=0,
         retrieval_options=RetrievalDetails(
             run_search=OptionalSearchSetting.ALWAYS,

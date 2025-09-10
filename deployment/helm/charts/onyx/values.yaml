@@ -100,6 +100,7 @@ inferenceCapability:
   securityContext:
     privileged: true
     runAsUser: 0
+  nodeSelector: {}
 
 indexCapability:
   service:
@@ -133,6 +134,7 @@ indexCapability:
   securityContext:
     privileged: true
     runAsUser: 0
+  nodeSelector: {}
 config:
   envConfigMapName: env-configmap
 
@@ -513,6 +515,7 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+  nodeSelector: {}
 
 celery_worker_docfetching:
   replicaCount: 1
@@ -702,7 +705,6 @@ configMap:
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
-  # https://docs.onyx.app/more/telemetry
   DISABLE_TELEMETRY: ""
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""

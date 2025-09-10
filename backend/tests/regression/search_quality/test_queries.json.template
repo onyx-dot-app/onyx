@@ -4,11 +4,7 @@
         "ground_truth": [
             {
                 "doc_source": "web",
-                "doc_link": "https://docs.onyx.app/more/use_cases/overview"
-            },
-            {
-                "doc_source": "web",
-                "doc_link": "https://docs.onyx.app/more/use_cases/ai_platform"
+                "doc_link": "https://docs.onyx.app/welcome"
             }
         ],
         "categories": [

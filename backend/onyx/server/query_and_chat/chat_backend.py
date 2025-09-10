@@ -448,11 +448,7 @@ def handle_new_chat_message(
     tenant_id = get_current_tenant_id()
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 
-    if (
-        not chat_message_req.message
-        and chat_message_req.prompt_id is not None
-        and not chat_message_req.use_existing_user_message
-    ):
+    if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -569,7 +565,6 @@ def get_max_document_tokens(
 
     return MaxSelectedDocumentTokens(
         max_tokens=compute_max_document_tokens_for_persona(
-            db_session=db_session,
             persona=persona,
         ),
     )
@@ -581,7 +576,6 @@ def get_max_document_tokens(
 class ChatSeedRequest(BaseModel):
     # standard chat session stuff
     persona_id: int
-    prompt_id: int | None = None
 
     # overrides / seeding
     llm_override: LLMOverride | None = None
@@ -632,12 +626,6 @@ def seed_chat(
         create_new_chat_message(
             chat_session_id=new_chat_session.id,
             parent_message=root_message,
-            prompt_id=chat_seed_request.prompt_id
-            or (
-                new_chat_session.persona.prompts[0].id
-                if new_chat_session.persona.prompts
-                else None
-            ),
             message=chat_seed_request.message,
             token_count=token_count,
             message_type=MessageType.USER,

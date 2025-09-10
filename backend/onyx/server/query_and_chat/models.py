@@ -97,10 +97,7 @@ class CreateChatMessageRequest(ChunkContext):
     user_file_ids: list[int] = []
     user_folder_ids: list[int] = []
 
-    # If no prompt provided, uses the largest prompt of the chat session
-    # but really this should be explicitly specified, only in the simplified APIs is this inferred
-    # Use prompt_id 0 to use the system default prompt which is Answer-Question
-    prompt_id: int | None
+    # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, then retrieval options are unused
     search_doc_ids: list[int] | None
     retrieval_options: RetrievalDetails | None

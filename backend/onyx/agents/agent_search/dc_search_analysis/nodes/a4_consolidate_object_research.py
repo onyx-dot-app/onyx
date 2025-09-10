@@ -33,7 +33,7 @@ def consolidate_object_research(
     if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
-    instructions = graph_config.inputs.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.system_prompt or ""
 
     agent_4_instructions = extract_section(
         instructions, "Agent Step 4:", "Agent Step 5:"

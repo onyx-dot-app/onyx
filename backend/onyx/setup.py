@@ -29,7 +29,6 @@ from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
-from onyx.db.persona import delete_old_default_personas
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
@@ -284,7 +283,6 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_public_credential(db_session)
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
-    delete_old_default_personas(db_session)
 
     logger.notice("Loading built-in tools")
     load_builtin_tools(db_session)

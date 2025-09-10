@@ -185,7 +185,6 @@ export function AssistantEditor({
     [llmProviders.length]
   );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
-  const existingPrompt = existingPersona?.prompts[0] ?? null;
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
@@ -314,9 +313,9 @@ export function AssistantEditor({
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
-    datetime_aware: existingPrompt?.datetime_aware ?? false,
-    system_prompt: existingPrompt?.system_prompt ?? "",
-    task_prompt: existingPrompt?.task_prompt ?? "",
+    datetime_aware: existingPersona?.datetime_aware ?? false,
+    system_prompt: existingPersona?.system_prompt ?? "",
+    task_prompt: existingPersona?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
@@ -639,7 +638,6 @@ export function AssistantEditor({
           const submissionData: PersonaUpsertParameters = {
             ...values,
             icon_color: values.icon_color ?? null,
-            existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -687,15 +685,18 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
-            if (!isUpdate) {
-              const currentPinnedIds =
-                user?.preferences?.pinned_assistants || [];
-              await toggleAssistantPinnedStatus(
-                currentPinnedIds,
-                assistantId,
-                true
-              );
-            }
+            // TODO: re-enable this once we figure out a way to better
+            // handle the `undefined` pinned_assistants case. `undefined` pinned assistants
+            // means the default ordering (admin specified)
+            // if (!isUpdate) {
+            //   const currentPinnedIds =
+            //     user?.preferences?.pinned_assistants || [];
+            //   await toggleAssistantPinnedStatus(
+            //     currentPinnedIds,
+            //     assistantId,
+            //     true
+            //   );
+            // }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants

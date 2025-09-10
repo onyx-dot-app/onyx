@@ -249,11 +249,7 @@ def handle_new_chat_message_v0(
     tenant_id = get_current_tenant_id()
     logger.debug(f"V0 API - Received new chat message: {chat_message_req.message}")
 
-    if (
-        not chat_message_req.message
-        and chat_message_req.prompt_id is not None
-        and not chat_message_req.use_existing_user_message
-    ):
+    if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
     def stream_generator() -> Generator[str, None, None]:

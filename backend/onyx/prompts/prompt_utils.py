@@ -9,7 +9,7 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Prompt
+from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
@@ -70,13 +70,12 @@ def handle_onyx_date_awareness(
 
 
 def build_task_prompt_reminders(
-    prompt: Prompt | PromptConfig,
+    prompt: Persona | PromptConfig,
     use_language_hint: bool,
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.task_prompt
-    # Citations are always enabled
+    base_task = prompt.task_prompt or ""
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing

@@ -31,6 +31,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.slackbot.podSecurityContext | nindent 8 }}
+      {{- with .Values.slackbot.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: slackbot
           securityContext:

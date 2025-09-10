@@ -18,7 +18,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
-from onyx.db.prompts import upsert_prompt
 from onyx.db.tools import get_tool_by_name
 from onyx.utils.logger import setup_logger
 
@@ -83,7 +82,7 @@ def persona_to_assistant(persona: Persona) -> AssistantObject:
         name=persona.name,
         description=persona.description,
         model=persona.llm_model_version_override or "gpt-3.5-turbo",
-        instructions=persona.prompts[0].system_prompt if persona.prompts else None,
+        instructions=persona.system_prompt,
         tools=[
             {
                 "type": tool.display_name,
@@ -107,18 +106,7 @@ def create_assistant(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> AssistantObject:
-    prompt = None
-    if request.instructions:
-        prompt = upsert_prompt(
-            user=user,
-            name=f"Prompt for {request.name or 'New Assistant'}",
-            description="Auto-generated prompt",
-            system_prompt=request.instructions,
-            task_prompt="",
-            datetime_aware=True,
-            personas=[],
-            db_session=db_session,
-        )
+    # No separate Prompt entity; instructions map to persona.system_prompt
 
     tool_ids = []
     for tool in request.tools or []:
@@ -149,18 +137,15 @@ def create_assistant(
         starter_messages=None,
         is_public=False,
         db_session=db_session,
-        prompt_ids=[prompt.id] if prompt else [0],
         document_set_ids=[],
         tool_ids=tool_ids,
         icon_color=None,
         icon_shape=None,
         is_visible=True,
+        system_prompt=request.instructions or "",
+        task_prompt="",
+        datetime_aware=True,
     )
-
-    if prompt:
-        prompt.personas = [persona]
-        db_session.commit()
-
     return persona_to_assistant(persona)
 
 
@@ -208,8 +193,8 @@ def modify_assistant(
     for key, value in update_data.items():
         setattr(persona, key, value)
 
-    if "instructions" in update_data and persona.prompts:
-        persona.prompts[0].system_prompt = update_data["instructions"]
+    if "instructions" in update_data:
+        persona.system_prompt = update_data["instructions"]
 
     db_session.commit()
     return persona_to_assistant(persona)
