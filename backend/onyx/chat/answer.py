@@ -19,7 +19,7 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
-from onyx.configs.agent_configs import TF_DR_DEFAULT_THOUGHTFUL
+from onyx.configs.agent_configs import TF_DR_DEFAULT_FAST
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
@@ -114,10 +114,10 @@ class Answer:
 
         if use_agentic_search:
             research_type = ResearchType.DEEP
-        elif TF_DR_DEFAULT_THOUGHTFUL:
-            research_type = ResearchType.THOUGHTFUL
-        else:
+        elif TF_DR_DEFAULT_FAST:
             research_type = ResearchType.FAST
+        else:
+            research_type = ResearchType.THOUGHTFUL
 
         self.search_behavior_config = GraphSearchConfig(
             use_agentic_search=use_agentic_search,

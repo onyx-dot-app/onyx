@@ -35,7 +35,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import run_with_timeout
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
-from onyx.configs.agent_configs import TF_DR_TIMEOUT_MULTIPLIER
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
@@ -489,7 +490,7 @@ def clarifier(
                 )
 
                 answer_tokens, _, _ = run_with_timeout(
-                    int(120 * TF_DR_TIMEOUT_MULTIPLIER),
+                    TF_DR_TIMEOUT_LONG,
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=create_question_prompt(
@@ -502,7 +503,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
+                        timeout_override=TF_DR_TIMEOUT_LONG,
                         ind=current_step_nr,
                         context_docs=None,
                         replace_citations=True,
@@ -646,7 +647,7 @@ def clarifier(
                         assistant_system_prompt, clarification_prompt
                     ),
                     schema=ClarificationGenerationResponse,
-                    timeout_override=int(50 * TF_DR_TIMEOUT_MULTIPLIER),
+                    timeout_override=int(TF_DR_TIMEOUT_SHORT),
                     # max_tokens=1500,
                 )
             except Exception as e:
@@ -675,7 +676,7 @@ def clarifier(
                 )
 
                 _, _, _ = run_with_timeout(
-                    int(120 * TF_DR_TIMEOUT_MULTIPLIER),
+                    TF_DR_TIMEOUT_LONG,
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=repeat_prompt,
@@ -684,7 +685,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=int(90 * TF_DR_TIMEOUT_MULTIPLIER),
+                        timeout_override=TF_DR_TIMEOUT_LONG,
                         answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
                         # max_tokens=None,

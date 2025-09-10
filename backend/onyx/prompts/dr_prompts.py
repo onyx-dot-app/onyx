@@ -1043,8 +1043,9 @@ find information about yellow curry specifically, but here is what I found about
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above.
+- Please cite your sources INLINE in format [[2]][[4]], etc! The numbers of the documents \
+are provided above. So the appropriate citation number should be close to the corresponding /
+information it supports!
 - If you are not that certain that the information does relate to the question topic, \
 point out the ambiguity in your answer. But DO NOT say something like 'I was not able to find \
 information on <X> specifically, but here is what I found about <X> generally....'. Rather say, \
@@ -1098,7 +1099,8 @@ find information about yellow curry specifically, but here is what I found about
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
 - Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above.
+are provided above. So the appropriate citation number should be close to the corresponding /
+information it supports!
 - If you are not that certain that the information does relate to the question topic, \
 point out the ambiguity in your answer. But DO NOT say something like 'I was not able to find \
 information on <X> specifically, but here is what I found about <X> generally....'. Rather say, \
@@ -1148,8 +1150,9 @@ find information about yellow curry specifically, but here is what I found about
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above.
+- THIS IS VERY IMPORTANT: Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
+are provided above. Also, if yoyu refer to sub-answers, the provided reference numbers \
+in the sub-answers are the same as the ones provided for the documents!
 
 ANSWER:
 """
