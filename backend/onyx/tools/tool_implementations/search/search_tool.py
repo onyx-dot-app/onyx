@@ -322,6 +322,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 override_kwargs.skip_query_analysis, False
             )
             user_file_ids = override_kwargs.user_file_ids
+            project_id = override_kwargs.project_id
             document_sources = override_kwargs.document_sources
             time_cutoff = override_kwargs.time_cutoff
             expanded_queries = override_kwargs.expanded_queries
@@ -377,6 +378,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
                 user_file_filters=UserFileFilters(
                     user_file_ids=user_file_ids,
+                    project_id=project_id,
                 ),
                 persona=self.persona,
                 offset=(retrieval_options.offset if retrieval_options else None),

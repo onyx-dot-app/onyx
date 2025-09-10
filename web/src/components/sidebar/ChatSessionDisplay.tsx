@@ -16,6 +16,13 @@ import { ShareChatSessionModal } from "@/app/chat/components/modal/ShareChatSess
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
+import { InfoIcon } from "@/components/icons/icons";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -28,6 +35,7 @@ export function ChatSessionDisplay({
   parentFolderName,
   showDragHandle = true,
   projectId,
+  isCustomAssistant,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -39,6 +47,7 @@ export function ChatSessionDisplay({
   parentFolderName?: string;
   showDragHandle?: boolean;
   projectId?: number;
+  isCustomAssistant?: boolean;
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
@@ -186,19 +195,41 @@ export function ChatSessionDisplay({
                     </div>
                   </div>
                 ) : (
-                  <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
-                    {chatName || `Unnamed Chat`}
-                    <span
-                      className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
-                      ${
-                        isSelected
-                          ? "to-background-chat-selected"
-                          : isHovered
-                            ? "to-background-chat-hover"
-                            : "to-background-sidebar"
-                      } `}
-                    />
-                  </p>
+                  <>
+                    <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-1 relative">
+                      {chatName || `Unnamed Chat`}
+                      <span
+                        className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
+                        ${
+                          isSelected
+                            ? "to-background-chat-selected"
+                            : isHovered
+                              ? "to-background-chat-hover"
+                              : "to-background-sidebar"
+                        } `}
+                      />
+                    </p>
+                    {isCustomAssistant && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="my-auto text-amber-600 dark:text-yellow-500">
+                              <InfoIcon
+                                size={14}
+                                className="text-amber-600 dark:text-yellow-500"
+                              />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="center">
+                            <p className="max-w-[220px] text-sm">
+                              Project files and instructions aren’t applied here
+                              because this chat uses a custom assistant.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </>
                 )}
 
                 {!isRenamingChat && (
