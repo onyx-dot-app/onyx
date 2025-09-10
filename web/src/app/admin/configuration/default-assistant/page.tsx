@@ -36,9 +36,11 @@ interface AvailableTool {
 
 function DefaultAssistantConfig() {
   const { popup, setPopup } = usePopup();
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
+  const [savingPrompt, setSavingPrompt] = useState(false);
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
   const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [originalPrompt, setOriginalPrompt] = useState<string>("");
   const { data: availableTools } = useSWR<AvailableTool[]>(
     "/api/admin/default-assistant/available-tools",
     errorHandlingFetcher
@@ -59,6 +61,7 @@ function DefaultAssistantConfig() {
     if (config) {
       setEnabledTools(new Set(config.tool_ids));
       setSystemPrompt(config.system_prompt);
+      setOriginalPrompt(config.system_prompt);
     }
   }, [config]);
 
@@ -76,9 +79,6 @@ function DefaultAssistantConfig() {
   };
 
   const handleToggleTool = async (toolId: number) => {
-    if (isSaving) return;
-    setIsSaving(true);
-    const previous = new Set(enabledTools);
     const next = new Set(enabledTools);
     if (next.has(toolId)) {
       next.delete(toolId);
@@ -86,33 +86,55 @@ function DefaultAssistantConfig() {
       next.add(toolId);
     }
     setEnabledTools(next);
+    setSavingTools((prev) => new Set(prev).add(toolId));
+
     try {
       await persistConfiguration({ tool_ids: Array.from(next) });
       await mutate("/api/admin/default-assistant/configuration");
     } catch (e) {
-      setEnabledTools(previous);
+      const rollback = new Set(enabledTools);
+      if (rollback.has(toolId)) {
+        rollback.delete(toolId);
+      } else {
+        rollback.add(toolId);
+      }
+      setEnabledTools(rollback);
       setPopup({ message: "Failed to save. Please try again.", type: "error" });
     } finally {
-      setIsSaving(false);
+      setSavingTools((prev) => {
+        const updated = new Set(prev);
+        updated.delete(toolId);
+        return updated;
+      });
     }
   };
 
+  const handleSystemPromptChange = (value: string) => {
+    setSystemPrompt(value);
+  };
+
   const handleSaveSystemPrompt = async () => {
-    setIsSaving(true);
+    if (systemPrompt === originalPrompt) return;
+
+    setSavingPrompt(true);
+    const currentPrompt = systemPrompt;
+
     try {
-      await persistConfiguration({ system_prompt: systemPrompt });
+      await persistConfiguration({ system_prompt: currentPrompt });
       await mutate("/api/admin/default-assistant/configuration");
+      setOriginalPrompt(currentPrompt);
       setPopup({
-        message: "System prompt updated successfully!",
+        message: "Instructions updated successfully!",
         type: "success",
       });
     } catch (error) {
+      setSystemPrompt(originalPrompt);
       setPopup({
-        message: "Failed to update system prompt",
+        message: "Failed to update instructions",
         type: "error",
       });
     } finally {
-      setIsSaving(false);
+      setSavingPrompt(false);
     }
   };
 
@@ -164,16 +186,18 @@ function DefaultAssistantConfig() {
                 )}
                 rows={8}
                 value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
+                onChange={(e) => handleSystemPromptChange(e.target.value)}
                 placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
-                disabled={isSaving}
               />
               <div className="flex justify-between items-center mt-2">
                 <div className="text-sm text-gray-500">
                   {systemPrompt.length} characters
                 </div>
-                <Button onClick={handleSaveSystemPrompt} disabled={isSaving}>
-                  Save Instructions
+                <Button
+                  onClick={handleSaveSystemPrompt}
+                  disabled={savingPrompt || systemPrompt === originalPrompt}
+                >
+                  {savingPrompt ? "Saving..." : "Save Instructions"}
                 </Button>
               </div>
             </div>
@@ -190,7 +214,7 @@ function DefaultAssistantConfig() {
                   tool={tool}
                   enabled={enabledTools.has(tool.id)}
                   onToggle={() => handleToggleTool(tool.id)}
-                  disabled={isSaving}
+                  disabled={savingTools.has(tool.id)}
                 />
               ))}
             </div>
