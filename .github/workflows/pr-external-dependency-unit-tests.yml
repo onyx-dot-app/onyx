@@ -83,9 +83,12 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
 
-      - name: Run migrations
+      - name: Reset Database and Run migrations
         run: |
           cd backend
+          # Reset database to clean state
+          alembic downgrade base
+          # Run migrations to head
           alembic upgrade head
 
       - name: Run Tests for ${{ matrix.test-dir }}
