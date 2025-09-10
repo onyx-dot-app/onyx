@@ -208,9 +208,7 @@ def construct_tools(
             continue
 
         if db_tool_model.in_code_tool_id:
-            tool_cls = get_built_in_tool_by_id(
-                db_tool_model.in_code_tool_id, db_session
-            )
+            tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
 
             # Handle Search Tool
             if (

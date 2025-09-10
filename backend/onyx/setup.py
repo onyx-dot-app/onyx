@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
+from onyx.configs.chat_configs import INPUT_PROMPT_YAML
+from onyx.configs.chat_configs import USER_FOLDERS_YAML
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
@@ -46,13 +48,12 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from onyx.seeding.load_docs import seed_initial_documents
-from onyx.seeding.load_yamls import load_chat_yamls
+from onyx.seeding.load_yamls import load_input_prompts_from_yaml
+from onyx.seeding.load_yamls import load_user_folders_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
-from onyx.tools.built_in_tools import auto_add_search_tool_to_personas
-from onyx.tools.built_in_tools import load_builtin_tools
 from onyx.tools.built_in_tools import refresh_built_in_tools_cache
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
@@ -284,14 +285,14 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    logger.notice("Loading built-in tools")
-    load_builtin_tools(db_session)
+    # Load input prompts and user folders from YAML
+    logger.notice("Loading input prompts and user folders")
+    load_input_prompts_from_yaml(db_session, INPUT_PROMPT_YAML)
+    load_user_folders_from_yaml(db_session, USER_FOLDERS_YAML)
 
-    logger.notice("Loading default Prompts and Personas")
-    load_chat_yamls(db_session)
-
+    # Tools and personas are now seeded via migrations
+    # Just refresh the cache for runtime usage
     refresh_built_in_tools_cache(db_session)
-    auto_add_search_tool_to_personas(db_session)
 
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows

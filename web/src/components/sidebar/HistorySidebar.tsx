@@ -247,13 +247,8 @@ export const HistorySidebar = React.memo(
 
       const handleNewChat = () => {
         reset();
-        console.log("currentChatSession", currentChatSession);
 
-        const newChatUrl =
-          `/${page}` +
-          (currentChatSession
-            ? `?assistantId=${currentChatSession.persona_id}`
-            : "");
+        const newChatUrl = `/${page}`;
         router.push(newChatUrl);
       };
 
@@ -292,12 +287,7 @@ export const HistorySidebar = React.memo(
               <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
                 <Link
                   className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href={
-                    `/${page}` +
-                    (currentChatSession
-                      ? `?assistantId=${currentChatSession?.persona_id}`
-                      : "")
-                  }
+                  href={`/${page}`}
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey) {
                       return;
