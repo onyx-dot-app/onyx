@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Persona
 from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
+from onyx.db.user_file import update_last_accessed_at_for_user_files
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import get_user_files_as_user
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -70,6 +71,13 @@ def parse_user_files(
         db_session,
     )
 
+    # Update last accessed at for the user files which are used in the chat
+    if user_file_ids or project_user_file_ids:
+        update_last_accessed_at_for_user_files(
+            user_file_ids + project_user_file_ids or [],
+            db_session,
+        )
+
     # Calculate token count for the files, need to import here to avoid circular import
     # TODO: fix this
     from onyx.db.user_file import calculate_user_files_token_count
@@ -96,7 +104,7 @@ def parse_user_files(
 
     # If we have enough tokens, we don't need search
     # we can just pass them into the prompt directly
-    if have_enough_tokens and False:
+    if have_enough_tokens:
         # No search tool override needed - files can be passed directly
         return user_files, user_file_models, None
 
