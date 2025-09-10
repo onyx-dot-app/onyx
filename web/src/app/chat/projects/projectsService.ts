@@ -43,6 +43,7 @@ export type ProjectDetails = {
   project: Project;
   files?: ProjectFile[];
   instructions?: Prompt;
+  persona_id_to_is_default?: Record<number, boolean>;
 };
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -179,6 +180,24 @@ export async function getProjectDetails(
   return response.json();
 }
 
+export async function unlinkFileFromProject(
+  projectId: number,
+  fileId: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/user/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(
+      fileId
+    )}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as any).detail || "Failed to unlink file from project"
+    );
+  }
+}
+
 export async function deleteUserFile(fileId: string): Promise<void> {
   const response = await fetch(
     `/api/user/projects/file/${encodeURIComponent(fileId)}`,
@@ -225,6 +244,17 @@ export async function getSessionProjectTokenCount(
 ): Promise<number> {
   const response = await fetch(
     `/api/user/projects/session/${encodeURIComponent(chatSessionId)}/token-count`
+  );
+  if (!response.ok) {
+    return 0;
+  }
+  const data = (await response.json()) as { total_tokens: number };
+  return data.total_tokens ?? 0;
+}
+
+export async function getProjectTokenCount(projectId: number): Promise<number> {
+  const response = await fetch(
+    `/api/user/projects/${encodeURIComponent(projectId)}/token-count`
   );
   if (!response.ok) {
     return 0;
