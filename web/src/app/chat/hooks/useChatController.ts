@@ -3,6 +3,7 @@
 import {
   buildChatUrl,
   nameChatSession,
+  stopChat,
   updateLlmOverrideForChatSession,
 } from "../services/lib";
 
@@ -252,6 +253,15 @@ export function useChatController({
 
   const stopGenerating = useCallback(() => {
     const currentSession = getCurrentSessionId();
+
+    // Call the stop-chat endpoint (fire and forget)
+    if (currentSession) {
+      stopChat(currentSession).catch((error) => {
+        console.error("Failed to call stop-chat endpoint:", error);
+        // We don't care if this fails - it's just a notification
+      });
+    }
+
     abortSession(currentSession);
 
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];

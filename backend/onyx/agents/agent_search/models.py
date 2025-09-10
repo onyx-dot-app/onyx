@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -86,6 +87,8 @@ class GraphConfig(BaseModel):
     behavior: GraphSearchConfig
     # Only needed for agentic search
     persistence: GraphPersistence
+    # Function to check if the connection is still active (for cancellation support)
+    is_connected: Callable[[], bool] | None = None
 
     @model_validator(mode="after")
     def validate_search_tool(self) -> "GraphConfig":

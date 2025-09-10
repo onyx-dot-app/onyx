@@ -35,6 +35,11 @@ def manage_sync_streaming(
         input=graph_input,
         config={"metadata": {"config": config, "thread_id": str(message_id)}},
     ):
+        # Check for cancellation before yielding each event
+        if config.is_connected is not None and not config.is_connected():
+            logger.info("Graph streaming cancelled due to connection loss")
+            break
+
         yield cast(CustomStreamEvent, event)
 
 
@@ -47,6 +52,10 @@ def run_graph(
     for event in manage_sync_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input
     ):
+        # Check for cancellation before yielding each event
+        if config.is_connected is not None and not config.is_connected():
+            logger.info("Graph execution cancelled due to connection loss")
+            break
 
         yield cast(Packet, event["data"])
 

@@ -126,6 +126,7 @@ class Answer:
             tooling=self.graph_tooling,
             persistence=self.graph_persistence,
             behavior=self.search_behavior_config,
+            is_connected=self.is_connected,
         )
 
     @property

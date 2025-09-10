@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
+from typing import Dict
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -91,6 +92,7 @@ from onyx.server.query_and_chat.models import LLMOverride
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
+from onyx.server.query_and_chat.models import StopChatRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.streaming_models import OverallStop
@@ -105,6 +107,34 @@ from shared_configs.contextvars import get_current_tenant_id
 RECENT_DOCS_FOLDER_ID = -1
 
 logger = setup_logger()
+
+# Global registry to track active chat sessions and their cancellation events
+_active_chat_sessions: Dict[str, asyncio.Event] = {}
+
+
+def get_or_create_cancellation_event(chat_session_id: str) -> asyncio.Event:
+    """Get or create a cancellation event for a chat session."""
+    if chat_session_id not in _active_chat_sessions:
+        _active_chat_sessions[chat_session_id] = asyncio.Event()
+        logger.debug(f"Created cancellation event for session {chat_session_id}")
+    return _active_chat_sessions[chat_session_id]
+
+
+def cancel_chat_session(chat_session_id: str) -> int:
+    """Cancel all active tasks for a chat session by setting the cancellation event."""
+    if chat_session_id not in _active_chat_sessions:
+        logger.debug(f"No active tasks found for session {chat_session_id}")
+        return 0
+
+    # Set the cancellation event
+    _active_chat_sessions[chat_session_id].set()
+
+    # Clean up the event
+    del _active_chat_sessions[chat_session_id]
+
+    logger.info(f"Cancellation event set for session {chat_session_id}")
+    return 1  # We don't track individual tasks, just that we triggered cancellation
+
 
 router = APIRouter(prefix="/chat")
 
@@ -460,6 +490,16 @@ def handle_new_chat_message(
             db_session=db_session,
         )
 
+    chat_session_id = str(chat_message_req.chat_session_id)
+    # Get or create the cancellation event for this session
+    cancellation_event = get_or_create_cancellation_event(chat_session_id)
+
+    def custom_is_connected() -> bool:
+        # Check both the original connection status and our cancellation flag
+        if cancellation_event.is_set():
+            return False
+        return is_connected_func()
+
     def stream_generator() -> Generator[str, None, None]:
         try:
             for packet in stream_chat_message(
@@ -471,8 +511,13 @@ def handle_new_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
-                is_connected=is_connected_func,
+                is_connected=custom_is_connected,
             ):
+                # Check for cancellation before yielding each packet
+                if cancellation_event.is_set():
+                    logger.info(f"Stream cancelled for session {chat_session_id}")
+                    break
+
                 yield packet
 
         except Exception as e:
@@ -480,9 +525,86 @@ def handle_new_chat_message(
             yield json.dumps({"error": str(e)})
 
         finally:
+            # Clean up the cancellation event if it still exists
+            if chat_session_id in _active_chat_sessions:
+                del _active_chat_sessions[chat_session_id]
             logger.debug("Stream generator finished")
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+@router.post("/stop-chat")
+def stop_chat(
+    request: StopChatRequest,
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, str | int]:
+    """
+    Stop a chat session by cancelling all ongoing tasks.
+    This endpoint is called when a user cancels a message in the frontend.
+
+    Args:
+        request (StopChatRequest): The request containing the chat session ID to stop.
+        user (User | None): The current user, obtained via dependency injection.
+        db_session (Session): Database session for creating interrupted message.
+
+    Returns:
+        dict[str, str]: A response indicating the chat was stopped and how many tasks were cancelled.
+    """
+    logger.info(
+        f"Stop chat request received for session {request.chat_session_id} from user: {user.id if user else 'anonymous'}"
+    )
+
+    # Cancel all active tasks for this chat session
+    cancelled_count = cancel_chat_session(request.chat_session_id)
+
+    # Check if we need to create an "interrupted" message
+    try:
+        # Get all messages for this chat session
+        messages = get_chat_messages_by_session(
+            chat_session_id=UUID(request.chat_session_id),
+            user_id=user.id if user else None,
+            db_session=db_session,
+            skip_permission_check=True,  # We already have permission via the endpoint
+        )
+
+        if messages:
+            # Get the latest message (last in the list since they're ordered)
+            latest_message = messages[-1]
+
+            # If the latest message is a user message, create an "interrupted" assistant message
+            if latest_message.message_type == MessageType.USER:
+                logger.info(
+                    f"Latest message is user message, creating interrupted message for session {request.chat_session_id}"
+                )
+
+                # Create the interrupted message
+                interrupted_message = create_new_chat_message(
+                    chat_session_id=UUID(request.chat_session_id),
+                    parent_message=latest_message,
+                    message="interrupted",
+                    prompt_id=None,
+                    token_count=0,
+                    message_type=MessageType.ASSISTANT,
+                    db_session=db_session,
+                    commit=True,
+                )
+
+                logger.info(
+                    f"Created interrupted message with ID {interrupted_message.id}"
+                )
+
+    except Exception as e:
+        logger.error(
+            f"Error creating interrupted message for session {request.chat_session_id}: {str(e)}"
+        )
+        # Don't fail the stop request if we can't create the interrupted message
+
+    return {
+        "status": "chat_stopped",
+        "message": f"Chat stop request received for session {request.chat_session_id}",
+        "tasks_cancelled": cancelled_count,
+    }
 
 
 @router.put("/set-message-as-latest")

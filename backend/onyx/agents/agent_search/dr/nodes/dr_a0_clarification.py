@@ -79,6 +79,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _check_cancellation(graph_config: GraphConfig) -> bool:
+    """Check if the operation should be cancelled based on connection status."""
+    if graph_config.is_connected is not None:
+        return not graph_config.is_connected()
+    return False
+
+
 def _format_tool_name(tool_name: str) -> str:
     """Convert tool name to LLM-friendly format."""
     name = tool_name.replace(" ", "_")
@@ -447,6 +454,19 @@ def clarifier(
 
         if not use_tool_calling_llm or len(available_tools) == 1:
             if len(available_tools) > 1:
+                # Check for cancellation before making LLM call
+                if _check_cancellation(graph_config):
+                    logger.info("Clarification cancelled before decision prompt")
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        available_tools=available_tools,
+                        query_list=[],
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
+
                 decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
                     question=original_question,
                     chat_history_string=chat_history_string,
@@ -462,12 +482,25 @@ def clarifier(
                         decision_prompt,
                     ),
                     schema=DecisionResponse,
+                    is_connected=graph_config.is_connected,
                 )
             else:
                 # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
                 llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
             if llm_decision.decision == "LLM":
+                # Check for cancellation before streaming answer
+                if _check_cancellation(graph_config):
+                    logger.info("Clarification cancelled before streaming answer")
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        available_tools=available_tools,
+                        query_list=[],
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
 
                 write_custom_event(
                     current_step_nr,
@@ -505,6 +538,7 @@ def clarifier(
                         context_docs=None,
                         replace_citations=True,
                         max_tokens=None,
+                        is_connected=graph_config.is_connected,
                     ),
                 )
 
@@ -547,6 +581,18 @@ def clarifier(
                 )
 
         else:
+            # Check for cancellation before tool calling decision
+            if _check_cancellation(graph_config):
+                logger.info("Clarification cancelled before tool calling decision")
+                return OrchestrationSetup(
+                    original_question=original_question,
+                    chat_history_string="",
+                    tools_used=[DRPath.END.value],
+                    available_tools=available_tools,
+                    query_list=[],
+                    assistant_system_prompt=assistant_system_prompt,
+                    assistant_task_prompt=assistant_task_prompt,
+                )
 
             decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
                 question=original_question,
@@ -573,6 +619,7 @@ def clarifier(
                 ind=0,
                 generate_final_answer=True,
                 chat_message_id=str(graph_config.persistence.chat_session_id),
+                is_connected=graph_config.is_connected,
             )
 
             if len(full_response.ai_message_chunk.tool_calls) == 0:
@@ -638,6 +685,21 @@ def clarifier(
             )
 
             try:
+                # Check for cancellation before clarification generation
+                if _check_cancellation(graph_config):
+                    logger.info(
+                        "Clarification cancelled before clarification generation"
+                    )
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        available_tools=available_tools,
+                        query_list=[],
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
+
                 clarification_response = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
@@ -645,6 +707,7 @@ def clarifier(
                     ),
                     schema=ClarificationGenerationResponse,
                     timeout_override=25,
+                    is_connected=graph_config.is_connected,
                     # max_tokens=1500,
                 )
             except Exception as e:
@@ -659,6 +722,21 @@ def clarifier(
                     clarification_question=clarification_response.clarification_question,
                     clarification_response=None,
                 )
+                # Check for cancellation before streaming clarification
+                if _check_cancellation(graph_config):
+                    logger.info(
+                        "Clarification cancelled before streaming clarification"
+                    )
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        available_tools=available_tools,
+                        query_list=[],
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
+
                 write_custom_event(
                     current_step_nr,
                     MessageStart(
@@ -685,6 +763,7 @@ def clarifier(
                         timeout_override=60,
                         answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
+                        is_connected=graph_config.is_connected,
                         # max_tokens=None,
                     ),
                 )

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 
@@ -42,6 +43,7 @@ def process_llm_stream(
     displayed_search_results: list[LlmDoc] | None = None,
     generate_final_answer: bool = False,
     chat_message_id: str | None = None,
+    is_connected: Callable[[], bool] | None = None,
 ) -> BasicSearchProcessedStreamResults:
     tool_call_chunk = AIMessageChunk(content="")
 
@@ -59,6 +61,10 @@ def process_llm_stream(
     # This stream will be the llm answer if no tool is chosen. When a tool is chosen,
     # the stream will contain AIMessageChunks with tool call information.
     for message in messages:
+        # Check for cancellation during streaming
+        if is_connected is not None and not is_connected():
+            logger.info("LLM stream processing cancelled due to connection loss")
+            break
 
         answer_piece = message.content
         if not isinstance(answer_piece, str):

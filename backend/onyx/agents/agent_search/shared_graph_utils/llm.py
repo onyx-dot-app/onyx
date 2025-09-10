@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from datetime import datetime
 from typing import cast
 from typing import Literal
@@ -21,7 +22,10 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
+
+logger = setup_logger()
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
@@ -43,6 +47,7 @@ def stream_llm_answer(
     ind: int | None = None,
     context_docs: list[LlmDoc] | None = None,
     replace_citations: bool = False,
+    is_connected: Callable[[], bool] | None = None,
 ) -> tuple[list[str], list[float], list[CitationInfo]]:
     """Stream the initial answer from the LLM.
 
@@ -81,6 +86,10 @@ def stream_llm_answer(
         timeout_override=timeout_override,
         max_tokens=max_tokens,
     ):
+        # Check for cancellation during streaming
+        if is_connected is not None and not is_connected():
+            logger.debug("LLM streaming cancelled due to connection loss")
+            break
 
         # TODO: in principle, the answer here COULD contain images, but we don't support that yet
         content = message.content
@@ -142,11 +151,16 @@ def invoke_llm_json(
     tool_choice: ToolChoiceOptions | None = None,
     timeout_override: int | None = None,
     max_tokens: int | None = None,
+    is_connected: Callable[[], bool] | None = None,
 ) -> SchemaType:
     """
     Invoke an LLM, forcing it to respond in a specified JSON format if possible,
     and return an object of that schema.
     """
+
+    # Check for cancellation before making LLM call
+    if is_connected is not None and not is_connected():
+        raise RuntimeError("LLM invoke cancelled due to connection loss")
 
     # check if the model supports response_format: json_schema
     supports_json = "response_format" in (

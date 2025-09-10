@@ -346,6 +346,19 @@ export async function deleteAllChatSessions() {
   return response;
 }
 
+export async function stopChat(chatSessionId: string) {
+  const response = await fetch(`/api/chat/stop-chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+    }),
+  });
+  return response;
+}
+
 export async function* simulateLLMResponse(input: string, delay: number = 30) {
   // Split the input string into tokens. This is a simple example, and in real use case, tokenization can be more complex.
   // Iterate over tokens and yield them one by one
