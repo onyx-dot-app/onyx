@@ -267,6 +267,7 @@ class TestSlackBotFederatedSearch:
             patch("slack_sdk.WebClient.search_messages"),
             patch("onyx.context.search.federated.slack_search.query_slack"),
             patch("onyx.onyxbot.slack.listener.get_channel_type_from_id"),
+            patch("onyx.context.search.utils.get_query_embeddings"),
         ]
 
         started_patches = [p.start() for p in patches]
@@ -277,7 +278,14 @@ class TestSlackBotFederatedSearch:
 
         self._setup_channel_type_mock(started_patches[2], channel_name)
 
+        self._setup_embedding_mock(started_patches[3])
+
         return patches, started_patches
+
+    def _setup_embedding_mock(self, mock_get_query_embeddings: Mock) -> None:
+        """Mock embedding calls to avoid model server dependency"""
+        # Return a dummy embedding vector for any query
+        mock_get_query_embeddings.return_value = [[0.1] * 768]  # 768-dimensional vector
 
     def _setup_slack_api_mocks(
         self, mock_search_messages: Mock, mock_conversations_info: Mock
