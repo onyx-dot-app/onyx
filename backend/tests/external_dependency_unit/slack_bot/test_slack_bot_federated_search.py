@@ -370,31 +370,29 @@ class TestSlackBotFederatedSearch:
 
     def _setup_llm_provider(self, db_session: Session) -> None:
         """Create a default LLM provider in the database for testing with real API key"""
-        # Check if there's already a default LLM provider
-        existing_provider = (
-            db_session.query(LLMProvider)
-            .filter(LLMProvider.is_default_provider.is_(True))
-            .first()
-        )
+        # Delete any existing default LLM provider to ensure clean state
+        existing_providers = db_session.query(LLMProvider).all()
+        for provider in existing_providers:
+            db_session.delete(provider)
+        db_session.commit()
 
-        if not existing_provider:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "OPENAI_API_KEY environment variable not set - test requires real API key"
-                )
-
-            llm_provider = LLMProvider(
-                name=f"test-llm-provider-{uuid4().hex[:8]}",
-                provider="openai",
-                api_key=api_key,
-                default_model_name="gpt-4o",
-                fast_default_model_name="gpt-4o-mini",
-                is_default_provider=True,
-                is_public=True,
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable not set - test requires real API key"
             )
-            db_session.add(llm_provider)
-            db_session.commit()
+
+        llm_provider = LLMProvider(
+            name=f"test-llm-provider-{uuid4().hex[:8]}",
+            provider="openai",
+            api_key=api_key,
+            default_model_name="gpt-4o",
+            fast_default_model_name="gpt-4o-mini",
+            is_default_provider=True,
+            is_public=True,
+        )
+        db_session.add(llm_provider)
+        db_session.commit()
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
