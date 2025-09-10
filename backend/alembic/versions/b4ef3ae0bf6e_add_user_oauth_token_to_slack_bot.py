@@ -1,7 +1,7 @@
 """add_user_oauth_token_to_slack_bot
 
 Revision ID: b4ef3ae0bf6e
-Revises: b558f51620b4
+Revises: 8818cf73fa1a
 Create Date: 2025-08-26 17:47:41.788462
 
 """
