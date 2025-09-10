@@ -34,7 +34,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -62,7 +62,7 @@ jobs:
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
   prepare-build:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -109,7 +109,7 @@ jobs:
           path: backend/generated/
 
   build-backend-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -138,7 +138,7 @@ jobs:
           push: true
 
   build-model-server-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -170,7 +170,7 @@ jobs:
 
   build-integration-image:
     needs: prepare-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -213,7 +213,7 @@ jobs:
         build-integration-image,
       ]
     # See https://docs.blacksmith.sh/blacksmith-runners/overview
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
 
     strategy:
       fail-fast: false
