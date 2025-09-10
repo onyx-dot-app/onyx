@@ -77,7 +77,7 @@ jobs:
           --set=celery_worker_monitoring.replicaCount=0 \
           --set=celery_worker_primary.replicaCount=0 \
           --set=celery_worker_user_files_indexing.replicaCount=0" \
-        --helm-extra-args="--wait --timeout 900s" \
+        --helm-extra-args="--timeout 900s" \
         --debug --config ct.yaml
       # the following would install only changed charts, but we only have one chart so 
       # don't worry about that for now
