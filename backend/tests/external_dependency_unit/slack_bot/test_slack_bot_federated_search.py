@@ -3,8 +3,6 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
@@ -43,6 +41,8 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
+        system_prompt="You are a helpful assistant.",
+        task_prompt="Answer the user's question based on the provided context.",
     )
     db_session.add(persona)
     db_session.flush()
@@ -53,9 +53,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     )
     db_session.add(persona_doc_set)
     db_session.commit()
-
-    persona.system_prompt = "You are a helpful assistant."
-    persona.task_prompt = "Answer the user's question based on the provided context."
 
     try:
         search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
@@ -68,13 +65,8 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
 
     db_session.commit()
 
-    persona_with_prompts = db_session.scalar(
-        select(Persona)
-        .options(joinedload(Persona.prompts))
-        .where(Persona.id == persona.id)
-    )
-
-    return persona_with_prompts
+    # Prompts are now directly on the persona table, no need for joinedload
+    return persona
 
 
 def _create_mock_slack_request(
