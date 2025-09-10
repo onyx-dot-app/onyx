@@ -1151,7 +1151,7 @@ find information about yellow curry specifically, but here is what I found about
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
 - THIS IS VERY IMPORTANT: Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above. Also, if yoyu refer to sub-answers, the provided reference numbers \
+are provided above. Also, if you refer to sub-answers, the provided reference numbers \
 in the sub-answers are the same as the ones provided for the documents!
 
 ANSWER:
