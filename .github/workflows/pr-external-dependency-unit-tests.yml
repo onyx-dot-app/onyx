@@ -52,6 +52,7 @@ jobs:
 
     env:
       PYTHONPATH: ./backend
+      MODEL_SERVER_HOST: "disabled"
 
     steps:
       - name: Checkout code
@@ -77,7 +78,7 @@ jobs:
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index inference_model_server
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
 
       - name: Run migrations
         run: |
