@@ -64,7 +64,7 @@ jobs:
           --set=minio.enabled=false \
           --set=vespa.enabled=false \
           --set=slackbot.enabled=false \
-          --set=webserver.replicaCount=0 \
+          --set=webserver.replicaCount=1 \
           --set=api.replicaCount=0 \
           --set=inferenceCapability.replicaCount=0 \
           --set=indexCapability.replicaCount=0 \
