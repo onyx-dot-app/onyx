@@ -56,8 +56,6 @@ jobs:
 
     env:
       PYTHONPATH: ./backend
-      # Disable model server for external dependency tests
-      MODEL_SERVER_HOST: "disabled"
 
     steps:
       - name: Checkout code
@@ -83,7 +81,7 @@ jobs:
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index inference_model_server
 
       - name: Run migrations
         run: |
