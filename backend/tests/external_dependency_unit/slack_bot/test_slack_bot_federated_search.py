@@ -3,6 +3,10 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
+# Set environment variables to disable model server for testing
+os.environ["MODEL_SERVER_HOST"] = "disabled"
+os.environ["MODEL_SERVER_PORT"] = "9000"
+
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
@@ -407,7 +411,10 @@ class TestSlackBotFederatedSearch:
         for p in patches:
             p.stop()
 
-    def test_slack_bot_public_channel_filtering(self, db_session: Session) -> None:
+    @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    def test_slack_bot_public_channel_filtering(
+        self, mock_gpu_status, db_session: Session
+    ) -> None:
         """Test that slack bot in public channel sees only public channel messages"""
         self._setup_llm_provider(db_session)
 
@@ -456,7 +463,10 @@ class TestSlackBotFederatedSearch:
         finally:
             self._teardown_common_mocks(patches)
 
-    def test_slack_bot_private_channel_filtering(self, db_session: Session) -> None:
+    @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    def test_slack_bot_private_channel_filtering(
+        self, mock_gpu_status, db_session: Session
+    ) -> None:
         """Test that slack bot in private channel sees private + public channel messages"""
         self._setup_llm_provider(db_session)
 
@@ -505,7 +515,8 @@ class TestSlackBotFederatedSearch:
         finally:
             self._teardown_common_mocks(patches)
 
-    def test_slack_bot_dm_filtering(self, db_session: Session) -> None:
+    @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    def test_slack_bot_dm_filtering(self, mock_gpu_status, db_session: Session) -> None:
         """Test that slack bot in DM sees all messages (no filtering)"""
         self._setup_llm_provider(db_session)
 
