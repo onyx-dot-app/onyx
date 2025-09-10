@@ -54,18 +54,19 @@ jobs:
       uses: helm/kind-action@v1.12.0
 
     - name: Run chart-testing (install)
-      timeout-minutes: 20
+      timeout-minutes: 25
       if: steps.list-changed.outputs.changed == 'true'
       run: ct install --all \
         --helm-extra-set-args="\
           --set=nginx.enabled=false \
-          --set=postgresql.enabled=false \
-          --set=redis.enabled=false \
           --set=minio.enabled=false \
           --set=vespa.enabled=false \
           --set=slackbot.enabled=false \
+          --set=postgresql.enabled=true \
+          --set=postgresql.primary.persistence.enabled=false \
+          --set=redis.enabled=true \
           --set=webserver.replicaCount=1 \
-          --set=api.replicaCount=0 \
+          --set=api.replicaCount=1 \
           --set=inferenceCapability.replicaCount=0 \
           --set=indexCapability.replicaCount=0 \
           --set=celery_beat.replicaCount=0 \
@@ -75,7 +76,7 @@ jobs:
           --set=celery_worker_monitoring.replicaCount=0 \
           --set=celery_worker_primary.replicaCount=0 \
           --set=celery_worker_user_files_indexing.replicaCount=0" \
-        --helm-extra-args="--timeout 900s" \
+        --helm-extra-args="--wait --timeout 900s" \
         --debug --config ct.yaml
       # the following would install only changed charts, but we only have one chart so 
       # don't worry about that for now
