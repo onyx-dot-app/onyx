@@ -11,6 +11,7 @@ env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
   
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -46,6 +47,8 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
           push: true
 
   build-backend-image:
@@ -75,6 +78,8 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
           push: true
 
   build-model-server-image:
@@ -104,6 +109,8 @@ jobs:
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
           tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
           push: true
 
   playwright-tests:
