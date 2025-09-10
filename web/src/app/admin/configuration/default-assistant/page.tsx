@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -143,18 +144,28 @@ function DefaultAssistantConfig() {
 
           <Separator />
 
-          <div>
-            <p className="block font-medium text-sm">Instructions</p>
+          <div className="max-w-4xl">
+            <div className="flex gap-x-2 items-center">
+              <div className="block font-medium text-sm">Instructions</div>
+            </div>
             <SubLabel>
               Add instructions to tailor the behavior of the assistant.
             </SubLabel>
             <div>
               <textarea
-                className="w-full p-3 border border-border rounded-lg resize-none"
+                className={cn(
+                  "w-full",
+                  "p-3",
+                  "border",
+                  "border-border",
+                  "rounded-lg",
+                  "text-sm",
+                  "[&::placeholder]:text-text-muted/50"
+                )}
                 rows={8}
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="Enter custom instructions for the assistant..."
+                placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
                 disabled={isSaving}
               />
               <div className="flex justify-between items-center mt-2">
