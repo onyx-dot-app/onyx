@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -59,3 +61,19 @@ def fetch_user_project_ids_for_user_files(
         str(user_file.id): [project.id for project in user_file.projects]
         for user_file in results
     }
+
+
+def update_last_accessed_at_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> None:
+    """Update `last_accessed_at` to now (UTC) for the given user files."""
+    if not user_file_ids:
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    (
+        db_session.query(UserFile)
+        .filter(UserFile.id.in_(user_file_ids))
+        .update({UserFile.last_accessed_at: now}, synchronize_session=False)
+    )
+    db_session.commit()

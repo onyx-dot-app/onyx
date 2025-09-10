@@ -116,6 +116,62 @@ export default function ProjectContextPanel() {
 
   if (!currentProjectId) return null; // no selection yet
 
+  const handleUploadChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      setIsUploading(true);
+      try {
+        // Show temporary uploading files immediately
+        const tempFiles: ProjectFile[] = Array.from(files).map((file) => ({
+          id: file.name,
+          file_id: file.name,
+          name: file.name,
+          project_id: currentProjectId,
+          user_id: null,
+          created_at: new Date().toISOString(),
+          status: UserFileStatus.UPLOADING,
+          file_type: file.type,
+          last_accessed_at: new Date().toISOString(),
+          chat_file_type: ChatFileType.DOCUMENT,
+          token_count: 0,
+          chunk_count: 0,
+        }));
+        setTempProjectFiles((prev) => [...prev, ...tempFiles]);
+
+        const result: CategorizedFiles = await uploadFiles(
+          Array.from(files),
+          currentProjectId
+        );
+        // Replace temp entries with backend entries (by index) so keys become backend IDs. This will prevent flickering.
+        setTempProjectFiles((prev) => [
+          ...prev.slice(0, -tempFiles.length),
+          ...result.user_files,
+        ]);
+        const unsupported = result?.unsupported_files || [];
+        const nonAccepted = result?.non_accepted_files || [];
+        if (unsupported.length > 0 || nonAccepted.length > 0) {
+          const parts: string[] = [];
+          if (unsupported.length > 0) {
+            parts.push(`Unsupported: ${unsupported.join(", ")}`);
+          }
+          if (nonAccepted.length > 0) {
+            parts.push(`Not accepted: ${nonAccepted.join(", ")}`);
+          }
+          setPopup({
+            type: "warning",
+            message: `Some files were not uploaded. ${parts.join(" | ")}`,
+          });
+        }
+      } finally {
+        setIsUploading(false);
+        setTempProjectFiles([]);
+        e.target.value = "";
+      }
+    },
+    [currentProjectId, uploadFiles, setPopup]
+  );
+
   return (
     <div className="flex flex-col gap-2 p-4 w-[800px] mx-auto mt-10">
       <FolderOpen size={34} />
@@ -169,62 +225,7 @@ export default function ProjectContextPanel() {
             if (!linkFileToProject) return;
             await linkFileToProject(currentProjectId, file.id);
           }}
-          handleUploadChange={async (
-            e: React.ChangeEvent<HTMLInputElement>
-          ) => {
-            const files = e.target.files;
-            if (!files || files.length === 0) return;
-            setIsUploading(true);
-            try {
-              // Show temporary uploading files immediately
-              const tempFiles: ProjectFile[] = Array.from(files).map(
-                (file) => ({
-                  id: file.name,
-                  file_id: file.name,
-                  name: file.name,
-                  project_id: currentProjectId,
-                  user_id: null,
-                  created_at: new Date().toISOString(),
-                  status: UserFileStatus.UPLOADING,
-                  file_type: file.type,
-                  last_accessed_at: new Date().toISOString(),
-                  chat_file_type: ChatFileType.DOCUMENT,
-                  token_count: 0,
-                  chunk_count: 0,
-                })
-              );
-              setTempProjectFiles((prev) => [...prev, ...tempFiles]);
-
-              const result: CategorizedFiles = await uploadFiles(
-                Array.from(files),
-                currentProjectId
-              );
-              // Replace temp entries with backend entries (by index) so keys become backend IDs. This will prevent flickering.
-              setTempProjectFiles((prev) => [
-                ...prev.slice(0, -tempFiles.length),
-                ...result.user_files,
-              ]);
-              const unsupported = result?.unsupported_files || [];
-              const nonAccepted = result?.non_accepted_files || [];
-              if (unsupported.length > 0 || nonAccepted.length > 0) {
-                const parts: string[] = [];
-                if (unsupported.length > 0) {
-                  parts.push(`Unsupported: ${unsupported.join(", ")}`);
-                }
-                if (nonAccepted.length > 0) {
-                  parts.push(`Not accepted: ${nonAccepted.join(", ")}`);
-                }
-                setPopup({
-                  type: "warning",
-                  message: `Some files were not uploaded. ${parts.join(" | ")}`,
-                });
-              }
-            } finally {
-              setIsUploading(false);
-              setTempProjectFiles([]);
-              e.target.value = "";
-            }
-          }}
+          handleUploadChange={handleUploadChange}
         />
       </div>
 
@@ -321,6 +322,11 @@ export default function ProjectContextPanel() {
           </DialogHeader>
           <FilesList
             recentFiles={(currentProjectDetails?.files || []) as any}
+            showRemove
+            onRemove={async (file) => {
+              if (!currentProjectId) return;
+              await unlinkFileFromProject(currentProjectId, file.id);
+            }}
           />
         </DialogContent>
       </Dialog>
