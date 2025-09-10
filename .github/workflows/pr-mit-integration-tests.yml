@@ -11,7 +11,8 @@ on:
       - "release/**"
 
 env:
-  # AWS ECR Configuration. Use us-west-2 since blacksmith is located there.
+  # AWS ECR Configuration. Use us-west-2 since blacksmith's instances are located there.
+  # This allows for faster image writes/pulls due to colocation.
   AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # e.g., 123456789012.dkr.ecr.us-east-2.amazonaws.com
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
@@ -211,7 +212,7 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    # See https://runs-on.com/runners/linux/
+    # See https://docs.blacksmith.sh/blacksmith-runners/overview
     runs-on: blacksmith-32vcpu-ubuntu-2404
 
     strategy:
