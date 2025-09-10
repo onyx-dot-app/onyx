@@ -1,3 +1,4 @@
+import os
 from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
@@ -10,6 +11,7 @@ from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
+from onyx.db.models import LLMProvider
 from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
 from onyx.db.models import Persona__Prompt
@@ -381,6 +383,34 @@ class TestSlackBotFederatedSearch:
 
         mock_get_channel_type_from_id.side_effect = mock_channel_type_response
 
+    def _setup_llm_provider(self, db_session: Session) -> None:
+        """Create a default LLM provider in the database for testing with real API key"""
+        # Check if there's already a default LLM provider
+        existing_provider = (
+            db_session.query(LLMProvider)
+            .filter(LLMProvider.is_default_provider.is_(True))
+            .first()
+        )
+
+        if not existing_provider:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "OPENAI_API_KEY environment variable not set - test requires real API key"
+                )
+
+            llm_provider = LLMProvider(
+                name=f"test-llm-provider-{uuid4().hex[:8]}",
+                provider="openai",
+                api_key=api_key,
+                default_model_name="gpt-4o",
+                fast_default_model_name="gpt-4o-mini",
+                is_default_provider=True,
+                is_public=True,
+            )
+            db_session.add(llm_provider)
+            db_session.commit()
+
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
         for p in patches:
@@ -388,6 +418,8 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_public_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in public channel sees only public channel messages"""
+        self._setup_llm_provider(db_session)
+
         user, persona, federated_connector, slack_bot, slack_channel_config = (
             self._setup_test_environment(db_session)
         )
@@ -435,6 +467,8 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_private_channel_filtering(self, db_session: Session) -> None:
         """Test that slack bot in private channel sees private + public channel messages"""
+        self._setup_llm_provider(db_session)
+
         user, persona, federated_connector, slack_bot, slack_channel_config = (
             self._setup_test_environment(db_session)
         )
@@ -482,6 +516,8 @@ class TestSlackBotFederatedSearch:
 
     def test_slack_bot_dm_filtering(self, db_session: Session) -> None:
         """Test that slack bot in DM sees all messages (no filtering)"""
+        self._setup_llm_provider(db_session)
+
         user, persona, federated_connector, slack_bot, slack_channel_config = (
             self._setup_test_environment(db_session)
         )
