@@ -96,7 +96,6 @@ class CreateChatMessageRequest(ChunkContext):
     user_file_ids: list[int] = []
     user_folder_ids: list[int] = []
 
-    # Note: prompt_id removed - prompt configuration now comes from persona
     # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, then retrieval options are unused
     search_doc_ids: list[int] | None

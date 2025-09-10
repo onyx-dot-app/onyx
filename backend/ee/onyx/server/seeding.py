@@ -133,7 +133,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
         logger.notice("Seeding Personas")
         try:
             for persona in personas:
-                db_persona = upsert_persona(
+                upsert_persona(
                     user=None,  # Seeding is done as admin
                     name=persona.name,
                     description=persona.description,
@@ -154,11 +154,8 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     system_prompt=persona.system_prompt,
                     task_prompt=persona.task_prompt,
                     datetime_aware=persona.datetime_aware,
+                    commit=False,
                 )
-                # Set embedded prompt fields from seed
-                db_persona.system_prompt = persona.system_prompt
-                db_persona.task_prompt = persona.task_prompt
-                db_persona.datetime_aware = persona.datetime_aware
             db_session.commit()
         except Exception:
             logger.exception("Failed to seed personas.")

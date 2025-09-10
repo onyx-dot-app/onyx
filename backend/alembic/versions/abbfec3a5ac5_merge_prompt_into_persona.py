@@ -65,7 +65,6 @@ def upgrade() -> None:
                     pr.datetime_aware
                 FROM persona__prompt pp
                 JOIN prompt pr ON pp.prompt_id = pr.id
-                ORDER BY pp.persona_id, pr.id
             ) p
             WHERE persona.id = p.persona_id
         """
@@ -75,31 +74,17 @@ def upgrade() -> None:
         # Since chat messages referenced prompt_id, we need to update them to use persona_id
         # This is complex as we need to map from prompt_id to persona_id
 
-        # First, create a temporary mapping table
-        op.execute(
-            """
-            CREATE TEMP TABLE prompt_to_persona_mapping AS
-            SELECT
-                pp.prompt_id,
-                pp.persona_id
-            FROM persona__prompt pp
-        """
-        )
-
         # Check if chat_message has prompt_id column
         chat_message_columns = [
             col["name"] for col in inspector.get_columns("chat_message")
         ]
         if "prompt_id" in chat_message_columns:
-            # Step 6: Drop the foreign key constraint on chat_message.prompt_id if it exists
             op.execute(
                 """
                 ALTER TABLE chat_message
                 DROP CONSTRAINT IF EXISTS chat_message__prompt_fk
             """
             )
-
-            # Step 7: Drop the prompt_id column from chat_message
             op.drop_column("chat_message", "prompt_id")
 
     # Step 4: Handle personas without prompts - set default values if needed (always run this)
@@ -122,27 +107,21 @@ def upgrade() -> None:
         op.drop_table("prompt")
 
     # Step 7: Make system_prompt and task_prompt non-nullable after migration (only if they exist)
-    if "system_prompt" in existing_columns:
-        op.alter_column(
-            "persona",
-            "system_prompt",
-            existing_type=sa.String(length=8000),
-            nullable=False,
-            server_default="",
-        )
-        # Remove server default after setting non-nullable
-        op.alter_column("persona", "system_prompt", server_default=None)
+    op.alter_column(
+        "persona",
+        "system_prompt",
+        existing_type=sa.String(length=8000),
+        nullable=False,
+        server_default=None,
+    )
 
-    if "task_prompt" in existing_columns:
-        op.alter_column(
-            "persona",
-            "task_prompt",
-            existing_type=sa.String(length=8000),
-            nullable=False,
-            server_default="",
-        )
-        # Remove server default after setting non-nullable
-        op.alter_column("persona", "task_prompt", server_default=None)
+    op.alter_column(
+        "persona",
+        "task_prompt",
+        existing_type=sa.String(length=8000),
+        nullable=False,
+        server_default=None,
+    )
 
 
 def downgrade() -> None:

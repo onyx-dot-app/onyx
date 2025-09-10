@@ -2096,9 +2096,6 @@ class ChatMessage(Base):
     latest_child_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     rephrased_query: Mapped[str] = mapped_column(Text, nullable=True)
-    # Note: prompt configuration is now handled through the persona (via chat_session.persona_id or alternate_assistant_id)
-    # If prompt configuration is None, then token_count is 0 as this message won't be passed into
-    # the LLM's context (not included in the history of messages)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
         Enum(MessageType, native_enum=False)

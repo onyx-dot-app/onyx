@@ -1,6 +1,5 @@
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
-from sqlalchemy.orm import Session
 
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
@@ -88,14 +87,12 @@ def compute_max_document_tokens(
 
 
 def compute_max_document_tokens_for_persona(
-    db_session: Session,
     persona: Persona,
     actual_user_input: str | None = None,
 ) -> int:
     # Use the persona directly since prompts are now embedded
-    prompt = persona
     return compute_max_document_tokens(
-        prompt_config=PromptConfig.from_model(prompt),
+        prompt_config=PromptConfig.from_model(persona),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
     )

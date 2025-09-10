@@ -57,6 +57,7 @@ def seed_chat_history(num_sessions: int, num_messages: int, days: int) -> None:
                     message=msg,
                     token_count=0,
                     message_type=current_message_type,
+                    commit=False,
                     db_session=db_session,
                 )
 

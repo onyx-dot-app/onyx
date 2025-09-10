@@ -65,10 +65,6 @@ def load_input_prompts_from_yaml(
 
 def load_builtin_personas(db_session: Session) -> None:
     """Load built-in personas with embedded prompt configuration."""
-
-    # cleanup old default personas before loading
-    delete_old_default_personas(db_session)
-
     logger.info("Loading builtin personas")
     try:
         for prebuilt_persona in get_prebuilt_personas():
@@ -141,4 +137,7 @@ def load_chat_yamls(
     """Load all chat-related YAML configurations and builtin personas."""
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
     load_user_folders_from_yaml(db_session)
+
+    # cleanup old default personas before loading
+    delete_old_default_personas(db_session)
     load_builtin_personas(db_session)

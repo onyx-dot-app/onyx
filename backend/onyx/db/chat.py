@@ -965,7 +965,6 @@ def create_new_chat_message(
         existing_message.parent_message = parent_message.id
         existing_message.message = message
         existing_message.rephrased_query = rephrased_query
-        # Note: prompt_id removed - prompt configuration now comes from persona
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.citations = citations
@@ -986,7 +985,6 @@ def create_new_chat_message(
             latest_child_message=None,
             message=message,
             rephrased_query=rephrased_query,
-            # Note: prompt_id removed - prompt configuration now comes from persona
             token_count=token_count,
             message_type=message_type,
             citations=citations,
@@ -1782,8 +1780,6 @@ def update_db_session_with_messages(
         chat_message.token_count = token_count
     if rephrased_query:
         chat_message.rephrased_query = rephrased_query
-    # Note: prompt_id has been removed after Prompt/Persona merge
-    # Prompts are now embedded in personas
     if citations:
         # Convert string keys to integers to match database field type
         chat_message.citations = {int(k): v for k, v in citations.items()}

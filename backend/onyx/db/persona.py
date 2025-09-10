@@ -706,7 +706,10 @@ def delete_old_default_personas(
     db_session: Session,
 ) -> None:
     """Note, this locks out the Summarize and Paraphrase personas for now
-    Need a more graceful fix later or those need to never have IDs"""
+    Need a more graceful fix later or those need to never have IDs.
+
+    This function is idempotent, so it can be run multiple times without issue.
+    """
     OLD_SUFFIX = "_old"
     stmt = (
         update(Persona)
