@@ -21,9 +21,7 @@ function MainContent({
   refreshPersonas: () => void;
 }) {
   // Filter out default/unified assistants
-  const customPersonas = personas.filter(
-    (persona) => !persona.is_default_persona && !persona.builtin_persona
-  );
+  const customPersonas = personas.filter((persona) => !persona.builtin_persona);
 
   return (
     <div>
