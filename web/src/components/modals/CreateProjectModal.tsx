@@ -65,7 +65,7 @@ export default function CreateProjectModal({
               className="w-full focus-visible:border focus-visible:border-neutral-200 focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-2 w-full">
             <Button
               type="button"
               variant="outline"
