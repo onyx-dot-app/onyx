@@ -16,59 +16,85 @@ down_revision = "8818cf73fa1a"
 branch_labels = None
 depends_on = None
 
+
 MAX_PROMPT_LENGTH = 5_000_000
 
 
 def upgrade() -> None:
     """NOTE: Prompts without any Personas will just be lost."""
     # Step 1: Add new columns to persona table (only if they don't exist)
-    op.add_column(
-        "persona",
-        sa.Column("system_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True),
-    )
-    op.add_column(
-        "persona",
-        sa.Column("task_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True),
-    )
-    op.add_column(
-        "persona",
-        sa.Column(
-            "datetime_aware", sa.Boolean(), nullable=False, server_default="true"
-        ),
-    )
 
-    # For personas that have associated prompts, copy the prompt data
-    op.execute(
-        """
-        UPDATE persona
-        SET
-            system_prompt = p.system_prompt,
-            task_prompt = p.task_prompt,
-            datetime_aware = p.datetime_aware
-        FROM (
-            -- Get the first prompt for each persona (in case there are multiple)
-            SELECT DISTINCT ON (pp.persona_id)
-                pp.persona_id,
-                pr.system_prompt,
-                pr.task_prompt,
-                pr.datetime_aware
-            FROM persona__prompt pp
-            JOIN prompt pr ON pp.prompt_id = pr.id
-        ) p
-        WHERE persona.id = p.persona_id
-    """
-    )
+    # Check if columns exist before adding them
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    existing_columns = [col["name"] for col in inspector.get_columns("persona")]
 
-    # Step 3: Update chat_message references
-    # Since chat messages referenced prompt_id, we need to update them to use persona_id
-    # This is complex as we need to map from prompt_id to persona_id
-    op.execute(
+    if "system_prompt" not in existing_columns:
+        op.add_column(
+            "persona",
+            sa.Column(
+                "system_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True
+            ),
+        )
+
+    if "task_prompt" not in existing_columns:
+        op.add_column(
+            "persona",
+            sa.Column(
+                "task_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True
+            ),
+        )
+
+    if "datetime_aware" not in existing_columns:
+        op.add_column(
+            "persona",
+            sa.Column(
+                "datetime_aware", sa.Boolean(), nullable=False, server_default="true"
+            ),
+        )
+
+    # Step 2: Migrate data from prompt table to persona table (only if tables exist)
+    existing_tables = inspector.get_table_names()
+
+    if "prompt" in existing_tables and "persona__prompt" in existing_tables:
+        # For personas that have associated prompts, copy the prompt data
+        op.execute(
+            """
+            UPDATE persona
+            SET
+                system_prompt = p.system_prompt,
+                task_prompt = p.task_prompt,
+                datetime_aware = p.datetime_aware
+            FROM (
+                -- Get the first prompt for each persona (in case there are multiple)
+                SELECT DISTINCT ON (pp.persona_id)
+                    pp.persona_id,
+                    pr.system_prompt,
+                    pr.task_prompt,
+                    pr.datetime_aware
+                FROM persona__prompt pp
+                JOIN prompt pr ON pp.prompt_id = pr.id
+            ) p
+            WHERE persona.id = p.persona_id
         """
-        ALTER TABLE chat_message
-        DROP CONSTRAINT IF EXISTS chat_message__prompt_fk
-    """
-    )
-    op.drop_column("chat_message", "prompt_id")
+        )
+
+        # Step 3: Update chat_message references
+        # Since chat messages referenced prompt_id, we need to update them to use persona_id
+        # This is complex as we need to map from prompt_id to persona_id
+
+        # Check if chat_message has prompt_id column
+        chat_message_columns = [
+            col["name"] for col in inspector.get_columns("chat_message")
+        ]
+        if "prompt_id" in chat_message_columns:
+            op.execute(
+                """
+                ALTER TABLE chat_message
+                DROP CONSTRAINT IF EXISTS chat_message__prompt_fk
+            """
+            )
+            op.drop_column("chat_message", "prompt_id")
 
     # Step 4: Handle personas without prompts - set default values if needed (always run this)
     op.execute(
@@ -82,10 +108,12 @@ def upgrade() -> None:
     )
 
     # Step 5: Drop the persona__prompt association table (if it exists)
-    op.drop_table("persona__prompt")
+    if "persona__prompt" in existing_tables:
+        op.drop_table("persona__prompt")
 
     # Step 6: Drop the prompt table (if it exists)
-    op.drop_table("prompt")
+    if "prompt" in existing_tables:
+        op.drop_table("prompt")
 
     # Step 7: Make system_prompt and task_prompt non-nullable after migration (only if they exist)
     op.alter_column(
