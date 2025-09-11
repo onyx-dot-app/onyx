@@ -176,7 +176,7 @@ export const NewShortCutModal = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-background-800 border-background-700 text-[#fff]"
-                placeholder="Введите короткое название"
+                placeholder={i18n.t(k.ENTER_SHORT_NAME_PLACEHOLDER)}
               />
             </div>
             <div className="flex flex-col space-y-2">

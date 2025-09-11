@@ -366,7 +366,7 @@ export function HorizontalFilters({
               <FiMap size={16} />
             </div>
           }
-          defaultDisplay="Все источники"
+          defaultDisplay={i18n.t(k.ALL_SOURCES)}
         />
 
         {availableDocumentSets.length > 0 && (
@@ -392,7 +392,7 @@ export function HorizontalFilters({
                 <FiBook size={16} />
               </div>
             }
-            defaultDisplay="Все наборы документов"
+            defaultDisplay={i18n.t(k.ALL_DOCUMENT_SETS)}
           />
         )}
       </div>

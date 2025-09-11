@@ -62,11 +62,11 @@ export const DocumentSetCreationForm = ({
           groups: existingDocumentSet?.groups ?? [],
         }}
         validationSchema={Yup.object().shape({
-          name: Yup.string().required("Пожалуйста, введите имя для набора"),
+          name: Yup.string().required(i18n.t(k.PLEASE_ENTER_NAME_FOR_SET)),
           description: Yup.string().optional(),
           cc_pair_ids: Yup.array()
             .of(Yup.number().required())
-            .required("Пожалуйста, выберите хотя бы один коннектор"),
+            .required(i18n.t(k.PLEASE_SELECT_AT_LEAST_ONE_CONNECTOR)),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -149,16 +149,16 @@ export const DocumentSetCreationForm = ({
               <div className="space-y-4 w-full">
                 <TextFormField
                   name="name"
-                  label="Имя:"
-                  placeholder="Имя для набора документов"
+                  label={i18n.t(k.NAME_LABEL)}
+                  placeholder={i18n.t(k.NAME_PLACEHOLDER)}
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
 
                 <TextFormField
                   name="description"
-                  label="Описание:"
-                  placeholder="Опишите, что представляет собой набор документов"
+                  label={i18n.t(k.DESCRIPTION_LABEL)}
+                  placeholder={i18n.t(k.DESCRIPTION_PLACEHOLDER)}
                   autoCompleteDisabled={true}
                   optional={true}
                 />
@@ -178,7 +178,7 @@ export const DocumentSetCreationForm = ({
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
-                      label={`${i18n.t(k.CONNECTORS_AVAILABLE_TO)} ${
+                      label={`${i18n.t(k.CONNECTORS_AVAILABLE_TO_GROUP)} ${
                         userGroups && userGroups.length > 1
                           ? i18n.t(k.THE_SELECTED_GROUP)
                           : i18n.t(k.THE_GROUP_YOU_CURATE)
@@ -188,31 +188,33 @@ export const DocumentSetCreationForm = ({
                       onChange={(selectedIds) => {
                         props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
                       }}
-                      placeholder="Поиск коннекторов..."
+                      placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
                     />
 
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
-                      title={`${i18n.t(k.CONNECTORS_NOT_AVAILABLE_TO_TH)} ${
+                      title={`${i18n.t(k.CONNECTORS_NOT_AVAILABLE_TO_GROUP)} ${
                         userGroups && userGroups.length > 1
                           ? `${i18n.t(k.GROUP)}${
                               props.values.groups.length > 1 ? i18n.t(k.S) : ""
                             } ${i18n.t(k.YOU_HAVE_SELECTED1)}`
                           : i18n.t(k.GROUP_YOU_CURATE)
                       }`}
-                      description="Будут доступны только те коннекторы, которые напрямую назначены группе, в которую вы пытаетесь добавить набор документов."
+                      description={i18n.t(
+                        k.CONNECTORS_NOT_AVAILABLE_DESCRIPTION
+                      )}
                     />
                   </>
                 ) : (
                   <ConnectorMultiSelect
                     name="cc_pair_ids"
-                    label="Выберите коннекторы"
+                    label={i18n.t(k.SELECT_CONNECTORS_LABEL)}
                     connectors={visibleCcPairs}
                     selectedIds={props.values.cc_pair_ids}
                     onChange={(selectedIds) => {
                       props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
                     }}
-                    placeholder="Поиск коннекторов..."
+                    placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
                   />
                 )}
               </div>

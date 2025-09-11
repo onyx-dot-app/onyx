@@ -17,9 +17,9 @@ export default function OAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [statusMessage, setStatusMessage] = useState("Обработка...");
+  const [statusMessage, setStatusMessage] = useState(i18n.t(k.PROCESSING));
   const [statusDetails, setStatusDetails] = useState(
-    "Пожалуйста, подождите, пока мы завершим настройку."
+    i18n.t(k.PLEASE_WAIT_SETUP)
   );
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -41,13 +41,9 @@ export default function OAuthCallbackPage() {
       // sourceType (for looking up metadata) = "google_drive"
 
       if (!code || !state) {
-        setStatusMessage(
-          "Неправильно сформированный запрос авторизации OAuth."
-        );
+        setStatusMessage(i18n.t(k.MALFORMED_OAUTH_REQUEST));
         setStatusDetails(
-          !code
-            ? "Отсутствует код авторизации."
-            : "Отсутствует параметр состояния."
+          !code ? i18n.t(k.MISSING_AUTH_CODE) : i18n.t(k.MISSING_STATE_PARAM)
         );
         setIsError(true);
         return;
@@ -55,11 +51,9 @@ export default function OAuthCallbackPage() {
 
       if (!connector) {
         setStatusMessage(
-          `Указанный тип источника коннектора ${connector} не существует.`
+          i18n.t(k.CONNECTOR_SOURCE_TYPE_NOT_EXIST, { connector })
         );
-        setStatusDetails(
-          `${connector} не является допустимым типом источника.`
-        );
+        setStatusDetails(i18n.t(k.INVALID_SOURCE_TYPE, { connector }));
         setIsError(true);
         return;
       }
@@ -67,20 +61,24 @@ export default function OAuthCallbackPage() {
       const sourceType = connector.replaceAll("-", "_");
       if (!isValidSource(sourceType)) {
         setStatusMessage(
-          `Указанный тип источника коннектора ${sourceType} не существует.`
+          i18n.t(k.CONNECTOR_SOURCE_TYPE_NOT_EXIST, { connector: sourceType })
         );
         setStatusDetails(
-          `${sourceType} не является допустимым типом источника.`
+          i18n.t(k.INVALID_SOURCE_TYPE, { connector: sourceType })
         );
         setIsError(true);
         return;
       }
 
       const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
-      setPageTitle(`Авторизуйтесь с помощью ${sourceMetadata.displayName}`);
+      setPageTitle(
+        i18n.t(k.AUTHORIZE_WITH_SERVICE, {
+          service: sourceMetadata.displayName,
+        })
+      );
 
-      setStatusMessage("Обработка...");
-      setStatusDetails("Пожалуйста, подождите, пока мы завершим авторизацию.");
+      setStatusMessage(i18n.t(k.PROCESSING));
+      setStatusDetails(i18n.t(k.PLEASE_WAIT_AUTHORIZATION));
       setIsError(false); // Ensure no error state during loading
 
       try {
@@ -91,28 +89,30 @@ export default function OAuthCallbackPage() {
         );
 
         if (!response) {
-          throw new Error("Пустой ответ от сервера OAuth.");
+          throw new Error(i18n.t(k.EMPTY_OAUTH_RESPONSE));
         }
 
-        setStatusMessage("Успешно!");
+        setStatusMessage(i18n.t(k.SUCCESS_EXCLAMATION));
         if (response.finalize_url) {
           setRedirectUrl(response.finalize_url);
           setStatusDetails(
-            `Ваша авторизация с ${sourceMetadata.displayName} успешно завершена. Для завершения настройки учетных данных требуются дополнительные шаги.`
+            i18n.t(k.AUTHORIZATION_COMPLETE_ADDITIONAL_STEPS, {
+              service: sourceMetadata.displayName,
+            })
           );
         } else {
           setRedirectUrl(response.redirect_on_success);
           setStatusDetails(
-            `Ваша авторизация с ${sourceMetadata.displayName} успешно завершена.`
+            i18n.t(k.AUTHORIZATION_COMPLETE, {
+              service: sourceMetadata.displayName,
+            })
           );
         }
         setIsError(false);
       } catch (error) {
-        console.error("OAuth ошибка:", error);
-        setStatusMessage("Упс, что-то пошло не так!");
-        setStatusDetails(
-          "Во время процесса OAuth произошла ошибка. Попробуйте еще раз."
-        );
+        console.error("OAuth error:", error);
+        setStatusMessage(i18n.t(k.OOPS_SOMETHING_WRONG));
+        setStatusDetails(i18n.t(k.OAUTH_ERROR_TRY_AGAIN));
         setIsError(true);
       }
     };

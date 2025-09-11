@@ -286,7 +286,7 @@ export function UserDropdown({
                   label={
                     i18n.language === "ru"
                       ? "Switch to English"
-                      : "Переключить на русский"
+                      : i18n.t(k.SWITCH_TO_RUSSIAN)
                   }
                 />
 

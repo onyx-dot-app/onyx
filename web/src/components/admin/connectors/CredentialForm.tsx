@@ -27,10 +27,13 @@ export async function submitCredential<T>(
       return { credential, message: i18n.t(k.SUCCESS1), isSuccess: true };
     } else {
       const errorData = await response.json();
-      return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+      return {
+        message: i18n.t(k.ERROR_WITH_DETAIL, { detail: errorData.detail }),
+        isSuccess: false,
+      };
     }
   } catch (error) {
-    return { message: `Ошибка: ${error}`, isSuccess: false };
+    return { message: i18n.t(k.ERROR_GENERIC, { error }), isSuccess: false };
   }
 }
 

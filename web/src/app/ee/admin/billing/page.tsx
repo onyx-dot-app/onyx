@@ -20,7 +20,7 @@ export default function page() {
   return (
     <div className="container max-w-4xl">
       <AdminPageTitle
-        title="Платежная информация"
+        title={i18n.t(k.BILLING_INFORMATION)}
         icon={<MdOutlineCreditCard size={32} className="my-auto" />}
       />
 

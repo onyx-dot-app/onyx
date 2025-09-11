@@ -25,7 +25,7 @@ export const ConnectorMultiSelect = ({
   selectedIds,
   onChange,
   disabled = false,
-  placeholder = "Поиск коннекторов...",
+  placeholder = i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER),
   showError = false,
 }: ConnectorMultiSelectProps) => {
   const [open, setOpen] = useState(false);
@@ -108,7 +108,7 @@ export const ConnectorMultiSelect = ({
   };
 
   const effectivePlaceholder = allConnectorsSelected
-    ? "Все коннекторы выбраны"
+    ? i18n.t(k.ALL_CONNECTORS_SELECTED)
     : placeholder;
 
   const isInputDisabled = disabled || allConnectorsSelected;

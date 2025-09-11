@@ -51,18 +51,18 @@ import { Callout } from "@/components/ui/callout";
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Значение свойства должно быть допустимым числом")
-    .integer("Значение свойства должно быть целым числом")
-    .min(60, "Значение свойства должно быть больше или равно 60")
-    .required("Значение свойства обязательно"),
+    .typeError(i18n.t(k.PROPERTY_VALUE_MUST_BE_VALID_NUMBER))
+    .integer(i18n.t(k.PROPERTY_VALUE_MUST_BE_INTEGER))
+    .min(60, i18n.t(k.PROPERTY_VALUE_MUST_BE_GREATER_THAN_60))
+    .required(i18n.t(k.PROPERTY_VALUE_REQUIRED)),
 });
 
 const PruneFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Значение свойства должно быть допустимым числом")
-    .integer("Значение свойства должно быть целым числом")
-    .min(86400, "Значение свойства должно быть больше или равно 86400")
-    .required("Значение свойства обязательно"),
+    .typeError(i18n.t(k.PROPERTY_VALUE_MUST_BE_VALID_NUMBER))
+    .integer(i18n.t(k.PROPERTY_VALUE_MUST_BE_INTEGER))
+    .min(86400, i18n.t(k.PROPERTY_VALUE_MUST_BE_GREATER_THAN_86400))
+    .required(i18n.t(k.PROPERTY_VALUE_REQUIRED)),
 });
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 8;
@@ -169,12 +169,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Имя коннектора успешно обновлено",
+        message: i18n.t(k.CONNECTOR_NAME_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: `Не удалось обновить имя коннектора`,
+        message: i18n.t(k.FAILED_TO_UPDATE_CONNECTOR_NAME),
         type: "error",
       });
     }
@@ -196,7 +196,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedRefreshFreq)) {
       setPopup({
-        message: "Неверная частота обновления: должна быть целым числом",
+        message: i18n.t(k.INVALID_REFRESH_FREQUENCY),
         type: "error",
       });
       return;
@@ -213,12 +213,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Частота обновления коннектора успешно обновлена",
+        message: i18n.t(k.CONNECTOR_REFRESH_FREQUENCY_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить частоту обновления коннектора",
+        message: i18n.t(k.FAILED_TO_UPDATE_REFRESH_FREQUENCY),
         type: "error",
       });
     }
@@ -232,7 +232,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedFreq)) {
       setPopup({
-        message: "Неверная частота обрезки: должна быть целым числом",
+        message: i18n.t(k.INVALID_PRUNING_FREQUENCY),
         type: "error",
       });
       return;
@@ -249,12 +249,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Частота обрезки коннектора успешно обновлена",
+        message: i18n.t(k.CONNECTOR_PRUNING_FREQUENCY_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить частоту обрезки коннектора",
+        message: i18n.t(k.FAILED_TO_UPDATE_PRUNING_FREQUENCY),
         type: "error",
       });
     }
@@ -271,7 +271,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         errorMsg={
           ccPairError?.info?.detail ||
           ccPairError?.toString() ||
-          "Неизвестная ошибка"
+          i18n.t(k.UNKNOWN_ERROR)
         }
       />
     );
@@ -296,8 +296,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingRefreshFrequency && (
         <EditPropertyModal
-          propertyTitle="Частота обновления"
-          propertyDetails="Как часто должен обновляться коннектор (в секундах)"
+          propertyTitle={i18n.t(k.REFRESH_FREQUENCY_TITLE)}
+          propertyDetails={i18n.t(k.REFRESH_FREQUENCY_DETAILS)}
           propertyName="refresh_frequency"
           propertyValue={String(refreshFreq)}
           validationSchema={RefreshFrequencySchema}
@@ -308,8 +308,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingPruningFrequency && (
         <EditPropertyModal
-          propertyTitle="Частота обрезки"
-          propertyDetails="Как часто следует обрезать коннектор (в секундах)"
+          propertyTitle={i18n.t(k.PRUNING_FREQUENCY_TITLE)}
+          propertyDetails={i18n.t(k.PRUNING_FREQUENCY_DETAILS)}
           propertyName="pruning_frequency"
           propertyValue={String(pruneFreq)}
           validationSchema={PruneFrequencySchema}
@@ -387,7 +387,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       <div className="text-sm mt-1">
         {i18n.t(k.CREATOR)}{" "}
-        <b className="text-emphasis">{ccPair.creator_email ?? "Неизвестный"}</b>
+        <b className="text-emphasis">
+          {ccPair.creator_email ?? i18n.t(k.UNKNOWN_USER)}
+        </b>
       </div>
       <div className="text-sm mt-1">
         {i18n.t(k.TOTAL_DOCUMENTS_INDEXED)}{" "}
@@ -430,7 +432,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
         <div className="mt-2">
-          <Callout type="warning" title="Неверное состояние коннектора">
+          <Callout type="warning" title={i18n.t(k.INVALID_CONNECTOR_STATE)}>
             {i18n.t(k.THIS_CONNECTOR_IS_IN_AN_INVALI)}
           </Callout>
         </div>

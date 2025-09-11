@@ -103,7 +103,10 @@ export async function submitConnector<T>(
         };
       } else {
         const errorData = await response.json();
-        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+        return {
+          message: `${i18n.t(k.ERROR_COLON)} ${errorData.detail}`,
+          isSuccess: false,
+        };
       }
     } else {
       const response = await fetch(
@@ -126,11 +129,14 @@ export async function submitConnector<T>(
         };
       } else {
         const errorData = await response.json();
-        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+        return {
+          message: `${i18n.t(k.ERROR_COLON)} ${errorData.detail}`,
+          isSuccess: false,
+        };
       }
     }
   } catch (error) {
-    return { message: `Ошибка: ${error}`, isSuccess: false };
+    return { message: `${i18n.t(k.ERROR_COLON)} ${error}`, isSuccess: false };
   }
 }
 
@@ -280,7 +286,10 @@ export default function AddConnector({
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        setPopup({ message: `Ошибка: ${error.message}`, type: "error" });
+        setPopup({
+          message: `${i18n.t(k.ERROR_COLON)} ${error.message}`,
+          type: "error",
+        });
       } else {
         // Handle non-standard errors
         setPopup({
@@ -441,7 +450,7 @@ export default function AddConnector({
             {popup}
 
             {uploading && (
-              <TemporaryLoadingModal content="Загрузка файлов..." />
+              <TemporaryLoadingModal content={i18n.t(k.LOADING_FILES)} />
             )}
 
             <AdminPageTitle

@@ -64,7 +64,7 @@ const Page = () => {
 
       <AdminPageTitle
         icon={<BookmarkIcon size={32} />}
-        title="Новый набор документов"
+        title={i18n.t(k.NEW_DOCUMENT_SET)}
       />
 
       <Main />

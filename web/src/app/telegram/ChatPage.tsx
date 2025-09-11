@@ -1806,7 +1806,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
-      console.log("Ошибка:", e);
+      console.log(i18n.t(k.ERROR), e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1903,7 +1903,7 @@ export function ChatPage({
       const responseJson = await response.json();
       const errorMsg = responseJson.detail || responseJson.message;
       setPopup({
-        message: `Не удалось отправить отзыв - ${errorMsg}`,
+        message: `${i18n.t(k.FAILED_TO_SEND_FEEDBACK)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -2076,14 +2076,14 @@ export function ChatPage({
         });
 
         if (!response.ok) {
-          throw new Error("Не удалось создать чат из Slack");
+          throw new Error(i18n.t(k.FAILED_TO_CREATE_CHAT_FROM_SLACK));
         }
 
         const data = await response.json();
 
         router?.push(data.redirect_url);
       } catch (error) {
-        console.error("Ошибка при загрузке чата из Slack:", error);
+        console.error(i18n.t(k.ERROR_LOADING_CHAT_FROM_SLACK), error);
         setPopup({
           message: i18n.t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
           type: "error",
@@ -2289,7 +2289,7 @@ export function ChatPage({
       {toggleDocSelection && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
-          buttonContent="Установить как контекст"
+          buttonContent={i18n.t(k.SET_AS_CONTEXT)}
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
@@ -2308,7 +2308,7 @@ export function ChatPage({
           <Modal
             hideDividerForTitle
             onOutsideClick={() => setDocumentSidebarVisible(false)}
-            title="Источники"
+            title={i18n.t(k.SOURCES)}
           >
             <DocumentResults
               agenticMessage={
@@ -2579,27 +2579,25 @@ export function ChatPage({
                                 </div>
 
                                 <div className="text-4xl text-text font-normal text-center">
-                                  Цифровые помощники в Telegram
+                                  {i18n.t(k.TELEGRAM_ASSISTANTS_TITLE)}
                                 </div>
                               </div>
                               <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
-                                Описание интеграции с Telegram
+                                {i18n.t(k.TELEGRAM_INTEGRATION_DESCRIPTION)}
                                 <br />
-                                Инструкция по использованию цифровых помощников
-                                в ТГ
-                                <br />и описание команд управления ботом
+                                {i18n.t(k.TELEGRAM_USAGE_INSTRUCTION)}
                               </div>
                               <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
-                                Токен авторизации:{" "}
+                                {i18n.t(k.AUTHORIZATION_TOKEN)}{" "}
                                 {error || error?.detail
-                                  ? "Ошибка получения токена"
+                                  ? i18n.t(k.TOKEN_ERROR)
                                   : data?.token}
                               </div>
                               {data?.url && (
                                 <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
                                   <Link href={data?.url}>
                                     <Button size="sm">
-                                      Перейти в Telegram-бота
+                                      {i18n.t(k.GO_TO_TELEGRAM_BOT)}
                                     </Button>
                                   </Link>
                                 </div>

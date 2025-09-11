@@ -114,14 +114,14 @@ export const OnyxApiKeyForm = ({
 
               <TextFormField
                 name="name"
-                label="Название (необязательно):"
+                label={i18n.t(k.API_KEY_NAME_LABEL)}
                 autoCompleteDisabled={true}
               />
 
               <SelectorFormField
                 // defaultValue is managed by Formik
-                label="Роль:"
-                subtext="Выберите роль для этого ключа API. Ограниченный доступ имеет доступ к простым публичным API. Базовый доступ имеет доступ к API обычного пользователя. Администратор имеет доступ к API уровня администратора."
+                label={i18n.t(k.ROLE_LABEL)}
+                subtext={i18n.t(k.ROLE_SUBTEXT)}
                 name="role"
                 options={[
                   {

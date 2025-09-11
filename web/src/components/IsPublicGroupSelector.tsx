@@ -87,12 +87,12 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               publicToWhom === "Curators"
                 ? `${i18n.t(k.MAKE_THIS)} ${
                     objectName === "document set"
-                      ? "набор документов"
+                      ? "i18n.t(k.DOCUMENT_SET)"
                       : objectName
                   } ${i18n.t(k.CURATOR_ACCESSIBLE)}`
                 : `${i18n.t(k.MAKE_THIS)} ${
                     objectName === "document set"
-                      ? "набор документов"
+                      ? "i18n.t(k.DOCUMENT_SET)"
                       : objectName
                   } ${i18n.t(k.PUBLIC2)}`
             }
@@ -101,22 +101,24 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
                 {i18n.t(k.IF_SET_THEN_THIS)}{" "}
                 {objectName === "document set"
-                  ? "набор документов"
+                  ? "i18n.t(k.DOCUMENT_SET)"
                   : objectName}{" "}
                 {i18n.t(k.WILL_BE_USABLE_BY)}{" "}
                 <b>
                   {i18n.t(k.ALL1)}{" "}
-                  {publicToWhom === "Users" ? "пользователей" : publicToWhom}
+                  {publicToWhom === "Users" ? i18n.t(k.USERS) : publicToWhom}
                 </b>
                 {i18n.t(k.OTHERWISE_ONLY)} <b>{i18n.t(k.ADMINS)}</b>{" "}
                 {i18n.t(k.AND)}{" "}
                 <b>
-                  {publicToWhom === "Users" ? "Пользователи" : publicToWhom}
+                  {publicToWhom === "Users"
+                    ? i18n.t(k.USERS_CAPITAL)
+                    : publicToWhom}
                 </b>
                 {", "}
                 {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}{" "}
                 {objectName === "document set"
-                  ? "набору документов"
+                  ? i18n.t(k.TO_DOCUMENT_SET)
                   : objectName}{" "}
                 {i18n.t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
               </span>
@@ -133,7 +135,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               <div className="block font-medium text-base">
                 {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)}{" "}
                 {objectName === "document set"
-                  ? "набора документов"
+                  ? i18n.t(k.OF_DOCUMENT_SETS)
                   : objectName}
               </div>
             </div>
@@ -145,7 +147,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                   <>
                     {i18n.t(k.THIS)}{" "}
                     {objectName === "document set"
-                      ? "набор документов"
+                      ? "i18n.t(k.DOCUMENT_SET)"
                       : objectName}{" "}
                     {i18n.t(k.WILL_BE_VISIBLE_ACCESSIBLE_BY)}
                   </>
@@ -153,7 +155,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                   <>
                     {i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO1)}
                     {objectName === "document set"
-                      ? "набор документов"
+                      ? "i18n.t(k.DOCUMENT_SET)"
                       : objectName}
                   </>
                 )}

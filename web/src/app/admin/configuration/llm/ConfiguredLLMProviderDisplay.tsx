@@ -29,7 +29,7 @@ function LLMProviderUpdateModal({
     ? `"${existingLlmProvider.name}"`
     : llmProviderDescriptor?.display_name ||
       llmProviderDescriptor?.name ||
-      "Поставщик услуг LLM";
+      i18n.t(k.LLM_SERVICE_PROVIDER);
 
   const hasAdvancedOptions = llmProviderDescriptor?.name != "azure";
 

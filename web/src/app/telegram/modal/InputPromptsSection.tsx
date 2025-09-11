@@ -64,15 +64,15 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось обновить приглашение");
+        throw new Error(i18n.t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       setEditingPromptId(null);
       setEditedPrompt(null);
       refreshInputPrompts();
-      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
+      setPopup({ message: i18n.t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
@@ -83,13 +83,16 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось удалить запрос");
+        throw new Error(i18n.t(k.FAILED_TO_DELETE_PROMPT));
       }
 
       refreshInputPrompts();
-      setPopup({ message: "Подсказка успешно удалена", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_DELETED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось удалить запрос", type: "error" });
+      setPopup({
+        message: i18n.t(k.FAILED_TO_DELETE_PROMPT_ERROR),
+        type: "error",
+      });
     }
   };
 
@@ -102,15 +105,18 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось создать приглашение");
+        throw new Error(i18n.t(k.FAILED_TO_CREATE_PROMPT_ERROR));
       }
 
       setNewPrompt({});
       setIsCreatingNew(false);
       refreshInputPrompts();
-      setPopup({ message: "Запрос создан успешно", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_CREATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось создать приглашение", type: "error" });
+      setPopup({
+        message: i18n.t(k.FAILED_TO_CREATE_PROMPT_MESSAGE),
+        type: "error",
+      });
     }
   };
 
@@ -123,13 +129,13 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось обновить приглашение");
+        throw new Error(i18n.t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       refreshInputPrompts();
-      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
+      setPopup({ message: i18n.t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
@@ -253,7 +259,7 @@ export function InputPromptsSection({
           {isCreatingNew ? (
             <div className="space-y-2 border p-4 rounded-md">
               <Input
-                placeholder="Новый промпт"
+                placeholder={i18n.t(k.NEW_PROMPT_PLACEHOLDER)}
                 value={newPrompt.prompt || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -261,7 +267,7 @@ export function InputPromptsSection({
               />
 
               <Textarea
-                placeholder="Новый контент"
+                placeholder={i18n.t(k.NEW_CONTENT_PLACEHOLDER)}
                 value={newPrompt.content || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, content: e.target.value })

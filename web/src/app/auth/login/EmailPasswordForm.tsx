@@ -57,10 +57,10 @@ export function EmailPasswordForm({
         }}
         validationSchema={Yup.object().shape({
           email: Yup.string()
-            .email("Поле заполнено некорректно")
-            .required("Поле обязательно")
+            .email(i18n.t(k.FIELD_FILLED_INCORRECTLY))
+            .required(i18n.t(k.FIELD_REQUIRED))
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required("Поле обязательно"),
+          password: Yup.string().required(i18n.t(k.FIELD_REQUIRED)),
         })}
         onSubmit={async (values) => {
           // Ensure email is lowercase
@@ -151,7 +151,7 @@ export function EmailPasswordForm({
 
             <TextFormField
               name="password"
-              label="Пароль"
+              label={i18n.t(k.PASSWORD)}
               type="password"
               includeForgotPassword={
                 NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup

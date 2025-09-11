@@ -29,7 +29,7 @@ function ReIndexPopup({
   hide: () => void;
 }) {
   return (
-    <Modal title="Запустить индексацию" onOutsideClick={hide}>
+    <Modal title={i18n.t(k.START_INDEXING_TITLE)} onOutsideClick={hide}>
       <div>
         <Button
           variant="submit"

@@ -12,10 +12,7 @@ function Main() {
     return (
       <div>
         <div className="mt-4">
-          <Callout
-            type="danger"
-            title="Пользовательская аналитика не включена."
-          >
+          <Callout type="danger" title={i18n.t(k.CUSTOM_ANALYTICS_NOT_ENABLED)}>
             {i18n.t(k.TO_SET_UP_CUSTOM_ANALYTICS_SCR)}{" "}
             <i>{i18n.t(k.CUSTOM_ANALYTICS_SECRET_KEY)}</i>{" "}
             {i18n.t(k.ENVIRONMENT_VARIABLE)}
@@ -38,7 +35,7 @@ export default function Page() {
   return (
     <main className="pt-4 mx-auto container">
       <AdminPageTitle
-        title="Пользовательская аналитика"
+        title={i18n.t(k.CUSTOM_ANALYTICS_TITLE)}
         icon={<FiBarChart2 size={32} />}
       />
 

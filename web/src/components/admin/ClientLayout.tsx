@@ -198,7 +198,7 @@ export function ClientLayout({
                       <div className="flex">
                         <KnowledgeMapIcon className="text-text-700" size={18} />
 
-                        <div className="ml-1">Карта знаний</div>
+                        <div className="ml-1">{i18n.t(k.KNOWLEDGE_MAP)}</div>
                       </div>
                     ),
 
@@ -537,13 +537,15 @@ export function ClientLayout({
                       ],
                     },
                     {
-                      name: "Инструменты пользователя",
+                      name: i18n.t(k.USER_TOOLS),
                       items: [
                         {
                           name: (
                             <div className="flex">
                               <FiSettings size={18} />
-                              <div className="ml-1">Редактор Langflow</div>
+                              <div className="ml-1">
+                                {i18n.t(k.LANGFLOW_EDITOR)}
+                              </div>
                             </div>
                           ),
                           link: "/admin/usertools/langflow",
@@ -552,7 +554,9 @@ export function ClientLayout({
                           name: (
                             <div className="flex">
                               <FiSettings size={18} />
-                              <div className="ml-1">Мониторинг Langfuse</div>
+                              <div className="ml-1">
+                                {i18n.t(k.LANGFUSE_MONITORING)}
+                              </div>
                             </div>
                           ),
                           link: "/admin/usertools/langfuse",

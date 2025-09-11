@@ -28,7 +28,7 @@ export const ApiKeyModal = ({
   }
   return (
     <Modal
-      title="Настройте модель генеративного ИИ"
+      title={i18n.t(k.CONFIGURE_AI_MODEL_TITLE)}
       width="max-w-3xl w-full"
       onOutsideClick={hide ? () => hide() : undefined}
     >

@@ -104,7 +104,7 @@ const SignedUpUserTable = ({
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки пользователей"
+        errorTitle={i18n.t(k.LOAD_USERS_ERROR)}
         errorMsg={error?.message}
       />
     );
@@ -116,9 +116,9 @@ const SignedUpUserTable = ({
   };
 
   const onRoleChangeSuccess = () =>
-    handlePopup("Роль пользователя успешно обновлена!", "success");
+    handlePopup(i18n.t(k.USER_ROLE_UPDATED_SUCCESS), "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
+    handlePopup(`${i18n.t(k.USER_ROLE_UPDATE_FAILED)} ${errorMsg}`, "error");
 
   const toggleRole = (roleEnum: UserRole) => {
     setFilters((prev) => {

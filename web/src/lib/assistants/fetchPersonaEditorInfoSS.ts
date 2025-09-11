@@ -1,3 +1,5 @@
+import i18n from "@/i18n/init";
+import k from "../i18n/keys";
 import { FullPersona, Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
@@ -93,7 +95,7 @@ export async function fetchAssistantEditorInfoSS(
   if (!knowledgeMapsResponse.ok) {
     return [
       null,
-      `Не удалось получить данные - ${await knowledgeMapsResponse.text()}`,
+      `${i18n.t(k.FAILED_TO_FETCH_DATA)} ${await knowledgeMapsResponse.text()}`,
     ];
   }
 

@@ -1,3 +1,6 @@
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
+
 export const updateBoost = async (documentId: string, boost: number) => {
   const response = await fetch("/api/manage/admin/doc-boosts", {
     method: "POST",
@@ -13,7 +16,7 @@ export const updateBoost = async (documentId: string, boost: number) => {
     return null;
   }
   const responseJson = await response.json();
-  return responseJson.message || responseJson.detail || "Неизвестная ошибка";
+  return responseJson.message || responseJson.detail || i18n.t(k.UNKNOWN_ERROR);
 };
 
 export const updateHiddenStatus = async (

@@ -170,7 +170,7 @@ export function SimplifiedChatInputBar({
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder="Спросите меня о чем угодно..."
+          placeholder={i18n.t(k.ASK_ME_ANYTHING)}
           value={message}
           onKeyDown={(event) => {
             if (
@@ -190,7 +190,7 @@ export function SimplifiedChatInputBar({
         <div className="flex items-center space-x-3 mr-12 px-4 pb-2">
           <ChatInputOption
             flexPriority="stiff"
-            label="Файл"
+            label={i18n.t(k.FILE_LABEL)}
             name="File"
             Icon={FiPlusCircle}
             onClick={() => {

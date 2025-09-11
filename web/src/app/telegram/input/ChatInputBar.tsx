@@ -463,7 +463,7 @@ export function ChatInputBar({
                     </p>
                     <p className="text-text-dark font-light line-clamp-1">
                       {currentAssistant.id == selectedAssistant.id &&
-                        "(по умолчанию) "}
+                        i18n.t(k.DEFAULT_IN_PAREN)}
                       {currentAssistant.description}
                     </p>
                   </button>
@@ -622,10 +622,9 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`${i18n.t(k.MESSAGE2)} ассистенту ${truncateString(
-                selectedAssistant.name,
-                70
-              )}...`}
+              placeholder={`${i18n.t(k.MESSAGE2)} ${i18n.t(
+                k.TO_ASSISTANT_TEXT
+              )} ${truncateString(selectedAssistant.name, 70)}...`}
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -795,15 +794,13 @@ export function ChatInputBar({
               <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
-                  label="Файл"
+                  label={i18n.t(k.FILE_LABEL)}
                   name="File"
                   Icon={FiPlusCircle}
                   onClick={() => {
                     toggleDocSelection();
                   }}
-                  tooltipContent={
-                    "Загружайте файлы и прикрепляйте пользовательские файлы"
-                  }
+                  tooltipContent={i18n.t(k.UPLOAD_AND_ATTACH_FILES)}
                 />
 
                 <LLMPopover
@@ -828,7 +825,7 @@ export function ChatInputBar({
                           llmManager?.currentLlm.modelName ||
                             "claude-3-5-sonnet-20240620"
                         )}
-                        tooltipContent="Модели переключателей"
+                        tooltipContent={i18n.t(k.TOGGLE_MODELS_TOOLTIP)}
                       />
                     </button>
                   }
@@ -848,11 +845,11 @@ export function ChatInputBar({
                     trigger={
                       <ChatInputOption
                         flexPriority="stiff"
-                        label="Фильтры"
+                        label={i18n.t(k.FILTERS_LABEL)}
                         name="Filters"
                         Icon={FiFilter}
                         toggle
-                        tooltipContent="Фильтруйте свой поиск"
+                        tooltipContent={i18n.t(k.FILTER_SEARCH_TOOLTIP)}
                       />
                     }
                   />

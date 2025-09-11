@@ -171,14 +171,14 @@ export default function NRFPage({
         });
         if (!res.ok) {
           throw new Error(
-            `Не удалось получить тип аутентификации: ${res.statusText}`
+            i18n.t(k.FAILED_TO_GET_AUTH_TYPE, { statusText: res.statusText })
           );
         }
 
         const data = await res.json();
         setAuthType(data.auth_type);
       } catch (err) {
-        console.error("Ошибка получения данных аутентификации:", err);
+        console.error(i18n.t(k.AUTH_DATA_FETCH_ERROR), err);
       } finally {
         setFetchingAuth(false);
       }

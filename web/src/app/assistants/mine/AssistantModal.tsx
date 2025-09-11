@@ -133,7 +133,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
           <button
             onClick={hideModal}
             className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
-            aria-label="Закрыть модальное окно"
+            aria-label={i18n.t(k.CLOSE_MODAL)}
           >
             <XIcon className="w-5 h-5" />
           </button>
@@ -182,7 +182,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
               <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
                 <FilterIcon className="text-text-800" size={16} />
                 <AssistantBadgeSelector
-                  text="Закреплен"
+                  text={i18n.t(k.PINNED)}
                   selected={assistantFilters[AssistantFilter.Pinned]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Pinned)
@@ -190,7 +190,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Личный"
+                  text={i18n.t(k.PERSONAL)}
                   selected={assistantFilters[AssistantFilter.Mine]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Mine)
@@ -198,7 +198,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Приватный"
+                  text={i18n.t(k.PRIVATE)}
                   selected={assistantFilters[AssistantFilter.Private]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Private)
@@ -206,7 +206,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Публичный"
+                  text={i18n.t(k.PUBLIC)}
                   selected={assistantFilters[AssistantFilter.Public]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Public)

@@ -1,5 +1,7 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 // TODO: deprecate this and just go directly to the backend via /api/...
 // For some reason Egnyte doesn't work when using /api, so leaving this as is for now
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
         error:
           error instanceof Error
             ? error.message
-            : "Произошла неизвестная ошибка",
+            : i18n.t(k.UNKNOWN_ERROR_OCCURRED),
       },
       { status: 500 }
     );

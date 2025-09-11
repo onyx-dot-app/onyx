@@ -22,7 +22,7 @@ export function CustomAnalyticsUpdateForm() {
 
   if (!settings) {
     return (
-      <Callout type="danger" title="Не удалось получить настройки"></Callout>
+      <Callout type="danger" title={i18n.t(k.FAILED_TO_GET_SETTINGS)}></Callout>
     );
   }
 

@@ -72,13 +72,11 @@ const GmailCredentialUpload = ({
         } else if (appCredentialJson.type === "service_account") {
           credentialFileType = "service_account";
         } else {
-          throw new Error(
-            "Неизвестный тип учетных данных, ожидалось одно из 'OAuth Web application' или 'Service Account'"
-          );
+          throw new Error(i18n.t(k.UNKNOWN_CREDENTIAL_TYPE));
         }
       } catch (e) {
         setPopup({
-          message: `Предоставлен неверный файл - ${e}`,
+          message: i18n.t(k.INVALID_FILE_PROVIDED, { error: e }),
           type: "error",
         });
         setIsUploading(false);
@@ -108,7 +106,9 @@ const GmailCredentialUpload = ({
         } else {
           const errorMsg = await response.text();
           setPopup({
-            message: `Не удалось загрузить учетные данные приложения - ${errorMsg}`,
+            message: i18n.t(k.FAILED_TO_UPLOAD_APP_CREDENTIALS, {
+              error: errorMsg,
+            }),
             type: "error",
           });
         }
@@ -137,7 +137,9 @@ const GmailCredentialUpload = ({
         } else {
           const errorMsg = await response.text();
           setPopup({
-            message: `Не удалось загрузить ключ учетной записи службы - ${errorMsg}`,
+            message: i18n.t(k.FAILED_TO_UPLOAD_SERVICE_KEY, {
+              error: errorMsg,
+            }),
             type: "error",
           });
         }
@@ -433,9 +435,7 @@ async function handleRevokeAccess(
   refreshCredentials: () => void
 ) {
   if (connectorExists) {
-    const message =
-      "Невозможно отозвать учетные данные Gmail, пока с ними связан какой-либо коннектор. " +
-      "Пожалуйста, удалите все связанные коннекторы, затем повторите попытку.";
+    const message = i18n.t(k.CANNOT_REVOKE_GMAIL_CREDENTIALS);
     setPopup({
       message: message,
       type: "error",
@@ -554,8 +554,8 @@ export const GmailAuthSection = ({
             }}
             validationSchema={Yup.object().shape({
               google_primary_admin: Yup.string()
-                .email("Должен быть действительный адрес электронной почты")
-                .required("Обязательно"),
+                .email(i18n.t(k.VALID_EMAIL_REQUIRED))
+                .required(i18n.t(k.REQUIRED_FIELD)),
             })}
             onSubmit={async (values, formikHelpers) => {
               formikHelpers.setSubmitting(true);
@@ -604,8 +604,8 @@ export const GmailAuthSection = ({
               <Form>
                 <TextFormField
                   name="google_primary_admin"
-                  label="Основной адрес электронной почты администратора:"
-                  subtext="Введите адрес электронной почты администратора/владельца организации Google, которой принадлежат учетные записи Gmail, которые вы хотите индексировать."
+                  label={i18n.t(k.PRIMARY_ADMIN_EMAIL_LABEL)}
+                  subtext={i18n.t(k.PRIMARY_ADMIN_EMAIL_SUBTEXT)}
                 />
 
                 <div className="flex">

@@ -78,9 +78,7 @@ export function AnonymousUserPath({
       if (!response.ok) {
         const detail = await response.json();
         setPopup({
-          message:
-            detail.detail ||
-            "Не удалось обновить путь анонимного пользователя.",
+          message: detail.detail || i18n.t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH),
           type: "error",
         });
         return;
@@ -92,7 +90,7 @@ export function AnonymousUserPath({
       });
     } catch (error) {
       setPopup({
-        message: `Не удалось обновить путь анонимного пользователя: ${error}`,
+        message: `${i18n.t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH)} ${error}`,
         type: "error",
       });
       console.error("Error updating anonymous user path:", error);
@@ -123,7 +121,7 @@ export function AnonymousUserPath({
             <Input
               type="text"
               className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-background-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
-              placeholder="Ваш путь"
+              placeholder={i18n.t(k.YOUR_PATH_PLACEHOLDER)}
               value={customPath ?? anonymousUserPath ?? ""}
               onChange={(e) => setCustomPath(e.target.value)}
             />

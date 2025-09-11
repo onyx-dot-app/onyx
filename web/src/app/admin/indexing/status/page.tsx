@@ -39,7 +39,7 @@ function Main() {
       <div className="text-error">
         {indexAttemptError?.info?.detail ||
           editableIndexAttemptError?.info?.detail ||
-          "Ошибка загрузки истории индексации."}
+          i18n.t(k.INDEXING_HISTORY_ERROR)}
       </div>
     );
   }
@@ -78,11 +78,11 @@ function Main() {
 export default function Status() {
   const { popup } = usePopupFromQuery({
     "connector-created": {
-      message: "Коннектор успешно создан",
+      message: i18n.t(k.CONNECTOR_CREATED_SUCCESS),
       type: "success",
     },
     "connector-deleted": {
-      message: "Коннектор успешно удален",
+      message: i18n.t(k.CONNECTOR_DELETED_SUCCESS),
       type: "success",
     },
   });
@@ -92,7 +92,7 @@ export default function Status() {
       {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}
-        title="Существующие коннекторы"
+        title={i18n.t(k.EXISTING_CONNECTORS)}
         farRightElement={
           <Link href="/admin/add-connector">
             <Button variant="success-reverse">{i18n.t(k.ADD_CONNECTOR)}</Button>

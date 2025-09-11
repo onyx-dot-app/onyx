@@ -56,7 +56,7 @@ export const CreateRateLimitModal = ({
       } catch (error) {
         setPopup({
           type: "error",
-          message: `Не удалось получить группы пользователей:${error}`,
+          message: i18n.t(k.FAILED_TO_GET_USER_GROUPS, { error }),
         });
       }
     };
@@ -72,7 +72,7 @@ export const CreateRateLimitModal = ({
 
   return (
     <Modal
-      title={"Создать ограничение скорости токенов"}
+      title={i18n.t(k.CREATE_TOKEN_RATE_LIMIT)}
       onOutsideClick={() => setIsOpen(false)}
       width="max-w-2xl w-full"
     >
@@ -86,17 +86,15 @@ export const CreateRateLimitModal = ({
         }}
         validationSchema={Yup.object().shape({
           period_hours: Yup.number()
-            .required("Временное окно — обязательное поле")
-            .min(1, "Временное окно должно быть не менее 1 часа"),
+            .required(i18n.t(k.TIME_WINDOW_REQUIRED))
+            .min(1, i18n.t(k.TIME_WINDOW_MIN_1_HOUR)),
           token_budget: Yup.number()
-            .required("Бюджет токена — обязательное поле")
-            .min(1, "Бюджет токена должен быть не менее 1"),
-          target_scope: Yup.string().required(
-            "Целевая область — обязательное поле"
-          ),
+            .required(i18n.t(k.TOKEN_BUDGET_REQUIRED))
+            .min(1, i18n.t(k.TOKEN_BUDGET_MIN_1)),
+          target_scope: Yup.string().required(i18n.t(k.TARGET_SCOPE_REQUIRED)),
           user_group_id: Yup.string().test(
             "user_group_id",
-            "Группа пользователей — обязательное поле",
+            i18n.t(k.USER_GROUP_REQUIRED),
             (value, context) => {
               return (
                 context.parent.target_scope !== "user_group" ||
@@ -141,21 +139,21 @@ export const CreateRateLimitModal = ({
               values.target_scope === Scope.USER_GROUP && (
                 <SelectorFormField
                   name="user_group_id"
-                  label="Группа пользователей"
+                  label={i18n.t(k.USER_GROUP_LABEL)}
                   options={modalUserGroups}
                   includeDefault={false}
                 />
               )}
             <TextFormField
               name="period_hours"
-              label="Временное окно (часы)"
+              label={i18n.t(k.TIME_WINDOW_HOURS)}
               type="number"
               placeholder=""
             />
 
             <TextFormField
               name="token_budget"
-              label="Бюджет токенов (тыс.)"
+              label={i18n.t(k.TOKEN_BUDGET_THOUSANDS)}
               type="number"
               placeholder=""
             />

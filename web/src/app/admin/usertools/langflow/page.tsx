@@ -1,3 +1,5 @@
+import i18n from "@/i18n/init";
+import k from "../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiTool } from "react-icons/fi";
 import Text from "@/components/ui/text";
@@ -18,19 +20,11 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Редактор Langflow"
+        title={i18n.t(k.LANGFLOW_EDITOR)}
         icon={<FiTool size={32} className="my-auto" />}
       />
 
-      <Text className="mb-8">
-        Langflow — это инструмент с открытым исходным кодом для создания и
-        управления чат-ботами, использующими большие языковые модели (LLM),
-        такие как GPT и другие. Langflow предназначен для упрощения разработки
-        приложений на основе ИИ с минимальным количеством кода или вовсе без
-        него. Инструмент предоставляет визуальный интерфейс, который позволяет
-        пользователям конструировать сложные цепочки взаимодействий между
-        моделью и пользователем через блоки, похожие на блоки в конструкторе.
-      </Text>
+      <Text className="mb-8">{i18n.t(k.LANGFLOW_DESCRIPTION)}</Text>
 
       <Text className="mb-8">
         <a
@@ -38,7 +32,7 @@ export default async function Page() {
           href="https://docs.langflow.org/"
           target="_blank"
         >
-          Документация Langflow
+          {i18n.t(k.LANGFLOW_DOCUMENTATION)}
         </a>{" "}
       </Text>
 
@@ -48,7 +42,7 @@ export default async function Page() {
         rel="noopener noreferrer"
       >
         <Button className="mx-auto" color="green" type="button">
-          {"Открыть редактор Langflow"}
+          {i18n.t(k.OPEN_LANGFLOW_EDITOR)}
         </Button>
       </a>
     </div>

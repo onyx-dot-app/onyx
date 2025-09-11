@@ -1,4 +1,6 @@
 import { getXDaysAgo } from "@/lib/dateUtils";
+import i18n from "@/i18n/init";
+import k from "../../i18n/keys";
 import { DateRangePickerValue } from "@tremor/react";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
@@ -31,9 +33,9 @@ function DateSelectorItem({
   );
 }
 
-export const LAST_30_DAYS = "Последние 30 дней";
-export const LAST_7_DAYS = "Последние 7 дней";
-export const TODAY = "Сегодня";
+export const LAST_30_DAYS = i18n.t(k.LAST_30_DAYS);
+export const LAST_7_DAYS = i18n.t(k.LAST_7_DAYS);
+export const TODAY = i18n.t(k.TODAY);
 
 export function DateRangeSelector({
   value,
@@ -117,7 +119,7 @@ export function DateRangeSelector({
           {value?.selectValue ? (
             <div className="text-emphasis">{value.selectValue}</div>
           ) : (
-            "За все время"
+            {i18n.t(k.ALL_TIME)}
           )}
           {value?.selectValue ? (
             <div

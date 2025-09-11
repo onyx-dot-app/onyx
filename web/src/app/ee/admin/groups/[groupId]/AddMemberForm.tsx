@@ -25,7 +25,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
   return (
     <Modal
       className="max-w-xl overflow-visible"
-      title="Добавить нового пользователя"
+      title={i18n.t(k.ADD_NEW_USER)}
       onOutsideClick={() => onClose()}
     >
       <div className="flex flex-col">

@@ -1,5 +1,7 @@
 "use client";
 
+import i18n from "@/i18n/init";
+import k from "../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookOpen, InfoIcon } from "@/components/icons/icons";
 import { useUserGroups } from "@/lib/hooks";
@@ -32,7 +34,7 @@ function Main() {
   if (ccPairsError || !ccPairs) {
     return (
       <ErrorCallout
-        errorTitle="Не удалось получить карты знаний"
+        errorTitle={i18n.t(k.FAILED_TO_FETCH_KNOWLEDGE_MAPS)}
         errorMsg={ccPairsError}
       />
     );
@@ -63,7 +65,7 @@ const Page = () => {
 
       <AdminPageTitle
         icon={<BookOpen size={32} />}
-        title="Новая карта знаний"
+        title={i18n.t(k.NEW_KNOWLEDGE_MAP)}
       />
 
       <Main />

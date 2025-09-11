@@ -74,7 +74,7 @@ const RerankingDetailsForm = forwardRef<
         .nullable()
         .test(
           "required-if-cohere",
-          "Требуется API-ключ для реранкинга Cohere",
+          i18n.t(k.COHERE_API_KEY_REQUIRED),
           function (value) {
             const { rerank_provider_type } = this.parent;
             return (
@@ -84,12 +84,12 @@ const RerankingDetailsForm = forwardRef<
           }
         ),
       rerank_api_url: Yup.string()
-        .url("Должен быть допустимым URL")
-        .matches(/^https?:\/\//, "URL должен начинаться с http:// или https://")
+        .url(i18n.t(k.VALID_URL_REQUIRED))
+        .matches(/^https?:\/\//, i18n.t(k.URL_MUST_START_HTTP))
         .nullable()
         .test(
           "required-if-litellm",
-          "API URL требуется для переоценки LiteLLM",
+          i18n.t(k.LITELLM_API_URL_REQUIRED),
           function (value) {
             const { rerank_provider_type } = this.parent;
             return (
@@ -322,7 +322,7 @@ const RerankingDetailsForm = forwardRef<
                   <Modal
                     onOutsideClick={() => setShowGpuWarningModalModel(null)}
                     width="w-[500px] flex flex-col"
-                    title="Графический процессор не включен"
+                    title={i18n.t(k.GPU_NOT_ENABLED)}
                   >
                     <>
                       <p className="text-error font-semibold">
@@ -347,7 +347,7 @@ const RerankingDetailsForm = forwardRef<
                       setShowLiteLLMConfigurationModal(false);
                     }}
                     width="w-[800px]"
-                    title="Конфигурация ключа API"
+                    title={i18n.t(k.API_KEY_CONFIGURATION)}
                   >
                     <div className="w-full  flex flex-col gap-y-4 px-4">
                       <TextFormField
@@ -362,12 +362,12 @@ const RerankingDetailsForm = forwardRef<
                           setFieldValue("rerank_api_url", value);
                         }}
                         type="text"
-                        label="URL-адрес прокси-сервера LiteLLM"
+                        label={i18n.t(k.LITELLM_PROXY_URL)}
                         name="rerank_api_url"
                       />
 
                       <TextFormField
-                        subtext="Установите ключ для доступа к вашему LiteLLM Proxy"
+                        subtext={i18n.t(k.SET_ACCESS_KEY_FOR_LITELLM)}
                         placeholder={
                           values.rerank_api_key
                             ? i18n.t(k._28).repeat(values.rerank_api_key.length)
@@ -382,13 +382,13 @@ const RerankingDetailsForm = forwardRef<
                           setFieldValue("rerank_api_key", value);
                         }}
                         type="password"
-                        label="LiteLLM Прокси-ключ"
+                        label={i18n.t(k.LITELLM_PROXY_KEY)}
                         name="rerank_api_key"
                         optional
                       />
 
                       <TextFormField
-                        subtext="Установите имя модели для использования в LiteLLM Proxy"
+                        subtext={i18n.t(k.SET_MODEL_NAME_FOR_LITELLM)}
                         placeholder={
                           values.rerank_model_name
                             ? i18n
@@ -404,7 +404,7 @@ const RerankingDetailsForm = forwardRef<
                           });
                           setFieldValue("rerank_model_name", value);
                         }}
-                        label="Название модели LiteLLM"
+                        label={i18n.t(k.LITELLM_MODEL_NAME)}
                         name="rerank_model_name"
                         optional
                       />
@@ -438,7 +438,7 @@ const RerankingDetailsForm = forwardRef<
                       setIsApiKeyModalOpen(false);
                     }}
                     width="w-[800px]"
-                    title="Конфигурация ключа API"
+                    title={i18n.t(k.API_KEY_CONFIGURATION)}
                   >
                     <div className="w-full px-4">
                       <TextFormField

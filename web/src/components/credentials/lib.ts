@@ -1,3 +1,5 @@
+import i18n from "@/i18n/init";
+import k from "../../i18n/keys";
 import * as Yup from "yup";
 
 import { dictionaryType, formType } from "./types";
@@ -37,9 +39,9 @@ export function createValidationSchema(json_values: Record<string, any>) {
       schemaFields[key] = Yup.string()
         .trim()
         // This ensures user cannot enter an empty string:
-        .min(1, `${displayName} не может быть пустым.`)
+        .min(1, `${displayName} ${i18n.t(k.CANNOT_BE_EMPTY)}.`)
         // The required message is shown if the field is missing
-        .required(`Пожалуйста введите ${displayName}`);
+        .required(`${i18n.t(k.PLEASE_ENTER)} ${displayName}`);
     }
   }
 

@@ -112,9 +112,9 @@ function ActionForm({
       <div className="relative w-full">
         <TextFormField
           name="definition"
-          label="Определение"
-          subtext="Укажите схему OpenAPI, которая определяет API, которые вы хотите сделать доступными в рамках этого инструмента."
-          placeholder="Введите здесь схему OpenAPI"
+          label={i18n.t(k.DEFINITION_LABEL)}
+          subtext={i18n.t(k.DEFINITION_SUBTEXT)}
+          placeholder={i18n.t(k.OPENAPI_SCHEMA_PLACEHOLDER)}
           isTextArea={true}
           defaultHeight="h-96"
           fontSize="sm"
@@ -246,7 +246,7 @@ function ActionForm({
                           name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
                             k.KEY1
                           )}`}
-                          placeholder="Ключ заголовка"
+                          placeholder={i18n.t(k.HEADER_KEY_PLACEHOLDER)}
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
@@ -254,7 +254,7 @@ function ActionForm({
                           name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
                             k.VALUE
                           )}`}
-                          placeholder="Значение заголовка"
+                          placeholder={i18n.t(k.HEADER_VALUE_PLACEHOLDER)}
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
@@ -323,12 +323,12 @@ function ActionForm({
                       {values.customHeaders.some(
                         (header) => header.key.toLowerCase() === "authorization"
                       ) && (
-                          <TooltipContent side="top" align="center">
-                            <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                              {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
-                            </p>
-                          </TooltipContent>
-                        )}
+                        <TooltipContent side="top" align="center">
+                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                            {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
+                          </p>
+                        </TooltipContent>
+                      )}
                     </Tooltip>
                   </TooltipProvider>
                   <div className="flex flex-col">
@@ -377,12 +377,12 @@ interface ToolFormValues {
 }
 
 const ToolSchema = Yup.object().shape({
-  definition: Yup.string().required("Требуется определение инструмента"),
+  definition: Yup.string().required(i18n.t(k.DEFINITION_REQUIRED)),
   customHeaders: Yup.array()
     .of(
       Yup.object().shape({
-        key: Yup.string().required("Требуется ключ заголовка"),
-        value: Yup.string().required("Требуется значение заголовка"),
+        key: Yup.string().required(i18n.t(k.HEADER_KEY_REQUIRED)),
+        value: Yup.string().required(i18n.t(k.HEADER_VALUE_REQUIRED)),
       })
     )
     .default([]),
@@ -419,10 +419,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           );
           if (hasAuthHeader && values.passthrough_auth) {
             setPopup({
-              message:
-                "Невозможно включить сквозную аутентификацию, если присутствуют заголовки " +
-                "Авторизации. Сначала удалите все заголовки " +
-                "Авторизации.",
+              message: i18n.t(k.CANNOT_ENABLE_AUTH_WITH_HEADERS),
               type: "error",
             });
             console.log(
@@ -456,7 +453,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           }
           if (response.error) {
             setPopup({
-              message: "Не удалось создать инструмент - " + response.error,
+              message: i18n.t(k.FAILED_TO_CREATE_TOOL) + response.error,
               type: "error",
             });
             return;

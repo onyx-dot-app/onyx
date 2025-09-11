@@ -10,7 +10,7 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Настройки рабочего пространства"
+        title={i18n.t(k.WORKSPACE_SETTINGS)}
         icon={<SettingsIcon size={32} className="my-auto" />}
       />
 

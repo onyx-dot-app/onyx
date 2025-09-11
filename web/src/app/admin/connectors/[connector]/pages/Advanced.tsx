@@ -16,21 +16,21 @@ const AdvancedFormPage = () => {
         description={`
 ${i18n.t(k.CHECKS_ALL_DOCUMENTS_AGAINST_T)}
 `}
-        label="Частота удаления (дней)"
+        label={i18n.t(k.DELETION_FREQUENCY_LABEL)}
         name="pruneFreq"
       />
 
       <NumberInput
-        description="Это частота, с которой мы извлекаем новые документы из источника (в минутах). Если ввести 0, мы никогда не будем извлекать новые документы для этого коннектора."
-        label="Частота обновления (минут)"
+        description={i18n.t(k.UPDATE_FREQUENCY_DESCRIPTION)}
+        label={i18n.t(k.UPDATE_FREQUENCY_LABEL)}
         name="refreshFreq"
       />
 
       <TextFormField
         type="date"
-        subtext="Документы до этой даты не будут извлечены"
+        subtext={i18n.t(k.INDEXING_START_DATE_SUBTEXT)}
         optional
-        label="Дата начала индексации"
+        label={i18n.t(k.INDEXING_START_DATE_LABEL)}
         name="indexingStart"
       />
 

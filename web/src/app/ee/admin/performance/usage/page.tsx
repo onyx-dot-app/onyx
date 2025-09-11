@@ -1,5 +1,7 @@
 "use client";
 
+import i18n from "@/i18n/init";
+import k from "../../../../../i18n/keys";
 import { DateRangeSelector } from "../DateRangeSelector";
 import { FeedbackChart } from "./FeedbackChart";
 import { QueryPerformanceChart } from "./QueryPerformanceChart";
@@ -16,7 +18,7 @@ export default function AnalyticsPage() {
   return (
     <main className="pt-4 mx-auto container">
       <AdminPageTitle
-        title="Статистика использования"
+        title={i18n.t(k.USAGE_STATISTICS)}
         icon={<FiActivity size={32} />}
       />
 

@@ -79,15 +79,15 @@ export function CustomLLMProviderUpdateForm({
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
-    name: Yup.string().required("Отображаемое имя обязательно"),
-    provider: Yup.string().required("Название провайдера обязательно"),
+    name: Yup.string().required(i18n.t(k.DISPLAY_NAME_REQUIRED)),
+    provider: Yup.string().required(i18n.t(k.PROVIDER_NAME_REQUIRED)),
     api_key: Yup.string(),
     api_base: Yup.string(),
     api_version: Yup.string(),
     model_names: Yup.array(
-      Yup.string().required("Название модели обязательно")
+      Yup.string().required(i18n.t(k.MODEL_NAME_REQUIRED))
     ),
-    default_model_name: Yup.string().required("Название модели обязательно"),
+    default_model_name: Yup.string().required(i18n.t(k.MODEL_NAME_REQUIRED)),
     fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
     // EE Only
@@ -220,15 +220,15 @@ export function CustomLLMProviderUpdateForm({
           <Form className="gap-y-6 mt-8">
             <TextFormField
               name="name"
-              label="Отображаемое имя"
-              subtext="Имя, которое можно использовать для идентификации этого поставщика при его выборе в пользовательском интерфейсе."
-              placeholder="Отображаемое имя"
+              label={i18n.t(k.DISPLAY_NAME_LABEL)}
+              subtext={i18n.t(k.DISPLAY_NAME_SUBTEXT)}
+              placeholder={i18n.t(k.DISPLAY_NAME_PLACEHOLDER)}
               disabled={existingLlmProvider ? true : false}
             />
 
             <TextFormField
               name="provider"
-              label="Название провайдера"
+              label={i18n.t(k.PROVIDER_LABEL)}
               subtext={
                 <>
                   {i18n.t(k.SHOULD_BE_ONE_OF_THE_PROVIDERS)}{" "}
@@ -243,7 +243,7 @@ export function CustomLLMProviderUpdateForm({
                   {i18n.t(k._8)}
                 </>
               }
-              placeholder="Название дополнительного провайдера"
+              placeholder={i18n.t(k.PROVIDER_PLACEHOLDER)}
             />
 
             <Separator />
@@ -252,29 +252,29 @@ export function CustomLLMProviderUpdateForm({
 
             <TextFormField
               name="api_key"
-              label="[Необязательно] API Key"
-              placeholder="API Key"
+              label={i18n.t(k.API_KEY_LABEL)}
+              placeholder={i18n.t(k.API_KEY_PLACEHOLDER)}
               type="password"
             />
 
             {existingLlmProvider?.deployment_name && (
               <TextFormField
                 name="deployment_name"
-                label="[Необязательно] Название развертывания"
-                placeholder="Название развертывания"
+                label={i18n.t(k.DEPLOYMENT_NAME_LABEL)}
+                placeholder={i18n.t(k.DEPLOYMENT_NAME_PLACEHOLDER)}
               />
             )}
 
             <TextFormField
               name="api_base"
-              label="[Необязательно] API Base"
-              placeholder="API Base"
+              label={i18n.t(k.API_BASE_LABEL)}
+              placeholder={i18n.t(k.API_BASE_PLACEHOLDER)}
             />
 
             <TextFormField
               name="api_version"
-              label="[Необязательно] API Version"
-              placeholder="API Version"
+              label={i18n.t(k.API_VERSION_LABEL)}
+              placeholder={i18n.t(k.API_VERSION_PLACEHOLDER)}
             />
 
             <Label>{i18n.t(k.OPTIONAL_CUSTOM_CONFIGS)}</Label>
@@ -379,7 +379,7 @@ export function CustomLLMProviderUpdateForm({
             {!existingLlmProvider?.deployment_name && (
               <TextArrayField
                 name="model_names"
-                label="Названия модели"
+                label={i18n.t(k.MODEL_NAMES_LABEL)}
                 values={formikProps.values}
                 subtext={
                   <>
@@ -404,16 +404,16 @@ export function CustomLLMProviderUpdateForm({
               name="default_model_name"
               subtext={`
               ${i18n.t(k.THE_MODEL_TO_USE_BY_DEFAULT_FO)}`}
-              label="Стандартная модель"
-              placeholder="Например gpt-4"
+              label={i18n.t(k.DEFAULT_MODEL_LABEL)}
+              placeholder={i18n.t(k.DEFAULT_MODEL_PLACEHOLDER)}
             />
 
             {!existingLlmProvider?.deployment_name && (
               <TextFormField
                 name="fast_default_model_name"
                 subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F)}`}
-                label="[Необязательно] Быстрая модель"
-                placeholder="Например gpt-4"
+                label={i18n.t(k.FAST_MODEL_LABEL)}
+                placeholder={i18n.t(k.FAST_MODEL_PLACEHOLDER)}
               />
             )}
 
@@ -445,7 +445,7 @@ export function CustomLLMProviderUpdateForm({
               <div className="flex w-full mt-4">
                 <Button type="submit" variant="submit">
                   {isTesting ? (
-                    <LoadingAnimation text="Тестирование" />
+                    <LoadingAnimation text={i18n.t(k.TESTING_TEXT)} />
                   ) : existingLlmProvider ? (
                     i18n.t(k.UPDATE)
                   ) : (

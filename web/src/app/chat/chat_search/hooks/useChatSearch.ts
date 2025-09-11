@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchChatSessions } from "../utils";
 import { ChatSessionGroup, ChatSessionSummary } from "../interfaces";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 interface UseChatSearchOptions {
   pageSize?: number;
@@ -80,11 +82,11 @@ export function useChatSearch(
         .sort((a, b) => {
           // Custom sort order for time periods
           const order = [
-            "Сегодня",
-            "Вчера",
-            "На этой неделе",
-            "В этом месяце",
-            "Старше",
+            i18n.t(k.TODAY),
+            i18n.t(k.YESTERDAY),
+            i18n.t(k.THIS_WEEK),
+            i18n.t(k.THIS_MONTH),
+            i18n.t(k.OLDER),
           ];
 
           return order.indexOf(a.title) - order.indexOf(b.title);

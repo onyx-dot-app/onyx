@@ -58,7 +58,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: enterpriseSettings?.application_name || "SmartSearch",
-    description: "Ответы на вопросы по вашим документам",
+    description: i18n.t(k.ANSWERS_TO_QUESTIONS_ABOUT_YOUR_DOCUMENTS),
     icons: {
       icon: logoLocation,
     },

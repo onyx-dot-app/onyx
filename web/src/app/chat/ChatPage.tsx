@@ -1795,7 +1795,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
-      console.log("Ошибка:", e);
+      console.log(i18n.t(k.ERROR), e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1892,7 +1892,7 @@ export function ChatPage({
       const responseJson = await response.json();
       const errorMsg = responseJson.detail || responseJson.message;
       setPopup({
-        message: `Не удалось отправить отзыв - ${errorMsg}`,
+        message: `${i18n.t(k.FAILED_TO_SEND_FEEDBACK)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -2065,14 +2065,14 @@ export function ChatPage({
         });
 
         if (!response.ok) {
-          throw new Error("Не удалось создать чат из Slack");
+          throw new Error(i18n.t(k.FAILED_TO_CREATE_CHAT_FROM_SLACK));
         }
 
         const data = await response.json();
 
         router?.push(data.redirect_url);
       } catch (error) {
-        console.error("Ошибка при загрузке чата из Slack:", error);
+        console.error(i18n.t(k.ERROR_LOADING_CHAT_FROM_SLACK), error);
         setPopup({
           message: i18n.t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
           type: "error",
@@ -2279,7 +2279,7 @@ export function ChatPage({
       {toggleDocSelection && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
-          buttonContent="Установить как контекст"
+          buttonContent={i18n.t(k.SET_AS_CONTEXT)}
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
@@ -2298,7 +2298,7 @@ export function ChatPage({
           <Modal
             hideDividerForTitle
             onOutsideClick={() => setDocumentSidebarVisible(false)}
-            title="Источники"
+            title={i18n.t(k.SOURCES)}
           >
             <DocumentResults
               agenticMessage={

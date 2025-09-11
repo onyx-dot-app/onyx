@@ -110,7 +110,7 @@ const UserRoleDropdown = ({
       </Select>
       {showConfirmModal && (
         <GenericConfirmModal
-          title="Изменить роль куратора"
+          title={i18n.t(k.CHANGE_CURATOR_ROLE)}
           message={`${i18n.t(k.WARNING_SWITCHING_ROLES_FROM)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]

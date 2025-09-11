@@ -83,7 +83,7 @@ export default function ImpersonatePage() {
                 <Field
                   type="email"
                   name="email"
-                  placeholder="Введите Email"
+                  placeholder={i18n.t(k.ENTER_EMAIL_PLACEHOLDER)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
 
@@ -100,7 +100,7 @@ export default function ImpersonatePage() {
                 <Field
                   type="password"
                   name="apiKey"
-                  placeholder="Введите API Key"
+                  placeholder={i18n.t(k.ENTER_API_KEY_PLACEHOLDER)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
 

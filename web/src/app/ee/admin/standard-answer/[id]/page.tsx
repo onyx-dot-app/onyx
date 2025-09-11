@@ -20,7 +20,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   if (!standardAnswersResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(
           k.FAILED_TO_FETCH_STANDARD_ANSWE1
         )} ${await standardAnswersResponse.text()}`}
@@ -36,7 +36,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   if (!standardAnswer) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(k.DID_NOT_FIND_STANDARD_ANSWER_W)} ${params.id}`}
       />
     );
@@ -45,7 +45,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   if (!standardAnswerCategoriesResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(
           k.FAILED_TO_FETCH_STANDARD_ANSWE
         )} ${await standardAnswerCategoriesResponse.text()}`}
@@ -59,7 +59,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
     <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
-        title="Изменить стандартный ответ"
+        title={i18n.t(k.EDIT_STANDARD_ANSWER)}
         icon={<ClipboardIcon size={32} />}
       />
 

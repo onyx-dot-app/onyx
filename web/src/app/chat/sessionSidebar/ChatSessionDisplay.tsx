@@ -110,7 +110,7 @@ export function ChatSessionDisplay({
         setIsRenamingChat(false);
         router.refresh();
       } else {
-        alert("Не удалось переименовать сеанс чата");
+        alert(i18n.t(k.FAILED_TO_RENAME_CHAT_SESSION));
       }
     },
     [chatSession.id, chatName, router]
@@ -337,7 +337,7 @@ export function ChatSessionDisplay({
                                   <>
                                     {showShareModal && (
                                       <DefaultDropdownElement
-                                        name="Поделиться"
+                                        name={i18n.t(k.SHARE)}
                                         icon={FiShare2}
                                         onSelect={() =>
                                           showShareModal(chatSession)
@@ -346,13 +346,13 @@ export function ChatSessionDisplay({
                                     )}
                                     {!search && (
                                       <DefaultDropdownElement
-                                        name="Переименовать"
+                                        name={i18n.t(k.RENAME)}
                                         icon={FiEdit2}
                                         onSelect={() => setIsRenamingChat(true)}
                                       />
                                     )}
                                     <DefaultDropdownElement
-                                      name="Удалить"
+                                      name={i18n.t(k.DELETE)}
                                       icon={FiTrash}
                                       onSelect={handleDeleteClick}
                                     />

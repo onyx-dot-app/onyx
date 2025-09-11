@@ -61,7 +61,7 @@ export function AddWebsitePanel({
               type="text"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="Введите URL"
+              placeholder={i18n.t(k.ENTER_URL_PLACEHOLDER)}
               className="flex-grow !text-sm mr-2 px-2 py-1 border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
             />
 

@@ -55,7 +55,7 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
           id="referral-source"
           className="w-full border-background-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
         >
-          <SelectValue placeholder="Выберите из списка" />
+          <SelectValue placeholder={i18n.t(k.SELECT_FROM_LIST)} />
         </SelectTrigger>
         <SelectContent className="max-h-60 overflow-y-auto">
           {referralOptions.map((option) => (

@@ -279,28 +279,28 @@ export function FilterPopup({
               <FilterOption
                 category={FilterCategories.date}
                 icon={<FiCalendar className="w-4 h-4" />}
-                label="Дата"
+                label={i18n.t(k.DATE_LABEL)}
               />
 
               {availableSources.length > 0 && (
                 <FilterOption
                   category={FilterCategories.sources}
                   icon={<FiDatabase className="w-4 h-4" />}
-                  label="Источники"
+                  label={i18n.t(k.SOURCES_LABEL)}
                 />
               )}
               {availableDocumentSets.length > 0 && (
                 <FilterOption
                   category={FilterCategories.documentSets}
                   icon={<FiBook className="w-4 h-4" />}
-                  label="Наборы"
+                  label={i18n.t(k.SETS_LABEL)}
                 />
               )}
               {availableTags.length > 0 && (
                 <FilterOption
                   category={FilterCategories.tags}
                   icon={<FiTag className="w-4 h-4" />}
-                  label="Теги"
+                  label={i18n.t(k.TAGS_LABEL)}
                 />
               )}
             </ul>
@@ -375,7 +375,7 @@ export function FilterPopup({
               <div className="pt-4 h-full flex flex-col w-full">
                 <div className="flex pb-2 px-4">
                   <Input
-                    placeholder="Поиск наборов документов..."
+                    placeholder={i18n.t(k.SEARCH_DOCUMENT_SETS_PLACEHOLDER)}
                     value={documentSetSearch}
                     onChange={(e) => setDocumentSetSearch(e.target.value)}
                     className="border border-text-subtle w-full"

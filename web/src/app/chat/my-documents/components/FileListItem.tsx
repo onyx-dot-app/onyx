@@ -134,7 +134,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                   })
                     .then((response) => {
                       if (!response.ok) {
-                        throw new Error("Не удалось переиндексировать файл");
+                        throw new Error(i18n.t(k.FAILED_TO_REINDEX_FILE_ERROR));
                       }
                       setIndexingStatus(false);
                       refreshFolderDetails();

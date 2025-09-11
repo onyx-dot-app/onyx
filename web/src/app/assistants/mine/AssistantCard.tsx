@@ -86,12 +86,14 @@ const AssistantCard: React.FC<{
       setActivePopover(null);
       setIsDeleteConfirmation(false);
       setPopup({
-        message: `${persona.name} был успешно удален.`,
+        message: `${persona.name} ${i18n.t(k.ASSISTANT_DELETED_SUCCESS)}`,
         type: "success",
       });
     } else {
       setPopup({
-        message: `Не удалось удалить помощника - ${await response.text()}`,
+        message: `${i18n.t(
+          k.FAILED_TO_DELETE_ASSISTANT
+        )} ${await response.text()}`,
         type: "error",
       });
     }

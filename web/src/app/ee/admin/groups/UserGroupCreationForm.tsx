@@ -52,7 +52,7 @@ export const UserGroupCreationForm = ({
             cc_pair_ids: [] as number[],
           }}
           validationSchema={Yup.object().shape({
-            name: Yup.string().required("Пожалуйста, введите имя группы"),
+            name: Yup.string().required(i18n.t(k.PLEASE_ENTER_GROUP_NAME)),
             user_ids: Yup.array().of(Yup.string().required()),
             cc_pair_ids: Yup.array().of(Yup.number().required()),
           })}
@@ -87,8 +87,8 @@ export const UserGroupCreationForm = ({
               <div className="py-4">
                 <TextFormField
                   name="name"
-                  label="Название:"
-                  placeholder="Название для группы пользователей"
+                  label={i18n.t(k.GROUP_NAME_LABEL)}
+                  placeholder={i18n.t(k.GROUP_NAME_PLACEHOLDER)}
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />

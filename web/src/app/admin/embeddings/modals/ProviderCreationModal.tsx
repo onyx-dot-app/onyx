@@ -54,25 +54,25 @@ export function ProviderCreationModal({
   };
 
   const validationSchema = Yup.object({
-    provider_type: Yup.string().required("Тип провадера обязателен"),
+    provider_type: Yup.string().required(i18n.t(k.PROVIDER_TYPE_REQUIRED)),
     api_key:
       isProxy || isAzure
         ? Yup.string()
         : useFileUpload
         ? Yup.string()
-        : Yup.string().required("Требуется API-ключ"),
+        : Yup.string().required(i18n.t(k.API_KEY_REQUIRED)),
     model_name: isProxy
-      ? Yup.string().required("Название модели обязательно")
+      ? Yup.string().required(i18n.t(k.MODEL_NAME_REQUIRED))
       : Yup.string().nullable(),
     api_url:
       isProxy || isAzure
-        ? Yup.string().required("API URL обязателен")
+        ? Yup.string().required(i18n.t(k.API_URL_REQUIRED))
         : Yup.string(),
     deployment_name: isAzure
-      ? Yup.string().required("Имя развертывания обязательно")
+      ? Yup.string().required(i18n.t(k.DEPLOYMENT_NAME_REQUIRED))
       : Yup.string(),
     api_version: isAzure
-      ? Yup.string().required("Требуется версия API")
+      ? Yup.string().required(i18n.t(k.API_VERSION_REQUIRED))
       : Yup.string(),
     custom_config: Yup.array().of(Yup.array().of(Yup.string()).length(2)),
   });
@@ -93,9 +93,7 @@ export function ProviderCreationModal({
         try {
           jsonContent = JSON.parse(fileContent);
         } catch (parseError) {
-          throw new Error(
-            "Не удалось проанализировать файл JSON. Убедитесь, что это допустимый JSON."
-          );
+          throw new Error(i18n.t(k.FAILED_TO_PARSE_JSON_FILE));
         }
         setFieldValue("api_key", JSON.stringify(jsonContent));
       } catch (error) {
@@ -165,8 +163,7 @@ export function ProviderCreationModal({
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          errorData.detail ||
-            "Не удалось обновить провайдера - проверьте ваш ключ API"
+          errorData.detail || i18n.t(k.FAILED_TO_UPDATE_PROVIDER)
         );
       }
 
@@ -175,7 +172,7 @@ export function ProviderCreationModal({
       if (error instanceof Error) {
         setErrorMsg(error.message);
       } else {
-        setErrorMsg("Произошла неизвестная ошибка");
+        setErrorMsg(i18n.t(k.UNKNOWN_ERROR_OCCURRED));
       }
     } finally {
       setIsProcessing(false);
@@ -234,7 +231,7 @@ export function ProviderCreationModal({
                     label={`${i18n.t(k.MODEL_NAME)} ${
                       isProxy ? i18n.t(k.FOR_TESTING) : ""
                     }`}
-                    placeholder="Название модели"
+                    placeholder={i18n.t(k.MODEL_NAME)}
                     type="text"
                   />
                 )}
@@ -242,8 +239,8 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="deployment_name"
-                    label="Имя развертывания"
-                    placeholder="Имя развертывания"
+                    label={i18n.t(k.DEPLOYMENT_NAME)}
+                    placeholder={i18n.t(k.DEPLOYMENT_NAME)}
                     type="text"
                   />
                 )}
@@ -251,8 +248,8 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="api_version"
-                    label="Версия API"
-                    placeholder="Версия API"
+                    label={i18n.t(k.API_VERSION)}
+                    placeholder={i18n.t(k.API_VERSION)}
                     type="text"
                   />
                 )}
@@ -296,7 +293,7 @@ export function ProviderCreationModal({
               </div>
 
               {errorMsg && (
-                <Callout title="Ошибка" type="danger">
+                <Callout title={i18n.t(k.ERROR)} type="danger">
                   {errorMsg}
                 </Callout>
               )}

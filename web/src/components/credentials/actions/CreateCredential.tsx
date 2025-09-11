@@ -190,8 +190,8 @@ export default function CreateCredential({
           <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
-              placeholder="(Необязательно) Название учетных данных.."
-              label="Название:"
+              placeholder={i18n.t(k.CREDENTIAL_NAME_PLACEHOLDER)}
+              label={i18n.t(k.CREDENTIAL_NAME_LABEL)}
             />
 
             {Object.entries(credentialTemplate).map(([key, val]) => {

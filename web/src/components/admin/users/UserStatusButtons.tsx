@@ -52,13 +52,13 @@ export const InviteUserButton = ({
         setShowInviteModal(false);
         mutate();
         setPopup({
-          message: "Пользователь успешно приглашен!",
+          message: `${i18n.t(k.INVITE_USER_SUCCESS)}`,
           type: "success",
         });
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Не удалось пригласить пользователя - ${errorMsg}`,
+          message: `${i18n.t(k.INVITE_USER_FAILED)} ${errorMsg}`,
           type: "error",
         }),
     }
@@ -84,13 +84,13 @@ export const InviteUserButton = ({
         setShowInviteModal(false);
         mutate();
         setPopup({
-          message: "Пользователь успешно отменил приглашение!",
+          message: `${i18n.t(k.UNINVITE_USER_SUCCESS)}`,
           type: "success",
         });
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Не удалось отменить приглашение пользователя - ${errorMsg}`,
+          message: `${i18n.t(k.UNINVITE_USER_FAILED)} ${errorMsg}`,
           type: "error",
         }),
     }
@@ -221,7 +221,7 @@ export const UserRoleDropdown = ({
       </Select>
       {showConfirmModal && (
         <GenericConfirmModal
-          title="Изменить роль куратора"
+          title={i18n.t(k.CHANGE_CURATOR_ROLE)}
           message={`${i18n.t(k.WARNING_SWITCHING_ROLES_FROM)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]

@@ -130,14 +130,16 @@ export function PagesTab({
       try {
         await updateFolderName(folderId, newName);
         setPopup({
-          message: "Папка успешно обновлена",
+          message: i18n.t(k.FOLDER_UPDATED_SUCCESS),
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Не удалось обновить папку:", error);
+        console.error(i18n.t(k.FAILED_TO_UPDATE_FOLDER), error);
         setPopup({
-          message: `Не удалось обновить папку: ${(error as Error).message}`,
+          message: `${i18n.t(k.FAILED_TO_UPDATE_FOLDER)} ${
+            (error as Error).message
+          }`,
           type: "error",
         });
       }
@@ -147,23 +149,19 @@ export function PagesTab({
 
   const handleDeleteFolder = useCallback(
     (folderId: number) => {
-      if (
-        confirm(
-          "Вы уверены, что хотите удалить эту папку? Это действие нельзя отменить."
-        )
-      ) {
+      if (confirm(i18n.t(k.CONFIRM_DELETE_FOLDER))) {
         deleteFolder(folderId)
           .then(() => {
             router.refresh();
             setPopup({
-              message: "Папка успешно удалена",
+              message: i18n.t(k.FOLDER_DELETED_SUCCESS),
               type: "success",
             });
           })
           .catch((error: Error) => {
-            console.error("Не удалось удалить папку:", error);
+            console.error(i18n.t(k.FAILED_TO_DELETE_FOLDER), error);
             setPopup({
-              message: `Не удалось удалить папку: ${error.message}`,
+              message: `${i18n.t(k.FAILED_TO_DELETE_FOLDER)} ${error.message}`,
               type: "error",
             });
           });
@@ -189,16 +187,16 @@ export function PagesTab({
           await refreshFolders();
           router.refresh();
           setPopup({
-            message: "Папка создана успешно",
+            message: i18n.t(k.FOLDER_CREATED_SUCCESS),
             type: "success",
           });
         } catch (error) {
-          console.error("Не удалось создать папку:", error);
+          console.error(i18n.t(k.FAILED_TO_CREATE_FOLDER_ERROR), error);
           setPopup({
             message:
               error instanceof Error
                 ? error.message
-                : "Не удалось создать папку",
+                : i18n.t(k.FAILED_TO_CREATE_FOLDER_MESSAGE),
             type: "error",
           });
         }
@@ -227,14 +225,16 @@ export function PagesTab({
         await addChatToFolder(folderId, chatSessionId);
         router.refresh();
         setPopup({
-          message: "Чат успешно добавлен в папку",
+          message: i18n.t(k.CHAT_ADDED_TO_FOLDER_SUCCESS),
           type: "success",
         });
       } catch (error: unknown) {
-        console.error("Не удалось добавить чат в папку:", error);
+        console.error(i18n.t(k.FAILED_TO_ADD_CHAT_TO_FOLDER_ERROR), error);
         setPopup({
-          message: `Не удалось добавить чат в папку: ${
-            error instanceof Error ? error.message : "Неизвестная ошибка"
+          message: `${i18n.t(k.FAILED_TO_ADD_CHAT_TO_FOLDER_MESSAGE)} ${
+            error instanceof Error
+              ? error.message
+              : i18n.t(k.UNKNOWN_ERROR_MESSAGE)
           }`,
 
           type: "error",
@@ -368,7 +368,7 @@ export function PagesTab({
               }}
               ref={newFolderInputRef}
               type="text"
-              placeholder="Введите название группы"
+              placeholder={i18n.t(k.ENTER_GROUP_NAME_PLACEHOLDER)}
               className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
             />
 

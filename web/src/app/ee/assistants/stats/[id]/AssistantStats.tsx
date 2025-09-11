@@ -54,18 +54,16 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
 
         if (!res.ok) {
           if (res.status === 403) {
-            throw new Error(
-              "У вас нет разрешения на просмотр этой статистики."
-            );
+            throw new Error(i18n.t(k.NO_PERMISSION_TO_VIEW_STATS));
           }
-          throw new Error("Не удалось получить статистику помощника");
+          throw new Error(i18n.t(k.FAILED_TO_GET_ASSISTANT_STATS));
         }
 
         const data = (await res.json()) as AssistantStatsResponse;
         setAssistantStats(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Произошла неизвестная ошибка"
+          err instanceof Error ? err.message : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
         );
       } finally {
         setIsLoading(false);

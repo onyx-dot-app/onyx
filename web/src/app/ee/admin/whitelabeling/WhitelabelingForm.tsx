@@ -77,7 +77,7 @@ export function WhitelabelingForm() {
           auto_scroll: Yup.boolean().nullable(),
           application_name: Yup.string()
             .trim()
-            .min(1, "Название приложения не может быть пустым")
+            .min(1, i18n.t(k.APP_NAME_CANNOT_BE_EMPTY))
             .nullable(),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),
@@ -140,10 +140,10 @@ export function WhitelabelingForm() {
         {({ isSubmitting, values, setValues }) => (
           <Form>
             <TextFormField
-              label="Название приложения"
+              label={i18n.t(k.APP_NAME_LABEL)}
               name="application_name"
               subtext={`${i18n.t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
-              placeholder="Пользовательское имя, которое заменит 'SmartSearch'"
+              placeholder={i18n.t(k.APP_NAME_PLACEHOLDER)}
               disabled={isSubmitting}
             />
 
@@ -211,14 +211,14 @@ export function WhitelabelingForm() {
                   label="Chat Header Content"
                   name="custom_header_content"
                   subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W)}`}
-                  placeholder="Содержание вашего заголовка..."
+                  placeholder={i18n.t(k.HEADER_CONTENT_PLACEHOLDER)}
                   disabled={isSubmitting}
                 />
 
                 <BooleanFormField
                   name="two_lines_for_chat_header"
-                  label="Две строки для заголовка чата?"
-                  subtext="Если включено, заголовок чата будет отображаться на двух строках вместо одной."
+                  label={i18n.t(k.TWO_LINE_HEADER_LABEL)}
+                  subtext={i18n.t(k.TWO_LINE_HEADER_SUBTEXT)}
                 />
 
                 <Separator />
@@ -268,16 +268,16 @@ export function WhitelabelingForm() {
 
                 <BooleanFormField
                   name="enable_consent_screen"
-                  label="Включить экран согласия"
-                  subtext="Если включено, первоначальное всплывающее окно будет преобразовано в экран согласия. Пользователи должны будут согласиться с условиями перед доступом к приложению при первом входе в систему."
+                  label={i18n.t(k.ENABLE_CONSENT_SCREEN_LABEL)}
+                  subtext={i18n.t(k.ENABLE_CONSENT_SCREEN_SUBTEXT)}
                   disabled={isSubmitting}
                 />
 
                 <TextFormField
-                  label="Текст нижнего колонтитула чата"
+                  label={i18n.t(k.CHAT_FOOTER_TEXT_LABEL)}
                   name="custom_lower_disclaimer_content"
                   subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W3)}`}
-                  placeholder="Содержимое вашего отказа от ответственности..."
+                  placeholder={i18n.t(k.DISCLAIMER_CONTENT_PLACEHOLDER)}
                   isTextArea
                   disabled={isSubmitting}
                 />

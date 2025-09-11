@@ -40,17 +40,17 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
   return (
     <Modal
       className="max-w-3xl"
-      title="Добавить новый коннектор"
+      title={i18n.t(k.ADD_NEW_CONNECTOR)}
       onOutsideClick={() => onClose()}
     >
       <div className="px-6 pt-4">
         <ConnectorMultiSelect
           name="connectors"
-          label="Выбрать коннекторы"
+          label={i18n.t(k.SELECT_CONNECTORS)}
           connectors={availableCCPairs}
           selectedIds={selectedCCPairIds}
           onChange={setSelectedCCPairIds}
-          placeholder="Поиск коннекторов для добавления..."
+          placeholder={i18n.t(k.SEARCH_CONNECTORS_TO_ADD)}
           showError={false}
         />
 

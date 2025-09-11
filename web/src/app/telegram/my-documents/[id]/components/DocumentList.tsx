@@ -185,7 +185,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           error:
             error instanceof Error
               ? error.message
-              : "Не удалось загрузить файл",
+              : i18n.t(k.FAILED_TO_LOAD_FILE),
           isPopoverOpen: false,
         },
       ]);
@@ -215,7 +215,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           error:
             error instanceof Error
               ? error.message
-              : "Не удалось загрузить файл",
+              : i18n.t(k.FAILED_TO_LOAD_FILE),
           isPopoverOpen: false,
         },
       ]);

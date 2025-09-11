@@ -47,7 +47,7 @@ function Main() {
       const response = await fetch(
         `/api/admin/long-term-logs/${category}/download`
       );
-      if (!response.ok) throw new Error("Не удалось загрузить журналы");
+      if (!response.ok) throw new Error(i18n.t(k.FAILED_TO_LOAD_LOGS));
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -120,7 +120,10 @@ function Main() {
 const Page = () => {
   return (
     <div className="container mx-auto">
-      <AdminPageTitle icon={<FiDownload size={32} />} title="Журналы отладки" />
+      <AdminPageTitle
+        icon={<FiDownload size={32} />}
+        title={i18n.t(k.DEBUG_LOGS)}
+      />
       <Main />
     </div>
   );

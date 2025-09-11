@@ -107,7 +107,8 @@ export default function CloudEmbeddingPage({
               {provider.icon({ size: 40 })}
               <h2 className="ml-2  mt-2 text-xl font-bold">
                 {provider.provider_type}{" "}
-                {provider.provider_type == "Cohere" && "(рекомендуется)"}
+                {provider.provider_type == "Cohere" &&
+                  i18n.t(k.RECOMMENDED_LABEL)}
               </h2>
               <HoverPopup
                 mainContent={
@@ -171,7 +172,7 @@ export default function CloudEmbeddingPage({
             <h2 className="ml-2  mt-2 text-xl font-bold">
               {LITELLM_CLOUD_PROVIDER.provider_type}{" "}
               {LITELLM_CLOUD_PROVIDER.provider_type == "Cohere" &&
-                "(рекомендуется)"}
+                i18n.t(k.RECOMMENDED_LABEL)}
             </h2>
             <HoverPopup
               mainContent={
@@ -421,19 +422,21 @@ export function CloudModelCard({
 
   const deleteModel = async () => {
     if (!model.id) {
-      setPopup({ message: "Модель не может быть удалена", type: "error" });
+      setPopup({ message: i18n.t(k.MODEL_CANNOT_BE_DELETED), type: "error" });
       return;
     }
 
     const response = await deleteSearchSettings(model.id);
 
     if (response.ok) {
-      setPopup({ message: "Модель успешно удалена", type: "success" });
+      setPopup({
+        message: i18n.t(k.MODEL_SUCCESSFULLY_DELETED),
+        type: "success",
+      });
       setShowDeleteModel(false);
     } else {
       setPopup({
-        message:
-          "Не удалось удалить модель. Убедитесь, что вы не пытаетесь удалить активную в данный момент модель.",
+        message: i18n.t(k.FAILED_TO_DELETE_MODEL),
         type: "error",
       });
     }

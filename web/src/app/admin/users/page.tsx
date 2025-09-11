@@ -64,7 +64,7 @@ const UsersTables = ({
   if (domainsError) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки допустимых доменов"
+        errorTitle={i18n.t(k.DOMAIN_LOAD_ERROR)}
         errorMsg={domainsError?.info?.detail}
       />
     );
@@ -179,7 +179,7 @@ const AddUserButton = ({
     );
     setModal(false);
     setPopup({
-      message: "Пользователи приглашены!",
+      message: i18n.t(k.USERS_INVITED_SUCCESS),
       type: "success",
     });
   };
@@ -187,7 +187,7 @@ const AddUserButton = ({
   const onFailure = async (res: Response) => {
     const error = (await res.json()).detail;
     setPopup({
-      message: `Не удалось пригласить пользователей - ${error}`,
+      message: `${i18n.t(k.FAILED_TO_INVITE_USERS)} ${error}`,
       type: "error",
     });
   };
@@ -220,19 +220,19 @@ const AddUserButton = ({
 
       {showConfirmation && (
         <ConfirmEntityModal
-          entityType="Приглашение первого пользователя"
-          entityName="ваша логика доступа"
+          entityType={i18n.t(k.FIRST_USER_INVITATION)}
+          entityName={i18n.t(k.ACCESS_LOGIC_ENTITY)}
           onClose={() => setShowConfirmation(false)}
           onSubmit={handleConfirmFirstInvite}
-          additionalDetails="После приглашения первого пользователя, только приглашенные пользователи смогут присоединиться к этой платформе. Это мера безопасности для контроля доступа к вашей команде."
-          actionButtonText="Продолжить"
+          additionalDetails={i18n.t(k.FIRST_USER_INVITATION_DETAILS)}
+          actionButtonText={i18n.t(k.CONTINUE_BUTTON)}
           variant="action"
         />
       )}
 
       {modal && (
         <Modal
-          title="Массовое добавление пользователей"
+          title={i18n.t(k.BULK_USER_ADDITION)}
           onOutsideClick={() => setModal(false)}
         >
           <div className="flex flex-col gap-y-4">
@@ -251,7 +251,7 @@ const Page = () => {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Управление пользователями"
+        title={i18n.t(k.USER_MANAGEMENT)}
         icon={<UsersIcon size={32} />}
       />
       <SearchableTables />

@@ -320,7 +320,7 @@ const Main = () => {
       <div className="flex mb-6">
         <CreateButton
           href="/admin/documents/sets/new"
-          text="Новый набор документов"
+          text={i18n.t(k.NEW_DOCUMENT_SET_BUTTON)}
         />
 
         {/* <Link href="/admin/documents/sets/new">
@@ -349,7 +349,7 @@ const Page = () => {
     <div className="container mx-auto">
       <AdminPageTitle
         icon={<BookmarkIcon size={32} />}
-        title="Наборы документов"
+        title={i18n.t(k.DOCUMENT_SETS_TITLE)}
       />
 
       <Main />

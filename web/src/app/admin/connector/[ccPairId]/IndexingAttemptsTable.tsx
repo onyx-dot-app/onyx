@@ -59,7 +59,7 @@ export function IndexingAttemptsTable({
     return (
       <Callout
         className="mt-4"
-        title="Пока не запланировано ни одной попытки индексации"
+        title={i18n.t(k.NO_INDEXING_ATTEMPTS_SCHEDULED)}
         type="notice"
       >
         {i18n.t(k.INDEX_ATTEMPTS_ARE_SCHEDULED_I)}

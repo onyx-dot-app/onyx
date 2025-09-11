@@ -768,7 +768,7 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Копировать">
+                          <CustomTooltip showTick line content={i18n.t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
@@ -778,13 +778,21 @@ export const AIMessage = ({
                               }
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Хороший ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={i18n.t(k.GOOD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Плохой ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={i18n.t(k.BAD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -796,7 +804,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Перегенерировать"
+                              content={i18n.t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -850,7 +858,7 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Копировать">
+                          <CustomTooltip showTick line content={i18n.t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
@@ -861,14 +869,22 @@ export const AIMessage = ({
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Хороший ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={i18n.t(k.GOOD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Плохой ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={i18n.t(k.BAD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -879,7 +895,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Перегенерировать"
+                              content={i18n.t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}

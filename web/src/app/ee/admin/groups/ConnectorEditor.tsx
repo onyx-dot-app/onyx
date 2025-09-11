@@ -1,3 +1,5 @@
+import i18n from "@/i18n/init";
+import k from "../../../../i18n/keys";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 
@@ -20,11 +22,11 @@ export const ConnectorEditor = ({
   return (
     <ConnectorMultiSelect
       name="connectors"
-      label="Коннекторы"
+      label={i18n.t(k.CONNECTORS_LABEL)}
       connectors={privateCCPairs}
       selectedIds={selectedCCPairIds}
       onChange={setSetCCPairIds}
-      placeholder="Поиск коннекторов..."
+      placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
       showError={true}
     />
   );

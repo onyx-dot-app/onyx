@@ -95,7 +95,9 @@ function SelectFeedbackType({
           onValueChange={onValueChange as (value: string) => void}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Выберите тип отзыва" />
+            <SelectValue
+              placeholder={i18n.t(k.SELECT_FEEDBACK_TYPE_PLACEHOLDER)}
+            />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">
@@ -174,7 +176,7 @@ export function QueryHistoryTable() {
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка получения истории запросов"
+        errorTitle={i18n.t(k.QUERY_HISTORY_ERROR)}
         errorMsg={error?.message}
       />
     );

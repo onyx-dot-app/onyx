@@ -64,7 +64,7 @@ export function WelcomeModal({ user }: { user: User | null }) {
           setWelcomeFlowComplete();
           router.refresh();
         }}
-        title={"Добро пожаловать в SmartSearch!"}
+        title={i18n.t(k.WELCOME_TO_SMARTSEARCH_TITLE)}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >
         <div>

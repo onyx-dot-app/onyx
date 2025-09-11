@@ -85,7 +85,7 @@ function IntegerInput({
   value,
   onChange,
   id,
-  placeholder = "Введите число", // Default placeholder if none is provided
+  placeholder = i18n.t(k.ENTER_NUMBER_PLACEHOLDER), // Default placeholder if none is provided
 }: {
   label: string;
   sublabel: string;
@@ -163,7 +163,7 @@ export function SettingsForm() {
       mutate({ token: value });
       return true;
     } else {
-      alert(`Ошибка обновления токена`);
+      alert(i18n.t(k.TOKEN_UPDATE_ERROR));
       return false;
     }
   };
@@ -199,15 +199,15 @@ export function SettingsForm() {
 
       router.refresh();
       setPopup({
-        message: "Настройки обновлены успешно!",
+        message: i18n.t(k.SETTINGS_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
-      // Отменить оптимистичное обновление
+      // {i18n.t(k.CANCEL_OPTIMISTIC_UPDATE)}
       setSettings(settings);
-      console.error("Ошибка обновления настроек:", error);
+      console.error(i18n.t(k.SETTINGS_UPDATE_ERROR), error);
       setPopup({
-        message: `Не удалось обновить настройки`,
+        message: i18n.t(k.SETTINGS_UPDATE_ERROR),
         type: "error",
       });
     }
@@ -255,8 +255,8 @@ export function SettingsForm() {
       {popup}
       <Title className="mb-4">{i18n.t(k.WORKSPACE_SETTINGS)}</Title>
       <Checkbox
-        label="Автопрокрутка"
-        sublabel="Если установлено, окно чата будет автоматически прокручиваться вниз по мере генерации новых строк текста моделью ИИ. Это можно переопределить индивидуальными настройками пользователя."
+        label={i18n.t(k.AUTO_SCROLL_LABEL)}
+        sublabel={i18n.t(k.AUTO_SCROLL_SUBLABEL)}
         checked={settings.auto_scroll}
         onChange={(e) =>
           handleToggleSettingsField("auto_scroll", e.target.checked)
@@ -264,8 +264,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label="Переопределить температуру по умолчанию"
-        sublabel="Если установлено, пользователи смогут переопределить температуру по умолчанию для каждого помощника."
+        label={i18n.t(k.OVERRIDE_DEFAULT_TEMPERATURE_LABEL)}
+        sublabel={i18n.t(k.OVERRIDE_DEFAULT_TEMPERATURE_SUBLABEL)}
         checked={settings.temperature_override_enabled}
         onChange={(e) =>
           handleToggleSettingsField(
@@ -276,8 +276,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label="Анонимные пользователи"
-        sublabel="Если установлено, пользователям не потребуется входить в систему для использования SmartSearch."
+        label={i18n.t(k.ANONYMOUS_USERS_LABEL)}
+        sublabel={i18n.t(k.ANONYMOUS_USERS_SUBLABEL)}
         checked={settings.anonymous_user_enabled}
         onChange={(e) =>
           handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
@@ -285,8 +285,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label="Поиск агента"
-        sublabel="Если установлено, пользователи смогут использовать Поиск агента."
+        label={i18n.t(k.AGENT_SEARCH_LABEL)}
+        sublabel={i18n.t(k.AGENT_SEARCH_SUBLABEL)}
         checked={settings.pro_search_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("pro_search_enabled", e.target.checked)
@@ -324,8 +324,8 @@ export function SettingsForm() {
         <>
           <Title className="mt-8 mb-4">{i18n.t(k.CHAT_SETTINGS)}</Title>
           <IntegerInput
-            label="Сохранение чата"
-            sublabel="Введите максимальное количество дней, в течение которых SmartSearch будет хранить сообщения чата. Если оставить это поле пустым, SmartSearch никогда не удалит сообщения чата."
+            label={i18n.t(k.CHAT_RETENTION_LABEL)}
+            sublabel={i18n.t(k.CHAT_RETENTION_SUBLABEL)}
             value={chatRetention === "" ? null : Number(chatRetention)}
             onChange={(e) => {
               const numValue = parseInt(e.target.value, 10);
@@ -334,7 +334,7 @@ export function SettingsForm() {
               }
             }}
             id="chatRetentionInput"
-            placeholder="Бесконечное удержание"
+            placeholder={i18n.t(k.INFINITE_RETENTION_PLACEHOLDER)}
           />
 
           <div className="mr-auto flex gap-2">
@@ -363,8 +363,8 @@ export function SettingsForm() {
 
       <div className="flex flex-col gap-2">
         <Checkbox
-          label="Включить извлечение и анализ изображений"
-          sublabel="Извлекать и анализировать изображения из документов во время индексации. Это позволяет системе обрабатывать изображения и создавать их описания с возможностью поиска."
+          label={i18n.t(k.ENABLE_IMAGE_EXTRACTION_LABEL)}
+          sublabel={i18n.t(k.ENABLE_IMAGE_EXTRACTION_SUBLABEL)}
           checked={settings.image_extraction_and_analysis_enabled ?? false}
           onChange={(e) =>
             handleToggleSettingsField(
@@ -375,8 +375,8 @@ export function SettingsForm() {
         />
 
         <Checkbox
-          label="Включить анализ изображений во время поиска"
-          sublabel="Анализировать изображения во время поиска, когда пользователь спрашивает об изображениях. Это обеспечивает более подробный и специфичный для запроса анализ изображений, но может увеличить задержку во время поиска."
+          label={i18n.t(k.ENABLE_IMAGE_ANALYSIS_LABEL)}
+          sublabel={i18n.t(k.ENABLE_IMAGE_ANALYSIS_SUBLABEL)}
           checked={settings.search_time_image_analysis_enabled ?? false}
           onChange={(e) =>
             handleToggleSettingsField(
@@ -387,8 +387,8 @@ export function SettingsForm() {
         />
 
         <IntegerInput
-          label="Максимальный размер изображения для анализа (МБ)"
-          sublabel="Изображения больше этого размера не будут анализироваться, чтобы предотвратить чрезмерное использование ресурсов."
+          label={i18n.t(k.MAX_IMAGE_SIZE_LABEL)}
+          sublabel={i18n.t(k.MAX_IMAGE_SIZE_SUBLABEL)}
           value={settings.image_analysis_max_size_mb ?? null}
           onChange={(e) => {
             const value = e.target.value ? parseInt(e.target.value) : null;
@@ -399,7 +399,7 @@ export function SettingsForm() {
             }
           }}
           id="image-analysis-max-size"
-          placeholder="Введите максимальный размер в МБ"
+          placeholder={i18n.t(k.MAX_IMAGE_SIZE_PLACEHOLDER)}
         />
 
         {/* Default Vision LLM Section */}
@@ -442,8 +442,10 @@ export function SettingsForm() {
           </div>
         </div>
 
-        <Title className="mb-4 mt-6">Интеграция Telegram</Title>
-        <div className="block font-medium text-base">Токен Telegram-бота:</div>
+        <Title className="mb-4 mt-6">{i18n.t(k.TELEGRAM_INTEGRATION)}</Title>
+        <div className="block font-medium text-base">
+          {i18n.t(k.TELEGRAM_BOT_TOKEN)}
+        </div>
         <div className="w-fit">
           <EditableValue
             initialValue={error ? error.detail : data?.token}

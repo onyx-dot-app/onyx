@@ -16,7 +16,7 @@ export const InstantSwitchConfirmModal = ({
     <Modal
       onOutsideClick={onClose}
       width="max-w-3xl"
-      title="Вы уверены, что хотите выполнить мгновенное переключение?"
+      title={i18n.t(k.INSTANT_SWITCH_CONFIRM_TITLE)}
     >
       <>
         <div>

@@ -284,7 +284,9 @@ const FilePickerFolderItem: React.FC<{
 
           <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
             {folder.files.length}{" "}
-            {folder.files.length === 1 ? "файл" : "файлов"}
+            {folder.files.length === 1
+              ? i18n.t(k.FILE_SINGULAR)
+              : i18n.t(k.FILES_PLURAL)}
           </div>
         </div>
       </div>
@@ -969,21 +971,25 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     isFolder: boolean
   ) => {
     const newName = prompt(
-      `Введите новое имя для ${isFolder ? "folder" : "file"}:`,
+      `${i18n.t(k.ENTER_NEW_NAME_FOR)} ${isFolder ? "folder" : "file"}:`,
       currentName
     );
     if (newName && newName !== currentName) {
       try {
         await renameItem(itemId, newName, isFolder);
         setPopup({
-          message: `${isFolder ? "Folder" : "File"} переименован успешно`,
+          message: `${isFolder ? "Folder" : "File"} ${i18n.t(
+            k.RENAMED_SUCCESSFULLY
+          )}`,
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Ошибка переименования элемента:", error);
+        console.error(i18n.t(k.RENAME_ERROR), error);
         setPopup({
-          message: `Не удалось переименовать ${isFolder ? "folder" : "file"}`,
+          message: `${i18n.t(k.FAILED_TO_RENAME_ITEM)} ${
+            isFolder ? i18n.t(k.FOLDER_LOWERCASE) : i18n.t(k.FILE_LOWERCASE)
+          }`,
           type: "error",
         });
       }
@@ -991,23 +997,25 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const handleDeleteItem = async (itemId: number, isFolder: boolean) => {
-    const itemType = isFolder ? "папка" : "файл";
+    const itemType = isFolder
+      ? i18n.t(k.FOLDER_LOWERCASE)
+      : i18n.t(k.FILE_LOWERCASE);
     const confirmDelete = window.confirm(
-      `Вы уверены, что хотите удалить этот ${itemType}?`
+      `${i18n.t(k.CONFIRM_DELETE_ITEM_MSG)} ${itemType}?`
     );
 
     if (confirmDelete) {
       try {
         await deleteItem(itemId, isFolder);
         setPopup({
-          message: `${itemType} успешно удален`,
+          message: `${itemType} ${i18n.t(k.ITEM_DELETED_SUCCESS_MSG)}`,
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Ошибка удаления элемента:", error);
+        console.error(i18n.t(k.DELETE_ERROR_MSG), error);
         setPopup({
-          message: `Не удалось удалить ${itemType}`,
+          message: `${i18n.t(k.FAILED_TO_DELETE_ITEM)} ${itemType}`,
           type: "error",
         });
       }
@@ -1112,7 +1120,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               <div className="w-full relative">
                 <input
                   type="text"
-                  placeholder="Поиск документов..."
+                  placeholder={i18n.t(k.SEARCH_DOCUMENTS_PLACEHOLDER)}
                   className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1404,7 +1412,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                         uploadingFiles.length > 0
                       }
                     >
-                      {buttonContent || "Установить контекст"}
+                      {buttonContent || i18n.t(k.SET_CONTEXT_BUTTON)}
                     </Button>
                   </div>
                 </TooltipTrigger>

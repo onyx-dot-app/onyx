@@ -185,14 +185,16 @@ export function PersonaMessagesChart({
             }}
           >
             <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Выберите помощника для отображения" />
+              <SelectValue
+                placeholder={i18n.t(k.SELECT_ASSISTANT_PLACEHOLDER)}
+              />
             </SelectTrigger>
             <SelectContent>
               <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
                 <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
                 <input
                   className="flex h-8 w-full rounded-sm bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Поиск ассистентов..."
+                  placeholder={i18n.t(k.SEARCH_ASSISTANTS_PLACEHOLDER)}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onClick={(e) => e.stopPropagation()}

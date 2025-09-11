@@ -148,7 +148,7 @@ export const TokenRateLimitTable = ({
                     (tokenRateLimit.period_hours > 1 ? i18n.t(k.S) : "")}
                 </TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " тысяч токенов"}
+                  {tokenRateLimit.token_budget + i18n.t(k.THOUSAND_TOKENS)}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>

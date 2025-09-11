@@ -937,7 +937,7 @@ export function AssistantEditor({
                         <div>
                           <div className="flex items-start gap-x-2">
                             <p className="block font-medium text-sm">
-                              База знаний
+                              {i18n.t(k.KNOWLEDGE_BASE_LABEL)}
                             </p>
                             <div className="flex items-center">
                               <TooltipProvider delayDuration={0}>
@@ -965,9 +965,7 @@ export function AssistantEditor({
                                   {ccPairs.length === 0 && (
                                     <TooltipContent side="top" align="center">
                                       <p className="bg-background-900 max-w-[200px] text-sm rounded-lg p-1.5 text-white">
-                                        Чтобы использовать действие «Знание»,
-                                        вам необходимо настроить хотя бы один
-                                        соединитель.
+                                        {i18n.t(k.KNOWLEDGE_ACTION_REQUIREMENT)}
                                       </p>
                                     </TooltipContent>
                                   )}
@@ -1003,7 +1001,7 @@ export function AssistantEditor({
                                   <BookIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  База знаний группы
+                                  {i18n.t(k.GROUP_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
 
@@ -1024,7 +1022,7 @@ export function AssistantEditor({
                                   <FileIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  База знаний пользователя
+                                  {i18n.t(k.USER_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
                             </div>
@@ -1037,8 +1035,7 @@ export function AssistantEditor({
                         !admin && (
                           <div className="text-sm flex flex-col items-start">
                             <SubLabel>
-                              Нажмите ниже, чтобы добавить документы или папки
-                              из функции «Мой документ»
+                              {i18n.t(k.ADD_DOCUMENTS_INSTRUCTION)}
                             </SubLabel>
                             {(selectedFiles.length > 0 ||
                               selectedFolders.length > 0) && (
@@ -1069,7 +1066,7 @@ export function AssistantEditor({
                               }}
                               className="text-primary hover:underline"
                             >
-                              + Добавить файлы пользователя
+                              {i18n.t(k.ADD_USER_FILES_BUTTON)}
                             </button>
                           </div>
                         )}
@@ -1080,22 +1077,19 @@ export function AssistantEditor({
                             <div>
                               <SubLabel>
                                 <>
-                                  Выберите, какие{" "}
+                                  {i18n.t(k.SELECT_DOCUMENT_SETS_TEXT)}{" "}
                                   {!user || user.role === "admin" ? (
                                     <Link
                                       href="/admin/documents/sets"
                                       className="font-semibold underline hover:underline text-text"
                                       target="_blank"
                                     >
-                                      наборы документов
+                                      {i18n.t(k.DOCUMENT_SETS_LABEL)}
                                     </Link>
                                   ) : (
-                                    "наборы документов"
+                                    i18n.t(k.DOCUMENT_SETS_TEXT)
                                   )}{" "}
-                                  должен использовать этот ассистент для
-                                  формирования своих ответов. Если ни один из
-                                  них не указан, ассистент будет ссылаться на
-                                  все доступные документы.
+                                  {i18n.t(k.DOCUMENT_SETS_DESCRIPTION)}
                                 </>
                               </SubLabel>
                             </div>
@@ -1136,7 +1130,7 @@ export function AssistantEditor({
                                   href="/admin/documents/sets/new"
                                   className="text-primary hover:underline"
                                 >
-                                  + Создать набор документов
+                                  {i18n.t(k.CREATE_DOCUMENT_SET_BUTTON)}
                                 </Link>
                               </p>
                             )}
@@ -1148,7 +1142,7 @@ export function AssistantEditor({
                   <Separator />
                   <div className="py-2">
                     <p className="block font-medium text-sm mb-2">
-                      Инструменты
+                      {i18n.t(k.TOOLS_LABEL)}
                     </p>
 
                     {imageGenerationTool && (
@@ -1157,15 +1151,15 @@ export function AssistantEditor({
                           <BooleanFormField
                             name={`enabled_tools_map.${imageGenerationTool.id}`}
                             label={imageGenerationTool.display_name}
-                            subtext="Создавайте и обрабатывайте изображения с помощью инструментов на базе ИИ"
+                            subtext={i18n.t(k.IMAGE_GENERATION_SUBTEXT)}
                             disabled={
                               !currentLLMSupportsImageOutput ||
                               !isImageGenerationAvailable
                             }
                             disabledTooltip={
                               !currentLLMSupportsImageOutput
-                                ? "Чтобы использовать генерацию изображений, выберите GPT-4 или другую совместимую с изображениями модель в качестве модели по умолчанию для этого помощника."
-                                : "Для генерации изображений требуется конфигурация OpenAI или Azure Dall-E."
+                                ? i18n.t(k.IMAGE_GENERATION_REQUIREMENT)
+                                : i18n.t(k.IMAGE_GENERATION_CONFIG_REQUIREMENT)
                             }
                           />
                         </div>
@@ -1176,8 +1170,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${langflowTool.id}`}
-                          label="Инструмент Langflow"
-                          subtext="Инструмент интеграции с визуальным нодовым редаактором."
+                          label={i18n.t(k.LANGFLOW_TOOL_LABEL)}
+                          subtext={i18n.t(k.LANGFLOW_TOOL_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(langflowTool.id);
                           }}
@@ -1188,15 +1182,15 @@ export function AssistantEditor({
                             <>
                               <TextFormField
                                 name="pipeline_id"
-                                label="Id пайплайна"
-                                placeholder="Введите идентификатор пайплайна"
-                                subtext="Идентификатор пайплайна Langflow"
+                                label={i18n.t(k.PIPELINE_ID_LABEL)}
+                                placeholder={i18n.t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={i18n.t(k.PIPELINE_ID_SUBTEXT)}
                               />
 
                               <BooleanFormField
                                 name="use_default"
-                                label="Использовать инструмент для всех запросов"
-                                subtext="Если включено, все запросы после ввода будут отправляться в инструмент без предварительной проверки необходимости его использования"
+                                label={i18n.t(k.USE_DEFAULT_LABEL)}
+                                subtext={i18n.t(k.USE_DEFAULT_SUBTEXT)}
                               />
                             </>
                           </div>
@@ -1208,8 +1202,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${docFormatterTool.id}`}
-                          label="Doc Formatter"
-                          subtext="Инструмент резюме"
+                          label={i18n.t(k.DOC_FORMATTER_LABEL)}
+                          subtext={i18n.t(k.DOC_FORMATTER_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(docFormatterTool.id);
                           }}
@@ -1220,9 +1214,9 @@ export function AssistantEditor({
                             <>
                               <TextFormField
                                 name="pipeline_id"
-                                label="Id пайплайна"
-                                placeholder="Введите идентификатор пайплайна"
-                                subtext="Идентификатор пайплайна Langflow"
+                                label={i18n.t(k.PIPELINE_ID_LABEL)}
+                                placeholder={i18n.t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={i18n.t(k.PIPELINE_ID_SUBTEXT)}
                               />
 
                               <Button
@@ -1245,7 +1239,7 @@ export function AssistantEditor({
                                 }}
                               >
                                 <CameraIcon size={14} />
-                                Загрузить файл шаблона
+                                {i18n.t(k.UPLOAD_TEMPLATE_FILE)}
                               </Button>
                               {values.template_file && (
                                 <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
@@ -1263,7 +1257,7 @@ export function AssistantEditor({
                         <BooleanFormField
                           name={`enabled_tools_map.${internetSearchTool.id}`}
                           label={internetSearchTool.display_name}
-                          subtext="Получайте доступ к информации в режиме реального времени и ищите в Интернете актуальные результаты"
+                          subtext={i18n.t(k.INTERNET_SEARCH_SUBTEXT)}
                         />
                       </>
                     )}
@@ -1272,8 +1266,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${knowledgeMapTool.id}`}
-                          label="KnowledgeMapTool"
-                          subtext="Инструмент для поиска информации в карте знаний по запросу пользователя."
+                          label={i18n.t(k.KNOWLEDGE_MAP_TOOL_LABEL)}
+                          subtext={i18n.t(k.KNOWLEDGE_MAP_TOOL_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(knowledgeMapTool?.id);
                           }}
@@ -1283,13 +1277,11 @@ export function AssistantEditor({
                           <div className="pl-4 border-l-2 ml-4 border-border">
                             {ccPairs.length > 0 && (
                               <>
-                                <Label>Карты знаний</Label>
+                                <Label>{i18n.t(k.KNOWLEDGE_MAPS_LABEL)}</Label>
 
                                 <div>
                                   <SubLabel>
-                                    Выберите Карты знаний, в которых цифровой
-                                    помощник должен искать ответ. Должна быть
-                                    выбрана хотя бы одна Карта знаний.
+                                    {i18n.t(k.KNOWLEDGE_MAPS_SELECTION_TEXT)}
                                   </SubLabel>
                                 </div>
                                 {knowledgeMaps.length > 0 ? (
@@ -1373,12 +1365,9 @@ export function AssistantEditor({
                                   />
                                 ) : (
                                   <i className="text-sm">
-                                    Нет доступных карт знаний
+                                    {i18n.t(k.NO_KNOWLEDGE_MAPS_AVAILABLE)}
                                     {user?.role !== "admin" && (
-                                      <>
-                                        Если эта функция будет вам полезна,
-                                        обратитесь за помощью к администраторам.
-                                      </>
+                                      <>{i18n.t(k.CONTACT_ADMIN_FOR_FEATURE)}</>
                                     )}
                                   </i>
                                 )}
@@ -1406,7 +1395,7 @@ export function AssistantEditor({
               <div className="-mt-2">
                 <div className="flex gap-x-2 mb-2 items-center">
                   <div className="block font-medium text-sm">
-                    Модель по умолчанию
+                    {i18n.t(k.DEFAULT_MODEL_LABEL)}
                   </div>
                 </div>
                 <LLMSelector
@@ -1458,20 +1447,19 @@ export function AssistantEditor({
                           }
                         }}
                         name="is_default_persona"
-                        label="Избранный помощник"
-                        subtext="Если установлено, этот помощник будет закреплен для всех новых пользователей и появится в списке избранных в проводнике помощника. Это также сделает помощника общедоступным."
+                        label={i18n.t(k.FAVORITE_ASSISTANT_LABEL)}
+                        subtext={i18n.t(k.FAVORITE_ASSISTANT_SUBTEXT)}
                       />
                     )}
 
                     <Separator />
 
                     <div className="flex gap-x-2 items-center ">
-                      <div className="block font-medium text-sm">Доступ</div>
+                      <div className="block font-medium text-sm">
+                        {i18n.t(k.ACCESS_LABEL)}
+                      </div>
                     </div>
-                    <SubLabel>
-                      Управление теми, кто может получить доступ и использовать
-                      этого помощника
-                    </SubLabel>
+                    <SubLabel>{i18n.t(k.ACCESS_MANAGEMENT_TEXT)}</SubLabel>
 
                     <div className="min-h-[100px]">
                       <div className="flex items-center mb-2">
@@ -1507,15 +1495,13 @@ export function AssistantEditor({
                             </TooltipTrigger>
                             {values.is_default_persona && (
                               <TooltipContent side="top" align="center">
-                                Персона по умолчанию должна быть общедоступной.
-                                Установите &quot;Персона по умолчанию&quot; на
-                                false, чтобы изменить видимость.
+                                {i18n.t(k.DEFAULT_PERSONA_MUST_BE_PUBLIC)}
                               </TooltipContent>
                             )}
                           </Tooltip>
                         </TooltipProvider>
                         <span className="text-sm ml-2">
-                          Организация Публичная
+                          {i18n.t(k.ORGANIZATION_PUBLIC)}
                         </span>
                       </div>
 
@@ -1523,26 +1509,23 @@ export function AssistantEditor({
                         <div className="flex items-center text-warning mt-2">
                           <InfoIcon size={16} className="mr-2" />
                           <span className="text-sm">
-                            Персона по умолчанию должна быть общедоступной.
-                            Видимость автоматически установлена ​​на организацию
-                            Публичная.
+                            {i18n.t(k.DEFAULT_PERSONA_VISIBILITY_WARNING)}
                           </span>
                         </div>
                       )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
-                          Этот помощник будет доступен всем в вашей организации
+                          {i18n.t(k.ASSISTANT_AVAILABLE_TO_ALL)}
                         </p>
                       ) : (
                         <>
                           <p className="text-sm text-text-dark mb-2">
-                            Этот помощник будет доступен только определенным
-                            пользователям и группам
+                            {i18n.t(k.ASSISTANT_AVAILABLE_TO_SPECIFIC)}
                           </p>
                           <div className="mt-2">
                             <Label className="mb-2" small>
-                              Поделиться с пользователями и группами
+                              {i18n.t(k.SHARE_WITH_USERS_AND_GROUPS)}
                             </Label>
 
                             <SearchMultiSelectDropdown
@@ -1643,16 +1626,11 @@ export function AssistantEditor({
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
-                        [Необязательно] Начальные сообщения
+                        {i18n.t(k.STARTER_MESSAGES_LABEL)}
                       </div>
                     </div>
 
-                    <SubLabel>
-                      Примеры сообщений, которые помогают пользователям понять,
-                      что может делать этот помощник и как эффективно с ним
-                      взаимодействовать. Новые поля ввода будут появляться
-                      автоматически по мере ввода текста.
-                    </SubLabel>
+                    <SubLabel>{i18n.t(k.STARTER_MESSAGES_SUBTEXT)}</SubLabel>
 
                     <div className="w-full">
                       <FieldArray
@@ -1678,13 +1656,15 @@ export function AssistantEditor({
                   <div className=" w-full max-w-4xl">
                     <Separator />
                     <div className="flex gap-x-2 items-center mt-4 ">
-                      <div className="block font-medium text-sm">Метки</div>
+                      <div className="block font-medium text-sm">
+                        {i18n.t(k.LABELS_LABEL)}
+                      </div>
                     </div>
                     <p
                       className="text-sm text-subtle"
                       style={{ color: "rgb(113, 114, 121)" }}
                     >
-                      Выберите метки, чтобы классифицировать этого помощника
+                      {i18n.t(k.SELECT_LABELS_TO_CLASSIFY)}
                     </p>
                     <div className="mt-3">
                       <SearchMultiSelectDropdown
@@ -1788,13 +1768,15 @@ export function AssistantEditor({
 
                   <div className="flex flex-col gap-y-4">
                     <div className="flex flex-col gap-y-4">
-                      <h3 className="font-medium text-sm">Знания Варианты</h3>
+                      <h3 className="font-medium text-sm">
+                        {i18n.t(k.KNOWLEDGE_OPTIONS_LABEL)}
+                      </h3>
                       <div className="flex flex-col gap-y-4 ml-4">
                         <TextFormField
                           small={true}
                           name="num_chunks"
-                          label="[Необязательно] Количество контекстных документов"
-                          placeholder="По умолчанию 10"
+                          label={i18n.t(k.OPTIONAL_CONTEXT_DOCUMENTS)}
+                          placeholder={i18n.t(k.DEFAULT_10)}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "" || /^[0-9]+$/.test(value)) {
@@ -1807,8 +1789,8 @@ export function AssistantEditor({
                           width="max-w-xl"
                           type="date"
                           small
-                          subtext="Документы до этой даты будут игнорироваться."
-                          label="[Необязательно] Дата окончания знаний"
+                          subtext={i18n.t(k.DOCUMENTS_BEFORE_DATE_IGNORED)}
+                          label={i18n.t(k.OPTIONAL_KNOWLEDGE_END_DATE)}
                           name="search_start_date"
                         />
 
@@ -1816,16 +1798,16 @@ export function AssistantEditor({
                           small
                           removeIndent
                           name="llm_relevance_filter"
-                          label="Фильтр релевантности ИИ"
-                          subtext="Если включено, LLM будет отфильтровывать документы, которые не являются полезными для ответа на запрос пользователя, перед созданием ответа. Обычно это улучшает качество ответа, но влечет за собой немного более высокую стоимость."
+                          label={i18n.t(k.AI_RELEVANCE_FILTER_LABEL)}
+                          subtext={i18n.t(k.AI_RELEVANCE_FILTER_SUBTEXT)}
                         />
 
                         <BooleanFormField
                           small
                           removeIndent
                           name="include_citations"
-                          label="Цитаты"
-                          subtext="Ответ будет включать цитаты ([1], [2] и т. д.) для документов, на которые ссылается LLM. В целом мы рекомендуем оставить этот параметр включенным, чтобы повысить доверие к ответу LLM."
+                          label={i18n.t(k.CITATIONS_LABEL)}
+                          subtext={i18n.t(k.CITATIONS_SUBTEXT)}
                         />
                       </div>
                     </div>
@@ -1836,8 +1818,8 @@ export function AssistantEditor({
                     small
                     removeIndent
                     name="datetime_aware"
-                    label="С учетом даты и времени"
-                    subtext='Включите эту опцию, чтобы сообщить помощнику текущую дату и время (в формате: "Четверг, 1 января 1970 г., 00:01"). Чтобы вставить ее в определенное место в подсказке, используйте шаблон [[CURRENT_DATETIME]]'
+                    label={i18n.t(k.DATETIME_AWARE_LABEL)}
+                    subtext={i18n.t(k.DATETIME_AWARE_SUBTEXT)}
                   />
 
                   <Separator />
@@ -1845,13 +1827,13 @@ export function AssistantEditor({
                   <TextFormField
                     maxWidth="max-w-4xl"
                     name="task_prompt"
-                    label="[Необязательно] Напоминания"
+                    label={i18n.t(k.OPTIONAL_REMINDERS_LABEL)}
                     isTextArea={true}
-                    placeholder="Не забудьте сослаться на все пункты, упомянутые в моем сообщении вам, и сосредоточьтесь на определении элементов действий, которые могут продвинуть дело вперед"
+                    placeholder={i18n.t(k.REMINDERS_PLACEHOLDER)}
                     onChange={(e) => {
                       setFieldValue("task_prompt", e.target.value);
                     }}
-                    explanationText="Узнайте о подсказках в наших документах!"
+                    explanationText={i18n.t(k.LEARN_ABOUT_PROMPTS)}
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
@@ -1863,14 +1845,14 @@ export function AssistantEditor({
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
                 >
-                  {isUpdate ? "Обновить" : "Создать"}
+                  {isUpdate ? i18n.t(k.UPDATE_BUTTON) : i18n.t(k.CREATE_BUTTON)}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.back()}
                 >
-                  Отмена
+                  {i18n.t(k.CANCEL_BUTTON)}
                 </Button>
               </div>
 
@@ -1881,7 +1863,7 @@ export function AssistantEditor({
                     onClick={openDeleteModal}
                     type="button"
                   >
-                    Удалить
+                    {i18n.t(k.DELETE_BUTTON)}
                   </Button>
                 )}
               </div>

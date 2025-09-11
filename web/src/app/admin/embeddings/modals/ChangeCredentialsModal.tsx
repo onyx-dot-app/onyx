@@ -65,15 +65,13 @@ export function ChangeCredentialsModal({
           jsonContent = JSON.parse(fileContent);
           setApiKey(JSON.stringify(jsonContent));
         } catch (parseError) {
-          throw new Error(
-            "Не удалось проанализировать файл JSON. Убедитесь, что это допустимый JSON."
-          );
+          throw new Error(i18n.t(k.FAILED_TO_PARSE_JSON_FILE));
         }
       } catch (error) {
         setTestError(
           error instanceof Error
             ? error.message
-            : "Произошла неизвестная ошибка при обработке файла."
+            : i18n.t(k.UNKNOWN_ERROR_PROCESSING_FILE)
         );
         setApiKey("");
         clearFileInput();
@@ -103,7 +101,9 @@ export function ChangeCredentialsModal({
       onDeleted();
     } catch (error) {
       setDeletionError(
-        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
+        error instanceof Error
+          ? error.message
+          : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
       );
     } finally {
       setIsProcessing(false);
@@ -147,7 +147,7 @@ export function ChangeCredentialsModal({
         const errorData = await updateResponse.json();
         throw new Error(
           errorData.detail ||
-            `Не удалось обновить провайдера — проверьте ${
+            `${i18n.t(k.FAILED_TO_UPDATE_PROVIDER_CHECK_API)} ${
               isProxy ? "API URL" : "API key"
             }`
         );
@@ -156,7 +156,9 @@ export function ChangeCredentialsModal({
       onConfirm();
     } catch (error) {
       setTestError(
-        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
+        error instanceof Error
+          ? error.message
+          : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
       );
     }
   };
@@ -210,7 +212,7 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiKey}
                     onChange={(e: any) => setApiKey(e.target.value)}
-                    placeholder="Вставьте свой ключ API здесь"
+                    placeholder={i18n.t(k.PASTE_YOUR_API_KEY_HERE)}
                   />
                 </>
               )}
@@ -231,11 +233,15 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiUrl}
                     onChange={(e: any) => setApiUrl(e.target.value)}
-                    placeholder="Вставьте URL вашего API сюда"
+                    placeholder={i18n.t(k.PASTE_YOUR_API_URL_HERE)}
                   />
 
                   {deletionError && (
-                    <Callout type="danger" title="Ошибка" className="mt-4">
+                    <Callout
+                      type="danger"
+                      title={i18n.t(k.ERROR_TITLE)}
+                      className="mt-4"
+                    >
                       {deletionError}
                     </Callout>
                   )}
@@ -256,13 +262,17 @@ export function ChangeCredentialsModal({
                  `}
                     value={modelName}
                     onChange={(e: any) => setModelName(e.target.value)}
-                    placeholder="Вставьте сюда название вашей модели"
+                    placeholder={i18n.t(k.PASTE_YOUR_MODEL_NAME_HERE)}
                   />
                 </>
               )}
 
               {testError && (
-                <Callout type="danger" title="Ошибка" className="my-4">
+                <Callout
+                  type="danger"
+                  title={i18n.t(k.ERROR_TITLE)}
+                  className="my-4"
+                >
                   {testError}
                 </Callout>
               )}
@@ -294,7 +304,7 @@ export function ChangeCredentialsModal({
           {i18n.t(k.DELETE_CONFIGURATION)}
         </Button>
         {deletionError && (
-          <Callout type="danger" title="Ошибка" className="mt-4">
+          <Callout type="danger" title={i18n.t(k.ERROR_TITLE)} className="mt-4">
             {deletionError}
           </Callout>
         )}

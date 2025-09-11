@@ -1,4 +1,5 @@
-"use client";
+import i18n from "@/i18n/init";
+import k from "./../../../../../i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { QueryHistoryTable } from "./QueryHistoryTable";
@@ -8,7 +9,7 @@ export default function QueryHistoryPage() {
   return (
     <main className="pt-4 mx-auto container">
       <AdminPageTitle
-        title="История запросов"
+        title={i18n.t(k.QUERY_HISTORY_TITLE)}
         icon={<DatabaseIcon size={32} />}
       />
 

@@ -20,7 +20,7 @@ export function ModelSelectionConfirmationModal({
   return (
     <Modal
       width="max-w-3xl"
-      title="Обновление модели внедрения"
+      title={i18n.t(k.EMBEDDING_MODEL_UPDATE_TITLE)}
       onOutsideClick={onCancel}
     >
       <div>
@@ -37,7 +37,11 @@ export function ModelSelectionConfirmationModal({
           </Text>
 
           {isCustom && (
-            <Callout type="warning" title="ВАЖНО" className="mt-4">
+            <Callout
+              type="warning"
+              title={i18n.t(k.IMPORTANT_WARNING)}
+              className="mt-4"
+            >
               {i18n.t(k.WE_VE_DETECTED_THAT_THIS_IS_A)}
               <b>{i18n.t(k.AFTER)}</b> {i18n.t(k.WE_START_RE_INDE)}
             </Callout>

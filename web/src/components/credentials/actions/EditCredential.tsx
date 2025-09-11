@@ -65,7 +65,7 @@ const EditCredential = ({
               includeRevert
               name="name"
               placeholder={credential.name || ""}
-              label="Имя (необязательно):"
+              label={i18n.t(k.NAME_OPTIONAL)}
             />
 
             {Object.entries(credential.credential_json).map(([key, value]) => (

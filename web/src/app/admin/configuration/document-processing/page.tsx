@@ -46,7 +46,7 @@ function Main() {
       });
       setApiKey("");
     } catch (error) {
-      console.error("Не удалось удалить ключ API:", error);
+      console.error(i18n.t(k.FAILED_TO_DELETE_API_KEY), error);
     }
     mutate();
   };
@@ -89,7 +89,7 @@ function Main() {
             ) : (
               <input
                 type="text"
-                placeholder="Введите API Key"
+                placeholder={i18n.t(k.ENTER_API_KEY_PLACEHOLDER)}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="w-full p-3 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
@@ -125,7 +125,7 @@ export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Обработка документов"
+        title={i18n.t(k.DOCUMENT_PROCESSING_TITLE)}
         icon={<DocumentIcon2 size={32} className="my-auto" />}
       />
 

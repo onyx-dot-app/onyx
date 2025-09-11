@@ -19,7 +19,7 @@ export default async function Page() {
   if (!toolResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(
           k.FAILED_TO_FETCH_TOOLS
         )} ${await toolResponse.text()}`}
@@ -33,7 +33,7 @@ export default async function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ToolIcon size={32} className="my-auto" />}
-        title="Инструменты"
+        title={i18n.t(k.TOOLS)}
       />
 
       <Text className="mb-2">{i18n.t(k.ACTIONS_ALLOW_ASSISTANTS_TO_RE)}</Text>
@@ -42,7 +42,7 @@ export default async function Page() {
         <Separator />
 
         <Title>{i18n.t(k.CREATE_AN_ACTION)}</Title>
-        <CreateButton href="/admin/actions/new" text="Новый инструмент" />
+        <CreateButton href="/admin/actions/new" text={i18n.t(k.NEW_TOOL)} />
 
         <Separator />
 

@@ -59,7 +59,7 @@ const Main = () => {
       {isAdmin && (
         <CreateButton
           onClick={() => setShowForm(true)}
-          text="Создать новую группу"
+          text={i18n.t(k.CREATE_NEW_GROUP)}
         />
       )}
       {data.length > 0 && (
@@ -90,7 +90,7 @@ const Page = () => {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Управление группами пользователей"
+        title={i18n.t(k.USER_GROUP_MANAGEMENT)}
         icon={<GroupsIcon size={32} />}
       />
 

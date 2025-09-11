@@ -178,7 +178,7 @@ export function Explorer({
             className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
             role="textarea"
             aria-multiline
-            placeholder="Найти документы по названию/содержанию..."
+            placeholder={i18n.t(k.FIND_DOCUMENTS_PLACEHOLDER)}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

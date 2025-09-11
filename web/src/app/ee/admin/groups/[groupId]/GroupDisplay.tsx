@@ -100,7 +100,7 @@ const UserRoleDropdown = ({
         } else {
           const errorData = await response.json();
           throw new Error(
-            errorData.detail || "Не удалось обновить роль пользователя."
+            errorData.detail || i18n.t(k.FAILED_TO_UPDATE_USER_ROLE)
           );
         }
       } catch (error: any) {
@@ -129,16 +129,16 @@ const UserRoleDropdown = ({
       {/* Confirmation modal - only shown when users try to demote themselves */}
       {showDemoteConfirm && pendingRoleChange && (
         <GenericConfirmModal
-          title="Удалить себя как куратора этой группы?"
-          message="Вы уверены, что хотите изменить свою роль на базовую? Это лишит вас возможности курировать эту группу."
-          confirmText="Да, установить для меня базовую"
+          title={i18n.t(k.REMOVE_SELF_AS_CURATOR_TITLE)}
+          message={i18n.t(k.REMOVE_SELF_AS_CURATOR_MESSAGE)}
+          confirmText={i18n.t(k.CONFIRM_SET_BASIC_ROLE)}
           onClose={() => {
-            // Отменить изменение роли, если пользователь закроет модальное окно
+            // {i18n.t(k.CANCEL_ROLE_CHANGE)}
             setShowDemoteConfirm(false);
             setPendingRoleChange(null);
           }}
           onConfirm={() => {
-            // Применить изменение роли, если пользователь подтвердит
+            // {i18n.t(k.APPLY_ROLE_CHANGE)}
             setShowDemoteConfirm(false);
             applyRoleChange(pendingRoleChange);
             setPendingRoleChange(null);
@@ -154,7 +154,7 @@ const UserRoleDropdown = ({
             disabled={isSettingRole}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Выберите роль" />
+              <SelectValue placeholder={i18n.t(k.SELECT_ROLE_PLACEHOLDER)} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={UserRole.BASIC}>{i18n.t(k.BASIC1)}</SelectItem>
@@ -188,9 +188,12 @@ export const GroupDisplay = ({
     setPopup({ message, type });
   };
   const onRoleChangeSuccess = () =>
-    handlePopup("Роль пользователя успешно обновлена!", "success");
+    handlePopup(i18n.t(k.USER_ROLE_UPDATED_SUCCESS), "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
+    handlePopup(
+      `${i18n.t(k.FAILED_TO_UPDATE_USER_ROLE_ERROR)} ${errorMsg}`,
+      "error"
+    );
   return (
     <div>
       {popup}
@@ -201,7 +204,7 @@ export const GroupDisplay = ({
           <div className="text-success font-bold">{i18n.t(k.UP_TO_DATE2)}</div>
         ) : (
           <div className="text-accent font-bold">
-            <LoadingAnimation text="Синхронизация" />
+            <LoadingAnimation text={i18n.t(k.SYNCHRONIZATION)} />
           </div>
         )}
       </div>

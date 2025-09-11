@@ -323,9 +323,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     if (!fileUrl) return;
 
     if (!validateUrl(fileUrl)) {
-      setUrlError(
-        "Введите действительный URL-адрес (например, https://example.com)"
-      );
+      setUrlError(i18n.t(k.ENTER_VALID_URL));
       return;
     }
 
@@ -548,7 +546,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         <input
                           ref={urlInputRef}
                           type="text"
-                          placeholder="Введите URL..."
+                          placeholder={i18n.t(k.ENTER_URL_PLACEHOLDER)}
                           className={`w-full text-sm py-2 px-3 border rounded-md bg-transparent focus:outline-none focus:ring-1 
                             ${
                               urlError

@@ -189,7 +189,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
   const { popup: folderCreatedPopup } = usePopupFromQuery({
     "folder-created": {
-      message: `Папка успешно создана`,
+      message: i18n.t(k.FOLDER_SUCCESSFULLY_CREATED),
       type: "success",
     },
   });
@@ -278,14 +278,22 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       try {
         await renameItem(itemId, newItemName, isFolder);
         setPopup({
-          message: `${isFolder ? "Папка" : "Файл"} успешно переименован`,
+          message: i18n.t(k.ITEM_SUCCESSFULLY_RENAMED, {
+            itemType: isFolder
+              ? i18n.t(k.FOLDER_LOWERCASE)
+              : i18n.t(k.FILE_LOWERCASE),
+          }),
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
         console.error("Error renaming item:", error);
         setPopup({
-          message: `Не удалось переименовать ${isFolder ? "папку" : "файл"}`,
+          message: i18n.t(k.FAILED_TO_RENAME_ITEM, {
+            itemType: isFolder
+              ? i18n.t(k.FOLDER_LOWERCASE)
+              : i18n.t(k.FILE_LOWERCASE),
+          }),
           type: "error",
         });
       }
@@ -314,14 +322,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           newDescription
         );
         setPopup({
-          message: "Описание папки успешно обновлено",
+          message: i18n.t(k.FOLDER_DESCRIPTION_UPDATED_SUCCESS),
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
-        console.error("Ошибка обновления описания папки:", error);
+        console.error(i18n.t(k.FOLDER_DESCRIPTION_UPDATE_ERROR), error);
         setPopup({
-          message: "Не удалось обновить описание папки",
+          message: i18n.t(k.FAILED_TO_UPDATE_FOLDER_DESCRIPTION),
           type: "error",
         });
       }
@@ -350,14 +358,16 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       try {
         await deleteItem(deleteItemId, deleteItemType === "folder");
         setPopup({
-          message: `${deleteItemType} успешно удалено`,
+          message: i18n.t(k.ITEM_DELETED_SUCCESS, { itemType: deleteItemType }),
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
-        console.error("Ошибка удаления элемента:", error);
+        console.error(i18n.t(k.ITEM_DELETION_ERROR), error);
         setPopup({
-          message: `Не удалось удалить ${deleteItemType}`,
+          message: i18n.t(k.FAILED_TO_DELETE_ITEM, {
+            itemType: deleteItemType,
+          }),
           type: "error",
         });
       }
@@ -373,14 +383,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     try {
       await moveItem(folderId, targetFolderId, true);
       setPopup({
-        message: "Папка успешно перемещена",
+        message: i18n.t(k.FOLDER_MOVED_SUCCESS),
         type: "success",
       });
       router.push(`/chat/my-documents/${targetFolderId}`);
     } catch (error) {
-      console.error("Ошибка перемещения папки:", error);
+      console.error(i18n.t(k.FOLDER_MOVE_ERROR), error);
       setPopup({
-        message: "Не удалось переместить папку",
+        message: i18n.t(k.FAILED_TO_MOVE_FOLDER),
         type: "error",
       });
     }
@@ -391,14 +401,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     try {
       await moveItem(fileId, targetFolderId, false);
       setPopup({
-        message: "Файл успешно перемещен",
+        message: i18n.t(k.FILE_MOVED_SUCCESS),
         type: "success",
       });
       await refreshFolderDetails();
     } catch (error) {
-      console.error("Ошибка перемещения файла:", error);
+      console.error(i18n.t(k.FILE_MOVE_ERROR), error);
       setPopup({
-        message: "Не удалось переместить файл",
+        message: i18n.t(k.FAILED_TO_MOVE_FILE),
         type: "error",
       });
     }
@@ -524,9 +534,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         try {
           await handleUpload(allowed);
         } catch (error) {
-          console.error("Ошибка загрузки файлов:", error);
+          console.error(i18n.t(k.FILE_UPLOAD_ERROR), error);
           setPopup({
-            message: "Не удалось загрузить файлы",
+            message: i18n.t(k.FAILED_TO_UPLOAD_FILES),
             type: "error",
           });
         }
@@ -577,7 +587,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     } catch (error) {
       console.error("Error during cleanup:", error);
       setPopup({
-        message: "Не удалось очистить файлы",
+        message: i18n.t(k.FAILED_TO_CLEANUP_FILES),
         type: "error",
       });
       // Modal will remain open, user can try again or cancel
@@ -728,7 +738,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             </div>
             <input
               type="text"
-              placeholder="Поиск документов..."
+              placeholder={i18n.t(k.SEARCH_DOCUMENTS_PLACEHOLDER)}
               className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

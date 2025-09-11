@@ -66,7 +66,7 @@ export function AssistantSharingModal({
       setIsUpdating(false);
       if (error) {
         setPopup({
-          message: `Не удалось поделиться помощником - ${error}`,
+          message: i18n.t(k.FAILED_TO_SHARE_ASSISTANT, { error }),
           type: "error",
         });
       }

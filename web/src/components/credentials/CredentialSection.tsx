@@ -94,7 +94,7 @@ export default function CredentialSection({
       const errorData = await response.json();
       setPopup({
         message: `Issue swapping credential: ${
-          errorData.detail || errorData.message || "Неизвестная ошибка"
+          errorData.detail || errorData.message || i18n.t(k.UNKNOWN_ERROR)
         }`,
 
         type: "error",
@@ -182,7 +182,7 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeModifyCredential}
           className="max-w-3xl rounded-lg"
-          title="Обновить учетные данные"
+          title={i18n.t(k.UPDATE_CREDENTIALS_TITLE)}
         >
           <ModifyCredential
             close={closeModifyCredential}
@@ -205,7 +205,7 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeEditingCredential}
           className="max-w-3xl rounded-lg"
-          title="Изменить учетные данные"
+          title={i18n.t(k.CHANGE_CREDENTIALS_TITLE)}
         >
           <EditCredential
             onUpdate={onUpdateCredential}

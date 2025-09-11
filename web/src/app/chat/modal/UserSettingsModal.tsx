@@ -150,17 +150,17 @@ export function UserSettingsModal({
           setCurrentLlm(destructureValue(defaultModel));
         }
         setPopup({
-          message: "Модель по умолчанию успешно обновлена",
+          message: i18n.t(k.DEFAULT_MODEL_UPDATED_SUCCESS),
           type: "success",
         });
         refreshUser();
         router.refresh();
       } else {
-        throw new Error("Не удалось обновить модель по умолчанию");
+        throw new Error(i18n.t(k.FAILED_TO_UPDATE_DEFAULT_MODEL));
       }
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить модель по умолчанию",
+        message: i18n.t(k.FAILED_TO_UPDATE_DEFAULT_MODEL),
         type: "error",
       });
     }
@@ -172,7 +172,7 @@ export function UserSettingsModal({
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      setPopup({ message: "Новые пароли не совпадают", type: "error" });
+      setPopup({ message: i18n.t(k.PASSWORDS_DO_NOT_MATCH), type: "error" });
       return;
     }
 
@@ -191,20 +191,23 @@ export function UserSettingsModal({
       });
 
       if (response.ok) {
-        setPopup({ message: "Пароль успешно изменен", type: "success" });
+        setPopup({
+          message: i18n.t(k.PASSWORD_CHANGED_SUCCESS),
+          type: "success",
+        });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
         const errorData = await response.json();
         setPopup({
-          message: errorData.detail || "Не удалось сменить пароль",
+          message: errorData.detail || i18n.t(k.FAILED_TO_CHANGE_PASSWORD),
           type: "error",
         });
       }
     } catch (error) {
       setPopup({
-        message: "Произошла ошибка при смене пароля",
+        message: i18n.t(k.ERROR_CHANGING_PASSWORD),
         type: "error",
       });
     } finally {
@@ -219,17 +222,17 @@ export function UserSettingsModal({
       const response = await deleteAllChatSessions();
       if (response.ok) {
         setPopup({
-          message: "Все ваши сеансы чата были удалены.",
+          message: i18n.t(k.ALL_CHAT_SESSIONS_DELETED),
           type: "success",
         });
         refreshChatSessions();
         router.push("/chat");
       } else {
-        throw new Error("Не удалось удалить все сеансы чата");
+        throw new Error(i18n.t(k.FAILED_TO_DELETE_ALL_SESSIONS));
       }
     } catch (error) {
       setPopup({
-        message: "Не удалось удалить все сеансы чата",
+        message: i18n.t(k.FAILED_TO_DELETE_ALL_SESSIONS),
         type: "error",
       });
     } finally {
@@ -294,7 +297,9 @@ export function UserSettingsModal({
                     }}
                   >
                     <SelectTrigger className="w-full mt-2">
-                      <SelectValue placeholder="Выберите тему" />
+                      <SelectValue
+                        placeholder={i18n.t(k.SELECT_THEME_PLACEHOLDER)}
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem

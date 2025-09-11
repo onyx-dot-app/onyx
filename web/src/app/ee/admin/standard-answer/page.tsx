@@ -214,13 +214,13 @@ const StandardAnswersTable = ({
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
       setPopup({
-        message: `Стандартный ответ ${id} удален`,
+        message: `${i18n.t(k.STANDARD_ANSWER_DELETED)} ${id}`,
         type: "success",
       });
     } else {
       const errorMsg = await response.text();
       setPopup({
-        message: `Не удалось удалить стандартный ответ - ${errorMsg}`,
+        message: `${i18n.t(k.FAILED_TO_DELETE_STANDARD_ANSWER)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -246,7 +246,7 @@ const StandardAnswersTable = ({
           className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Найти стандартные ответы по ключевому слову/фразе..."
+          placeholder={i18n.t(k.SEARCH_STANDARD_ANSWERS_PLACEHOLDER)}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -281,7 +281,7 @@ const StandardAnswersTable = ({
               <FiTag size={16} />
             </div>
           }
-          defaultDisplay="Все категории"
+          defaultDisplay={i18n.t(k.ALL_CATEGORIES)}
         />
 
         <div className="flex flex-wrap pb-4 mt-3">
@@ -370,7 +370,7 @@ const Main = () => {
   if (standardAnswersError || !standardAnswers) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки стандартных ответов"
+        errorTitle={i18n.t(k.STANDARD_ANSWERS_LOADING_ERROR)}
         errorMsg={
           standardAnswersError.info?.message ||
           standardAnswersError.message.info?.detail
@@ -382,7 +382,7 @@ const Main = () => {
   if (standardAnswerCategoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки стандартных категорий ответов"
+        errorTitle={i18n.t(k.STANDARD_ANSWER_CATEGORIES_LOADING_ERROR)}
         errorMsg={
           standardAnswerCategoriesError.info?.message ||
           standardAnswerCategoriesError.message.info?.detail
@@ -407,7 +407,7 @@ const Main = () => {
 
       <CreateButton
         href="/admin/standard-answer/new"
-        text="Новый стандартный ответ"
+        text={i18n.t(k.NEW_STANDARD_ANSWER)}
       />
 
       <Separator />
@@ -429,7 +429,7 @@ const Page = () => {
     <div className="container mx-auto">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
-        title="Стандартные ответы"
+        title={i18n.t(k.STANDARD_ANSWERS_TITLE)}
       />
 
       <Main />

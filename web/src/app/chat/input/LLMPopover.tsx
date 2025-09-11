@@ -158,7 +158,7 @@ export default function LLMPopover({
                   defaultProvider?.default_model_name ||
                   i18n.t(k.CLAUDE_SONNET)
               )}
-              tooltipContent="Модели переключателей"
+              tooltipContent={i18n.t(k.TOGGLE_MODELS_TOOLTIP)}
             />
           </button>
         ),

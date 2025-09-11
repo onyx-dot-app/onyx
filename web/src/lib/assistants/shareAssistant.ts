@@ -1,4 +1,6 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 interface ShareAssistantRequest {
   userIds: string[];
@@ -22,7 +24,8 @@ async function updateAssistantSharedStatus(
     return null;
   }
 
-  const errorMessage = (await response.json()).detail || "Неизвестная ошибка";
+  const errorMessage =
+    (await response.json()).detail || i18n.t(k.UNKNOWN_ERROR);
   return errorMessage;
 }
 

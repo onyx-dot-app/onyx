@@ -38,29 +38,29 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
 
     setIsLoading(true);
     try {
-      // Значение всегда равно 1 для фиксированных параметров или 0 для "All"
+      // Value is always 1 for fixed parameters or 0 for "All"
       const value = selectedPeriod === CleanupPeriod.All ? 0 : 1;
       await onConfirm(selectedPeriod, value);
-      // Модальное окно будет закрыто родительским компонентом после onConfirm
+      // Modal will be closed by parent component after onConfirm
     } catch (error) {
-      console.error("Ошибка очистки:", error);
+      console.error("Cleanup error:", error);
       setIsLoading(false);
-      // Позвольте родительскому компоненту обработать ошибку, оставьте модальное окно открытым со сбросом состояния загрузки
+      // Let parent component handle error, keep modal open with loading state reset
     }
   };
 
   const getDeleteButtonText = () => {
-    if (!selectedPeriod) return "Сначала выберите параметр";
+    if (!selectedPeriod) return i18n.t(k.SELECT_OPTION_FIRST);
 
     switch (selectedPeriod) {
       case CleanupPeriod.Day:
-        return "Удалить файлы старше 1 дня";
+        return i18n.t(k.DELETE_FILES_OLDER_THAN_1_DAY);
       case CleanupPeriod.Week:
-        return "Удалить файлы старше 1 недели";
+        return i18n.t(k.DELETE_FILES_OLDER_THAN_1_WEEK);
       case CleanupPeriod.Month:
-        return "Удалить файлы старше 1 месяца";
+        return i18n.t(k.DELETE_FILES_OLDER_THAN_1_MONTH);
       case CleanupPeriod.All:
-        return "Удалить все файлы";
+        return i18n.t(k.DELETE_ALL_FILES);
     }
   };
 

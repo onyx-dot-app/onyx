@@ -226,7 +226,7 @@ export default function EmbeddingForm() {
       return true;
     } else {
       setPopup({
-        message: "Не удалось обновить настройки поиска",
+        message: i18n.t(k.FAILED_TO_UPDATE_SEARCH_SETTINGS),
         type: "error",
       });
       return false;
@@ -475,7 +475,7 @@ export default function EmbeddingForm() {
   }
   if (currentEmbeddingModelError || !currentEmbeddingModel) {
     return (
-      <ErrorCallout errorTitle="Не удалось получить статус модели внедрения" />
+      <ErrorCallout errorTitle={i18n.t(k.FAILED_TO_GET_EMBEDDING_STATUS)} />
     );
   }
 
@@ -535,12 +535,14 @@ export default function EmbeddingForm() {
       navigateToEmbeddingPage("embedding model");
     } else {
       setPopup({
-        message: "Не удалось обновить модель встраивания",
+        message: i18n.t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL),
         type: "error",
       });
 
       alert(
-        `Не удалось обновить модель встраивания - ${await response.text()}`
+        i18n.t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL_ALERT, {
+          response: await response.text(),
+        })
       );
     }
   };

@@ -52,28 +52,25 @@ export function AccessTypeForm({
 
   const options = [
     {
-      name: "Частный",
+      name: i18n.t(k.PRIVATE),
       value: "private",
-      description:
-        "Только пользователи, которым явно предоставлен доступ к этому коннектору (через страницу групп пользователей), могут получить доступ к документам, полученным этим коннектором",
+      description: i18n.t(k.PRIVATE_DESCRIPTION),
     },
   ];
 
   if (isAdmin) {
     options.push({
-      name: "Публичный",
+      name: i18n.t(k.PUBLIC),
       value: "public",
-      description:
-        "Все пользователи с учетной записью на SmartSearch могут получить доступ к документам, полученным этим коннектором",
+      description: i18n.t(k.PUBLIC_DESCRIPTION),
     });
   }
 
   if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
     options.push({
-      name: "Автоматическая синхронизация разрешений",
+      name: i18n.t(k.AUTO_SYNC_PERMISSIONS),
       value: "sync",
-      description:
-        "Мы автоматически синхронизируем разрешения из источника. Документ будет доступен для поиска в SmartSearch, если и только если пользователь, выполняющий поиск, имеет разрешение на доступ к документу в источнике.",
+      description: i18n.t(k.AUTO_SYNC_DESCRIPTION),
     });
   }
 

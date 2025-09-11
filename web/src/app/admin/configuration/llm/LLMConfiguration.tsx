@@ -162,10 +162,7 @@ export function LLMConfiguration() {
           />
         </>
       ) : (
-        <Callout
-          type="warning"
-          title="Пока не настроено ни одного поставщика LLM"
-        >
+        <Callout type="warning" title={i18n.t(k.NO_LLM_PROVIDERS_CONFIGURED)}>
           {i18n.t(k.PLEASE_SET_ONE_UP_BELOW_IN_ORD)}
         </Callout>
       )}

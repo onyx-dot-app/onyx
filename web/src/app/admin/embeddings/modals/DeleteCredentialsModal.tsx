@@ -29,7 +29,11 @@ export function DeleteCredentialsModal({
           {i18n.t(k.YOU_RE_ABOUT_TO_DELETE_YOUR)} {modelProvider.provider_type}{" "}
           {i18n.t(k.CREDENTIALS_ARE_YOU_SURE)}
         </Text>
-        <Callout type="danger" title="Точка невозврата" className="mt-4" />
+        <Callout
+          type="danger"
+          title={i18n.t(k.POINT_OF_NO_RETURN)}
+          className="mt-4"
+        />
         <div className="flex mt-8 justify-between">
           <Button variant="secondary" onClick={onCancel}>
             {i18n.t(k.KEEP_CREDENTIALS)}

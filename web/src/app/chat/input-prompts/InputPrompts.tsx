@@ -42,7 +42,7 @@ export default function InputPrompts() {
         const data = await response.json();
         setInputPrompts(data);
       } else {
-        throw new Error("Не удалось получить ярлыки подсказок");
+        throw new Error(i18n.t(k.FAILED_TO_FETCH_PROMPT_LABELS));
       }
     } catch (error) {
       setPopup({ message: "Failed to fetch prompt shortcuts", type: "error" });
@@ -78,7 +78,7 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось обновить приглашение");
+        throw new Error(i18n.t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       // Update local state with new values
@@ -91,9 +91,9 @@ export default function InputPrompts() {
       );
 
       setEditingPromptId(null);
-      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
+      setPopup({ message: i18n.t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
@@ -124,13 +124,13 @@ export default function InputPrompts() {
       );
       setPopup({
         message: isPromptPublic(promptToDelete)
-          ? "Подсказка успешно скрыта"
-          : "Подсказка успешно удалена",
+          ? i18n.t(k.PROMPT_SUCCESSFULLY_HIDDEN)
+          : i18n.t(k.PROMPT_SUCCESSFULLY_DELETED),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось удалить/скрыть подсказку",
+        message: i18n.t(k.FAILED_TO_DELETE_PROMPT),
         type: "error",
       });
     }
@@ -145,16 +145,16 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось создать приглашение");
+        throw new Error(i18n.t(k.FAILED_TO_CREATE_PROMPT));
       }
 
       const createdPrompt = await response.json();
       setInputPrompts((prevPrompts) => [...prevPrompts, createdPrompt]);
       setNewPrompt({});
       setIsCreatingNew(false);
-      setPopup({ message: "Запрос создан успешно", type: "success" });
+      setPopup({ message: i18n.t(k.PROMPT_CREATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось создать приглашение", type: "error" });
+      setPopup({ message: i18n.t(k.FAILED_TO_CREATE_PROMPT), type: "error" });
     }
   };
 
@@ -185,7 +185,7 @@ export default function InputPrompts() {
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
           <Textarea
-            placeholder="Ярлык подсказки (например, «Резюмировать»)"
+            placeholder={i18n.t(k.PROMPT_LABEL_PLACEHOLDER)}
             value={newPrompt.prompt || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -194,7 +194,7 @@ export default function InputPrompts() {
           />
 
           <Textarea
-            placeholder="Фактическая подсказка (например, кратко изложите загруженный документ и выделите ключевые моменты.)"
+            placeholder={i18n.t(k.PROMPT_CONTENT_PLACEHOLDER)}
             value={newPrompt.content || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, content: e.target.value })
@@ -282,14 +282,14 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 value={localPrompt}
                 onChange={(e) => handleLocalEdit("prompt", e.target.value)}
                 className="mb-2 resize-none"
-                placeholder="Промпт"
+                placeholder={i18n.t(k.PROMPT_PLACEHOLDER)}
               />
 
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
                 className="resize-vertical min-h-[100px]"
-                placeholder="Контент"
+                placeholder={i18n.t(k.CONTENT_PLACEHOLDER)}
               />
             </div>
             <div className="flex items-end">
@@ -306,7 +306,9 @@ const PromptCard: React.FC<PromptCardProps> = ({
               <TooltipTrigger asChild>
                 <div className="mb-2  flex gap-x-2 ">
                   <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Встроенный" />}
+                  {isPromptPublic(prompt) && (
+                    <SourceChip title={i18n.t(k.BUILT_IN)} />
+                  )}
                 </div>
               </TooltipTrigger>
               {isPromptPublic(prompt) && (

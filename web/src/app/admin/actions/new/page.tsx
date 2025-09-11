@@ -1,5 +1,7 @@
 "use client";
 
+import i18n from "@/i18n/init";
+import k from "../../../../i18n/keys";
 import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -12,7 +14,7 @@ export default function NewToolPage() {
       <BackButton />
 
       <AdminPageTitle
-        title="Создать инструмент"
+        title={i18n.t(k.CREATE_TOOL)}
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

@@ -59,15 +59,15 @@ export default function OAuthFinalizePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [statusMessage, setStatusMessage] = useState("Обработка...");
+  const [statusMessage, setStatusMessage] = useState(i18n.t(k.PROCESSING));
   const [statusDetails, setStatusDetails] = useState(
-    "Пожалуйста, подождите, пока мы завершим настройку."
+    i18n.t(k.PLEASE_WAIT_SETUP)
   );
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // New state
   const [pageTitle, setPageTitle] = useState(
-    "Завершите авторизацию с помощью стороннего сервиса"
+    i18n.t(k.FINALIZE_AUTH_THIRD_PARTY)
   );
 
   const [accessibleResources, setAccessibleResources] = useState<
@@ -87,12 +87,8 @@ export default function OAuthFinalizePage() {
       // sourceType (for looking up metadata) = "google_drive"
 
       if (isNaN(credential) || !connector) {
-        setStatusMessage(
-          "Неправильно сформированный запрос на завершение OAuth."
-        );
-        setStatusDetails(
-          "Недействительный или отсутствующий идентификатор учетных данных."
-        );
+        setStatusMessage(i18n.t(k.MALFORMED_OAUTH_FINALIZE_REQUEST));
+        setStatusDetails(i18n.t(k.INVALID_OR_MISSING_CREDENTIAL_ID));
         setIsError(true);
         return;
       }
@@ -100,10 +96,10 @@ export default function OAuthFinalizePage() {
       const sourceType = connector.replaceAll("-", "_");
       if (!isValidSource(sourceType)) {
         setStatusMessage(
-          `Указанный тип источника коннектора ${sourceType} не существует.`
+          i18n.t(k.CONNECTOR_SOURCE_TYPE_NOT_EXIST, { connector: sourceType })
         );
         setStatusDetails(
-          `${sourceType} не является допустимым типом источника.`
+          i18n.t(k.INVALID_SOURCE_TYPE, { connector: sourceType })
         );
         setIsError(true);
         return;
@@ -111,13 +107,13 @@ export default function OAuthFinalizePage() {
 
       const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
       setPageTitle(
-        `Завершить авторизацию с помощью ${sourceMetadata.displayName}`
+        i18n.t(k.FINALIZE_AUTH_WITH_SERVICE, {
+          service: sourceMetadata.displayName,
+        })
       );
 
-      setStatusMessage("Обработка...");
-      setStatusDetails(
-        "Пожалуйста, подождите, пока мы получим список доступных вам сайтов."
-      );
+      setStatusMessage(i18n.t(k.PROCESSING));
+      setStatusDetails(i18n.t(k.PLEASE_WAIT_GET_AVAILABLE_SITES));
       setIsError(false); // Ensure no error state during loading
 
       try {
@@ -127,21 +123,19 @@ export default function OAuthFinalizePage() {
         );
 
         if (!response) {
-          throw new Error("Пустой ответ от сервера OAuth.");
+          throw new Error(i18n.t(k.EMPTY_OAUTH_RESPONSE));
         }
 
         setAccessibleResources(response.accessible_resources);
 
-        setStatusMessage("Выберите сайт Confluence");
+        setStatusMessage(i18n.t(k.SELECT_CONFLUENCE_SITE));
         setStatusDetails("");
 
         setIsError(false);
       } catch (error) {
-        console.error("Ошибка завершения OAuth:", error);
-        setStatusMessage("Упс, что-то пошло не так!");
-        setStatusDetails(
-          "Во время процесса завершения OAuth произошла ошибка. Повторите попытку."
-        );
+        console.error("OAuth finalization error:", error);
+        setStatusMessage(i18n.t(k.OOPS_SOMETHING_WRONG));
+        setStatusDetails(i18n.t(k.OAUTH_FINALIZATION_ERROR_RETRY));
         setIsError(true);
       }
     };
@@ -169,16 +163,16 @@ export default function OAuthFinalizePage() {
             }}
             validationSchema={Yup.object().shape({
               credential_id: Yup.number().required(
-                "Требуется идентификатор учетных данных."
+                i18n.t(k.CREDENTIAL_ID_REQUIRED)
               ),
               cloud_id: Yup.string().required(
-                "Вы должны выбрать сайт Confluence (id не найден)."
+                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_ID)
               ),
               cloud_name: Yup.string().required(
-                "Вы должны выбрать сайт Confluence (имя не найдено)."
+                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_NAME)
               ),
               cloud_url: Yup.string().required(
-                "Вы должны выбрать сайт Confluence (url не найден)."
+                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_URL)
               ),
             })}
             validateOnMount
@@ -186,14 +180,14 @@ export default function OAuthFinalizePage() {
               formikHelpers.setSubmitting(true);
               try {
                 if (!values.cloud_id) {
-                  throw new Error("Требуется идентификатор облака.");
+                  throw new Error(i18n.t(k.CLOUD_ID_REQUIRED));
                 }
                 if (!values.cloud_name) {
-                  throw new Error("Облачный URL-адрес обязателен.");
+                  throw new Error(i18n.t(k.CLOUD_NAME_REQUIRED));
                 }
 
                 if (!values.cloud_url) {
-                  throw new Error("Облачный URL-адрес обязателен.");
+                  throw new Error(i18n.t(k.CLOUD_URL_REQUIRED));
                 }
 
                 const response = await handleOAuthConfluenceFinalize(
@@ -206,16 +200,14 @@ export default function OAuthFinalizePage() {
 
                 if (response) {
                   setRedirectUrl(response.redirect_url);
-                  setStatusMessage("Авторизация Confluence завершена.");
+                  setStatusMessage(i18n.t(k.CONFLUENCE_AUTH_COMPLETED));
                 }
 
-                setIsSubmitted(true); // Отметить как отправленное
+                setIsSubmitted(true);
               } catch (error) {
                 console.error(error);
-                setStatusMessage("Ошибка во время отправки.");
-                setStatusDetails(
-                  "Во время отправки произошла ошибка. Попробуйте еще раз."
-                );
+                setStatusMessage(i18n.t(k.ERROR_DURING_SUBMISSION));
+                setStatusDetails(i18n.t(k.SUBMISSION_ERROR_TRY_AGAIN));
                 setIsError(true);
                 formikHelpers.setSubmitting(false);
               }

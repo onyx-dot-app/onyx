@@ -74,7 +74,7 @@ export function TagFilter({
     <div className="pt-4 h-full flex flex-col w-full">
       <div className="flex pb-2 px-4">
         <Input
-          placeholder="Поиск тегов..."
+          placeholder={i18n.t(k.SEARCH_TAGS_PLACEHOLDER)}
           value={filterValue}
           onChange={(e) => setFilterValue(e.target.value)}
           className="border border-text-subtle w-full"

@@ -157,7 +157,11 @@ export function ShareChatSessionModal({
               </div>
             ) : (
               <div>
-                <Callout type="warning" title="Предупреждение" className="mb-4">
+                <Callout
+                  type="warning"
+                  title={i18n.t(k.WARNING)}
+                  className="mb-4"
+                >
                   {i18n.t(k.PLEASE_MAKE_SURE_THAT_ALL_CONT)}
                 </Callout>
                 <div className="flex w-full justify-between">
@@ -196,13 +200,13 @@ export function ShareChatSessionModal({
           <AdvancedOptionsToggle
             showAdvancedOptions={showAdvancedOptions}
             setShowAdvancedOptions={setShowAdvancedOptions}
-            title="Расширенные настройки"
+            title={i18n.t(k.ADVANCED_SETTINGS)}
           />
 
           {showAdvancedOptions && (
             <>
               <div className="mb-4">
-                <Callout type="notice" title="Создать новый чат">
+                <Callout type="notice" title={i18n.t(k.CREATE_NEW_CHAT)}>
                   {i18n.t(k.GENERATE_A_LINK_TO_A_NEW_CHAT)}
                 </Callout>
               </div>

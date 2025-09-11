@@ -476,7 +476,7 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Введите здесь свою скидку...",
+  placeholder = i18n.t(k.ENTER_DISCOUNT_PLACEHOLDER),
 }: MarkdownPreviewProps) => {
   const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -824,7 +824,7 @@ export function SelectorFormField({
           disabled={disabled}
         >
           <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Выбрать...">
+            <SelectValue placeholder={i18n.t(k.SELECT_PLACEHOLDER)}>
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
           </SelectTrigger>

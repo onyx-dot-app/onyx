@@ -66,13 +66,13 @@ export const StandardAnswerCreationForm = ({
           }}
           validationSchema={Yup.object().shape({
             keyword: Yup.string()
-              .required("Требуются ключевые слова или шаблон")
+              .required(i18n.t(k.KEYWORDS_OR_PATTERN_REQUIRED))
               .max(255)
               .min(1),
-            answer: Yup.string().required("Требуется ответ").min(1),
+            answer: Yup.string().required(i18n.t(k.ANSWER_REQUIRED)).min(1),
             categories: Yup.array()
               .required()
-              .min(1, "Требуется хотя бы одна категория"),
+              .min(1, i18n.t(k.AT_LEAST_ONE_CATEGORY_REQUIRED)),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -116,38 +116,38 @@ export const StandardAnswerCreationForm = ({
                   name="keyword"
                   label="Regex pattern"
                   isCode
-                  tooltip="Срабатывает, если вопрос соответствует этому шаблону регулярного выражения (используя Python `re.search()`)"
+                  tooltip={i18n.t(k.REGEX_TOOLTIP)}
                   placeholder="(?:it|support)\s*ticket"
                 />
               ) : values.matchAnyKeywords == "any" ? (
                 <TextFormField
                   name="keyword"
-                  label="Любые из этих ключевых слов, разделенных пробелами"
-                  tooltip="Вопрос должен соответствовать этим ключевым словам, чтобы вызвать ответ."
-                  placeholder="проблема с билетом"
+                  label={i18n.t(k.ANY_KEYWORDS_LABEL)}
+                  tooltip={i18n.t(k.ANY_KEYWORDS_TOOLTIP)}
+                  placeholder={i18n.t(k.ANY_KEYWORDS_PLACEHOLDER)}
                   autoCompleteDisabled={true}
                 />
               ) : (
                 <TextFormField
                   name="keyword"
-                  label="Все эти ключевые слова в любом порядке, разделенные пробелами"
-                  tooltip="Вопрос должен соответствовать этим ключевым словам, чтобы вызвать ответ."
+                  label={i18n.t(k.ALL_KEYWORDS_LABEL)}
+                  tooltip={i18n.t(k.ALL_KEYWORDS_TOOLTIP)}
                   placeholder="it ticket"
                   autoCompleteDisabled={true}
                 />
               )}
               <BooleanFormField
-                subtext="Сопоставить шаблон регулярного выражения вместо точного ключевого слова"
+                subtext={i18n.t(k.MATCH_REGEX_SUBTEXT)}
                 optional
-                label="Сопоставить регулярное выражение"
+                label={i18n.t(k.MATCH_REGEX_LABEL)}
                 name="matchRegex"
               />
 
               {values.matchRegex ? null : (
                 <SelectorFormField
                   defaultValue={`all`}
-                  label="Стратегия обнаружения ключевых слов"
-                  subtext="Выберите, требуется ли, чтобы вопрос пользователя содержал какие-либо или все ключевые слова, указанные выше, для отображения этого ответа."
+                  label={i18n.t(k.KEYWORD_DETECTION_STRATEGY)}
+                  subtext={i18n.t(k.KEYWORD_DETECTION_SUBTEXT)}
                   name="matchAnyKeywords"
                   options={[
                     {
@@ -167,14 +167,14 @@ export const StandardAnswerCreationForm = ({
               <div className="w-full">
                 <MarkdownFormField
                   name="answer"
-                  label="Ответ"
-                  placeholder="Ответ в Markdown. Пример: если вам нужна помощь от ИТ-отдела, отправьте электронное письмо на адрес internalsupport@company.com"
+                  label={i18n.t(k.ANSWER_LABEL)}
+                  placeholder={i18n.t(k.ANSWER_PLACEHOLDER)}
                 />
               </div>
               <div className="w-4/12">
                 <MultiSelectDropdown
                   name="categories"
-                  label="Категории:"
+                  label={i18n.t(k.CATEGORIES_LABEL)}
                   onChange={(selected_options) => {
                     const selected_categories = selected_options.map(
                       (option) => {

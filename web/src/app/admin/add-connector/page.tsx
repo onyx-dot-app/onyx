@@ -101,7 +101,7 @@ export default function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ConnectorIcon size={32} />}
-        title="Добавить коннектор"
+        title={i18n.t(k.ADD_CONNECTOR)}
         farRightElement={
           <Link href="/admin/indexing/status">
             <Button variant="success-reverse">
@@ -114,7 +114,7 @@ export default function Page() {
       <input
         type="text"
         ref={searchInputRef}
-        placeholder="Найти коннекторы..."
+        placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
@@ -149,20 +149,20 @@ export default function Page() {
 // function getCategoryDescription(category: SourceCategory): string {
 //   switch (category) {
 //     case SourceCategory.Messaging:
-//       return "Интеграция с платформами обмена сообщениями и общения.";
+//       return "Integration with messaging platforms and communication tools.";
 //     case SourceCategory.ProjectManagement:
-//       return "Ссылка на инструменты управления проектами и отслеживания задач.";
+//       return "Link to project management tools and task tracking systems.";
 //     case SourceCategory.CustomerSupport:
-//       return "Подключение к системам поддержки клиентов и справочной службы.";
+//       return "Connect to customer support systems and help desk services.";
 //     case SourceCategory.CodeRepository:
-//       return "Интеграция с репозиториями кода и системами контроля версий.";
+//       return "Integration with code repositories and version control systems.";
 //     case SourceCategory.Storage:
-//       return "Подключение к облачным хранилищам и службам хостинга файлов.";
+//       return "Connect to cloud storage and file hosting services.";
 //     case SourceCategory.Wiki:
-//       return "Ссылка на платформы вики и базы знаний.";
+//       return "Link to wiki platforms and knowledge bases.";
 //     case SourceCategory.Other:
-//       return "Подключение к другим различным источникам знаний.";
+//       return "Connect to other various knowledge sources.";
 //     default:
-//       return "Подключение к различным источникам знаний.";
+//       return "Connect to various knowledge sources.";
 //   }
 // }

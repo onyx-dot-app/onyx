@@ -342,7 +342,7 @@ export const FilterComponent = forwardRef<
               </div>
               <Input
                 type="number"
-                placeholder="Количество"
+                placeholder={i18n.t(k.QUANTITY)}
                 value={docsValue}
                 onChange={(e) => setDocsValue(e.target.value)}
                 className="h-8 w-full"

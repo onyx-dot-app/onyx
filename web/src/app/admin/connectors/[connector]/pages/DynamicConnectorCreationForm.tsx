@@ -5,6 +5,8 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 import CredentialSubText from "@/components/credentials/CredentialFields";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -56,9 +58,9 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       )}
 
       <TextFormField
-        subtext="Описательное имя для коннектора."
+        subtext={i18n.t(k.CONNECTOR_NAME_DESCRIPTIVE)}
         type={"text"}
-        label={"Название коннектора"}
+        label={i18n.t(k.CONNECTOR_NAME_LABEL)}
         name={"name"}
       />
 

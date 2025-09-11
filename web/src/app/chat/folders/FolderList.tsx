@@ -99,7 +99,10 @@ const FolderItem = ({
       }
       router.refresh(); // Refresh values to update the sidebar
     } catch (error) {
-      setPopup({ message: "Не удалось сохранить имя папки", type: "error" });
+      setPopup({
+        message: i18n.t(k.FAILED_TO_SAVE_FOLDER_NAME),
+        type: "error",
+      });
     }
   };
 
@@ -117,7 +120,7 @@ const FolderItem = ({
       await deleteFolder(folder.folder_id!);
       router.refresh();
     } catch (error) {
-      setPopup({ message: "Не удалось удалить папку.", type: "error" });
+      setPopup({ message: i18n.t(k.FAILED_TO_DELETE_FOLDER), type: "error" });
     } finally {
       setShowDeleteConfirm(false);
     }
@@ -162,7 +165,7 @@ const FolderItem = ({
       router.refresh();
     } catch (error) {
       setPopup({
-        message: "Не удалось добавить сеанс чата в папку",
+        message: i18n.t(k.FAILED_TO_ADD_CHAT_TO_FOLDER),
         type: "error",
       });
     }

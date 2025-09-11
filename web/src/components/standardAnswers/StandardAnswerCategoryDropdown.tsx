@@ -24,7 +24,7 @@ export const StandardAnswerCategoryDropdownField: FC<
   if (standardAnswerCategoryResponse.error != null) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${
           standardAnswerCategoryResponse.error.message
         }`}

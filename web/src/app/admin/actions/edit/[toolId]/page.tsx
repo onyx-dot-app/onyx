@@ -22,7 +22,7 @@ export default async function Page(props: {
     body = (
       <div>
         <ErrorCallout
-          errorTitle="Что-то пошло не так :("
+          errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
           errorMsg="Tool not found"
         />
       </div>
@@ -52,7 +52,7 @@ export default async function Page(props: {
       <BackButton />
 
       <AdminPageTitle
-        title="Редактировать инструмент"
+        title={i18n.t(k.EDIT_TOOL)}
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

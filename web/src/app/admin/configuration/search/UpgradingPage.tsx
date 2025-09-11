@@ -62,7 +62,9 @@ export default function UpgradingPage({
       mutate("/api/search-settings/get-secondary-search-settings");
     } else {
       alert(
-        `Не удалось отменить обновление модели внедрения - ${await response.text()}`
+        i18n.t(k.FAILED_TO_CANCEL_EMBEDDING_UPDATE, {
+          response: await response.text(),
+        })
       );
     }
     setIsCancelling(false);
@@ -106,7 +108,7 @@ export default function UpgradingPage({
       {isCancelling && (
         <Modal
           onOutsideClick={() => setIsCancelling(false)}
-          title="Отменить встраивание переключателя модели"
+          title={i18n.t(k.CANCEL_EMBEDDING_MODEL_SWITCH)}
         >
           <div>
             <div>{i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_CANCE)}</div>
@@ -156,7 +158,9 @@ export default function UpgradingPage({
                       reindexingProgress={sortedReindexingProgress}
                     />
                   ) : (
-                    <ErrorCallout errorTitle="Не удалось получить ход выполнения повторной индексации" />
+                    <ErrorCallout
+                      errorTitle={i18n.t(k.FAILED_TO_GET_REINDEXING_PROGRESS)}
+                    />
                   )}
                 </>
               ) : (

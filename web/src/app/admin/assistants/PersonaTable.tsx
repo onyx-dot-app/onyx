@@ -107,7 +107,9 @@ export function PersonasTable() {
     if (!response.ok) {
       setPopup({
         type: "error",
-        message: `Не удалось обновить порядок персон -${await response.text()}`,
+        message: i18n.t(k.FAILED_TO_UPDATE_PERSONA_ORDER, {
+          response: await response.text(),
+        }),
       });
       setFinalPersonas(assistants);
       await refreshAssistants();
@@ -137,7 +139,9 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Не удалось удалить персону -${await response.text()}`,
+          message: i18n.t(k.FAILED_TO_DELETE_PERSONA, {
+            response: await response.text(),
+          }),
         });
       }
     }
@@ -165,7 +169,9 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Не удалось обновить персону -${await response.text()}`,
+          message: i18n.t(k.FAILED_TO_UPDATE_PERSONA, {
+            response: await response.text(),
+          }),
         });
       }
     }
@@ -214,12 +220,12 @@ export function PersonasTable() {
 
       <DraggableTable
         headers={[
-          "Имя",
-          "Описание",
-          "Тип",
-          "Избранный помощник",
-          "Видимость",
-          "Удалить",
+          i18n.t(k.NAME),
+          i18n.t(k.DESCRIPTION),
+          i18n.t(k.TYPE),
+          i18n.t(k.FAVORITE_ASSISTANT),
+          i18n.t(k.VISIBILITY),
+          i18n.t(k.DELETE),
         ]}
         isAdmin={isAdmin}
         rows={finalPersonas.map((persona) => {
