@@ -92,6 +92,8 @@ from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 
 logger = setup_logger()
 
+PROMPT_LENGTH = 5_000_000
+
 
 class Base(DeclarativeBase):
     __abstract__ = True
@@ -2583,9 +2585,11 @@ class Persona(Base):
 
     # Prompt fields merged from Prompt table
     system_prompt: Mapped[str | None] = mapped_column(
-        String(length=8000), nullable=True
+        String(length=PROMPT_LENGTH), nullable=True
     )
-    task_prompt: Mapped[str | None] = mapped_column(String(length=8000), nullable=True)
+    task_prompt: Mapped[str | None] = mapped_column(
+        String(length=PROMPT_LENGTH), nullable=True
+    )
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
 
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
