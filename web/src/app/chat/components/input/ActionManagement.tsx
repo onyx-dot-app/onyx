@@ -273,14 +273,6 @@ function MCPToolsList({
   const toggleForcedTool = (toolId: number) => {
     // Keep both popovers open; only outside clicks should close
     preventMainPopupClose();
-    try {
-      console.debug(
-        "[ActionManagement:MCPToolsList] toggleForcedTool",
-        toolId,
-        "current:",
-        forcedToolIds
-      );
-    } catch {}
     if (forcedToolIds.includes(toolId)) {
       setForcedToolIds([]);
     } else {
