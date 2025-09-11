@@ -6,8 +6,6 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.llm import upsert_llm_provider
@@ -76,15 +74,8 @@ def test_stream_chat_message_objects_without_web_search(
         file_descriptors=[],
         prompt_override=None,
         search_doc_ids=None,
-        retrieval_options=RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=True,
-            filters=BaseFilters(),
-            enable_auto_detect_filters=False,
-            limit=10,
-        ),
+        retrieval_options=RetrievalDetails(),
         query_override=None,
-        allowed_tool_ids=[],  # Disable all tools to test handling of missing web search
     )
 
     # Call stream_chat_message_objects
