@@ -103,6 +103,7 @@ def get_files_in_project(
         db_session.query(UserFile)
         .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user.id)
         .filter(UserFile.status != UserFileStatus.FAILED)
+        .order_by(UserFile.created_at.desc())
         .all()
     )
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
