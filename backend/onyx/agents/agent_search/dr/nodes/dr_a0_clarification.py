@@ -56,8 +56,6 @@ from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
-from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_W_TOOL_CALLING
-from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -460,7 +458,7 @@ def clarifier(
                 llm_decision = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
+                        assistant_system_prompt,
                         decision_prompt,
                         uploaded_image_context=uploaded_image_context,
                     ),
@@ -561,7 +559,7 @@ def clarifier(
 
             stream = graph_config.tooling.primary_llm.stream(
                 prompt=create_question_prompt(
-                    assistant_system_prompt + EVAL_SYSTEM_PROMPT_W_TOOL_CALLING,
+                    assistant_system_prompt,
                     decision_prompt + assistant_task_prompt,
                     uploaded_image_context=uploaded_image_context,
                 ),

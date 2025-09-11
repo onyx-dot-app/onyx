@@ -1435,7 +1435,7 @@ And finally and most importantly, here is the question:
 ---question---
 {SEPARATOR_LINE}
 
-Please answer the question directly.
+Please answer the question in a way earlier instructions suggested.
 
 
 """
