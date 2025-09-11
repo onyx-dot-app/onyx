@@ -412,7 +412,9 @@ class TestSlackBotFederatedSearch:
             p.stop()
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
-    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
+    @patch(
+        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+    )
     def test_slack_bot_public_channel_filtering(
         self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
@@ -465,7 +467,9 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
-    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
+    @patch(
+        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+    )
     def test_slack_bot_private_channel_filtering(
         self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
@@ -518,7 +522,9 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
-    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
+    @patch(
+        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+    )
     def test_slack_bot_dm_filtering(
         self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
