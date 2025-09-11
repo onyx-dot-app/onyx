@@ -110,7 +110,11 @@ function CollapsibleFolder({
         ) : (
           <button
             type="button"
-            onClick={onNameClick}
+            onClick={() => {
+              setOpen(true);
+              onToggle?.(true);
+              onNameClick?.();
+            }}
             className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
           >
             <span className="truncate">{title}</span>
