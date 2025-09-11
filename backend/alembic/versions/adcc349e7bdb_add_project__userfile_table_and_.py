@@ -1,8 +1,8 @@
 """add project__userfile table and userfile column changes
 
-Revision ID: 085d844e3953
-Revises: 8818cf73fa1a
-Create Date: 2025-09-05 14:24:50.026940
+Revision ID: adcc349e7bdb
+Revises: b7ec9b5b505f
+Create Date: 2025-09-11 11:28:38.394739
 
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql as psql
 
 # revision identifiers, used by Alembic.
-revision = "085d844e3953"
-down_revision = "8818cf73fa1a"
+revision = "adcc349e7bdb"
+down_revision = "b7ec9b5b505f"
 branch_labels = None
 depends_on = None
 
@@ -201,16 +201,10 @@ def upgrade() -> None:
         "user_file",
         sa.Column("last_accessed_at", sa.DateTime(timezone=True), nullable=True),
     )
+    # Store instructions directly on the project
     op.add_column(
         "user_project",
-        sa.Column("prompt_id", sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        "user_project_prompt_id_fkey",
-        "user_project",
-        "prompt",
-        ["prompt_id"],
-        ["id"],
+        sa.Column("instructions", sa.String(), nullable=True),
     )
     op.add_column(
         "chat_session",
@@ -359,14 +353,9 @@ def downgrade() -> None:
     )
 
     # Rename user_project back to user_folder and revert related changes
+    # Drop the instructions column on downgrade
     try:
-        op.drop_constraint(
-            "user_project_prompt_id_fkey", "user_project", type_="foreignkey"
-        )
-    except Exception:
-        pass
-    try:
-        op.drop_column("user_project", "prompt_id")
+        op.drop_column("user_project", "instructions")
     except Exception:
         pass
     # Recreate user_file.folder_id (nullable) since we dropped it on upgrade

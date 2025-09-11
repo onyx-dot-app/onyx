@@ -110,9 +110,9 @@ export default function ProjectContextPanel() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    const preset = currentProjectDetails?.instructions?.system_prompt ?? "";
+    const preset = currentProjectDetails?.project?.instructions ?? "";
     setInstructionText(preset);
-  }, [currentProjectDetails?.instructions?.system_prompt ?? ""]);
+  }, [currentProjectDetails?.project?.instructions ?? ""]);
 
   if (!currentProjectId) return null; // no selection yet
 
@@ -182,12 +182,12 @@ export default function ProjectContextPanel() {
       <div className="flex flex-row gap-2 justify-between">
         <div className="min-w-0">
           <p className="font-bold">Instructions</p>
-          {currentProjectDetails?.instructions ? (
+          {currentProjectDetails?.project?.instructions ? (
             <p
               className="font-light truncate"
-              title={currentProjectDetails.instructions.system_prompt}
+              title={currentProjectDetails.project.instructions || ""}
             >
-              {currentProjectDetails.instructions.system_prompt}
+              {currentProjectDetails.project.instructions}
             </p>
           ) : (
             <p className="font-light truncate">

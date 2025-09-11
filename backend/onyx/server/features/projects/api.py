@@ -15,14 +15,11 @@ from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
-from onyx.db.models import Prompt
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import upload_files_to_user_files_with_indexing
-from onyx.db.prompts import upsert_prompt
-from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse
@@ -181,13 +178,16 @@ def link_user_file_to_project(
     return UserFileSnapshot.from_model(user_file)
 
 
-@router.get("/{project_id}/instructions")
+class ProjectInstructionsResponse(BaseModel):
+    instructions: str | None
+
+
+@router.get("/{project_id}/instructions", response_model=ProjectInstructionsResponse)
 def get_project_instructions(
     project_id: int,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> PromptSnapshot:
-
+) -> ProjectInstructionsResponse:
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user.id)
@@ -197,25 +197,21 @@ def get_project_instructions(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    prompt = db_session.query(Prompt).filter_by(id=project.prompt_id).one_or_none()
-    if prompt is None:
-        return None
-
-    return PromptSnapshot.from_model(prompt)
+    return ProjectInstructionsResponse(instructions=project.instructions)
 
 
 class UpsertProjectInstructionsRequest(BaseModel):
     instructions: str
 
 
-@router.post("/{project_id}/instructions", response_model=PromptSnapshot)
+@router.post("/{project_id}/instructions", response_model=ProjectInstructionsResponse)
 def upsert_project_instructions(
     project_id: int,
     body: UpsertProjectInstructionsRequest,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ):
-    """Create or update a Prompt that stores this project's instructions."""
+    """Create or update this project's instructions stored on the project itself."""
     # Ensure the project exists and belongs to the user
     project = (
         db_session.query(UserProject)
@@ -224,32 +220,16 @@ def upsert_project_instructions(
     )
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    print("upserting instructions", body.instructions)
-
-    prompt_name = f"project-{project_id}-instructions"
-    description = f"Instructions prompt for project {project_id}"
-
-    prompt = upsert_prompt(
-        db_session=db_session,
-        user=user,
-        name=prompt_name,
-        system_prompt=body.instructions,
-        task_prompt="",
-        datetime_aware=True,
-        prompt_id=project.prompt_id,
-        default_prompt=False,
-        description=description,
-    )
-    project.prompt_id = prompt.id
+    project.instructions = body.instructions
 
     db_session.commit()
-    return PromptSnapshot.from_model(prompt)
+    db_session.refresh(project)
+    return ProjectInstructionsResponse(instructions=project.instructions)
 
 
 class ProjectPayload(BaseModel):
     project: UserProjectSnapshot
     files: list[UserFileSnapshot] | None = None
-    instructions: PromptSnapshot | None = None
     persona_id_to_is_default: dict[int, bool] | None = None
 
 
@@ -261,7 +241,6 @@ def get_project_details(
 ) -> ProjectPayload:
     project = get_project(project_id, user, db_session)
     files = get_files_in_project(project_id, user, db_session)
-    instructions = get_project_instructions(project_id, user, db_session)
     persona_ids = [
         session.persona_id
         for session in project.chat_sessions
@@ -274,7 +253,6 @@ def get_project_details(
     return ProjectPayload(
         project=project,
         files=files,
-        instructions=instructions,
         persona_id_to_is_default=persona_id_to_is_default,
     )
 

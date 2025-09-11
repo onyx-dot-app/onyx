@@ -71,6 +71,7 @@ class UserProjectSnapshot(BaseModel):
     description: str | None
     created_at: datetime
     user_id: UUID
+    instructions: str | None = None
     chat_sessions: list[ChatSessionDetails]
 
     @classmethod
@@ -81,6 +82,7 @@ class UserProjectSnapshot(BaseModel):
             description=model.description,
             created_at=model.created_at,
             user_id=model.user_id,
+            instructions=model.instructions,
             chat_sessions=[
                 ChatSessionDetails.from_model(chat)
                 for chat in model.chat_sessions

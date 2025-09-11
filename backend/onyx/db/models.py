@@ -3256,12 +3256,10 @@ class UserProject(Base):
         secondary=Project__UserFile.__table__,
         back_populates="projects",
     )
-    prompt_id: Mapped[int | None] = mapped_column(
-        ForeignKey("prompt.id"), nullable=True
-    )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="project", lazy="selectin"
     )
+    instructions: Mapped[str] = mapped_column(String)
 
 
 class UserDocument(str, Enum):

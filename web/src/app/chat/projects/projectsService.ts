@@ -1,4 +1,3 @@
-import { Prompt } from "@/app/admin/assistants/interfaces";
 import { ChatFileType, ChatSession } from "../interfaces";
 
 export interface Project {
@@ -7,6 +6,7 @@ export interface Project {
   description: string | null;
   created_at: string;
   user_id: string;
+  instructions: string | null;
   chat_sessions: ChatSession[];
 }
 
@@ -42,7 +42,6 @@ export enum UserFileStatus {
 export type ProjectDetails = {
   project: Project;
   files?: ProjectFile[];
-  instructions?: Prompt;
   persona_id_to_is_default?: Record<number, boolean>;
 };
 
@@ -143,19 +142,19 @@ export async function deleteProject(projectId: number): Promise<void> {
 
 export async function getProjectInstructions(
   projectId: number
-): Promise<Prompt | null> {
+): Promise<string | null> {
   const response = await fetch(`/api/user/projects/${projectId}/instructions`);
   if (!response.ok) {
     throw new Error("Failed to fetch project instructions");
   }
-  const data = await response.json();
-  return data;
+  const data = (await response.json()) as { instructions: string | null };
+  return data.instructions ?? null;
 }
 
 export async function upsertProjectInstructions(
   projectId: number,
   instructions: string
-): Promise<Prompt> {
+): Promise<string | null> {
   const response = await fetch(`/api/user/projects/${projectId}/instructions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -167,7 +166,8 @@ export async function upsertProjectInstructions(
       (errorData as any).detail || "Failed to upsert project instructions"
     );
   }
-  return response.json();
+  const data = (await response.json()) as { instructions: string | null };
+  return data.instructions ?? null;
 }
 
 export async function getProjectDetails(
