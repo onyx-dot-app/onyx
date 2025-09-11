@@ -64,6 +64,7 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_instructions
+from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import FileDescriptor
@@ -629,6 +630,17 @@ def stream_chat_message_objects(
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
+        project_file_ids = []
+        if chat_session.project_id and user_id:
+            project_file_ids.extend(
+                [
+                    file.file_id
+                    for file in get_user_files_from_project(
+                        chat_session.project_id, user_id, db_session
+                    )
+                ]
+            )
+
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             yield UserKnowledgeFilePacket(
                 user_files=[
@@ -636,6 +648,7 @@ def stream_chat_message_objects(
                         id=str(file.file_id), type=file.file_type, name=file.filename
                     )
                     for file in in_memory_user_files
+                    if file.file_id not in project_file_ids
                 ]
             )
 

@@ -680,3 +680,44 @@ ul > li > p {
 .container {
   margin-bottom: 1rem;
 }
+
+@layer components {
+  .text-onyx-ultra-strong {
+    @apply not-italic font-semibold;
+    color: rgba(0, 0, 0, 0.92);
+  }
+  .dark .text-onyx-ultra-strong {
+    color: rgba(255, 255, 255, 0.92);
+  }
+  .text-onyx-strong {
+    @apply not-italic font-semibold;
+    color: rgba(0, 0, 0, 0.8);
+  }
+  .dark .text-onyx-strong {
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .text-onyx-medium {
+    @apply not-italic font-medium;
+    color: rgba(0, 0, 0, 0.8);
+  }
+  .dark .text-onyx-medium {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .text-onyx-emphasis {
+    @apply not-italic font-semibold;
+    color: rgba(0, 0, 0, 0.6);
+  }
+  .dark .text-onyx-emphasis {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .text-onyx-muted {
+    @apply not-italic font-normal;
+    color: rgba(0, 0, 0, 0.4);
+  }
+  .dark .text-onyx-muted {
+    color: rgba(255, 255, 255, 0.55);
+  }
+}

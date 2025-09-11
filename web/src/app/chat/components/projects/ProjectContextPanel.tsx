@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { FileIcon, FolderOpen, Loader2, X } from "lucide-react";
+import { FileIcon, Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { RiPlayListAddFill } from "react-icons/ri";
 import { useProjectsContext } from "../../projects/ProjectsContext";
@@ -29,6 +29,12 @@ import type {
 import { UserFileStatus } from "../../projects/projectsService";
 import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import {
+  MultipleFilesIcon,
+  OpenFolderIcon,
+  ListSettingsIcon,
+  DocumentIcon,
+} from "@/components/icons/CustomIcons";
 
 export function FileCard({
   file,
@@ -55,7 +61,11 @@ export function FileCard({
   };
 
   return (
-    <div className="relative flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm">
+    <div
+      className={`relative flex items-center gap-3 border border-border rounded-xl ${
+        isProcessing ? "bg-accent-background" : "bg-background-background"
+      } px-3 py-1 shadow-sm h-14`}
+    >
       {!isProcessing && (
         <button
           onClick={handleRemoveFile}
@@ -66,21 +76,20 @@ export function FileCard({
           <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
         </button>
       )}
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background-dark/60">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-transparent">
         {isProcessing ? (
-          <Loader2 className="h-5 w-5 text-text-400 animate-spin" />
+          <Loader2 className="h-5 w-5 text-onyx-medium animate-spin" />
         ) : (
-          <FileIcon className="h-5 w-5 text-text-400" />
+          <div className="bg-accent-background p-2 rounded-lg shadow-sm">
+            <DocumentIcon className="h-5 w-5 text-onyx-medium" />
+          </div>
         )}
       </div>
       <div className="flex flex-col overflow-hidden">
-        <span
-          className="text-sm font-medium text-text-darker truncate"
-          title={file.name}
-        >
+        <span className="text-onyx-medium text-sm truncate" title={file.name}>
           {file.name}
         </span>
-        <span className="text-xs text-text-400 truncate">
+        <span className="text-onyx-muted text-xs truncate">
           {isProcessing
             ? file.status === UserFileStatus.UPLOADING
               ? "Uploading..."
@@ -116,6 +125,9 @@ export default function ProjectContextPanel() {
 
   if (!currentProjectId) return null; // no selection yet
 
+  const totalFiles = (currentProjectDetails?.files || []).length;
+  const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
+
   const handleUploadChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -137,7 +149,7 @@ export default function ProjectContextPanel() {
           token_count: 0,
           chunk_count: 0,
         }));
-        setTempProjectFiles((prev) => [...prev, ...tempFiles]);
+        setTempProjectFiles((prev) => [...tempFiles, ...prev]);
 
         const result: CategorizedFiles = await uploadFiles(
           Array.from(files),
@@ -173,117 +185,145 @@ export default function ProjectContextPanel() {
   );
 
   return (
-    <div className="flex flex-col gap-2 p-4 w-[800px] mx-auto mt-10">
-      <FolderOpen size={34} />
-      <h1 className="text-4xl font-medium">
-        {currentProjectDetails?.project?.name || "Loading project..."}
-      </h1>
-      <Separator />
+    <div className="flex flex-col gap-5 p-4 w-full max-w-[800px] mx-auto mt-10">
+      <div className="flex flex-col gap-2">
+        <OpenFolderIcon size={34} className="text-onyx-ultra-strong" />
+        <h1 className="text-onyx-strong text-4xl">
+          {currentProjectDetails?.project?.name || "Loading project..."}
+        </h1>
+      </div>
+
+      <Separator className="my-0" />
       <div className="flex flex-row gap-2 justify-between">
         <div className="min-w-0">
-          <p className="font-bold">Instructions</p>
+          <p className="text-onyx-medium text-2xl">Instructions</p>
           {currentProjectDetails?.project?.instructions ? (
             <p
-              className="font-light truncate"
+              className="text-onyx-muted text-base truncate"
               title={currentProjectDetails.project.instructions || ""}
             >
               {currentProjectDetails.project.instructions}
             </p>
           ) : (
-            <p className="font-light truncate">
+            <p className="text-onyx-muted text-base truncate">
               Add instructions to tailor the response in this project.
             </p>
           )}
         </div>
         <button
           onClick={() => setIsInstrOpen(true)}
-          className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 shrink-0 whitespace-nowrap"
+          className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 shrink-0 whitespace-nowrap h-12"
         >
-          <RiPlayListAddFill
-            size={20}
-            className="text-text-darker dark:text-text-lighter"
-          />
-          <p className="text-sm text-text-darker dark:text-text-lighter whitespace-nowrap">
+          <ListSettingsIcon size={20} className="text-onyx-emphasis" />
+          <p className="text-onyx-emphasis text-lg whitespace-nowrap">
             Set Instructions
           </p>
         </button>
       </div>
-      <div className="flex flex-row gap-2 justify-between">
-        <div>
-          <p className="font-bold">Files</p>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-row gap-2 justify-between">
+          <div>
+            <p className="text-onyx-medium text-2xl">Files</p>
 
-          <p className="font-light">
-            Chats in this project can access these files.
-          </p>
+            <p className="text-onyx-muted text-base">
+              Chats in this project can access these files.
+            </p>
+          </div>
+          <FilePicker
+            showTriggerLabel
+            triggerLabel="Add Files"
+            recentFiles={recentFiles}
+            onPickRecent={async (file) => {
+              if (!currentProjectId) return;
+              if (!linkFileToProject) return;
+              await linkFileToProject(currentProjectId, file.id);
+            }}
+            handleUploadChange={handleUploadChange}
+            triggerLabelClassName="text-lg text-onyx-emphasis"
+            triggerClassName="h-12"
+          />
         </div>
-        <FilePicker
-          showTriggerLabel
-          triggerLabel="Add Files"
-          recentFiles={recentFiles}
-          onPickRecent={async (file) => {
-            if (!currentProjectId) return;
-            if (!linkFileToProject) return;
-            await linkFileToProject(currentProjectId, file.id);
-          }}
-          handleUploadChange={handleUploadChange}
-        />
+
+        {tempProjectFiles.length > 0 ||
+        (currentProjectDetails?.files &&
+          currentProjectDetails.files.length > 0) ? (
+          <>
+            {/* Mobile / small screens: just show a button to view files */}
+            <div className="sm:hidden">
+              <button
+                className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                onClick={() => setShowProjectFiles(true)}
+              >
+                <div className="flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <span className="text-onyx-medium text-sm truncate flex-1">
+                      View files
+                    </span>
+                    <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                  </div>
+                  <span className="text-onyx-muted text-sm">
+                    {displayFileCount} files
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Desktop / larger screens: show previews with optional View All */}
+            <div className="hidden sm:flex gap-3">
+              {(() => {
+                const byId = new Map<string, ProjectFile>();
+                // Prefer backend files when available
+                (currentProjectDetails?.files || []).forEach((f) =>
+                  byId.set(f.id, f)
+                );
+                // Add temp files only if a backend file with same id doesn't exist yet
+                tempProjectFiles.forEach((f) => {
+                  if (!byId.has(f.id)) byId.set(f.id, f);
+                });
+                return Array.from(byId.values())
+                  .slice(0, 3)
+                  .map((f) => (
+                    <div key={f.id} className="w-52">
+                      <FileCard
+                        file={f}
+                        removeFile={async (fileId: string) => {
+                          if (!currentProjectId) return;
+                          await unlinkFileFromProject(currentProjectId, fileId);
+                        }}
+                      />
+                    </div>
+                  ));
+              })()}
+              {totalFiles > 3 && (
+                <button
+                  className="rounded-xl px-3 py-1 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                  onClick={() => setShowProjectFiles(true)}
+                >
+                  <div className="flex flex-col overflow-hidden h-12 p-1">
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <span className="text-onyx-medium text-sm truncate flex-1">
+                        View All
+                      </span>
+                      <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                    </div>
+                    <span className="text-onyx-muted text-sm">
+                      {displayFileCount} files
+                    </span>
+                  </div>
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="text-onyx-muted text-base">No files yet.</p>
+        )}
       </div>
-
-      {tempProjectFiles.length > 0 ||
-      (currentProjectDetails?.files &&
-        currentProjectDetails.files.length > 0) ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {(() => {
-            const byId = new Map<string, ProjectFile>();
-            // Prefer backend files when available
-            (currentProjectDetails?.files || []).forEach((f) =>
-              byId.set(f.id, f)
-            );
-            // Add temp files only if a backend file with same id doesn't exist yet
-            tempProjectFiles.forEach((f) => {
-              if (!byId.has(f.id)) byId.set(f.id, f);
-            });
-            return Array.from(byId.values())
-              .slice(0, 3)
-              .map((f) => (
-                <FileCard
-                  key={f.id}
-                  file={f}
-                  removeFile={async (fileId: string) => {
-                    if (!currentProjectId) return;
-                    await unlinkFileFromProject(currentProjectId, fileId);
-                  }}
-                />
-              ));
-          })()}
-          {[...(currentProjectDetails?.files || [])].length > 3 && (
-            <button
-              className="flex items-center gap-3 border border-border rounded-xl bg-background-background px-3 py-2 shadow-sm text-left"
-              onClick={() => setShowProjectFiles(true)}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background-dark/60">
-                <FileIcon className="h-5 w-5 text-text-400" />
-              </div>
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-sm font-medium text-text-darker truncate">
-                  View all project files
-                </span>
-                <span className="text-xs text-text-400 truncate">
-                  {(currentProjectDetails?.files || []).length} files
-                </span>
-              </div>
-            </button>
-          )}
-        </div>
-      ) : (
-        <p className="text-sm text-text-400">No files yet.</p>
-      )}
 
       <Dialog open={isInstrOpen} onOpenChange={setIsInstrOpen}>
         <DialogContent className="w-[95%] max-w-2xl">
           <DialogHeader>
             <div className="flex flex-col gap-3">
-              <RiPlayListAddFill size={22} />
+              <ListSettingsIcon size={22} />
               <DialogTitle>Set Project Instructions</DialogTitle>
             </div>
             <DialogDescription>
@@ -317,7 +357,7 @@ export default function ProjectContextPanel() {
       <Dialog open={showProjectFiles} onOpenChange={setShowProjectFiles}>
         <DialogContent className="w-full max-w-lg">
           <DialogHeader>
-            <FolderOpen size={32} />
+            <OpenFolderIcon size={32} />
             <DialogTitle>Project files</DialogTitle>
           </DialogHeader>
           <FilesList

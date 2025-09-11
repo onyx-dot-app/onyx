@@ -29,6 +29,8 @@ type FilePickerProps = {
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   showTriggerLabel?: boolean;
   triggerLabel?: string;
+  triggerLabelClassName?: string;
+  triggerClassName?: string;
 };
 
 // Small helper to render an icon + label row
@@ -43,6 +45,8 @@ export default function FilePicker({
   handleUploadChange,
   showTriggerLabel = false,
   triggerLabel = "Add Files",
+  triggerLabelClassName = "",
+  triggerClassName = "",
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
@@ -61,11 +65,21 @@ export default function FilePicker({
       />
       <Menubar className="bg-transparent dark:bg-transparent p-0 border-0">
         <MenubarMenu>
-          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 py-1.5 px-0">
+          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 py-1.5 px-0 h-8">
             {showTriggerLabel ? (
-              <div className="flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered transition-all duration-150">
+              <div
+                className={cn(
+                  "flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered transition-all duration-150",
+                  triggerClassName
+                )}
+              >
                 <FileUploadIcon className="text-text-darker dark:text-text-lighter" />
-                <p className="text-sm text-text-darker dark:text-text-lighter">
+                <p
+                  className={cn(
+                    "text-text-darker dark:text-text-lighter",
+                    triggerLabelClassName
+                  )}
+                >
                   {triggerLabel}
                 </p>
               </div>
