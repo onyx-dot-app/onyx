@@ -213,6 +213,20 @@ webserver:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    # Example: customTriggers: []
+    #   - type: prometheus
+    #     metadata:
+    #       serverAddress: http://prometheus:9090
+    #       metricName: http_requests_per_second
+    #       threshold: '100'
+    customTriggers: []
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -280,6 +294,20 @@ api:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    # Example: customTriggers: []
+    #   - type: prometheus
+    #     metadata:
+    #       serverAddress: http://prometheus:9090
+    #       metricName: http_requests_per_second
+    #       threshold: '100'
+    customTriggers: []
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -358,6 +386,18 @@ celery_worker_heavy:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -381,6 +421,18 @@ celery_worker_docprocessing:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -404,6 +456,18 @@ celery_worker_light:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -427,6 +491,18 @@ celery_worker_monitoring:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -450,6 +526,18 @@ celery_worker_primary:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -473,6 +561,18 @@ celery_worker_user_files_indexing:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -521,6 +621,18 @@ celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
