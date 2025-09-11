@@ -426,15 +426,6 @@ services:
       - "8081:8081"
     volumes:
       - vespa_volume:/opt/vespa/var
-    # Resource limits for better CI performance
-    deploy:
-      resources:
-        limits:
-          memory: 3G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
     logging:
       driver: json-file
       options:
