@@ -2,7 +2,6 @@ import yaml
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import INPUT_PROMPT_YAML
-from onyx.configs.chat_configs import USER_FOLDERS_YAML
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.db.persona import delete_old_default_personas
 from onyx.db.persona import upsert_persona
