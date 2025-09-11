@@ -4,8 +4,8 @@ import { loginAs, loginAsRandomUser } from "../utils/auth";
 
 test.use({ storageState: "admin_auth.json" });
 
-const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID || "";
-const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET || "";
+const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID;
+const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET;
 
 async function createFederatedSlackConnector(page: Page) {
   // Navigate to add connector page
@@ -15,6 +15,10 @@ async function createFederatedSlackConnector(page: Page) {
   // Click on Slack connector tile (specifically the one with "Logo Slack" text, not "Slack Bots")
   await page.getByRole("link", { name: "Logo Slack" }).first().click();
   await page.waitForLoadState("networkidle");
+
+  if (!SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
+    throw new Error("SLACK_CLIENT_ID and SLACK_CLIENT_SECRET must be set");
+  }
 
   // Fill in the client ID and client secret
   await page.getByLabel(/client id/i).fill(SLACK_CLIENT_ID);
