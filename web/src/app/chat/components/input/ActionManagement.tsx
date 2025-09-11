@@ -438,14 +438,6 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   };
 
   const toggleForcedTool = (toolId: number) => {
-    try {
-      console.debug(
-        "[ActionManagement] toggleForcedTool",
-        toolId,
-        "current:",
-        forcedToolIds
-      );
-    } catch {}
     if (forcedToolIds.includes(toolId)) {
       // If clicking on already forced tool, unforce it
       setForcedToolIds([]);
