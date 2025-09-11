@@ -194,13 +194,16 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
                     and content_piece.get("type") != "text"
                 ):
                     removal_indices.append(content_piece_number)
-            filtered_past_messages[past_message_number].content = [
-                content_piece
-                for content_piece_number, content_piece in enumerate(
-                    past_message.content
-                )
-                if content_piece_number not in removal_indices
-            ]
+
+            # Only rebuild the content list if there are items to remove
+            if removal_indices:
+                filtered_past_messages[past_message_number].content = [
+                    content_piece
+                    for content_piece_number, content_piece in enumerate(
+                        past_message.content
+                    )
+                    if content_piece_number not in removal_indices
+                ]
 
         else:
             continue
