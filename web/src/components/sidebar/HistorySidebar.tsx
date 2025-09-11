@@ -377,6 +377,7 @@ export const HistorySidebar = React.memo(
               </DndContext>
               {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
                 liveAssistant &&
+                // filter out the default assistant
                 liveAssistant.id !== 0 && (
                   <div className="w-full mt-1 pr-4">
                     <SortableAssistant
