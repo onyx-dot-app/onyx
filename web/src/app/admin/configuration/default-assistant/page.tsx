@@ -14,6 +14,12 @@ import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -30,6 +36,7 @@ interface AvailableTool {
   in_code_tool_id: string;
   display_name: string;
   description: string;
+  is_available: boolean;
 }
 
 // Tools are now fetched from the backend dynamically
@@ -208,15 +215,22 @@ function DefaultAssistantConfig() {
           <div>
             <p className="block font-medium text-sm mb-2">Actions</p>
             <div className="space-y-3">
-              {(availableTools || []).map((tool) => (
-                <ToolToggle
-                  key={tool.id}
-                  tool={tool}
-                  enabled={enabledTools.has(tool.id)}
-                  onToggle={() => handleToggleTool(tool.id)}
-                  disabled={savingTools.has(tool.id)}
-                />
-              ))}
+              {(availableTools || [])
+                .slice()
+                .sort((a, b) => {
+                  // Show enabled (available) tools first; not enabled at bottom
+                  if (a.is_available === b.is_available) return 0;
+                  return a.is_available ? -1 : 1;
+                })
+                .map((tool) => (
+                  <ToolToggle
+                    key={tool.id}
+                    tool={tool}
+                    enabled={enabledTools.has(tool.id)}
+                    onToggle={() => handleToggleTool(tool.id)}
+                    disabled={savingTools.has(tool.id)}
+                  />
+                ))}
             </div>
           </div>
         </div>
@@ -236,21 +250,51 @@ function ToolToggle({
     in_code_tool_id: string;
     display_name: string;
     description: string;
+    is_available: boolean;
   };
   enabled: boolean;
   onToggle: () => void;
   disabled?: boolean;
 }) {
+  const notEnabledReason = (() => {
+    if (tool.in_code_tool_id === "WebSearchTool") {
+      return "Set EXA_API_KEY on the server and restart to enable Web Search.";
+    }
+    if (tool.in_code_tool_id === "ImageGenerationTool") {
+      return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";
+    }
+    return "Not configured.";
+  })();
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border border-border">
       <div className="flex-1 pr-4">
-        <div className="text-sm font-medium">{tool.display_name}</div>
+        <div className="text-sm font-medium flex items-center gap-2">
+          <span>{tool.display_name}</span>
+          {!tool.is_available && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
+                    Not enabled
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  {notEnabledReason}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
         <Text className="text-sm text-text-600 mt-1">{tool.description}</Text>
       </div>
       <Switch
         checked={enabled}
-        onCheckedChange={onToggle}
-        disabled={disabled}
+        onCheckedChange={() => {
+          if (tool.is_available) {
+            onToggle();
+          }
+        }}
+        disabled={disabled || !tool.is_available}
       />
     </div>
   );

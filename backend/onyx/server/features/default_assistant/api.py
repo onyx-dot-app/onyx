@@ -6,7 +6,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.models import Tool as ToolDBModel
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
@@ -115,12 +117,30 @@ def list_available_tools(
     ordered_tools = [
         tool_by_in_code_id[t] for t in ORDERED_TOOL_IDS if t in tool_by_in_code_id
     ]
+
+    # Compute availability for relevant tools
+    # For Image Generation, consider only OpenAI providers (not Azure DALL-E) per UI requirement
+    providers = fetch_existing_llm_providers(db_session)
+    image_available = any(
+        getattr(p, "provider", None) == "openai" and bool(getattr(p, "api_key", None))
+        for p in providers
+    )
+    internet_search_available = bool(EXA_API_KEY)
+
+    def _is_available(in_code_id: str) -> bool:
+        if in_code_id == ImageGenerationTool.__name__:
+            return image_available
+        if in_code_id == WebSearchTool.__name__:
+            return internet_search_available
+        return True
+
     return [
         AvailableTool(
             id=tool.id,
             in_code_tool_id=tool.in_code_tool_id or "",
             display_name=tool.display_name or tool.name,
             description=tool.description or "",
+            is_available=_is_available(tool.in_code_tool_id or ""),
         )
         for tool in ordered_tools
     ]

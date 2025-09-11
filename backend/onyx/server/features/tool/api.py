@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -29,10 +31,12 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    WebSearchTool,
+)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
-from onyx.tools.utils import is_image_generation_available
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -158,16 +162,37 @@ def list_tools(
 
     kg_configs = get_kg_config_settings()
     kg_available = kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
+    # For Image Generation visibility in tool lists, only consider OpenAI providers
+    providers = fetch_existing_llm_providers(db_session)
+    image_available = any(
+        getattr(p, "provider", None) == "openai" and bool(getattr(p, "api_key", None))
+        for p in providers
+    )
+    internet_search_available = bool(EXA_API_KEY)
 
-    return [
-        ToolSnapshot.from_model(tool)
-        for tool in tools
-        if (
-            tool.display_name != KnowledgeGraphTool._DISPLAY_NAME
-            and (
-                tool.in_code_tool_id != ImageGenerationTool._NAME
-                or is_image_generation_available(db_session=db_session)
-            )
-        )
-        or (tool.display_name == KnowledgeGraphTool._DISPLAY_NAME and kg_available)
-    ]
+    filtered_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        in_code_id = tool.in_code_tool_id or ""
+
+        # Knowledge Graph availability
+        if tool.display_name == KnowledgeGraphTool._DISPLAY_NAME:
+            if kg_available:
+                filtered_tools.append(ToolSnapshot.from_model(tool))
+            continue
+
+        # Image generation availability
+        if in_code_id == ImageGenerationTool.__name__:
+            if image_available:
+                filtered_tools.append(ToolSnapshot.from_model(tool))
+            continue
+
+        # Internet search availability
+        if in_code_id == WebSearchTool.__name__:
+            if internet_search_available:
+                filtered_tools.append(ToolSnapshot.from_model(tool))
+            continue
+
+        # All other tools always shown
+        filtered_tools.append(ToolSnapshot.from_model(tool))
+
+    return filtered_tools

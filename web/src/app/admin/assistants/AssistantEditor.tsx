@@ -138,6 +138,8 @@ export function AssistantEditor({
 }) {
   const { refreshAssistants, isImageGenerationAvailable } =
     useAssistantsContext();
+  const [isInternetSearchAvailable, setIsInternetSearchAvailable] =
+    useState<boolean>(false);
 
   const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
@@ -286,12 +288,38 @@ export function AssistantEditor({
     return mcpServers.find((server) => server.id === serverId) || null;
   };
 
+  // Determine Internet Search availability from admin tools endpoint
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      try {
+        const res = await fetch("/api/admin/default-assistant/available-tools");
+        if (res.ok) {
+          const data = (await res.json()) as Array<{
+            in_code_tool_id: string;
+            is_available: boolean;
+          }>;
+          const internetTool = data.find(
+            (t) => t.in_code_tool_id === "WebSearchTool"
+          );
+          setIsInternetSearchAvailable(!!internetTool?.is_available);
+        }
+      } catch (e) {
+        // ignore; default stays false
+      }
+    };
+    fetchAvailability();
+  }, []);
+
   const availableTools = [
     ...customTools,
     ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
-    ...(imageGenerationTool ? [imageGenerationTool] : []),
-    ...(internetSearchTool ? [internetSearchTool] : []),
+    ...(imageGenerationTool && isImageGenerationAvailable
+      ? [imageGenerationTool]
+      : []),
+    ...(internetSearchTool && isInternetSearchAvailable
+      ? [internetSearchTool]
+      : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -1197,7 +1225,7 @@ export function AssistantEditor({
                     <div className="py-2">
                       <p className="block font-medium text-sm mb-2">Actions</p>
 
-                      {imageGenerationTool && (
+                      {imageGenerationTool && isImageGenerationAvailable && (
                         <>
                           <div className="flex items-center content-start mb-2">
                             <BooleanFormField
@@ -1218,7 +1246,7 @@ export function AssistantEditor({
                         </>
                       )}
 
-                      {internetSearchTool && (
+                      {internetSearchTool && isInternetSearchAvailable && (
                         <>
                           <BooleanFormField
                             name={`enabled_tools_map.${internetSearchTool.id}`}

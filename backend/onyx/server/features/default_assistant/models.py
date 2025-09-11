@@ -37,3 +37,6 @@ class AvailableTool(BaseModel):
     )
     display_name: str = Field(..., description="Human-friendly name for the tool")
     description: str = Field(..., description="Description of the tool")
+    is_available: bool = Field(
+        ..., description="Whether the tool is currently usable (configured)"
+    )
