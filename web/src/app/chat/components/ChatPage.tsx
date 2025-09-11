@@ -18,6 +18,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
@@ -163,6 +164,10 @@ export function ChatPage({
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
+  const {
+    connectors: federatedConnectorOAuthStatus,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -798,6 +803,9 @@ export function ChatPage({
           updateCurrentLlm={llmManager.updateCurrentLlm}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectorOAuthStatus}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => {
             setUserSettingsToggled(false);
             setSettingsToggled(false);

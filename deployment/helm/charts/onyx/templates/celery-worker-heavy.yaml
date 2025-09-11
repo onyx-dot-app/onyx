@@ -33,6 +33,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_worker_heavy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: celery-worker-heavy
           securityContext:

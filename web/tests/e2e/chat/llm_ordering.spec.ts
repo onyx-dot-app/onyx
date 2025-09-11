@@ -27,20 +27,16 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.getByLabel("Close modal").click();
   await page.waitForTimeout(5000);
   await verifyCurrentModel(page, "GPT 5");
-  // Test Art Assistant: Should use its own model (GPT 4o)
+  // Test Art Assistant: Should use user default model (GPT 5)
   await page.reload();
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
   await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "GPT 4o");
+  await verifyCurrentModel(page, "GPT 5");
 
-  // Test new chat: Should use Art Assistant's model initially
+  // Test new chat: Should use user default model (GPT 5)
   await startNewChat(page);
   await verifyAssistantIsChosen(page, "Art");
-  await verifyCurrentModel(page, "GPT 4o");
-
-  // Test another new chat: Should use user's default model (GPT 5)
-  await startNewChat(page);
   await verifyCurrentModel(page, "GPT 5");
 
   // Test model switching within a chat
@@ -71,5 +67,5 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
 
   // Switch back to Art Assistant and verify its model
   await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
-  await verifyCurrentModel(page, "GPT 4o");
+  await verifyCurrentModel(page, "GPT 5");
 });

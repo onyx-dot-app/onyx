@@ -22,6 +22,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.models import LlmDoc
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.context.search.models import InferenceSection
 from onyx.db.connector import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -94,7 +96,7 @@ def basic_search(
                 assistant_system_prompt, base_search_processing_prompt
             ),
             schema=BaseSearchProcessingResponse,
-            timeout_override=15,
+            timeout_override=TF_DR_TIMEOUT_SHORT,
             # max_tokens=100,
         )
     except Exception as e:
@@ -203,7 +205,7 @@ def basic_search(
                 assistant_system_prompt, search_prompt + (assistant_task_prompt or "")
             ),
             schema=SearchAnswer,
-            timeout_override=40,
+            timeout_override=TF_DR_TIMEOUT_LONG,
             # max_tokens=1500,
         )
 
@@ -224,9 +226,9 @@ def basic_search(
             claims,
         ) = extract_document_citations(answer_string, claims)
 
-        if (citation_numbers and max(citation_numbers) > len(retrieved_docs)) or min(
-            citation_numbers
-        ) < 1:
+        if citation_numbers and (
+            (max(citation_numbers) > len(retrieved_docs)) or min(citation_numbers) < 1
+        ):
             raise ValueError("Citation numbers are out of range for retrieved docs.")
 
         cited_documents = {

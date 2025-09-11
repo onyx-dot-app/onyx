@@ -33,6 +33,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: api-server
           securityContext:

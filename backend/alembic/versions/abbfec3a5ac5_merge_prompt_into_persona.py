@@ -17,6 +17,9 @@ branch_labels = None
 depends_on = None
 
 
+MAX_PROMPT_LENGTH = 5_000_000
+
+
 def upgrade() -> None:
     """NOTE: Prompts without any Personas will just be lost."""
     # Step 1: Add new columns to persona table (only if they don't exist)
@@ -28,12 +31,18 @@ def upgrade() -> None:
 
     if "system_prompt" not in existing_columns:
         op.add_column(
-            "persona", sa.Column("system_prompt", sa.String(length=8000), nullable=True)
+            "persona",
+            sa.Column(
+                "system_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True
+            ),
         )
 
     if "task_prompt" not in existing_columns:
         op.add_column(
-            "persona", sa.Column("task_prompt", sa.String(length=8000), nullable=True)
+            "persona",
+            sa.Column(
+                "task_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=True
+            ),
         )
 
     if "datetime_aware" not in existing_columns:
@@ -110,7 +119,7 @@ def upgrade() -> None:
     op.alter_column(
         "persona",
         "system_prompt",
-        existing_type=sa.String(length=8000),
+        existing_type=sa.String(length=MAX_PROMPT_LENGTH),
         nullable=False,
         server_default=None,
     )
@@ -118,7 +127,7 @@ def upgrade() -> None:
     op.alter_column(
         "persona",
         "task_prompt",
-        existing_type=sa.String(length=8000),
+        existing_type=sa.String(length=MAX_PROMPT_LENGTH),
         nullable=False,
         server_default=None,
     )
@@ -132,8 +141,8 @@ def downgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=False),
-        sa.Column("system_prompt", sa.String(length=8000), nullable=False),
-        sa.Column("task_prompt", sa.String(length=8000), nullable=False),
+        sa.Column("system_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=False),
+        sa.Column("task_prompt", sa.String(length=MAX_PROMPT_LENGTH), nullable=False),
         sa.Column(
             "datetime_aware", sa.Boolean(), nullable=False, server_default="true"
         ),
