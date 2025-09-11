@@ -24,6 +24,7 @@ import {
   BrainIcon,
   NewChatIcon,
   ChatIcon,
+  OnyxSparkleIcon,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -197,7 +198,7 @@ const collections = (
             {
               name: (
                 <div className="flex">
-                  <ChatIcon className="text-text-700" size={18} />
+                  <OnyxSparkleIcon className="text-text-700" size={18} />
                   <div className="ml-1">Default Assistant</div>
                 </div>
               ),
