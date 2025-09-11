@@ -40,14 +40,14 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.alter_column(
-        "prompt",
+        "persona",
         "system_prompt",
         existing_type=sa.String(length=MAX_PROMPT_LENGTH),
         type_=sa.TEXT(),
         existing_nullable=False,
     )
     op.alter_column(
-        "prompt",
+        "persona",
         "task_prompt",
         existing_type=sa.String(length=MAX_PROMPT_LENGTH),
         type_=sa.TEXT(),
