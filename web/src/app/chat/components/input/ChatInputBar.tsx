@@ -42,7 +42,6 @@ import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
-import { useChatController } from "../../hooks/useChatController";
 
 const MAX_INPUT_HEIGHT = 200;
 
