@@ -412,8 +412,9 @@ class TestSlackBotFederatedSearch:
             p.stop()
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
     def test_slack_bot_public_channel_filtering(
-        self, mock_gpu_status: Mock, db_session: Session
+        self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
         """Test that slack bot in public channel sees only public channel messages"""
         self._setup_llm_provider(db_session)
@@ -464,8 +465,9 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
     def test_slack_bot_private_channel_filtering(
-        self, mock_gpu_status: Mock, db_session: Session
+        self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
         """Test that slack bot in private channel sees private + public channel messages"""
         self._setup_llm_provider(db_session)
@@ -516,8 +518,9 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
+    @patch("onyx.document_index.vespa.chunk_retrieval.query_vespa", return_value=[])
     def test_slack_bot_dm_filtering(
-        self, mock_gpu_status: Mock, db_session: Session
+        self, mock_vespa: Mock, mock_gpu_status: Mock, db_session: Session
     ) -> None:
         """Test that slack bot in DM sees all messages (no filtering)"""
         self._setup_llm_provider(db_session)
