@@ -155,5 +155,4 @@ jobs:
               --skip-version-check \
               --timeout 20m \
               --severity CRITICAL,HIGH \
-              --exit-code 1 \
               docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}

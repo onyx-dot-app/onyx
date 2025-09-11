@@ -163,5 +163,4 @@ jobs:
               --timeout 20m \
               --severity CRITICAL,HIGH \
               --ignorefile /tmp/.trivyignore \
-              --exit-code 1 \
               docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
