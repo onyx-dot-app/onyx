@@ -25,31 +25,19 @@ def upgrade() -> None:
     op.alter_column(
         "persona",
         "system_prompt",
-        existing_type=sa.TEXT(),
+        existing_type=sa.String(length=8000),
         type_=sa.String(length=MAX_PROMPT_LENGTH),
         existing_nullable=False,
     )
     op.alter_column(
         "persona",
         "task_prompt",
-        existing_type=sa.TEXT(),
+        existing_type=sa.String(length=8000),
         type_=sa.String(length=MAX_PROMPT_LENGTH),
         existing_nullable=False,
     )
 
 
 def downgrade() -> None:
-    op.alter_column(
-        "persona",
-        "system_prompt",
-        existing_type=sa.String(length=MAX_PROMPT_LENGTH),
-        type_=sa.TEXT(),
-        existing_nullable=False,
-    )
-    op.alter_column(
-        "persona",
-        "task_prompt",
-        existing_type=sa.String(length=MAX_PROMPT_LENGTH),
-        type_=sa.TEXT(),
-        existing_nullable=False,
-    )
+    # Downgrade not necessary
+    pass
