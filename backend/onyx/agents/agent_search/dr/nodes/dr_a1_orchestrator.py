@@ -141,6 +141,7 @@ def orchestrator(
     available_tools = state.available_tools or {}
 
     uploaded_context = state.uploaded_test_context or ""
+    uploaded_image_context = state.uploaded_image_context or []
 
     questions = [
         f"{iteration_response.tool}: {iteration_response.question}"
@@ -234,7 +235,9 @@ def orchestrator(
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        decision_system_prompt, reasoning_prompt
+                        decision_system_prompt,
+                        reasoning_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     event_name="basic_response",
                     writer=writer,
@@ -325,6 +328,7 @@ def orchestrator(
                     prompt=create_question_prompt(
                         decision_system_prompt,
                         decision_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=TF_DR_TIMEOUT_SHORT,
@@ -376,6 +380,7 @@ def orchestrator(
                     prompt=create_question_prompt(
                         decision_system_prompt,
                         plan_generation_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     schema=OrchestrationPlan,
                     timeout_override=TF_DR_TIMEOUT_SHORT,
@@ -454,6 +459,7 @@ def orchestrator(
                     prompt=create_question_prompt(
                         decision_system_prompt,
                         decision_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=TF_DR_TIMEOUT_LONG,
@@ -550,6 +556,7 @@ def orchestrator(
                     prompt=create_question_prompt(
                         decision_system_prompt,
                         orchestration_next_step_purpose_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     event_name="basic_response",
                     writer=writer,
