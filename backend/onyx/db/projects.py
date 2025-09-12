@@ -87,7 +87,7 @@ def create_user_files(
 def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     project_id: int | None,
-    user: User,
+    user: User | None,
     db_session: Session,
 ) -> CategorizedFilesResult:
     categorized_files_result = create_user_files(files, project_id, user, db_session)
@@ -122,7 +122,7 @@ def upload_files_to_user_files_with_indexing(
 
 
 def check_project_ownership(
-    project_id: int, user_id: UUID, db_session: Session
+    project_id: int, user_id: UUID | None, db_session: Session
 ) -> bool:
     return (
         db_session.query(UserProject)
@@ -133,7 +133,7 @@ def check_project_ownership(
 
 
 def get_user_files_from_project(
-    project_id: int, user_id: UUID, db_session: Session
+    project_id: int, user_id: UUID | None, db_session: Session
 ) -> list[UserFile]:
     # First check if the user owns the project
     if not check_project_ownership(project_id, user_id, db_session):
