@@ -29,8 +29,6 @@ export default async function Layout({
     documentSets,
     tags,
     llmProviders,
-    folders,
-    openedFolders,
     sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,

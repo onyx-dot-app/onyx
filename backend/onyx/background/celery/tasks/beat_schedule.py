@@ -27,6 +27,16 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
     {
+        "name": "check-for-user-file-processing",
+        "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.USER_FILE_PROCESSING,
+        },
+    },
+    {
         "name": "check-for-kg-processing",
         "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
         "schedule": timedelta(seconds=60),
