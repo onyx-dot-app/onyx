@@ -57,16 +57,9 @@ jobs:
       if: steps.list-changed.outputs.changed == 'true'
       run: |
         echo "=== Pre-install Cluster Status ==="
-        kubectl cluster-info
         kubectl get nodes -o wide
         kubectl get pods --all-namespaces
-        echo "=== Available Storage Classes ==="
         kubectl get storageclass
-        echo "=== Available PVs ==="
-        kubectl get pv
-        echo "=== Kind cluster resources ==="
-        docker ps
-        docker stats --no-stream
 
     - name: Add Helm repositories and update
       if: steps.list-changed.outputs.changed == 'true'
@@ -75,11 +68,6 @@ jobs:
         helm repo add bitnami https://charts.bitnami.com/bitnami
         helm repo add vespa https://onyx-dot-app.github.io/vespa-helm-charts
         helm repo update
-        echo "=== Available repositories ==="
-        helm repo list
-        echo "=== Repository search results ==="
-        helm search repo bitnami/postgresql --versions | head -10
-        helm search repo bitnami/redis --versions | head -10
 
     - name: Pre-pull critical images
       if: steps.list-changed.outputs.changed == 'true'
@@ -104,8 +92,8 @@ jobs:
         kind load docker-image docker.io/onyxdotapp/onyx-web-server:latest --name $KIND_CLUSTER || echo "Failed to load onyx web server"
         kind load docker-image docker.io/onyxdotapp/onyx-backend:latest --name $KIND_CLUSTER || echo "Failed to load onyx backend"
         
-        echo "=== Available images in kind cluster ==="
-        docker exec $KIND_CLUSTER-control-plane crictl images
+        echo "=== Images loaded into Kind cluster ==="
+        docker exec $KIND_CLUSTER-control-plane crictl images | grep -E "(postgres|redis|onyx)" || echo "Some images may still be loading..."
 
     - name: Validate chart dependencies
       if: steps.list-changed.outputs.changed == 'true'
@@ -113,10 +101,7 @@ jobs:
         echo "=== Validating chart dependencies ==="
         cd deployment/helm/charts/onyx
         helm dependency update
-        helm dependency list
-        echo "=== Chart validation ==="
         helm lint .
-        helm template . --dry-run --debug
 
     - name: Run chart-testing (install) with enhanced monitoring
       timeout-minutes: 25
@@ -128,12 +113,21 @@ jobs:
         monitor_cluster() {
           while true; do
             echo "=== Cluster Status Check at $(date) ==="
-            kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded
-            kubectl get events --sort-by=.lastTimestamp --all-namespaces | tail -10
-            echo "=== Resource usage ==="
-            kubectl top nodes 2>/dev/null || echo "Metrics not available"
-            kubectl top pods --all-namespaces 2>/dev/null || echo "Pod metrics not available"
-            sleep 30
+            # Only show non-running pods to reduce noise
+            NON_RUNNING_PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded --no-headers 2>/dev/null | wc -l)
+            if [ "$NON_RUNNING_PODS" -gt 0 ]; then
+              echo "Non-running pods:"
+              kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded
+            else
+              echo "All pods running successfully"
+            fi
+            # Only show recent events if there are issues
+            RECENT_EVENTS=$(kubectl get events --sort-by=.lastTimestamp --all-namespaces --field-selector=type!=Normal 2>/dev/null | tail -5)
+            if [ -n "$RECENT_EVENTS" ]; then
+              echo "Recent warnings/errors:"
+              echo "$RECENT_EVENTS"
+            fi
+            sleep 60
           done
         }
         
@@ -181,50 +175,32 @@ jobs:
         
         echo "=== Installation completed successfully ==="
         kubectl get pods --all-namespaces
-        kubectl get services --all-namespaces
 
     - name: Post-install verification
       if: steps.list-changed.outputs.changed == 'true'
       run: |
         echo "=== Post-install verification ==="
-        kubectl get pods --all-namespaces -o wide
+        kubectl get pods --all-namespaces
         kubectl get services --all-namespaces
-        kubectl get pvc --all-namespaces
-        kubectl describe pods --all-namespaces | grep -A 10 -B 5 "Failed\|Error\|Warning" || echo "No pod issues found"
-        kubectl logs --all-namespaces --tail=50 | grep -i error || echo "No error logs found"
+        # Only show issues if they exist
+        kubectl describe pods --all-namespaces | grep -A 5 -B 2 "Failed\|Error\|Warning" || echo "No pod issues found"
 
     - name: Cleanup on failure
       if: failure() && steps.list-changed.outputs.changed == 'true'
       run: |
         echo "=== Cleanup on failure ==="
         echo "=== Final cluster state ==="
-        kubectl get pods --all-namespaces -o wide
-        kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -20
+        kubectl get pods --all-namespaces
+        kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -10
         
         echo "=== Pod descriptions for debugging ==="
-        kubectl describe pods --all-namespaces | grep -A 20 -B 5 "Failed\|Error\|Warning\|Pending" || echo "No problematic pods found"
+        kubectl describe pods --all-namespaces | grep -A 10 -B 3 "Failed\|Error\|Warning\|Pending" || echo "No problematic pods found"
         
         echo "=== Recent logs for debugging ==="
-        kubectl logs --all-namespaces --tail=100 | grep -i "error\|timeout\|failed\|pull" || echo "No error logs found"
-        
-        echo "=== Node resources ==="
-        kubectl describe nodes
-        kubectl top nodes 2>/dev/null || echo "Metrics not available"
-        
-        echo "=== Storage and volumes ==="
-        kubectl get pv,pvc --all-namespaces
-        kubectl get storageclass
+        kubectl logs --all-namespaces --tail=50 | grep -i "error\|timeout\|failed\|pull" || echo "No error logs found"
         
         echo "=== Helm releases ==="
         helm list --all-namespaces
-        
-        echo "=== Docker system info ==="
-        docker system df
-        docker ps -a
-        
-        echo "=== Kind cluster cleanup ==="
-        # Don't actually delete the cluster in CI, just show what would be cleaned up
-        echo "Would run: kind delete cluster --name $(kubectl config current-context | sed 's/kind-//')"
       # the following would install only changed charts, but we only have one chart so 
       # don't worry about that for now
       # run: ct install --target-branch ${{ github.event.repository.default_branch }}
