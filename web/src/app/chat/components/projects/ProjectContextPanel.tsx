@@ -123,8 +123,6 @@ export default function ProjectContextPanel() {
     setInstructionText(preset);
   }, [currentProjectDetails?.project?.instructions ?? ""]);
 
-  if (!currentProjectId) return null; // no selection yet
-
   const totalFiles = (currentProjectDetails?.files || []).length;
   const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
 
@@ -183,6 +181,8 @@ export default function ProjectContextPanel() {
     },
     [currentProjectId, uploadFiles, setPopup]
   );
+
+  if (!currentProjectId) return null; // no selection yet
 
   return (
     <div className="flex flex-col gap-5 p-4 w-full max-w-[800px] mx-auto mt-10">

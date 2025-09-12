@@ -30,7 +30,6 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "./projectsService";
-import { Prompt } from "@/app/admin/assistants/interfaces";
 
 export type { Project, ProjectFile } from "./projectsService";
 
