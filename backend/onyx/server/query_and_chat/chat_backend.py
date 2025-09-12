@@ -275,13 +275,14 @@ def create_new_chat_session(
     logger.info(
         f"Creating chat session with request: {chat_session_creation_request.persona_id}"
     )
+    user_id = user.id if user is not None else None
     project_id = chat_session_creation_request.project_id
     if project_id:
-        if not check_project_ownership(project_id, user.id, db_session):
+        if not check_project_ownership(project_id, user_id, db_session):
             raise HTTPException(
                 status_code=403, detail="User does not have access to project"
             )
-    user_id = user.id if user is not None else None
+
     try:
         new_chat_session = create_chat_session(
             db_session=db_session,

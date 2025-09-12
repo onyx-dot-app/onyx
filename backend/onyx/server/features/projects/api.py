@@ -35,11 +35,12 @@ router = APIRouter(prefix="/user/projects")
 
 @router.get("/")
 def get_projects(
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserProjectSnapshot]:
+    user_id = user.id if user is not None else None
     projects = (
-        db_session.query(UserProject).filter(UserProject.user_id == user.id).all()
+        db_session.query(UserProject).filter(UserProject.user_id == user_id).all()
     )
     return [UserProjectSnapshot.from_model(project) for project in projects]
 
@@ -47,10 +48,11 @@ def get_projects(
 @router.post("/create")
 def create_project(
     name: str,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
-    project = UserProject(name=name, user_id=user.id)
+    user_id = user.id if user is not None else None
+    project = UserProject(name=name, user_id=user_id)
     db_session.add(project)
     db_session.commit()
     return UserProjectSnapshot.from_model(project)
@@ -60,11 +62,10 @@ def create_project(
 def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
     try:
-
         # Use our consolidated function that handles indexing properly
         categorized_files_result = upload_files_to_user_files_with_indexing(
             files=files, project_id=project_id, user=user, db_session=db_session
@@ -80,12 +81,13 @@ def upload_user_files(
 @router.get("/{project_id}")
 def get_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -96,12 +98,13 @@ def get_project(
 @router.get("/files/{project_id}")
 def get_files_in_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
+    user_id = user.id if user is not None else None
     user_files = (
         db_session.query(UserFile)
-        .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user.id)
+        .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
         .order_by(UserFile.created_at.desc())
         .all()
@@ -113,24 +116,26 @@ def get_files_in_project(
 def unlink_user_file_from_project(
     project_id: int,
     file_id: UUID,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Unlink an existing user file from a specific project for the current user.
 
     Does not delete the underlying file; only removes the association.
     """
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    user_id = user.id if user is not None else None
     user_file = (
         db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
         .one_or_none()
     )
     if user_file is None:
@@ -148,7 +153,7 @@ def unlink_user_file_from_project(
 def link_user_file_to_project(
     project_id: int,
     file_id: UUID,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ):
     """Link an existing user file to a specific project for the current user.
@@ -156,9 +161,10 @@ def link_user_file_to_project(
     Creates the association in the Project__UserFile join table if it does not exist.
     Returns the linked user file snapshot.
     """
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -166,7 +172,7 @@ def link_user_file_to_project(
 
     user_file = (
         db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
         .one_or_none()
     )
     if user_file is None:
@@ -186,12 +192,13 @@ class ProjectInstructionsResponse(BaseModel):
 @router.get("/{project_id}/instructions", response_model=ProjectInstructionsResponse)
 def get_project_instructions(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
 
@@ -209,14 +216,15 @@ class UpsertProjectInstructionsRequest(BaseModel):
 def upsert_project_instructions(
     project_id: int,
     body: UpsertProjectInstructionsRequest,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ):
     """Create or update this project's instructions stored on the project itself."""
     # Ensure the project exists and belongs to the user
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -237,7 +245,7 @@ class ProjectPayload(BaseModel):
 @router.get("/{project_id}/details", response_model=ProjectPayload)
 def get_project_details(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ProjectPayload:
     project = get_project(project_id, user, db_session)
@@ -267,12 +275,13 @@ class UpdateProjectRequest(BaseModel):
 def update_project(
     project_id: int,
     body: UpdateProjectRequest,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ):
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -291,12 +300,13 @@ def update_project(
 @router.delete("/{project_id}")
 def delete_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -318,16 +328,17 @@ def delete_project(
 @router.delete("/file/{file_id}")
 def delete_user_file(
     file_id: UUID,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Delete a user file belonging to the current user.
 
     This will also remove any project associations for the file.
     """
+    user_id = user.id if user is not None else None
     user_file = (
         db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
         .one_or_none()
     )
     if user_file is None:
@@ -345,16 +356,17 @@ def delete_user_file(
 @router.get("/file/{file_id}", response_model=UserFileSnapshot)
 def get_user_file(
     file_id: UUID,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
     """Fetch a single user file by ID for the current user.
 
     Includes files in any status (including FAILED) to allow status polling.
     """
+    user_id = user.id if user is not None else None
     user_file = (
         db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user.id)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
         .one_or_none()
     )
     if user_file is None:
@@ -369,7 +381,7 @@ class UserFileIdsRequest(BaseModel):
 @router.post("/file/statuses", response_model=list[UserFileSnapshot])
 def get_user_file_statuses(
     body: UserFileIdsRequest,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     """Fetch statuses for a set of user file IDs owned by the current user.
@@ -379,9 +391,10 @@ def get_user_file_statuses(
     if not body.file_ids:
         return []
 
+    user_id = user.id if user is not None else None
     user_files = (
         db_session.query(UserFile)
-        .filter(UserFile.user_id == user.id)
+        .filter(UserFile.user_id == user_id)
         .filter(UserFile.id.in_(body.file_ids))
         .all()
     )
@@ -393,12 +406,13 @@ def get_user_file_statuses(
 def move_chat_session(
     project_id: int,
     body: ChatSessionRequest,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
+    user_id = user.id if user is not None else None
     chat_session = (
         db_session.query(ChatSession)
-        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user.id)
+        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
         .one_or_none()
     )
     if chat_session is None:
@@ -411,13 +425,13 @@ def move_chat_session(
 @router.post("/remove_chat_session")
 def remove_chat_session(
     body: ChatSessionRequest,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
-
+    user_id = user.id if user is not None else None
     chat_session = (
         db_session.query(ChatSession)
-        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user.id)
+        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
         .one_or_none()
     )
     if chat_session is None:
@@ -430,16 +444,17 @@ def remove_chat_session(
 @router.get("/session/{chat_session_id}/token-count", response_model=TokenCountResponse)
 def get_chat_session_project_token_count(
     chat_session_id: str,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the project linked to the given chat session.
 
     If the chat session has no project, returns 0.
     """
+    user_id = user.id if user is not None else None
     chat_session = (
         db_session.query(ChatSession)
-        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user.id)
+        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user_id)
         .one_or_none()
     )
     if chat_session is None:
@@ -451,7 +466,7 @@ def get_chat_session_project_token_count(
     total_tokens = (
         db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
         .filter(
-            UserFile.user_id == user.id,
+            UserFile.user_id == user_id,
             UserFile.projects.any(id=chat_session.project_id),
         )
         .scalar()
@@ -464,15 +479,16 @@ def get_chat_session_project_token_count(
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
 def get_project_token_count(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the given project for the current user."""
 
     # Verify the project belongs to the current user
+    user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
         .one_or_none()
     )
     if project is None:
@@ -481,7 +497,7 @@ def get_project_token_count(
     total_tokens = (
         db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
         .filter(
-            UserFile.user_id == user.id,
+            UserFile.user_id == user_id,
             UserFile.projects.any(id=project_id),
         )
         .scalar()

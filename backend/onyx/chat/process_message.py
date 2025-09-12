@@ -631,7 +631,7 @@ def stream_chat_message_objects(
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
         project_file_ids = []
-        if chat_session.project_id and user_id:
+        if chat_session.project_id:
             project_file_ids.extend(
                 [
                     file.file_id

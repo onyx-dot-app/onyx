@@ -70,7 +70,7 @@ class UserProjectSnapshot(BaseModel):
     name: str
     description: str | None
     created_at: datetime
-    user_id: UUID
+    user_id: UUID | None
     instructions: str | None = None
     chat_sessions: list[ChatSessionDetails]
 

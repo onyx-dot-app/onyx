@@ -51,7 +51,7 @@ def parse_user_files(
 
     project_user_file_ids = []
 
-    if project_id and user_id:
+    if project_id:
         project_user_file_ids.extend(
             [
                 file.id
