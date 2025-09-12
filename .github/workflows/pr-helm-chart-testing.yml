@@ -52,31 +52,6 @@ jobs:
     - name: Create kind cluster
       if: steps.list-changed.outputs.changed == 'true'
       uses: helm/kind-action@v1.12.0
-      with:
-        config: |
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          nodes:
-          - role: control-plane
-            kubeadmConfigPatches:
-            - |
-              kind: InitConfiguration
-              nodeRegistration:
-                kubeletExtraArgs:
-                  system-reserved: memory=2Gi
-                  eviction-hard: memory.available<500Mi
-                  image-gc-high-threshold: 90
-                  image-gc-low-threshold: 80
-          - role: worker
-            kubeadmConfigPatches:
-            - |
-              kind: JoinConfiguration
-              nodeRegistration:
-                kubeletExtraArgs:
-                  system-reserved: memory=2Gi
-                  eviction-hard: memory.available<500Mi
-                  image-gc-high-threshold: 90
-                  image-gc-low-threshold: 80
 
     - name: Pre-install cluster status check
       if: steps.list-changed.outputs.changed == 'true'
