@@ -152,6 +152,7 @@ def basic_search(
                 alternate_db_session=search_db_session,
                 retrieved_sections_callback=callback_container.append,
                 skip_query_analysis=True,
+                original_query=rewritten_query,
             ),
         ):
             # get retrieved docs to send to the rest of the graph
