@@ -897,12 +897,13 @@ def update_assistant_preferences_for_user_api(
 
 @router.get("/user/files/recent")
 def get_recent_files(
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
+    user_id = user.id if user is not None else None
     user_files = (
         db_session.query(UserFile)
-        .filter(UserFile.user_id == user.id)
+        .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
         .order_by(UserFile.last_accessed_at.desc())
         .all()

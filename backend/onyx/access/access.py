@@ -134,9 +134,9 @@ def get_access_for_user_files(
     user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
     return {
         str(user_file.id): DocumentAccess.build(
-            user_emails=[user_file.user.email],
+            user_emails=[user_file.user.email] if user_file.user else [],
             user_groups=[],
-            is_public=False,
+            is_public=True if user_file.user is None else False,
             external_user_emails=[],
             external_user_group_ids=[],
         )
