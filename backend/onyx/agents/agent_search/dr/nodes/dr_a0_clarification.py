@@ -110,6 +110,10 @@ def _get_available_tools(
 
     for tool in graph_config.tooling.tools:
 
+        if not tool.is_available():
+            logger.info(f"Tool {tool.name} is not available, skipping")
+            continue
+
         tool_db_info = tool_dict.get(tool.id)
         if tool_db_info:
             incode_tool_id = tool_db_info.in_code_tool_id
@@ -123,6 +127,7 @@ def _get_available_tools(
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
         elif isinstance(tool, KnowledgeGraphTool) and include_kg:
+            # TODO (chris): move this into the `is_available` check
             if len(active_source_types) == 0:
                 logger.error(
                     "No active source types found, skipping Knowledge Graph tool"
