@@ -421,6 +421,7 @@ jobs:
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
+          TARGET_AVAILABLE_TENANTS=0 \
           IMAGE_TAG=test \
           DEV_MODE=true \
           docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up -d
