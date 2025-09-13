@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class LLMOverride(BaseModel):
-    model_provider: str | None = None
+    name: str | None = None
     model_version: str | None = None
     temperature: float | None = None
 

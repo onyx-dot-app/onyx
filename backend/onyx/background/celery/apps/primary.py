@@ -316,6 +316,7 @@ celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.connector_deletion",
         "onyx.background.celery.tasks.docprocessing",
+        "onyx.background.celery.tasks.evals",
         "onyx.background.celery.tasks.periodic",
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.shared",

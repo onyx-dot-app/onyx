@@ -386,6 +386,28 @@
         }
       },
       {
+        "name": "Eval CLI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/backend/onyx/evals/eval_cli.py",
+        "cwd": "${workspaceFolder}/backend",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "envFile": "${workspaceFolder}/.vscode/.env",
+        "presentation": {
+          "group": "3"
+        },
+        "env": {
+          "LOG_LEVEL": "INFO",
+          "PYTHONUNBUFFERED": "1",
+          "PYTHONPATH": "."
+        },
+        "args": [
+            "--verbose"
+        ],
+        "consoleTitle": "Eval CLI Console"
+    },
+      {
         // Celery jobs launched through a single background script (legacy)
         // Recommend using the "Celery (all)" compound launch instead.
         "name": "Background Jobs",
@@ -466,4 +488,4 @@
       }
     ]
   }
-  
+ 

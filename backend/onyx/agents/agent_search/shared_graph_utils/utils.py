@@ -1,4 +1,3 @@
-import os
 import re
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -8,18 +7,10 @@ from typing import Any
 from typing import cast
 from typing import Literal
 from typing import TypedDict
-from uuid import UUID
 
 from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
-from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.models import GraphInputs
-from onyx.agents.agent_search.models import GraphPersistence
-from onyx.agents.agent_search.models import GraphSearchConfig
-from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
 from onyx.agents.agent_search.shared_graph_utils.models import (
     EntityRelationshipTermExtraction,
@@ -32,9 +23,6 @@ from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswer
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
@@ -42,25 +30,16 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import AGENT_MAX_TOKENS_HISTORY_SUMMARY
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
 )
 from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERATION
-from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DISPATCH_SEP_CHAR
 from onyx.configs.constants import FORMAT_DOCS_SEPARATOR
-from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SearchRequest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
-from onyx.db.tools import get_tool_by_name
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.llm.interfaces import LLM
@@ -77,15 +56,12 @@ from onyx.prompts.agent_search import (
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
-from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -154,120 +130,6 @@ def format_entity_term_extraction(
     term_str = "\n - ".join(term_strs)
 
     return "\n".join(entity_strs + relationship_strs + term_strs)
-
-
-def get_test_config(
-    db_session: Session,
-    primary_llm: LLM,
-    fast_llm: LLM,
-    search_request: SearchRequest,
-    use_agentic_search: bool = True,
-) -> GraphConfig:
-    persona = get_persona_by_id(DEFAULT_PERSONA_ID, None, db_session)
-    document_pruning_config = DocumentPruningConfig(
-        max_chunks=int(
-            persona.num_chunks
-            if persona.num_chunks is not None
-            else MAX_CHUNKS_FED_TO_CHAT
-        ),
-        max_window_percentage=CHAT_TARGET_CHUNK_PERCENTAGE,
-    )
-
-    answer_style_config = AnswerStyleConfig(
-        citation_config=CitationConfig(
-            # The docs retrieved by this flow are already relevance-filtered
-            all_docs_useful=True
-        ),
-        structured_response_format=None,
-    )
-
-    search_tool_config = SearchToolConfig(
-        answer_style_config=answer_style_config,
-        document_pruning_config=document_pruning_config,
-        retrieval_options=RetrievalDetails(),  # may want to set dedupe_docs=True
-        rerank_settings=None,  # Can use this to change reranking model
-        selected_sections=None,
-        latest_query_files=None,
-        bypass_acl=False,
-    )
-
-    prompt_config = PromptConfig.from_model(persona)
-
-    search_tool = SearchTool(
-        tool_id=get_tool_by_name(SearchTool._NAME, db_session).id,
-        db_session=db_session,
-        user=None,
-        persona=persona,
-        retrieval_options=search_tool_config.retrieval_options,
-        prompt_config=prompt_config,
-        llm=primary_llm,
-        fast_llm=fast_llm,
-        document_pruning_config=search_tool_config.document_pruning_config,
-        answer_style_config=search_tool_config.answer_style_config,
-        selected_sections=search_tool_config.selected_sections,
-        chunks_above=search_tool_config.chunks_above,
-        chunks_below=search_tool_config.chunks_below,
-        full_doc=search_tool_config.full_doc,
-        evaluation_type=(
-            LLMEvaluationType.BASIC
-            if persona.llm_relevance_filter
-            else LLMEvaluationType.SKIP
-        ),
-        rerank_settings=search_tool_config.rerank_settings,
-        bypass_acl=search_tool_config.bypass_acl,
-    )
-
-    graph_inputs = GraphInputs(
-        persona=search_request.persona,
-        rerank_settings=search_tool_config.rerank_settings,
-        prompt_builder=AnswerPromptBuilder(
-            user_message=HumanMessage(content=search_request.query),
-            message_history=[],
-            llm_config=primary_llm.config,
-            raw_user_query=search_request.query,
-            raw_user_uploaded_files=[],
-        ),
-        structured_response_format=answer_style_config.structured_response_format,
-    )
-
-    using_tool_calling_llm = explicit_tool_calling_supported(
-        primary_llm.config.model_provider, primary_llm.config.model_name
-    )
-    graph_tooling = GraphTooling(
-        primary_llm=primary_llm,
-        fast_llm=fast_llm,
-        search_tool=search_tool,
-        tools=[search_tool],
-        force_use_tool=ForceUseTool(force_use=False, tool_name=""),
-        using_tool_calling_llm=using_tool_calling_llm,
-    )
-
-    chat_session_id = (
-        os.environ.get("ONYX_AS_CHAT_SESSION_ID")
-        or "00000000-0000-0000-0000-000000000000"
-    )
-    assert (
-        chat_session_id is not None
-    ), "ONYX_AS_CHAT_SESSION_ID must be set for backend tests"
-    graph_persistence = GraphPersistence(
-        db_session=db_session,
-        chat_session_id=UUID(chat_session_id),
-        message_id=1,
-    )
-
-    search_behavior_config = GraphSearchConfig(
-        use_agentic_search=use_agentic_search,
-        skip_gen_ai_answer_generation=False,
-        allow_refinement=True,
-    )
-    graph_config = GraphConfig(
-        inputs=graph_inputs,
-        tooling=graph_tooling,
-        persistence=graph_persistence,
-        behavior=search_behavior_config,
-    )
-
-    return graph_config
 
 
 def get_persona_agent_prompt_expressions(

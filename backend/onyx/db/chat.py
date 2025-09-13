@@ -1760,7 +1760,6 @@ def update_db_session_with_messages(
     research_answer_purpose: ResearchAnswerPurpose | None = None,
     commit: bool = False,
 ) -> ChatMessage:
-
     chat_message = (
         db_session.query(ChatMessage)
         .filter(

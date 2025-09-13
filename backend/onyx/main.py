@@ -59,6 +59,7 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
+from onyx.server.evals.api import router as evals_router
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.folder.api import router as folder_router
 from onyx.server.features.input_prompt.api import (
@@ -378,6 +379,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(application, evals_router)
 
     if AUTH_TYPE == AuthType.DISABLED:
         # Server logs this during auth setup verification step

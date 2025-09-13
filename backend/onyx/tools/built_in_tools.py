@@ -136,6 +136,23 @@ def load_builtin_tools(db_session: Session) -> None:
     logger.notice("All built-in tools are loaded/verified.")
 
 
+def get_builtin_tool_type_by_name(
+    name: str,
+) -> Type[SearchTool | ImageGenerationTool | InternetSearchTool | KnowledgeGraphTool]:
+    name_to_builtin_tool_type: dict[
+        str,
+        Type[
+            SearchTool | ImageGenerationTool | InternetSearchTool | KnowledgeGraphTool
+        ],
+    ] = {
+        "SearchTool": SearchTool,
+        "ImageGenerationTool": ImageGenerationTool,
+        "InternetSearchTool": InternetSearchTool,
+        "KnowledgeGraphTool": KnowledgeGraphTool,
+    }
+    return name_to_builtin_tool_type[name]
+
+
 def get_builtin_tool(
     db_session: Session,
     tool_type: Type[

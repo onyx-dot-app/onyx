@@ -677,6 +677,14 @@ LOG_POSTGRES_CONN_COUNTS = (
 # Anonymous usage telemetry
 DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 
+#####
+# Braintrust Configuration
+#####
+# Enable Braintrust tracing for LangGraph/LangChain applications
+BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
+# Braintrust project name
+BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
 )

@@ -137,6 +137,7 @@ class CreateChatMessageRequest(ChunkContext):
 
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search
+    # TODO: Deprecate this in favor of research_type
     use_agentic_search: bool = False
 
     skip_gen_ai_answer_generation: bool = False
