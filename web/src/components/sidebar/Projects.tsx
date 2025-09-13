@@ -51,7 +51,7 @@ function CollapsibleFolder({
   return (
     <div className="w-full">
       <div
-        className={`w-full group flex items-center gap-x-2 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
+        className={`w-full group flex items-center gap-x-1 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
       >
         <button
           type="button"
@@ -227,19 +227,23 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
     name: string;
   } | null>(null);
   return (
-    <div className="flex flex-col gap-y-2">
-      <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
+    <div className="flex flex-col">
+      <div className=" flex justify-between px-4 ">
+        <p className="my-auto font-normal text-sm leading-normal text-text-500/80 dark:text-[#D4D4D4]">
+          Projects
+        </p>
         <button
           type="button"
+          aria-label="Create project"
           onClick={() => setIsCreateProjectOpen(true)}
-          className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex justify-between"
+          className="p-2 rounded hover:bg-accent-background-hovered cursor-pointer"
+          title="New project"
         >
-          <p className="my-auto flex font-normal items-center">New project</p>
           <FolderPlus size={20} />
         </button>
       </div>
 
-      <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
+      <div className="px-2 gap-y-1 flex flex-col text-text-history-sidebar-button items-center">
         {projects.map((p) => (
           <CollapsibleFolder
             key={p.id}
