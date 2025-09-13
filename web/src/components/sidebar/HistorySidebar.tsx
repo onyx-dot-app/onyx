@@ -282,7 +282,7 @@ export const HistorySidebar = React.memo(
               />
             </div>
             {page == "chat" && (
-              <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
+              <div className="px-4 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center">
                 <Link
                   className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
                   href={`/${page}`}
