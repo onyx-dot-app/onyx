@@ -424,7 +424,16 @@ jobs:
           TARGET_AVAILABLE_TENANTS=0 \
           IMAGE_TAG=test \
           DEV_MODE=true \
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up -d
+          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up \
+            relational_db \
+            index \
+            cache \
+            minio \
+            api_server \
+            inference_model_server \
+            indexing_model_server \
+            background \
+            -d
         id: start_docker_multi_tenant
 
       - name: Wait for service to be ready (multi-tenant)
