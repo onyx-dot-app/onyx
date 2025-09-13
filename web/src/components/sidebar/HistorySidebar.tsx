@@ -17,7 +17,6 @@ import {
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/components/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -55,13 +54,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
+import Projects from "./Projects";
 
 interface HistorySidebarProps {
   liveAssistant?: MinimalPersonaSnapshot | null;
   page: pageType;
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
-  folders?: Folder[];
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
@@ -181,7 +180,6 @@ export const HistorySidebar = React.memo(
         page,
         existingChats,
         currentChatSession,
-        folders,
         explicitlyUntoggle,
         toggleSidebar,
         removeToggle,
@@ -312,18 +310,6 @@ export const HistorySidebar = React.memo(
                     New Chat
                   </p>
                 </Link>
-                <Link
-                  className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href="/chat/my-documents"
-                >
-                  <KnowledgeGroupIcon
-                    size={20}
-                    className="flex-none text-text-history-sidebar-button"
-                  />
-                  <p className="my-auto flex font-normal items-center text-base">
-                    My Documents
-                  </p>
-                </Link>
                 {user?.preferences?.shortcut_enabled && (
                   <Link
                     className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
@@ -419,7 +405,7 @@ export const HistorySidebar = React.memo(
                   Explore Assistants
                 </button>
               </div>
-
+              <Projects />
               <PagesTab
                 toggleChatSessionSearchModal={toggleChatSessionSearchModal}
                 showDeleteModal={showDeleteModal}
@@ -427,7 +413,6 @@ export const HistorySidebar = React.memo(
                 closeSidebar={removeToggle}
                 existingChats={existingChats}
                 currentChatId={currentChatId}
-                folders={folders}
               />
             </div>
           </div>

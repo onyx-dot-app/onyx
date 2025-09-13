@@ -182,7 +182,6 @@ def admin_get_chat_sessions(
                 time_created=chat.time_created.isoformat(),
                 time_updated=chat.time_updated.isoformat(),
                 shared_status=chat.shared_status,
-                folder_id=chat.folder_id,
                 current_alternate_model=chat.current_alternate_model,
             )
             for chat in chat_sessions

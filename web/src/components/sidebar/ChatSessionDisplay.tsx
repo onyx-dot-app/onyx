@@ -10,25 +10,19 @@ import {
 } from "@/app/chat/services/lib";
 import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
-import {
-  FiArrowRight,
-  FiCheck,
-  FiEdit2,
-  FiMoreHorizontal,
-  FiShare2,
-  FiTrash,
-  FiX,
-} from "react-icons/fi";
-import { DefaultDropdownElement } from "@/components/Dropdown";
-import { Popover } from "@/components/popover/Popover";
+import { FiCheck, FiX } from "react-icons/fi";
+import { ChatSessionMorePopup } from "./ChatSessionMorePopup";
 import { ShareChatSessionModal } from "@/app/chat/components/modal/ShareChatSessionModal";
-import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
-import { useChatContext } from "@/components/context/ChatContext";
-import { removeChatFromFolder } from "@/app/chat/components/folders/FolderManagement";
+import { InfoIcon } from "@/components/icons/icons";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -39,6 +33,9 @@ export function ChatSessionDisplay({
   showDeleteModal,
   isDragging,
   parentFolderName,
+  showDragHandle = true,
+  projectId,
+  isCustomAssistant,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -48,6 +45,9 @@ export function ChatSessionDisplay({
   showDeleteModal?: (chatSession: ChatSession) => void;
   isDragging?: boolean;
   parentFolderName?: string;
+  showDragHandle?: boolean;
+  projectId?: number;
+  isCustomAssistant?: boolean;
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
@@ -55,68 +55,11 @@ export function ChatSessionDisplay({
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [chatName, setChatName] = useState(chatSession.name);
   const settings = useContext(SettingsContext);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const chatSessionRef = useRef<HTMLDivElement>(null);
-  const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
 
-  const { refreshChatSessions, refreshFolders } = useChatContext();
-
   const isMobile = settings?.isMobile;
-  const handlePopoverOpenChange = useCallback(
-    (open: boolean) => {
-      setPopoverOpen(open);
-      if (!open) {
-        setIsDeleteModalOpen(false);
-      }
-    },
-    [isDeleteModalOpen]
-  );
-
-  const handleDeleteClick = useCallback(() => {
-    setIsDeleteModalOpen(true);
-  }, []);
-
-  const handleCancelDelete = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDeleteModalOpen(false);
-    setPopoverOpen(false);
-  }, []);
-
-  const handleConfirmDelete = useCallback(
-    async (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (showDeleteModal) {
-        showDeleteModal(chatSession);
-      }
-      await deleteChatSession(chatSession.id);
-      await refreshChatSessions();
-      await refreshFolders();
-      setIsDeleteModalOpen(false);
-      setPopoverOpen(false);
-    },
-    [chatSession, showDeleteModal, refreshChatSessions, refreshFolders]
-  );
-
-  const handleMoveOutOfFolder = useCallback(async () => {
-    try {
-      if (chatSession.folder_id === null) return;
-      await removeChatFromFolder(chatSession.folder_id, chatSession.id);
-      await refreshChatSessions();
-      await refreshFolders();
-      setPopoverOpen(false);
-    } catch (e) {
-      console.error("Failed to move chat out of folder", e);
-    }
-  }, [
-    chatSession.folder_id,
-    chatSession.id,
-    refreshChatSessions,
-    refreshFolders,
-  ]);
 
   const onRename = useCallback(
     async (e?: React.MouseEvent) => {
@@ -161,34 +104,6 @@ export function ChatSessionDisplay({
     settings?.settings
   );
 
-  const handleDragStart = (event: React.DragEvent<HTMLAnchorElement>) => {
-    event.dataTransfer.setData(CHAT_SESSION_ID_KEY, chatSession.id.toString());
-    event.dataTransfer.setData(
-      FOLDER_ID_KEY,
-      chatSession.folder_id?.toString() || ""
-    );
-  };
-
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    // Prevent default touch behavior
-    event.preventDefault();
-
-    // Create a custom event to mimic drag start
-    const customEvent = new Event("dragstart", { bubbles: true });
-    (customEvent as any).dataTransfer = new DataTransfer();
-    (customEvent as any).dataTransfer.setData(
-      CHAT_SESSION_ID_KEY,
-      chatSession.id.toString()
-    );
-    (customEvent as any).dataTransfer.setData(
-      FOLDER_ID_KEY,
-      chatSession.folder_id?.toString() || ""
-    );
-
-    // Dispatch the custom event
-    event.currentTarget.dispatchEvent(customEvent);
-  };
-
   return (
     <>
       {isShareModalVisible && (
@@ -199,7 +114,10 @@ export function ChatSessionDisplay({
         />
       )}
 
-      <div className="bg-transparent" ref={chatSessionRef}>
+      <div
+        className="bg-transparent animate-in fade-in slide-in-from-left-2 duration-300"
+        ref={chatSessionRef}
+      >
         <Link
           onMouseEnter={() => {
             setIsHovered(true);
@@ -220,17 +138,7 @@ export function ChatSessionDisplay({
               : `/chat?chatId=${chatSession.id}`
           }
           scroll={false}
-          draggable={!isMobile}
-          onDragStart={!isMobile ? handleDragStart : undefined}
         >
-          <div
-            className={`${
-              isMobile ? "visible" : "invisible group-hover:visible"
-            } flex-none`}
-            onTouchStart={isMobile ? handleTouchStart : undefined}
-          >
-            <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
-          </div>
           <BasicSelectable
             padding="extra"
             isHovered={isHovered}
@@ -279,7 +187,6 @@ export function ChatSessionDisplay({
                           e.stopPropagation();
                           setChatName(chatSession.name);
                           setIsRenamingChat(false);
-                          setPopoverOpen(false);
                         }}
                         className="p-1"
                       >
@@ -288,19 +195,41 @@ export function ChatSessionDisplay({
                     </div>
                   </div>
                 ) : (
-                  <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
-                    {chatName || `Unnamed Chat`}
-                    <span
-                      className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
-                      ${
-                        isSelected
-                          ? "to-background-chat-selected"
-                          : isHovered
-                            ? "to-background-chat-hover"
-                            : "to-background-sidebar"
-                      } `}
-                    />
-                  </p>
+                  <>
+                    <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-1 relative">
+                      {chatName || `Unnamed Chat`}
+                      <span
+                        className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
+                        ${
+                          isSelected
+                            ? "to-background-chat-selected"
+                            : isHovered
+                              ? "to-background-chat-hover"
+                              : "to-background-sidebar"
+                        } `}
+                      />
+                    </p>
+                    {isCustomAssistant && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="my-auto text-amber-600 dark:text-yellow-500">
+                              <InfoIcon
+                                size={14}
+                                className="text-amber-600 dark:text-yellow-500"
+                              />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="center">
+                            <p className="max-w-[220px] text-sm">
+                              Project files and instructions aren’t applied here
+                              because this chat uses a custom assistant.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </>
                 )}
 
                 {!isRenamingChat && (
@@ -324,92 +253,15 @@ export function ChatSessionDisplay({
                         </div>
                       </CustomTooltip>
                     )}
-                    {(isHovered || popoverOpen) && (
-                      <div>
-                        <div
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setPopoverOpen(!popoverOpen);
-                          }}
-                          className="-my-1"
-                        >
-                          <Popover
-                            open={popoverOpen}
-                            onOpenChange={handlePopoverOpenChange}
-                            content={
-                              <div className="p-1 rounded">
-                                <FiMoreHorizontal
-                                  onClick={() => setPopoverOpen(true)}
-                                  size={16}
-                                />
-                              </div>
-                            }
-                            popover={
-                              <div
-                                className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                                  isDeleteModalOpen ? "w-64" : "w-48"
-                                }`}
-                              >
-                                {!isDeleteModalOpen ? (
-                                  <>
-                                    {showShareModal && (
-                                      <DefaultDropdownElement
-                                        name="Share"
-                                        icon={FiShare2}
-                                        onSelect={() =>
-                                          showShareModal(chatSession)
-                                        }
-                                      />
-                                    )}
-                                    {!search && (
-                                      <DefaultDropdownElement
-                                        name="Rename"
-                                        icon={FiEdit2}
-                                        onSelect={() => setIsRenamingChat(true)}
-                                      />
-                                    )}
-                                    {chatSession.folder_id !== null && (
-                                      <DefaultDropdownElement
-                                        name={`Move out of ${parentFolderName ?? "group"}?`}
-                                        icon={FiArrowRight}
-                                        onSelect={handleMoveOutOfFolder}
-                                      />
-                                    )}
-                                    <DefaultDropdownElement
-                                      name="Delete"
-                                      icon={FiTrash}
-                                      onSelect={handleDeleteClick}
-                                    />
-                                  </>
-                                ) : (
-                                  <div className="p-3">
-                                    <p className="text-sm mb-3">
-                                      Are you sure you want to delete this chat?
-                                    </p>
-                                    <div className="flex justify-center gap-2">
-                                      <button
-                                        className="px-3 py-1 text-sm bg-background-200 rounded"
-                                        onClick={handleCancelDelete}
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        className="px-3 py-1 text-sm bg-red-500 text-white rounded"
-                                        onClick={handleConfirmDelete}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            }
-                            requiresContentPadding
-                            sideOffset={6}
-                            triggerMaxWidth
-                          />
-                        </div>
-                      </div>
+                    {isHovered && (
+                      <ChatSessionMorePopup
+                        chatSession={chatSession}
+                        projectId={projectId}
+                        isRenamingChat={isRenamingChat}
+                        setIsRenamingChat={setIsRenamingChat}
+                        showShareModal={showShareModal}
+                        search={search}
+                      />
                     )}
                   </div>
                 )}

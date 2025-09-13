@@ -121,10 +121,7 @@ def upsert_ingestion_doc(
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=[document],
-        index_attempt_metadata=IndexAttemptMetadata(
-            connector_id=cc_pair.connector_id,
-            credential_id=cc_pair.credential_id,
-        ),
+        request_id=None,
     )
 
     # If there's a secondary index being built, index the doc but don't use it for return here

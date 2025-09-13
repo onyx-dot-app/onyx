@@ -42,7 +42,9 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.user_preferences import activate_user
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.user_preferences import get_all_user_assistant_specific_configs
@@ -64,6 +66,7 @@ from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import TenantInfo
@@ -889,3 +892,21 @@ def update_assistant_preferences_for_user_api(
     update_assistant_preferences(
         assistant_id, user.id, new_assistant_preference, db_session
     )
+    db_session.commit()
+
+
+@router.get("/user/files/recent")
+def get_recent_files(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    user_id = user.id if user is not None else None
+    user_files = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
+        .order_by(UserFile.last_accessed_at.desc())
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

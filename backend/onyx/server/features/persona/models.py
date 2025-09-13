@@ -76,8 +76,8 @@ class PersonaUpsertRequest(BaseModel):
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
-    user_file_ids: list[int] | None = None
-    user_folder_ids: list[int] | None = None
+    # Accept string UUIDs from frontend
+    user_file_ids: list[str] | None = None
 
     # prompt fields
     system_prompt: str
@@ -163,8 +163,8 @@ class PersonaSnapshot(BaseModel):
     icon_shape: int | None
     icon_color: str | None
     uploaded_image_id: str | None
-    user_file_ids: list[int]
-    user_folder_ids: list[int]
+    # Return string UUIDs to frontend for consistency
+    user_file_ids: list[str]
     display_priority: int | None
     is_default_persona: bool
     builtin_persona: bool
@@ -197,8 +197,7 @@ class PersonaSnapshot(BaseModel):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
-            user_file_ids=[file.id for file in persona.user_files],
-            user_folder_ids=[folder.id for folder in persona.user_folders],
+            user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
@@ -257,8 +256,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
-            user_file_ids=[file.id for file in persona.user_files],
-            user_folder_ids=[folder.id for folder in persona.user_folders],
+            user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,

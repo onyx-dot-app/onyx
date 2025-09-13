@@ -46,9 +46,8 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
             group
             rounded-lg
             text-input-text
-            hover:bg-background-chat-hover
-            hover:text-neutral-900  
-            dark:hover:text-neutral-50
+            group-hover:text-neutral-900 
+            dark:group-hover:text-neutral-50
             py-1.5
             px-2
             ${
