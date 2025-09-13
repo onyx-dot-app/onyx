@@ -1,8 +1,27 @@
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel
 
 from onyx.chat.models import ThreadMessage
+
+
+class ChannelType(str, Enum):
+    """Slack channel types."""
+
+    IM = "im"  # Direct message
+    MPIM = "mpim"  # Multi-person direct message
+    PRIVATE_CHANNEL = "private_channel"  # Private channel
+    PUBLIC_CHANNEL = "public_channel"  # Public channel
+    UNKNOWN = "unknown"  # Unknown channel type
+
+
+class SlackContext(BaseModel):
+    """Context information for Slack bot interactions."""
+
+    channel_type: ChannelType
+    channel_id: str
+    user_id: str
 
 
 class SlackMessageInfo(BaseModel):
@@ -15,6 +34,7 @@ class SlackMessageInfo(BaseModel):
     bypass_filters: bool  # User has tagged @OnyxBot
     is_slash_command: bool  # User is using /OnyxBot
     is_bot_dm: bool  # User is direct messaging to OnyxBot
+    slack_context: SlackContext | None = None
 
 
 # Models used to encode the relevant data for the ephemeral message actions

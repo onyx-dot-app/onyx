@@ -18,6 +18,7 @@ from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
 from onyx.federated_connectors.slack.models import SlackCredentials
 from onyx.federated_connectors.slack.models import SlackEntities
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -169,8 +170,8 @@ class SlackFederatedConnector(FederatedConnector):
             "token_type": authed_user.get("token_type"),
         }
 
-        # Extract OAuth tokens from authed_user
-        access_token = authed_user.get("access_token")
+        # Extract OAuth tokens - bot token from root, user token from authed_user
+        user_token = authed_user.get("access_token")  # User token
         refresh_token = authed_user.get("refresh_token")
         token_type = authed_user.get("token_type", "bearer")
         scope = authed_user.get("scope")
@@ -183,7 +184,7 @@ class SlackFederatedConnector(FederatedConnector):
             )
 
         return OAuthResult(
-            access_token=access_token,
+            access_token=user_token,  # Bot token for bot operations
             token_type=token_type,
             scope=scope,
             expires_at=expires_at,
@@ -221,6 +222,8 @@ class SlackFederatedConnector(FederatedConnector):
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,
+        slack_event_context: SlackContext | None = None,
+        bot_token: str | None = None,
     ) -> list[InferenceChunk]:
         """Perform a federated search on Slack.
 
@@ -229,9 +232,20 @@ class SlackFederatedConnector(FederatedConnector):
             entities: The entities to search within (validated by validate())
             access_token: The OAuth access token
             limit: Maximum number of results to return
+            slack_event_context: Optional Slack context for slack bot
+            bot_token: Optional bot token for slack bot
 
         Returns:
             Search results in SlackSearchResponse format
         """
+        logger.info(f"Slack federated search called with entities: {entities}")
+
         with get_session_with_current_tenant() as db_session:
-            return slack_retrieval(query, access_token, db_session, limit)
+            return slack_retrieval(
+                query,
+                access_token,
+                db_session,
+                limit,
+                slack_event_context=slack_event_context,
+                bot_token=bot_token,
+            )

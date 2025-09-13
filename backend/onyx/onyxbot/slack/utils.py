@@ -39,6 +39,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
 from onyx.llm.utils import message_to_string
 from onyx.onyxbot.slack.constants import FeedbackVisibility
+from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.prompts.miscellaneous_prompts import SLACK_LANGUAGE_REPHRASE_PROMPT
 from onyx.utils.logger import setup_logger
@@ -81,6 +82,39 @@ def get_onyx_bot_auth_ids(
             slack_token_bot_ids[tenant_id] = bot_id
 
     return user_id, bot_id
+
+
+def get_channel_type_from_id(web_client: WebClient, channel_id: str) -> ChannelType:
+    """
+    Get the channel type from a channel ID using Slack API.
+    Returns: ChannelType enum value
+    """
+    try:
+        channel_info = web_client.conversations_info(channel=channel_id)
+        if channel_info.get("ok") and channel_info.get("channel"):
+            channel: dict[str, Any] = channel_info.get("channel", {})
+
+            if channel.get("is_im"):
+                return ChannelType.IM  # Direct message
+            elif channel.get("is_mpim"):
+                return ChannelType.MPIM  # Multi-person direct message
+            elif channel.get("is_private"):
+                return ChannelType.PRIVATE_CHANNEL  # Private channel
+            elif channel.get("is_channel"):
+                return ChannelType.PUBLIC_CHANNEL  # Public channel
+            else:
+                logger.warning(
+                    f"Could not determine channel type for {channel_id}, defaulting to unknown"
+                )
+                return ChannelType.UNKNOWN
+        else:
+            logger.warning(f"Invalid channel info response for {channel_id}")
+            return ChannelType.UNKNOWN
+    except Exception as e:
+        logger.warning(
+            f"Error getting channel info for {channel_id}, defaulting to unknown: {e}"
+        )
+        return ChannelType.UNKNOWN
 
 
 def check_message_limit() -> bool:

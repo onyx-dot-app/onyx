@@ -75,7 +75,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         """
         ttl_ms: int | None = None
 
-        retry_after_value: list[str] | None = None
+        retry_after_value: list[str] | str | None = None
         retry_after_header_name: Optional[str] = None
         duration_s: float = 1.0  # seconds
 

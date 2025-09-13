@@ -18,6 +18,11 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
     else:
         model_server_url = f"{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}"
 
+    # If model server is disabled, return False (no GPU available)
+    if model_server_url in ["disabled", "disabled:9000"]:
+        logger.info("Model server is disabled, assuming no GPU available")
+        return False
+
     if "http" not in model_server_url:
         model_server_url = f"http://{model_server_url}"
 

@@ -40,7 +40,11 @@ class OAuthResult(BaseModel):
     """Standardized OAuth result that all federated connectors should return from callback."""
 
     access_token: Optional[str] = Field(
-        default=None, description="The access token received"
+        default=None, description="The bot access token for bot operations"
+    )
+    user_token: Optional[str] = Field(
+        default=None,
+        description="The user access token for user-scoped operations like federated search",
     )
     token_type: Optional[str] = Field(
         default=None, description="Token type (usually 'bearer')"
