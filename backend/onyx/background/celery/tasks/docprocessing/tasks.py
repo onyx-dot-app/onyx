@@ -85,6 +85,9 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.httpx.httpx_pool import HttpxPool
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -1369,6 +1372,14 @@ def _docprocessing_task(
                 f"Processing {len(documents)} documents through indexing pipeline"
             )
 
+            adapter = DocumentIndexingBatchAdapter(
+                db_session=db_session,
+                connector_id=index_attempt.connector_credential_pair.connector.id,
+                credential_id=index_attempt.connector_credential_pair.credential.id,
+                tenant_id=tenant_id,
+                index_attempt_metadata=index_attempt_metadata,
+            )
+
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
@@ -1378,7 +1389,8 @@ def _docprocessing_task(
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
-                index_attempt_metadata=index_attempt_metadata,
+                request_id=index_attempt_metadata.request_id,
+                adapter=adapter,
             )
 
         # Update batch completion and document counts atomically using database coordination
