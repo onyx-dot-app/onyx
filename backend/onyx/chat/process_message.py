@@ -90,10 +90,10 @@ from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import ImageGenerationToolConfig
 from onyx.tools.tool_constructor import InternetSearchToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry

@@ -8,9 +8,6 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    WebSearchTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
@@ -18,6 +15,9 @@ from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

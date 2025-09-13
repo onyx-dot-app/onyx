@@ -67,13 +67,13 @@ from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    WebSearchTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger

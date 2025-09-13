@@ -18,10 +18,10 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
