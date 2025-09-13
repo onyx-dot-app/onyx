@@ -5,10 +5,7 @@ concurrency:
 
 on:
   merge_group:
-  pull_request:
-    branches:
-      - main
-      - "release/**"
+    types: [checks_requested]
 
 env:
   # Private Registry Configuration
