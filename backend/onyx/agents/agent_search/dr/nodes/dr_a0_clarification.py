@@ -110,7 +110,7 @@ def _get_available_tools(
 
     for tool in graph_config.tooling.tools:
 
-        if not tool.is_available():
+        if not tool.is_available(db_session):
             logger.info(f"Tool {tool.name} is not available, skipping")
             continue
 

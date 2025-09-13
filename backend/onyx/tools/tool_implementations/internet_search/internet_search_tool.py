@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from typing import Any
 
+from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
@@ -46,7 +47,8 @@ class WebSearchTool(Tool[None]):
         return self._DISPLAY_NAME
 
     @override
-    def is_available(self) -> bool:
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
         """Available only if EXA API key is configured."""
         return bool(EXA_API_KEY)
 

@@ -9,6 +9,7 @@ from onyx.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
     from onyx.llm.interfaces import LLM
     from onyx.llm.models import PreviousMessage
     from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
@@ -47,11 +48,15 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     def llm_name(self) -> str:
         return self.display_name
 
-    def is_available(self) -> bool:
+    @classmethod
+    def is_available(cls, db_session: "Session") -> bool:
         """
         Whether this tool is currently available for use given
         the state of the system. Default: available.
         Subclasses may override to perform dynamic checks.
+
+        Args:
+            db_session: Database session for tools that need DB access
         """
         return True
 
