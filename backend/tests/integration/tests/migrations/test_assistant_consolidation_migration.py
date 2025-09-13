@@ -5,6 +5,8 @@ Tests the migration from multiple default assistants (Search, General, Art, etc.
 to a single default Assistant (ID 0) and the associated tool seeding.
 """
 
+from typing import cast
+
 import pytest
 from sqlalchemy import text
 
@@ -151,8 +153,8 @@ def test_assistant_consolidation_end_state() -> None:
                 """
             )
         )
-        tool_count = result.scalar()
-        assert tool_count >= 2, "Default assistant should have at least 2 tools"
+        tool_count = cast(int, result.scalar())
+        assert tool_count == 3, "Default assistant should have exactly 3 tools"
 
 
 @pytest.mark.skip(
