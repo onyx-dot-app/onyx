@@ -21,7 +21,8 @@ export async function getConnectorOauthRedirectUrl(
   }
 
   const data = await response.json();
-  return data.redirect_url as string;
+  // standard oauth authorize endpoint returns { url: string }
+  return data.url as string;
 }
 
 export function useOAuthDetails(sourceType: ValidSources) {
