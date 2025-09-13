@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useUser } from "@/components/user/UserProvider";
 import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -78,6 +79,8 @@ const SignedUpUserTable = ({
   }>({});
 
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [showSlackUsers, setShowSlackUsers] = useState(true);
+  const [showApiKeys, setShowApiKeys] = useState(true);
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
 
   const {
@@ -97,6 +100,16 @@ const SignedUpUserTable = ({
   });
 
   const { user: currentUser } = useUser();
+
+  const visibleUsers = (pageOfUsers || []).filter((user) => {
+    if (!showSlackUsers && user.role === UserRole.SLACK_USER) {
+      return false;
+    }
+    if (!showApiKeys && user.role === UserRole.API_KEY) {
+      return false;
+    }
+    return true;
+  });
 
   if (error) {
     return (
@@ -147,7 +160,7 @@ const SignedUpUserTable = ({
 
   const renderFilters = () => (
     <>
-      <div className="flex items-center gap-4 py-4">
+      <div className="flex flex-wrap items-center gap-4 py-4">
         <Select
           value={filters.is_active?.toString() || "all"}
           onValueChange={(selectedStatus) =>
@@ -199,6 +212,26 @@ const SignedUpUserTable = ({
               ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="show-slack-users"
+            checked={showSlackUsers}
+            onCheckedChange={setShowSlackUsers}
+          />
+          <label htmlFor="show-slack-users" className="text-sm">
+            Show Slack Users
+          </label>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="show-api-keys"
+            checked={showApiKeys}
+            onCheckedChange={setShowApiKeys}
+          />
+          <label htmlFor="show-api-keys" className="text-sm">
+            Show API Keys
+          </label>
+        </div>
       </div>
       <div className="flex gap-2 py-1">
         {selectedRoles.map((role) => (
@@ -217,8 +250,11 @@ const SignedUpUserTable = ({
   );
 
   const renderUserRoleDropdown = (user: User) => {
-    if (user.role === UserRole.SLACK_USER) {
-      return <p className="ml-2">Slack User</p>;
+    if (
+      user.role === UserRole.SLACK_USER ||
+      user.role === UserRole.API_KEY
+    ) {
+      return <p className="ml-2">{USER_ROLE_LABELS[user.role]}</p>;
     }
     return (
       <UserRoleDropdown
@@ -349,7 +385,7 @@ const SignedUpUserTable = ({
           </TableBody>
         ) : (
           <TableBody>
-            {!pageOfUsers?.length ? (
+            {!visibleUsers.length ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center">
                   <p className="pt-4 pb-4">
@@ -360,7 +396,7 @@ const SignedUpUserTable = ({
                 </TableCell>
               </TableRow>
             ) : (
-              pageOfUsers.map((user) => (
+              visibleUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>{user.email}</TableCell>
                   <TableCell className="w-[180px]">
