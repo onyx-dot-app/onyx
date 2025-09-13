@@ -44,11 +44,13 @@ export function FileCard({
   removeFile: (fileId: string) => void;
 }) {
   const typeLabel = useMemo(() => {
-    if (!file.file_type) return "";
-    const parts = String(file.file_type).split("/");
-    const ext = parts[parts.length - 1] || file.file_type;
-    return String(ext).toUpperCase();
-  }, [file.file_type]);
+    const name = String(file.name || "");
+    const lastDotIndex = name.lastIndexOf(".");
+    if (lastDotIndex <= 0 || lastDotIndex === name.length - 1) {
+      return "";
+    }
+    return name.slice(lastDotIndex + 1).toUpperCase();
+  }, [file.name]);
 
   const isProcessing =
     String(file.status).toLowerCase() === "processing" ||
