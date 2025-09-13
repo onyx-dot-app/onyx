@@ -159,10 +159,10 @@ def _get_force_search_settings(
             override_kwargs=search_tool_override_kwargs,
         )
 
-    internet_search_available = any(isinstance(tool, WebSearchTool) for tool in tools)
+    web_search_available = any(isinstance(tool, WebSearchTool) for tool in tools)
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
-    if not internet_search_available and not search_tool_available:
+    if not web_search_available and not search_tool_available:
         # Does not matter much which tool is set here as force is false and neither tool is available
         return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
     # Currently, the internet search tool does not support query override
