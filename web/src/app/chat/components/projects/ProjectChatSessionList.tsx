@@ -7,6 +7,8 @@ import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup"
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import { InfoIcon } from "@/components/icons/icons";
+import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +23,7 @@ export default function ProjectChatSessionList() {
     currentProjectId,
     refreshCurrentProjectDetails,
   } = useProjectsContext();
+  const { assistants } = useAssistantsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -55,7 +58,30 @@ export default function ProjectChatSessionList() {
             >
               <div className="flex items-center gap-3 min-w-0 w-full">
                 <div className="flex h-full w-fit items-start pt-1 pl-1">
-                  <ChatBubbleIcon className="h-5 w-5 text-onyx-medium" />
+                  {(() => {
+                    const personaIdToDefault =
+                      currentProjectDetails?.persona_id_to_is_default || {};
+                    const isDefault = personaIdToDefault[chat.persona_id];
+                    if (isDefault === false) {
+                      const assistant = assistants.find(
+                        (a) => a.id === chat.persona_id
+                      );
+                      if (assistant) {
+                        return (
+                          <div className="h-full pt-1">
+                            <AssistantIcon
+                              assistant={assistant}
+                              size={18}
+                              disableToolip
+                            />
+                          </div>
+                        );
+                      }
+                    }
+                    return (
+                      <ChatBubbleIcon className="h-5 w-5 text-onyx-medium" />
+                    );
+                  })()}
                 </div>
                 <div className="flex flex-col w-full">
                   <div className="flex items-center gap-1 w-full justify-between">
