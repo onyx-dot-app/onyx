@@ -15,10 +15,14 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from pydantic import BaseModel
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
@@ -27,6 +31,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Persona__UserFile
+from onyx.db.models import Persona__UserFolder
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
@@ -39,6 +45,7 @@ from onyx.db.user_documents import unshare_file_with_assistant
 from onyx.db.user_documents import unshare_folder_with_assistant
 from onyx.db.user_documents import upload_files_to_user_files_with_indexing
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
@@ -201,6 +208,7 @@ def delete_folder(
     db_session: Session = Depends(get_session),
 ) -> MessageResponse:
     user_id = user.id if user else None
+    tenant_id = get_current_tenant_id()
     folder = (
         db_session.query(UserFolder)
         .filter(UserFolder.id == folder_id, UserFolder.user_id == user_id)
@@ -208,9 +216,76 @@ def delete_folder(
     )
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    db_session.delete(folder)
-    db_session.commit()
-    return MessageResponse(message="Folder deleted successfully")
+
+    try:
+        # Get all files in the folder
+        files = db_session.query(UserFile).filter(UserFile.folder_id == folder_id).all()
+        file_count = len(files)
+
+        # Store file_ids for later file store deletion
+        file_store_ids = []
+        cc_pair_count = 0
+
+        # First handle all database records
+        for file in files:
+            file_store_ids.append(file.file_id)
+
+            # Delete Persona__UserFile entries
+            db_session.execute(
+                delete(Persona__UserFile).where(
+                    Persona__UserFile.user_file_id == file.id
+                )
+            )
+
+            # Set cc_pair to DELETING if exists
+            if file.cc_pair:
+                file.cc_pair.status = ConnectorCredentialPairStatus.DELETING
+                cc_pair_count += 1
+            # Delete the user file record
+            db_session.delete(file)
+
+        # Delete folder associations and the folder itself
+        db_session.execute(
+            delete(Persona__UserFolder).where(
+                Persona__UserFolder.user_folder_id == folder_id
+            )
+        )
+        db_session.delete(folder)
+        db_session.commit()
+
+        # After successful database deletion, delete from file store
+        file_store = get_default_file_store()
+        for file_store_id in file_store_ids:
+            try:
+                file_store.delete_file(file_store_id)
+            except Exception as file_store_error:
+                logger.error(
+                    f"Error deleting file from file store {file_store_id}: {str(file_store_error)}"
+                )
+
+        if cc_pair_count > 0:
+            # run the beat task to pick up this deletion from the db immediately
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+                priority=OnyxCeleryPriority.HIGH,
+                kwargs={"tenant_id": tenant_id},
+            )
+
+            logger.info(
+                f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: "
+                f"cc_pair count ={cc_pair_count}"
+            )
+
+        return MessageResponse(
+            message=f"Folder and {file_count} files deleted successfully"
+        )
+
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Error deleting folder {folder_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete folder: {str(e)}"
+        )
 
 
 @router.delete("/user/file/{file_id}")
@@ -220,6 +295,7 @@ def delete_file(
     db_session: Session = Depends(get_session),
 ) -> MessageResponse:
     user_id = user.id if user else None
+    tenant_id = get_current_tenant_id()
     file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
@@ -227,9 +303,49 @@ def delete_file(
     )
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
-    db_session.delete(file)
-    db_session.commit()
-    return MessageResponse(message="File deleted successfully")
+    try:
+        # Store file_id for later file store deletion
+        file_store_id = file.file_id
+
+        # First update cc_pair status if exists
+        if file.cc_pair:
+            cc_pair = file.cc_pair
+            cc_pair.status = ConnectorCredentialPairStatus.DELETING
+
+        # Delete database records
+        db_session.execute(
+            delete(Persona__UserFile).where(Persona__UserFile.user_file_id == file_id)
+        )
+        db_session.delete(file)
+        db_session.commit()
+
+        # After successful database deletion, delete from file store
+        try:
+            file_store = get_default_file_store()
+            file_store.delete_file(file_store_id)
+        except Exception as file_store_error:
+            logger.error(
+                f"Error deleting file from file store {file_store_id}: {str(file_store_error)}"
+            )
+
+        if file.cc_pair:
+            # run the beat task to pick up this deletion from the db immediately
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+                priority=OnyxCeleryPriority.HIGH,
+                kwargs={"tenant_id": tenant_id},
+            )
+
+            logger.info(
+                f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: "
+                f"cc_pair={file.cc_pair.id}"
+            )
+
+        return MessageResponse(message="File deleted successfully")
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Error deleting file {file_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 
 class FileMoveRequest(BaseModel):
