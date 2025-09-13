@@ -8,6 +8,7 @@ from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
+from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -36,11 +37,11 @@ def test_stream_chat_message_objects_without_web_search(
             fast_default_model_name="gpt-4.1",
             groups=[],
         )
-        upsert_llm_provider(
+        provider = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_request,
             db_session=db_session,
         )
-        db_session.commit()
+        update_default_provider(provider.id, db_session)
     except Exception as e:
         # Provider might already exist or other setup issue
         print(f"Note: Could not create LLM provider: {e}")
