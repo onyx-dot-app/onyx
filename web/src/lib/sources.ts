@@ -8,6 +8,7 @@ import {
   Document360Icon,
   DropboxIcon,
   GithubIcon,
+  GithubPagesIcon,
   GitlabIcon,
   BitbucketIcon,
   GlobeIcon,
@@ -357,6 +358,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.CodeRepository,
     docs: "https://docs.onyx.app/admin/connectors/official/github",
     isPopular: true,
+  },
+  github_pages: {
+    icon: GithubPagesIcon,
+    displayName: "Github Pages",
+    category: SourceCategory.CodeRepository,
   },
   gitlab: {
     icon: GitlabIcon,

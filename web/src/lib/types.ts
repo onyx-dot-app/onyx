@@ -436,6 +436,7 @@ export interface UserGroup {
 export enum ValidSources {
   Web = "web",
   GitHub = "github",
+  GitHubPages = "github_pages",
   GitLab = "gitlab",
   Slack = "slack",
   GoogleDrive = "google_drive",
@@ -505,6 +506,7 @@ export const validAutoSyncSources = [
   ValidSources.Slack,
   ValidSources.Salesforce,
   ValidSources.GitHub,
+  ValidSources.GitHubPages,
   ValidSources.Sharepoint,
 ] as const;
 
