@@ -71,6 +71,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.kg.models import KGEntityTypeAttributes
@@ -3593,3 +3594,145 @@ class MCPConnectionConfig(Base):
         Index("ix_mcp_connection_config_user_email", "user_email"),
         Index("ix_mcp_connection_config_server_user", "mcp_server_id", "user_email"),
     )
+
+
+"""
+Permission Sync Tables
+"""
+
+
+class DocPermissionSyncAttempt(Base):
+    """
+    Represents an attempt to sync document permissions for a connector credential pair.
+    Similar to IndexAttempt but specifically for document permission syncing operations.
+    """
+
+    __tablename__ = "doc_permission_sync_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Status of the sync attempt
+    status: Mapped[PermissionSyncStatus] = mapped_column(
+        Enum(PermissionSyncStatus, native_enum=False, index=True)
+    )
+
+    # Counts for tracking progress
+    total_docs_synced: Mapped[int | None] = mapped_column(Integer, default=0)
+    docs_with_permission_errors: Mapped[int | None] = mapped_column(Integer, default=0)
+
+    # Error message if sync fails
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Timestamps
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # Relationships
+    connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
+        "ConnectorCredentialPair"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_permission_sync_attempt_latest_for_cc_pair",
+            "connector_credential_pair_id",
+            "time_created",
+        ),
+        Index(
+            "ix_permission_sync_attempt_status_time",
+            "status",
+            desc("time_finished"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DocPermissionSyncAttempt(id={self.id!r}, " f"status={self.status!r})>"
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
+
+
+class ExternalGroupPermissionSyncAttempt(Base):
+    """
+    Represents an attempt to sync external group memberships for users.
+    This tracks the syncing of user-to-external-group mappings across connectors.
+    """
+
+    __tablename__ = "external_group_permission_sync_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Can be tied to a specific connector or be a global group sync
+    connector_credential_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=True,  # Nullable for global group syncs across all connectors
+    )
+
+    # Status of the group sync attempt
+    status: Mapped[PermissionSyncStatus] = mapped_column(
+        Enum(PermissionSyncStatus, native_enum=False, index=True)
+    )
+
+    # Counts for tracking progress
+    total_users_processed: Mapped[int | None] = mapped_column(Integer, default=0)
+    total_groups_processed: Mapped[int | None] = mapped_column(Integer, default=0)
+    total_group_memberships_synced: Mapped[int | None] = mapped_column(
+        Integer, default=0
+    )
+
+    # Error message if sync fails
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Timestamps
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # Relationships
+    connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
+        "ConnectorCredentialPair"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_group_sync_attempt_cc_pair_time",
+            "connector_credential_pair_id",
+            "time_created",
+        ),
+        Index(
+            "ix_group_sync_attempt_status_time",
+            "status",
+            desc("time_finished"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, "
+            f"status={self.status!r})>"
+        )
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
