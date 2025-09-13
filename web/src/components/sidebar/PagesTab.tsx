@@ -56,21 +56,21 @@ export function PagesTab({
     <div className="flex flex-col gap-y-2 flex-grow">
       {popup}
       <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
-        <div className="flex group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
+        <div className="flex group justify-between text-sm text-text-300/80 items-center font-normal leading-normal">
           <p>Chats</p>
 
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="my-auto mr-auto group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
+                  className="my-auto group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
                   onClick={() => {
                     toggleChatSessionSearchModal?.();
                   }}
                 >
                   <Search
                     className="flex-none text-text-mobile-sidebar"
-                    size={12}
+                    size={20}
                   />
                 </button>
               </TooltipTrigger>
