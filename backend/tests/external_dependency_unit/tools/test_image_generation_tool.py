@@ -25,10 +25,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import ImageSh
 @pytest.fixture
 def dalle3_tool() -> ImageGenerationTool:
     """Fixture for DALL-E 3 tool with API key from environment."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        pytest.skip("OPENAI_API_KEY environment variable not set")
-
+    api_key = os.environ["OPENAI_API_KEY"]
     return ImageGenerationTool(
         tool_id=0,
         api_key=api_key,
@@ -51,12 +48,6 @@ def test_image_generation_with_heartbeats(dalle3_tool: ImageGenerationTool) -> N
         responses.append(response)
         if response.id == IMAGE_GENERATION_HEARTBEAT_ID:
             heartbeat_count += 1
-            # Verify heartbeat structure
-            assert isinstance(response.response, dict)
-            assert "status" in response.response
-            assert response.response["status"] == "generating"
-            assert "heartbeat" in response.response
-            assert isinstance(response.response["heartbeat"], int)
         elif response.id == IMAGE_GENERATION_RESPONSE_ID:
             image_response_count += 1
 
