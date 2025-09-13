@@ -462,36 +462,32 @@ jobs:
           echo "Finished waiting for service."
 
       - name: Run Multi-Tenant Integration Tests
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 25
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            echo "Running multi-tenant integration tests..."
-            docker run --rm --network onyx-stack_default \
-              --name test-runner \
-              -e POSTGRES_HOST=relational_db \
-              -e POSTGRES_USER=postgres \
-              -e POSTGRES_PASSWORD=password \
-              -e DB_READONLY_USER=db_readonly_user \
-              -e DB_READONLY_PASSWORD=password \
-              -e POSTGRES_DB=postgres \
-              -e POSTGRES_USE_NULL_POOL=true \
-              -e VESPA_HOST=index \
-              -e REDIS_HOST=cache \
-              -e API_SERVER_HOST=api_server \
-              -e OPENAI_API_KEY=${OPENAI_API_KEY} \
-              -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
-              -e TEST_WEB_HOSTNAME=test-runner \
-              -e AUTH_TYPE=cloud \
-              -e MULTI_TENANT=true \
-              -e REQUIRE_EMAIL_VERIFICATION=false \
-              -e DISABLE_TELEMETRY=true \
-              -e IMAGE_TAG=test \
-              -e DEV_MODE=true \
-              onyxdotapp/onyx-integration:test \
-              /app/tests/integration/multitenant_tests
+        run: |
+          echo "Running multi-tenant integration tests..."
+          docker run --rm --network onyx-stack_default \
+            --name test-runner \
+            -e POSTGRES_HOST=relational_db \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -e DB_READONLY_USER=db_readonly_user \
+            -e DB_READONLY_PASSWORD=password \
+            -e POSTGRES_DB=postgres \
+            -e POSTGRES_USE_NULL_POOL=true \
+            -e VESPA_HOST=index \
+            -e REDIS_HOST=cache \
+            -e API_SERVER_HOST=api_server \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+            -e TEST_WEB_HOSTNAME=test-runner \
+            -e AUTH_TYPE=cloud \
+            -e MULTI_TENANT=true \
+            -e SKIP_RESET=true \
+            -e REQUIRE_EMAIL_VERIFICATION=false \
+            -e DISABLE_TELEMETRY=true \
+            -e IMAGE_TAG=test \
+            -e DEV_MODE=true \
+            onyxdotapp/onyx-integration:test \
+            /app/tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
         if: always()
