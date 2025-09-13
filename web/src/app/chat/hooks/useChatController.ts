@@ -291,7 +291,12 @@ export function useChatController({
       }
     }
 
+    // Reset all relevant state to ensure clean state for new requests
     updateChatStateAction(currentSession, "input");
+    updateCanContinue(false, currentSession);
+    setUncaughtError(currentSession, null);
+    setLoadingError(currentSession, null);
+    resetRegenerationState(currentSession);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -399,14 +404,24 @@ export function useChatController({
             message: "Please wait for the content to upload",
             type: "error",
           });
+        } else if (
+          currentChatState == "streaming" ||
+          currentChatState == "loading"
+        ) {
+          // If we're in streaming/loading state, it might be a stale state after stopping
+          // Force reset the state to input to allow new requests
+          updateChatStateAction(frozenSessionId, "input");
+          updateCanContinue(false, frozenSessionId);
+          setUncaughtError(frozenSessionId, null);
+          setLoadingError(frozenSessionId, null);
+          resetRegenerationState(frozenSessionId);
         } else {
           setPopup({
             message: "Please wait for the response to complete",
             type: "error",
           });
+          return;
         }
-
-        return;
       }
 
       clientScrollToBottom();
