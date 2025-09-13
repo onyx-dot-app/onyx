@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -19,6 +18,7 @@ from onyx.db.tools import update_tool
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
 from onyx.server.features.tool.models import ToolSnapshot
+from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -26,13 +26,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     validate_openapi_schema,
 )
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
-    KnowledgeGraphTool,
-)
-from onyx.tools.utils import is_image_generation_available
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -156,18 +149,19 @@ def list_tools(
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session)
 
-    kg_configs = get_kg_config_settings()
-    kg_available = kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
+    filtered_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        # Check if it's a built-in tool and if it's available
+        if tool.in_code_tool_id:
+            try:
+                tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
+                if not tool_cls.is_available(db_session):
+                    continue
+            except KeyError:
+                # If tool ID not found in registry, include it by default
+                pass
 
-    return [
-        ToolSnapshot.from_model(tool)
-        for tool in tools
-        if (
-            tool.display_name != KnowledgeGraphTool._DISPLAY_NAME
-            and (
-                tool.in_code_tool_id != ImageGenerationTool._NAME
-                or is_image_generation_available(db_session=db_session)
-            )
-        )
-        or (tool.display_name == KnowledgeGraphTool._DISPLAY_NAME and kg_available)
-    ]
+        # All custom tools and available built-in tools are included
+        filtered_tools.append(ToolSnapshot.from_model(tool))
+
+    return filtered_tools

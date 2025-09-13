@@ -31,6 +31,7 @@ interface AssistantsContextProps {
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
 
+  // assistants that the user has explicitly pinned
   pinnedAssistants: MinimalPersonaSnapshot[];
   setPinnedAssistants: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
 
@@ -70,10 +71,11 @@ export const AssistantsProvider: React.FC<{
         .map((id) => assistants.find((assistant) => assistant.id === id))
         .filter(
           (assistant): assistant is MinimalPersonaSnapshot =>
-            assistant !== undefined
+            assistant !== undefined && assistant.id !== 0
         );
     } else {
-      return assistants.filter((a) => a.is_default_persona);
+      // Filter out the unified assistant (ID 0) from the pinned list
+      return assistants.filter((a) => a.is_default_persona && a.id !== 0);
     }
   });
 
@@ -84,10 +86,11 @@ export const AssistantsProvider: React.FC<{
           .map((id) => assistants.find((assistant) => assistant.id === id))
           .filter(
             (assistant): assistant is MinimalPersonaSnapshot =>
-              assistant !== undefined
+              assistant !== undefined && assistant.id !== 0
           );
       } else {
-        return assistants.filter((a) => a.is_default_persona);
+        // Filter out the unified assistant (ID 0) from the pinned list
+        return assistants.filter((a) => a.is_default_persona && a.id !== 0);
       }
     });
   }, [user?.preferences?.pinned_assistants, assistants]);
@@ -135,7 +138,9 @@ export const AssistantsProvider: React.FC<{
   } = useMemo(() => {
     const { visibleAssistants, hiddenAssistants } = classifyAssistants(
       user,
-      assistants
+      // remove the unified assistant (ID 0) from the list of assistants, it should not be shown
+      // anywhere on the chat page
+      assistants.filter((assistant) => assistant.id !== 0)
     );
 
     const finalAssistants = user

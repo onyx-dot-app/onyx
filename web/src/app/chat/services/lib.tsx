@@ -205,7 +205,7 @@ export async function* sendMessage({
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
-  const body = JSON.stringify({
+  const payload = {
     alternate_assistant_id: alternateAssistantId,
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
@@ -244,7 +244,18 @@ export async function* sendMessage({
     use_agentic_search: useAgentSearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_ids: forcedToolIds,
-  });
+  };
+
+  try {
+    console.debug("[sendMessage] forcedToolIds param:", forcedToolIds);
+    console.debug(
+      "[sendMessage] payload tool ids:",
+      payload.allowed_tool_ids,
+      payload.forced_tool_ids
+    );
+  } catch {}
+
+  const body = JSON.stringify(payload);
 
   const response = await fetch(`/api/chat/send-message`, {
     method: "POST",

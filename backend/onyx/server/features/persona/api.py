@@ -52,9 +52,6 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -383,18 +380,6 @@ def list_personas(
 
     if persona_ids:
         personas = [p for p in personas if p.id in persona_ids]
-
-    # Filter out personas with unavailable tools
-    personas = [
-        p
-        for p in personas
-        if not (
-            any(
-                tool.in_code_tool_id == ImageGenerationTool.__name__ for tool in p.tools
-            )
-            and not is_image_generation_available(db_session=db_session)
-        )
-    ]
 
     return personas
 

@@ -21,6 +21,9 @@ env:
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
 
+  # LLMs
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
 jobs:
   discover-test-dirs:
     runs-on: ubuntu-latest

@@ -34,6 +34,7 @@ import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
+import { Logo } from "@/components/logo/Logo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
@@ -86,6 +87,7 @@ import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 import { MessagesDisplay } from "./MessagesDisplay";
+import { WelcomeMessage } from "./WelcomeMessage";
 
 export function ChatPage({
   toggle,
@@ -1161,19 +1163,7 @@ export function ChatPage({
                             }`}
                           >
                             {showCenteredInput && (
-                              <div
-                                data-testid="chat-intro"
-                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
-                              >
-                                <AssistantIcon
-                                  colorOverride="text-text-800"
-                                  assistant={liveAssistant}
-                                  size="large"
-                                />
-                                <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
-                                  {liveAssistant.name}
-                                </div>
-                              </div>
+                              <WelcomeMessage assistant={liveAssistant} />
                             )}
                             <div
                               className={showCenteredInput ? "row-start-2" : ""}

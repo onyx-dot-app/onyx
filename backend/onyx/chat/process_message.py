@@ -91,7 +91,7 @@ from onyx.tools.tool_constructor import ImageGenerationToolConfig
 from onyx.tools.tool_constructor import InternetSearchToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    WebSearchTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
@@ -159,9 +159,7 @@ def _get_force_search_settings(
             override_kwargs=search_tool_override_kwargs,
         )
 
-    internet_search_available = any(
-        isinstance(tool, InternetSearchTool) for tool in tools
-    )
+    internet_search_available = any(isinstance(tool, WebSearchTool) for tool in tools)
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
     if not internet_search_available and not search_tool_available:
@@ -199,9 +197,7 @@ def _get_force_search_settings(
 
     return ForceUseTool(
         force_use=False,
-        tool_name=(
-            SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
-        ),
+        tool_name=(SearchTool._NAME if search_tool_available else WebSearchTool._NAME),
         args=args,
         override_kwargs=None,
     )

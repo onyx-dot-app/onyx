@@ -149,9 +149,6 @@ def create_assistant(
     return persona_to_assistant(persona)
 
 
-""
-
-
 @router.get("/{assistant_id}")
 def retrieve_assistant(
     assistant_id: int,

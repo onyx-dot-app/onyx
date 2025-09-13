@@ -5,7 +5,11 @@ from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from typing_extensions import override
 
+from onyx.configs.app_configs import OKTA_API_TOKEN
+from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import message_to_string
@@ -85,6 +89,11 @@ address as well as other information like who they report to and who reports to 
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @override
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        return OKTA_PROFILE_TOOL_ENABLED and bool(OKTA_API_TOKEN)
 
     def tool_definition(self) -> dict:
         return {

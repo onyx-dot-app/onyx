@@ -20,8 +20,8 @@ const isSearchTool = (tool: ToolSnapshot): boolean => {
 
 const isWebSearchTool = (tool: ToolSnapshot): boolean => {
   return (
-    tool.in_code_tool_id === "InternetSearchTool" ||
-    tool.display_name?.toLowerCase().includes("internet search")
+    tool.in_code_tool_id === "WebSearchTool" ||
+    tool.display_name?.toLowerCase().includes("web_search")
   );
 };
 

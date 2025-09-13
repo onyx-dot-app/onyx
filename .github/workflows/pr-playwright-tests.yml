@@ -17,6 +17,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
 
   # for federated slack tests
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
@@ -183,7 +184,8 @@ jobs:
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
-          GEN_AI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }} \
+          EXA_API_KEY=${{ env.EXA_API_KEY }} \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \

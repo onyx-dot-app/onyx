@@ -386,6 +386,14 @@ class Document__Tag(Base):
 
 
 class Persona__Tool(Base):
+    """An entry in this table represents a tool that is **available** to a persona.
+    It does NOT necessarily mean that the tool is actually usable to the persona.
+
+    For example, a persona may have the image generation tool attached to it, even though
+    the image generation tool is not set up / enabled. In this case, the tool should not
+    show up in the UI for the persona + it should not be usable by the persona in chat.
+    """
+
     __tablename__ = "persona__tool"
 
     persona_id: Mapped[int] = mapped_column(

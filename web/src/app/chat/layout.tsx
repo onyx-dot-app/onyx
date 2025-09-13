@@ -31,6 +31,7 @@ export default async function Layout({
     llmProviders,
     folders,
     openedFolders,
+    availableTools,
     sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
@@ -56,6 +57,7 @@ export default async function Layout({
           llmProviders,
           folders,
           openedFolders,
+          availableTools,
           shouldShowWelcomeModal,
           defaultAssistantId,
         }}

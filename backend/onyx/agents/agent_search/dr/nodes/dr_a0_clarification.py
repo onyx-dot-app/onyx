@@ -66,7 +66,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    WebSearchTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -108,19 +108,24 @@ def _get_available_tools(
 
     for tool in graph_config.tooling.tools:
 
+        if not tool.is_available(db_session):
+            logger.info(f"Tool {tool.name} is not available, skipping")
+            continue
+
         tool_db_info = tool_dict.get(tool.id)
         if tool_db_info:
             incode_tool_id = tool_db_info.in_code_tool_id
         else:
             raise ValueError(f"Tool {tool.name} is not found in the database")
 
-        if isinstance(tool, InternetSearchTool):
+        if isinstance(tool, WebSearchTool):
             llm_path = DRPath.WEB_SEARCH.value
             path = DRPath.WEB_SEARCH
         elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
         elif isinstance(tool, KnowledgeGraphTool) and include_kg:
+            # TODO (chris): move this into the `is_available` check
             if len(active_source_types) == 0:
                 logger.error(
                     "No active source types found, skipping Knowledge Graph tool"

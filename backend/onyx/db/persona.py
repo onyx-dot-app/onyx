@@ -891,3 +891,62 @@ def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
     if persona is None:
         raise ValueError(f"Persona with ID {persona_id} does not exist")
     return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)
+
+
+def get_default_assistant(db_session: Session) -> Persona | None:
+    """Fetch the default assistant (persona with builtin_persona=True)."""
+    return (
+        db_session.query(Persona)
+        .options(selectinload(Persona.tools))
+        .filter(Persona.builtin_persona.is_(True))
+        # NOTE: need to add this since we had prior builtin personas
+        # that have since been deleted
+        .filter(Persona.deleted.is_(False))
+        .one_or_none()
+    )
+
+
+def update_default_assistant_configuration(
+    db_session: Session,
+    tool_ids: list[int] | None = None,
+    system_prompt: str | None = None,
+) -> Persona:
+    """Update only tools and system_prompt for the default assistant.
+
+    Args:
+        db_session: Database session
+        tool_ids: List of tool IDs to enable (if None, tools are not updated)
+        system_prompt: New system prompt (if None, system prompt is not updated)
+
+    Returns:
+        Updated Persona object
+
+    Raises:
+        ValueError: If default assistant not found or invalid tool IDs provided
+    """
+    # Get the default assistant
+    persona = get_default_assistant(db_session)
+    if not persona:
+        raise ValueError("Default assistant not found")
+
+    # Update system prompt if provided
+    if system_prompt is not None:
+        persona.system_prompt = system_prompt
+
+    # Update tools if provided
+    if tool_ids is not None:
+        # Clear existing tool associations
+        persona.tools = []
+
+        # Add new tool associations
+        for tool_id in tool_ids:
+            tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
+            if not tool:
+                raise ValueError(f"Tool with ID {tool_id} not found")
+            if tool.in_code_tool_id is None:
+                raise ValueError(f"Tool with ID {tool_id} is not a built-in tool")
+
+            persona.tools.append(tool)
+
+    db_session.commit()
+    return persona

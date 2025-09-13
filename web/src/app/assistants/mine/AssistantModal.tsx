@@ -91,12 +91,15 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
         !assistantFilters[AssistantFilter.Mine] ||
         checkUserOwnsAssistant(user, assistant);
 
+      const isNotUnifiedAssistant = assistant.id !== 0;
+
       return (
         (nameMatches || labelMatches) &&
         publicFilter &&
         privateFilter &&
         pinnedFilter &&
-        mineFilter
+        mineFilter &&
+        isNotUnifiedAssistant
       );
     });
   }, [assistants, searchQuery, assistantFilters]);
@@ -231,53 +234,61 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
             </div>
 
             <div className="flex-grow overflow-y-auto">
-              <h2 className="text-2xl font-semibold text-text-800 mb-2 px-4 py-2">
-                Featured Assistants
-              </h2>
-
-              <div className="w-full px-2 pb-10 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-                {featuredAssistants.length > 0 ? (
-                  featuredAssistants.map((assistant, index) => (
-                    <div key={index}>
-                      <AssistantCard
-                        pinned={pinnedAssistants
-                          .map((a) => a.id)
-                          .includes(assistant.id)}
-                        persona={assistant}
-                        closeModal={hideModal}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <div className="col-span-2 text-center text-text-500">
-                    No featured assistants match filters
+              {featuredAssistants.length === 0 && allAssistants.length === 0 ? (
+                <div className="flex mt-3 h-96">
+                  <div className="text-center text-text-500 text-sm">
+                    No Assistants configured yet...
                   </div>
-                )}
-              </div>
-
-              {allAssistants && allAssistants.length > 0 && (
+                </div>
+              ) : (
                 <>
-                  <h2 className="text-2xl font-semibold text-text-800 mt-4 mb-2 px-4 py-2">
-                    All Assistants
-                  </h2>
+                  {featuredAssistants.length > 0 && (
+                    <>
+                      <h2 className="text-2xl font-semibold text-text-800 mb-2 px-4 py-2">
+                        Featured Assistants
+                      </h2>
 
-                  <div className="w-full mt-2 px-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-                    {allAssistants
-                      .sort((a, b) => b.id - a.id)
-                      .map((assistant, index) => (
-                        <div key={index}>
-                          <AssistantCard
-                            pinned={
-                              user?.preferences?.pinned_assistants?.includes(
-                                assistant.id
-                              ) ?? false
-                            }
-                            persona={assistant}
-                            closeModal={hideModal}
-                          />
-                        </div>
-                      ))}
-                  </div>
+                      <div className="w-full px-2 pb-10 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                        {featuredAssistants.map((assistant, index) => (
+                          <div key={index}>
+                            <AssistantCard
+                              pinned={pinnedAssistants
+                                .map((a) => a.id)
+                                .includes(assistant.id)}
+                              persona={assistant}
+                              closeModal={hideModal}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {allAssistants && allAssistants.length > 0 && (
+                    <>
+                      <h2 className="text-2xl font-semibold text-text-800 mt-4 mb-2 px-4 py-2">
+                        All Assistants
+                      </h2>
+
+                      <div className="w-full mt-2 px-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                        {allAssistants
+                          .sort((a, b) => b.id - a.id)
+                          .map((assistant, index) => (
+                            <div key={index}>
+                              <AssistantCard
+                                pinned={
+                                  user?.preferences?.pinned_assistants?.includes(
+                                    assistant.id
+                                  ) ?? false
+                                }
+                                persona={assistant}
+                                closeModal={hideModal}
+                              />
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>

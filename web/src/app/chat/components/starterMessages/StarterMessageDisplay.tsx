@@ -8,10 +8,14 @@ export function StarterMessageDisplay({
   onSelectStarterMessage: (message: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 w-full max-w-searchbar-max mx-auto">
-      {starterMessages.map((starterMessage) => (
+    <div
+      data-testid="starter-messages"
+      className="flex flex-col gap-2 w-full max-w-searchbar-max mx-auto"
+    >
+      {starterMessages.map((starterMessage, index) => (
         <div
           key={starterMessage.name}
+          data-testid={`starter-message-${index}`}
           onClick={() => onSelectStarterMessage(starterMessage.message)}
           className="
             text-left 

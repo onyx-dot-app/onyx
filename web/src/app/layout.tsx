@@ -148,6 +148,8 @@ export default async function RootLayout({
     );
   }
 
+  console.log("assistants", assistants);
+
   return getPageContent(
     <AppProvider
       authTypeMetadata={authTypeMetadata}

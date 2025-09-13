@@ -171,6 +171,7 @@ class PromptOverrideConfig(BaseModel):
     system_prompt: str
     task_prompt: str = ""
     datetime_aware: bool = True
+    include_citations: bool = True
 
 
 class PersonaOverrideConfig(BaseModel):

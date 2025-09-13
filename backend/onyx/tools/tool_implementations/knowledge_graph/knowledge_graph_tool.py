@@ -1,7 +1,10 @@
 from collections.abc import Generator
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -39,6 +42,12 @@ class KnowledgeGraphTool(Tool[None]):
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        """Available only if KG is enabled and exposed."""
+        kg_configs = get_kg_config_settings()
+        return kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
 
     def tool_definition(self) -> dict:
         return {
