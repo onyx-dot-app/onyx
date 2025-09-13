@@ -326,6 +326,7 @@ export const HistorySidebar = React.memo(
                 )}
               </div>
             )}
+            <Projects />
             <div className="h-full  relative overflow-x-hidden overflow-y-auto">
               <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
                 Assistants
@@ -405,7 +406,7 @@ export const HistorySidebar = React.memo(
                   Explore Assistants
                 </button>
               </div>
-              <Projects />
+
               <PagesTab
                 toggleChatSessionSearchModal={toggleChatSessionSearchModal}
                 showDeleteModal={showDeleteModal}
