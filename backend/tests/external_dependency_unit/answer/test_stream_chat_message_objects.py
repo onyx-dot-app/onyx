@@ -31,7 +31,6 @@ def test_stream_chat_message_objects_without_web_search(
             name="test-provider",
             provider="openai",
             api_key=os.environ["OPENAI_API_KEY"],
-            is_default_provider=True,
             is_public=True,
             default_model_name="gpt-4.1",
             fast_default_model_name="gpt-4.1",
