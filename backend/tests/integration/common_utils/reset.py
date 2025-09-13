@@ -155,11 +155,7 @@ def upgrade_postgres(
 def drop_multitenant_postgres(
     database: str = "postgres",
 ) -> None:
-    """Drop all tenant schemas from Postgres (keep public schema intact).
-
-    This avoids re-running public schema migrations between tests, which
-    significantly speeds up CI while preserving tenant isolation.
-    """
+    """Reset the Postgres database."""
     # this seems to hang due to locking issues, so run with a timeout with a few retries
     NUM_TRIES = 10
     TIMEOUT = 40
@@ -231,8 +227,20 @@ def drop_multitenant_postgres_task(dbname: str) -> None:
         schema_name = schema[0]
         cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
 
-    # Keep public schema as-is to avoid expensive Alembic migrations per test
-    logger.info("Skipping drop of public schema tables (kept for speed).")
+    # Drop tables in the public schema
+    logger.info("Selecting public schema tables.")
+    cur.execute(
+        """
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public'
+        """
+    )
+    public_tables = cur.fetchall()
+
+    logger.info("Dropping public schema tables.")
+    for table in public_tables:
+        table_name = table[0]
+        cur.execute(f'DROP TABLE IF EXISTS public."{table_name}" CASCADE')
 
     cur.close()
     conn.close()
@@ -332,12 +340,10 @@ def reset_vespa() -> None:
 
 
 def reset_postgres_multitenant() -> None:
-    """Reset the Postgres database for all tenants in a multitenant setup.
+    """Reset the Postgres database for all tenants in a multitenant setup."""
 
-    Optimization: only drop tenant schemas; do not downgrade/upgrade the
-    public schema here since migrations already ran at service startup.
-    """
     drop_multitenant_postgres()
+    reset_postgres(config_name="schema_private", setup_onyx=False)
 
 
 def reset_vespa_multitenant() -> None:
@@ -414,14 +420,9 @@ def reset_all() -> None:
 
 
 def reset_all_multitenant() -> None:
-    """Reset both Vespa and Postgres for all tenants.
-
-    We clear Vespa first while tenant schemas still exist (to reliably find
-    per-tenant index names), then drop tenant schemas from Postgres. We keep
-    the public schema intact to avoid re-running migrations for every test.
-    """
-    logger.info("Resetting Vespa for all tenants...")
-    reset_vespa_multitenant()
+    """Reset both Postgres and Vespa for all tenants."""
     logger.info("Resetting Postgres for all tenants...")
     reset_postgres_multitenant()
+    logger.info("Resetting Vespa for all tenants...")
+    reset_vespa_multitenant()
     logger.info("Finished resetting all.")
