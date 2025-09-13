@@ -227,7 +227,7 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
     name: string;
   } | null>(null);
   return (
-    <div className="flex flex-col gap-y-2 mt-4">
+    <div className="flex flex-col gap-y-2">
       <div className="px-4 -mx-2 gap-y-1 flex flex-col text-text-history-sidebar-button gap-x-1.5 items-center">
         <button
           type="button"
