@@ -609,7 +609,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
               )}
 
               <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
-                <div className="space-x-1 flex px-4 ">
+                <div className="space-x-1 flex px-4 items-center">
                   <FilePicker
                     onPickRecent={(file: ProjectFile) => {
                       // Check if file with same ID already exists
