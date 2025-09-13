@@ -267,6 +267,22 @@ def get_doc_permission_sync_attempt(
     return db_session.scalars(stmt).first()
 
 
+def get_latest_doc_permission_sync_attempt_for_cc_pair(
+    db_session: Session,
+    connector_credential_pair_id: int,
+) -> DocPermissionSyncAttempt | None:
+    """Get the latest doc permission sync attempt for a connector credential pair."""
+    return db_session.execute(
+        select(DocPermissionSyncAttempt)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .order_by(DocPermissionSyncAttempt.time_finished.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
 def get_recent_doc_permission_sync_attempts_for_cc_pair(
     cc_pair_id: int,
     limit: int,

@@ -4,7 +4,7 @@ import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
-import { CCPairStatus } from "@/components/Status";
+import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CredentialSection from "@/components/credentials/CredentialSection";
 import {
@@ -633,14 +633,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </div>
 
           {ccPair.access_type === "sync" && (
-            <div className="w-[200px]">
-              <div className="text-sm font-medium mb-1">
-                Last Permission Synced
+            <>
+              <div className="w-[200px]">
+                <div className="text-sm font-medium mb-1">
+                  Permission Syncing
+                </div>
+                {ccPair.permission_syncing ||
+                ccPair.last_permission_sync_attempt_status ? (
+                  <PermissionSyncStatus
+                    status={ccPair.last_permission_sync_attempt_status}
+                    errorMsg={ccPair.last_permission_sync_attempt_error_message}
+                  />
+                ) : (
+                  <PermissionSyncStatus status={null} />
+                )}
               </div>
-              <div className="text-sm text-text-default">
-                {timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+
+              <div className="w-[200px]">
+                <div className="text-sm font-medium mb-1">Last Synced</div>
+                <div className="text-sm text-text-default">
+                  {ccPair.last_permission_sync_attempt_finished
+                    ? timeAgo(ccPair.last_permission_sync_attempt_finished)
+                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </Card>

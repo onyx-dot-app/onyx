@@ -37,6 +37,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
@@ -45,6 +46,12 @@ from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import User
+from onyx.db.permission_sync_attempt import (
+    get_latest_doc_permission_sync_attempt_for_cc_pair,
+)
+from onyx.db.permission_sync_attempt import (
+    get_recent_doc_permission_sync_attempts_for_cc_pair,
+)
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
@@ -56,6 +63,7 @@ from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocumentSyncStatus
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.documents.models import PermissionSyncAttemptSnapshot
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -101,6 +109,48 @@ def get_cc_pair_index_attempts(
     )
 
 
+@router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
+def get_cc_pair_permission_sync_attempts(
+    cc_pair_id: int,
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[PermissionSyncAttemptSnapshot]:
+    if user:
+        user_has_access = verify_user_has_access_to_cc_pair(
+            cc_pair_id, db_session, user, get_editable=False
+        )
+        if not user_has_access:
+            raise HTTPException(
+                status_code=400, detail="CC Pair not found for current user permissions"
+            )
+
+    # Get all permission sync attempts for this cc pair
+    all_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        limit=1000,
+        db_session=db_session,
+    )
+
+    start_idx = page_num * page_size
+    end_idx = start_idx + page_size
+    paginated_attempts = all_attempts[start_idx:end_idx]
+    items = (
+        [
+            PermissionSyncAttemptSnapshot.from_permission_sync_attempt_db_model(attempt)
+            for attempt in paginated_attempts
+        ],
+    )
+
+    print(f"items: {items}")
+
+    return PaginatedReturn(
+        items=items,
+        total_items=len(all_attempts),
+    )
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}")
 def get_cc_pair_full_info(
     cc_pair_id: int,
@@ -143,6 +193,16 @@ def get_cc_pair_full_info(
         only_finished=False,
     )
 
+    # Get latest permission sync attempt for status
+    latest_permission_sync_attempt = None
+    if cc_pair.access_type == AccessType.SYNC:
+        latest_permission_sync_attempt = (
+            get_latest_doc_permission_sync_attempt_for_cc_pair(
+                db_session=db_session,
+                connector_credential_pair_id=cc_pair_id,
+            )
+        )
+
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
         number_of_index_attempts=count_index_attempts_for_cc_pair(
@@ -160,6 +220,26 @@ def get_cc_pair_full_info(
         is_editable_for_current_user=is_editable_for_current_user,
         indexing=bool(
             latest_attempt and latest_attempt.status == IndexingStatus.IN_PROGRESS
+        ),
+        last_permission_sync_attempt_status=(
+            latest_permission_sync_attempt.status
+            if latest_permission_sync_attempt
+            else None
+        ),
+        permission_syncing=bool(
+            latest_permission_sync_attempt
+            and latest_permission_sync_attempt.status
+            == PermissionSyncStatus.IN_PROGRESS
+        ),
+        last_permission_sync_attempt_finished=(
+            latest_permission_sync_attempt.time_finished
+            if latest_permission_sync_attempt
+            else None
+        ),
+        last_permission_sync_attempt_error_message=(
+            latest_permission_sync_attempt.error_message
+            if latest_permission_sync_attempt
+            else None
         ),
     )
 
