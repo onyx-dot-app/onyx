@@ -161,19 +161,15 @@ export function AssistantEditor({
   const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
-  // state to persist across formik reformatting
+  // both `defautIconColor` and `defaultIconShape` are state so that they
+  // persist across formik reformatting
   const [defautIconColor, _setDeafultIconColor] = useState(
     colorOptions[Math.floor(Math.random() * colorOptions.length)]
   );
+  const [defaultIconShape] = useState<any>(
+    () => generateRandomIconShape().encodedGrid
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const [defaultIconShape, setDefaultIconShape] = useState<any>(null);
-
-  useEffect(() => {
-    if (defaultIconShape === null) {
-      setDefaultIconShape(generateRandomIconShape().encodedGrid);
-    }
-  }, [defaultIconShape]);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
