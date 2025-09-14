@@ -1,6 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
 import k from "./../i18n/keys";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 import { useState, useRef, useContext, useEffect, useMemo } from "react";
 import { FiLogOut } from "react-icons/fi";
@@ -48,8 +49,8 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
     return (
       <Link
         href={href}
-        target={openInNewTab ? i18n.t(k.BLANK) : undefined}
-        rel={openInNewTab ? i18n.t(k.NOOPENER_NOREFERRER) : undefined}
+        target={openInNewTab ? "_blank" : undefined}
+        rel={openInNewTab ? "noopener noreferrer" : undefined}
       >
         {content}
       </Link>
@@ -69,6 +70,8 @@ export function UserDropdown({
   hideUserDropdown?: boolean;
 }) {
   const { user, isCurator } = useUser();
+  const { language, changeLanguage } = useLanguage();
+  const { t } = useTranslation();
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -164,7 +167,7 @@ export function UserDropdown({
                 text-base
               "
             >
-              {user && user.email ? user.email[0].toUpperCase() : i18n.t(k.A1)}
+              {user && user.email ? user.email[0].toUpperCase() : t(k.A1)}
             </div>
             {notifications && notifications.length > 0 && (
               <div className="absolute -right-0.5 -top-0.5 w-3 h-3 bg-red-500 rounded-full"></div>
@@ -192,7 +195,7 @@ export function UserDropdown({
                 overscroll-contain
               `}
           >
-            {page != i18n.t(k.ADMIN) && showNotifications ? (
+            {page != "admin" && showNotifications ? (
               <Notifications
                 navigateToDropdown={() => setShowNotifications(false)}
                 notifications={notifications || []}
@@ -200,7 +203,7 @@ export function UserDropdown({
               />
             ) : hideUserDropdown ? (
               <DropdownOption
-                onClick={() => router.push(i18n.t(k.AUTH_LOGIN))}
+                onClick={() => router.push("/auth/login")}
                 icon={<UserIcon className="h-5w-5 my-auto " />}
                 label="Log In"
               />
@@ -248,14 +251,14 @@ export function UserDropdown({
                   <DropdownOption
                     href="/admin/indexing/status"
                     icon={<LightSettingsIcon size={16} className="my-auto" />}
-                    label={i18n.t(k.ADMIN_PANEL_LABEL)}
+                    label={t(k.ADMIN_PANEL_LABEL)}
                   />
                 ) : (
                   showCuratorPanel && (
                     <DropdownOption
                       href="/admin/indexing/status"
                       icon={<LightSettingsIcon size={16} className="my-auto" />}
-                      label={i18n.t(k.CURATOR_PANEL_LABEL)}
+                      label={t(k.CURATOR_PANEL_LABEL)}
                     />
                   )
                 )}
@@ -270,23 +273,23 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={toggleUserSettings}
                     icon={<UserIcon size={16} className="my-auto" />}
-                    label={i18n.t(k.USER_SETTINGS_LABEL)}
+                    label={t(k.USER_SETTINGS_LABEL)}
                   />
                 )}
                 <DropdownOption
                   onClick={() => {
-                    const nextLang = i18n.language === "ru" ? "en" : "ru";
-                    i18n.changeLanguage(nextLang);
+                    const nextLang = language === "ru" ? "en" : "ru";
+                    changeLanguage(nextLang);
                   }}
                   icon={
                     <span className="my-auto text-xs font-semibold">
-                      {i18n.language === "ru" ? "EN" : "RU"}
+                      {language === "ru" ? "EN" : "RU"}
                     </span>
                   }
                   label={
-                    i18n.language === "ru"
-                      ? "Switch to English"
-                      : i18n.t(k.SWITCH_TO_RUSSIAN)
+                    language === "ru"
+                      ? t(k.SWITCH_TO_ENGLISH)
+                      : t(k.SWITCH_TO_RUSSIAN)
                   }
                 />
 
@@ -296,9 +299,9 @@ export function UserDropdown({
                     setShowNotifications(true);
                   }}
                   icon={<BellIcon size={16} className="my-auto" />}
-                  label={`${i18n.t(k.NOTIFICATIONS)} ${
+                  label={`${t(k.NOTIFICATIONS)} ${
                     notifications && notifications.length > 0
-                      ? `${i18n.t(k._4)}${notifications.length}${i18n.t(k._5)}`
+                      ? `${t(k._4)}${notifications.length}${t(k._5)}`
                       : ""
                   }`}
                 />
@@ -314,7 +317,7 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={handleLogout}
                     icon={<FiLogOut size={16} className="my-auto" />}
-                    label={i18n.t(k.LOGOUT_LABEL)}
+                    label={t(k.LOGOUT_LABEL)}
                   />
                 )}
               </>

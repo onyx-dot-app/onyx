@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
@@ -26,6 +26,7 @@ type AssistantStatsResponse = {
 };
 
 export function AssistantStats({ assistantId }: { assistantId: number }) {
+  const { t } = useTranslation();
   const [assistantStats, setAssistantStats] =
     useState<AssistantStatsResponse | null>(null);
   const { assistants } = useAssistants();
@@ -54,16 +55,16 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
 
         if (!res.ok) {
           if (res.status === 403) {
-            throw new Error(i18n.t(k.NO_PERMISSION_TO_VIEW_STATS));
+            throw new Error(t(k.NO_PERMISSION_TO_VIEW_STATS));
           }
-          throw new Error(i18n.t(k.FAILED_TO_GET_ASSISTANT_STATS));
+          throw new Error(t(k.FAILED_TO_GET_ASSISTANT_STATS));
         }
 
         const data = (await res.json()) as AssistantStatsResponse;
         setAssistantStats(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
+          err instanceof Error ? err.message : t(k.UNKNOWN_ERROR_OCCURRED)
         );
       } finally {
         setIsLoading(false);
@@ -126,7 +127,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   } else if (!assistantStats?.daily_stats?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">{i18n.t(k.NO_DATA_FOUND_FOR_THIS_ASSISTA)}</p>
+        <p className="m-auto">{t(k.NO_DATA_FOUND_FOR_THIS_ASSISTA)}</p>
       </div>
     );
   } else if (chartData) {
@@ -146,7 +147,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <p className="text-base font-normal text-2xl">
-          {i18n.t(k.ASSISTANT_ANALYTICS)}
+          {t(k.ASSISTANT_ANALYTICS)}
         </p>
         <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
       </CardHeader>
@@ -176,13 +177,13 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-text-500">
-                    {i18n.t(k.TOTAL_MESSAGES)}
+                    {t(k.TOTAL_MESSAGES)}
                   </p>
                   <p className="text-2xl font-normal">{totalMessages}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-text-500">
-                    {i18n.t(k.TOTAL_UNIQUE_USERS)}
+                    {t(k.TOTAL_UNIQUE_USERS)}
                   </p>
                   <p className="text-2xl font-normal">{totalUniqueUsers}</p>
                 </div>

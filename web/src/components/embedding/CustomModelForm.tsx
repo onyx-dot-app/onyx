@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import {
   BooleanFormField,
@@ -14,6 +16,7 @@ export function CustomModelForm({
 }: {
   onSubmit: (model: HostedEmbeddingModel) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
       <Formik
@@ -26,12 +29,8 @@ export function CustomModelForm({
           normalize: true,
         }}
         validationSchema={Yup.object().shape({
-          model_name: Yup.string().required(
-            i18n.t(k.EMBEDDING_MODEL_NAME_REQUIRED)
-          ),
-          model_dim: Yup.number().required(
-            i18n.t(k.EMBEDDING_DIMENSION_REQUIRED)
-          ),
+          model_name: Yup.string().required(t(k.EMBEDDING_MODEL_NAME_REQUIRED)),
+          model_dim: Yup.number().required(t(k.EMBEDDING_DIMENSION_REQUIRED)),
           query_prefix: Yup.string(),
           passage_prefix: Yup.string(),
           normalize: Yup.boolean().required(),
@@ -51,17 +50,17 @@ export function CustomModelForm({
           <Form>
             <TextFormField
               name="model_name"
-              label={i18n.t(k.MODEL_NAME_LABEL)}
-              subtext={i18n.t(k.MODEL_NAME_SUBTEXT)}
-              placeholder={i18n.t(k.MODEL_NAME_PLACEHOLDER)}
+              label={t(k.MODEL_NAME_LABEL)}
+              subtext={t(k.MODEL_NAME_SUBTEXT)}
+              placeholder={t(k.MODEL_NAME_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="model_dim"
-              label={i18n.t(k.MODEL_DIMENSION_LABEL)}
-              subtext={i18n.t(k.MODEL_DIMENSION_SUBTEXT)}
-              placeholder={i18n.t(k.MODEL_DIMENSION_PLACEHOLDER)}
+              label={t(k.MODEL_DIMENSION_LABEL)}
+              subtext={t(k.MODEL_DIMENSION_SUBTEXT)}
+              placeholder={t(k.MODEL_DIMENSION_PLACEHOLDER)}
               autoCompleteDisabled={true}
               type="number"
             />
@@ -69,37 +68,35 @@ export function CustomModelForm({
             <TextFormField
               min={-1}
               name="description"
-              label={i18n.t(k.DESCRIPTION_LABEL)}
-              subtext={i18n.t(k.MODEL_DESCRIPTION_SUBTEXT)}
+              label={t(k.DESCRIPTION_LABEL)}
+              subtext={t(k.MODEL_DESCRIPTION_SUBTEXT)}
               placeholder=""
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="query_prefix"
-              label={i18n.t(k.QUERY_PREFIX_LABEL)}
+              label={t(k.QUERY_PREFIX_LABEL)}
               subtext={
                 <>
-                  {i18n.t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
-                  <i>{i18n.t(k.QUERIES)}</i>{" "}
-                  {i18n.t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
+                  {t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
+                  <i>{t(k.QUERIES)}</i> {t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
                 </>
               }
-              placeholder={i18n.t(k.QUERY_PREFIX_PLACEHOLDER)}
+              placeholder={t(k.QUERY_PREFIX_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="passage_prefix"
-              label={i18n.t(k.PASSAGE_PREFIX_LABEL)}
+              label={t(k.PASSAGE_PREFIX_LABEL)}
               subtext={
                 <>
-                  {i18n.t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
-                  <i>{i18n.t(k.PASSAGES)}</i>{" "}
-                  {i18n.t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
+                  {t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
+                  <i>{t(k.PASSAGES)}</i> {t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
                 </>
               }
-              placeholder={i18n.t(k.PASSAGE_PREFIX_PLACEHOLDER)}
+              placeholder={t(k.PASSAGE_PREFIX_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
@@ -107,7 +104,7 @@ export function CustomModelForm({
               removeIndent
               name="normalize"
               label="Normalize Embeddings"
-              subtext={i18n.t(k.NORMALIZE_EMBEDDINGS_SUBTEXT)}
+              subtext={t(k.NORMALIZE_EMBEDDINGS_SUBTEXT)}
             />
 
             <Button
@@ -115,7 +112,7 @@ export function CustomModelForm({
               disabled={isSubmitting}
               className="w-64 mx-auto"
             >
-              {i18n.t(k.CHOOSE)}
+              {t(k.CHOOSE)}
             </Button>
           </Form>
         )}

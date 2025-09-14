@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Modal } from "@/components/Modal";
@@ -28,6 +30,7 @@ export default function UpgradingPage({
 }: {
   futureEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
 }) {
+  const { t } = useTranslation();
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   const { setPopup, popup } = usePopup();
@@ -61,11 +64,7 @@ export default function UpgradingPage({
     if (response.ok) {
       mutate("/api/search-settings/get-secondary-search-settings");
     } else {
-      alert(
-        i18n.t(k.FAILED_TO_CANCEL_EMBEDDING_UPDATE, {
-          response: await response.text(),
-        })
-      );
+      alert(t(k.FAILED_TO_CANCEL_EMBEDDING_UPDATE));
     }
     setIsCancelling(false);
   };
@@ -108,14 +107,14 @@ export default function UpgradingPage({
       {isCancelling && (
         <Modal
           onOutsideClick={() => setIsCancelling(false)}
-          title={i18n.t(k.CANCEL_EMBEDDING_MODEL_SWITCH)}
+          title={t(k.CANCEL_EMBEDDING_MODEL_SWITCH)}
         >
           <div>
-            <div>{i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_CANCE)}</div>
+            <div>{t(k.ARE_YOU_SURE_YOU_WANT_TO_CANCE)}</div>
             <div className="mt-12 gap-x-2 w-full justify-end flex">
-              <Button onClick={onCancel}>{i18n.t(k.CONFIRM)}</Button>
+              <Button onClick={onCancel}>{t(k.CONFIRM)}</Button>
               <Button onClick={() => setIsCancelling(false)} variant="outline">
-                {i18n.t(k.CANCEL)}
+                {t(k.CANCEL)}
               </Button>
             </div>
           </div>
@@ -124,10 +123,10 @@ export default function UpgradingPage({
 
       {futureEmbeddingModel && (
         <div>
-          <Title className="mt-8">{i18n.t(k.CURRENT_UPGRADE_STATUS)}</Title>
+          <Title className="mt-8">{t(k.CURRENT_UPGRADE_STATUS)}</Title>
           <div className="mt-4">
             <div className="italic text-lg mb-2">
-              {i18n.t(k.CURRENTLY_IN_THE_PROCESS_OF_SW)}{" "}
+              {t(k.CURRENTLY_IN_THE_PROCESS_OF_SW)}{" "}
               {futureEmbeddingModel.model_name}
             </div>
 
@@ -136,7 +135,7 @@ export default function UpgradingPage({
               className="mt-4"
               onClick={() => setIsCancelling(true)}
             >
-              {i18n.t(k.CANCEL)}
+              {t(k.CANCEL)}
             </Button>
 
             {connectors && connectors.length > 0 ? (
@@ -150,7 +149,7 @@ export default function UpgradingPage({
                   )}
 
                   <Text className="my-4">
-                    {i18n.t(k.THE_TABLE_BELOW_SHOWS_THE_RE_I)}
+                    {t(k.THE_TABLE_BELOW_SHOWS_THE_RE_I)}
                   </Text>
 
                   {sortedReindexingProgress ? (
@@ -159,33 +158,33 @@ export default function UpgradingPage({
                     />
                   ) : (
                     <ErrorCallout
-                      errorTitle={i18n.t(k.FAILED_TO_GET_REINDEXING_PROGRESS)}
+                      errorTitle={t(k.FAILED_TO_GET_REINDEXING_PROGRESS)}
                     />
                   )}
                 </>
               ) : (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-2">
-                    {i18n.t(k.SWITCHING_EMBEDDING_MODELS)}
+                    {t(k.SWITCHING_EMBEDDING_MODELS)}
                   </h3>
                   <p className="mb-4 text-text-800">
-                    {i18n.t(k.YOU_RE_CURRENTLY_SWITCHING_EMB)}
+                    {t(k.YOU_RE_CURRENTLY_SWITCHING_EMB)}
                   </p>
                   <p className="text-text-600">
-                    {i18n.t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
+                    {t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
                   </p>
                 </div>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">
                 <h3 className="text-lg font-semibold mb-2">
-                  {i18n.t(k.SWITCHING_EMBEDDING_MODELS)}
+                  {t(k.SWITCHING_EMBEDDING_MODELS)}
                 </h3>
                 <p className="mb-4 text-text-800">
-                  {i18n.t(k.YOU_RE_CURRENTLY_SWITCHING_EMB1)}
+                  {t(k.YOU_RE_CURRENTLY_SWITCHING_EMB1)}
                 </p>
                 <p className="text-text-600">
-                  {i18n.t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
+                  {t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
                 </p>
               </div>
             )}

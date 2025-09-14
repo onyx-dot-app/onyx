@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { useRouter } from "next/navigation";
@@ -47,6 +47,7 @@ export function ChatSessionDisplay({
   showDeleteModal?: (chatSession: ChatSession) => void;
   isDragging?: boolean;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
   const [isRenamingChat, setIsRenamingChat] = useState(false);
@@ -110,7 +111,7 @@ export function ChatSessionDisplay({
         setIsRenamingChat(false);
         router.refresh();
       } else {
-        alert(i18n.t(k.FAILED_TO_RENAME_CHAT_SESSION));
+        alert(t(k.FAILED_TO_RENAME_CHAT_SESSION));
       }
     },
     [chatSession.id, chatName, router]
@@ -270,7 +271,7 @@ export function ChatSessionDisplay({
                   </div>
                 ) : (
                   <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
-                    {chatName || `${i18n.t(k.UNNAMED_CHAT)}`}
+                    {chatName || `${t(k.UNNAMED_CHAT)}`}
                     <span
                       className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
                       ${
@@ -291,13 +292,11 @@ export function ChatSessionDisplay({
                         line
                         content={
                           <p>
-                            {i18n.t(k.THIS_CHAT_WILL_EXPIRE)}{" "}
+                            {t(k.THIS_CHAT_WILL_EXPIRE)}{" "}
                             {daysUntilExpiration < 1
-                              ? i18n.t(k.TODAY1)
-                              : `${i18n.t(
-                                  k.IN
-                                )} ${daysUntilExpiration} ${i18n.t(k.DAY)}${
-                                  daysUntilExpiration !== 1 ? i18n.t(k.S) : ""
+                              ? t(k.TODAY1)
+                              : `${t(k.IN)} ${daysUntilExpiration} ${t(k.DAY)}${
+                                  daysUntilExpiration !== 1 ? t(k.S) : ""
                                 }`}
                           </p>
                         }
@@ -337,7 +336,7 @@ export function ChatSessionDisplay({
                                   <>
                                     {showShareModal && (
                                       <DefaultDropdownElement
-                                        name={i18n.t(k.SHARE)}
+                                        name={t(k.SHARE)}
                                         icon={FiShare2}
                                         onSelect={() =>
                                           showShareModal(chatSession)
@@ -346,13 +345,13 @@ export function ChatSessionDisplay({
                                     )}
                                     {!search && (
                                       <DefaultDropdownElement
-                                        name={i18n.t(k.RENAME)}
+                                        name={t(k.RENAME)}
                                         icon={FiEdit2}
                                         onSelect={() => setIsRenamingChat(true)}
                                       />
                                     )}
                                     <DefaultDropdownElement
-                                      name={i18n.t(k.DELETE)}
+                                      name={t(k.DELETE)}
                                       icon={FiTrash}
                                       onSelect={handleDeleteClick}
                                     />
@@ -360,22 +359,20 @@ export function ChatSessionDisplay({
                                 ) : (
                                   <div className="p-3">
                                     <p className="text-sm mb-3">
-                                      {i18n.t(
-                                        k.ARE_YOU_SURE_YOU_WANT_TO_DELET5
-                                      )}
+                                      {t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET5)}
                                     </p>
                                     <div className="flex justify-center gap-2">
                                       <button
                                         className="px-3 py-1 text-sm bg-background-200 rounded"
                                         onClick={handleCancelDelete}
                                       >
-                                        {i18n.t(k.CANCEL)}
+                                        {t(k.CANCEL)}
                                       </button>
                                       <button
                                         className="px-3 py-1 text-sm bg-red-500 text-white rounded"
                                         onClick={handleConfirmDelete}
                                       >
-                                        {i18n.t(k.DELETE)}
+                                        {t(k.DELETE)}
                                       </button>
                                     </div>
                                   </div>

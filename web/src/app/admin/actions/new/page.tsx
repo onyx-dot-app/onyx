@@ -1,6 +1,6 @@
 "use client";
 
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../i18n/keys";
 import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
@@ -9,12 +9,13 @@ import { ToolIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
 
 export default function NewToolPage() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
       <BackButton />
 
       <AdminPageTitle
-        title={i18n.t(k.CREATE_TOOL)}
+        title={t(k.CREATE_TOOL)}
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

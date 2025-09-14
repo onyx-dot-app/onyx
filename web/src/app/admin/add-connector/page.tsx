@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -44,6 +44,7 @@ function SourceTile({
   );
 }
 export default function Page() {
+  const { t } = useTranslation();
   const sources = useMemo(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -101,12 +102,10 @@ export default function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ConnectorIcon size={32} />}
-        title={i18n.t(k.ADD_CONNECTOR)}
+        title={t(k.ADD_CONNECTOR)}
         farRightElement={
           <Link href="/admin/indexing/status">
-            <Button variant="success-reverse">
-              {i18n.t(k.SEE_CONNECTORS)}
-            </Button>
+            <Button variant="success-reverse">{t(k.SEE_CONNECTORS)}</Button>
           </Link>
         }
       />
@@ -114,7 +113,7 @@ export default function Page() {
       <input
         type="text"
         ref={searchInputRef}
-        placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
+        placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}

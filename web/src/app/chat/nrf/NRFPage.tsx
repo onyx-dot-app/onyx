@@ -1,7 +1,13 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
-import React, { useState, useEffect, useRef, useContext } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useContext,
+  RefObject,
+} from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
@@ -45,6 +51,7 @@ export default function NRFPage({
 }: {
   requestCookies: ReadonlyRequestCookies;
 }) {
+  const { t } = useTranslation();
   const {
     theme,
     defaultLightBackgroundUrl,
@@ -171,14 +178,14 @@ export default function NRFPage({
         });
         if (!res.ok) {
           throw new Error(
-            i18n.t(k.FAILED_TO_GET_AUTH_TYPE, { statusText: res.statusText })
+            t(k.FAILED_TO_GET_AUTH_TYPE, { statusText: res.statusText })
           );
         }
 
         const data = await res.json();
         setAuthType(data.auth_type);
       } catch (err) {
-        console.error(i18n.t(k.AUTH_DATA_FETCH_ERROR), err);
+        console.error(t(k.AUTH_DATA_FETCH_ERROR), err);
       } finally {
         setFetchingAuth(false);
       }
@@ -244,8 +251,8 @@ export default function NRFPage({
                 }`}
               >
                 {isNight
-                  ? i18n.t(k.END_YOUR_DAY_WITH_ONYX)
-                  : i18n.t(k.START_YOUR_DAY_WITH_ONYX)}
+                  ? t(k.END_YOUR_DAY_WITH_ONYX)
+                  : t(k.START_YOUR_DAY_WITH_ONYX)}
               </h1>
 
               <SimplifiedChatInputBar
@@ -256,7 +263,7 @@ export default function NRFPage({
                 files={currentMessageFiles}
                 setFiles={setCurrentMessageFiles}
                 filterManager={filterManager}
-                textAreaRef={textAreaRef}
+                textAreaRef={textAreaRef as RefObject<HTMLTextAreaElement>}
                 existingSources={availableSources}
                 availableDocumentSets={documentSets}
                 availableTags={tags}
@@ -323,11 +330,11 @@ export default function NRFPage({
       <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
         <DialogContent className="w-fit max-w-[95%]">
           <DialogHeader>
-            <DialogTitle>{i18n.t(k.TURN_OFF_ONYX_NEW_TAB_PAGE)}</DialogTitle>
+            <DialogTitle>{t(k.TURN_OFF_ONYX_NEW_TAB_PAGE)}</DialogTitle>
             <DialogDescription>
-              {i18n.t(k.YOU_LL_SEE_YOUR_BROWSER_S_DEFA)}
+              {t(k.YOU_LL_SEE_YOUR_BROWSER_S_DEFA)}
               <br />
-              {i18n.t(k.YOU_CAN_TURN_IT_BACK_ON_ANYTIM)}
+              {t(k.YOU_CAN_TURN_IT_BACK_ON_ANYTIM)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 justify-center">
@@ -335,10 +342,10 @@ export default function NRFPage({
               variant="outline"
               onClick={() => setShowTurnOffModal(false)}
             >
-              {i18n.t(k.CANCEL)}
+              {t(k.CANCEL)}
             </Button>
             <Button variant="destructive" onClick={confirmTurnOff}>
-              {i18n.t(k.TURN_OFF)}
+              {t(k.TURN_OFF)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -346,7 +353,7 @@ export default function NRFPage({
       {!user && authType !== "disabled" && showLoginModal ? (
         <Modal className="max-w-md mx-auto">
           {fetchingAuth ? (
-            <p className="p-4">{i18n.t(k.LOADING_LOGIN_INFO)}</p>
+            <p className="p-4">{t(k.LOADING_LOGIN_INFO)}</p>
           ) : authType == "basic" ? (
             <LoginPage
               authUrl={null}
@@ -362,7 +369,7 @@ export default function NRFPage({
           ) : (
             <div className="flex flex-col items-center">
               <h2 className="text-center text-xl text-strong font-bold mb-4">
-                {i18n.t(k.WELCOME_TO_ONYX)}
+                {t(k.WELCOME_TO_ONYX)}
               </h2>
               <Button
                 className="bg-agent w-full hover:bg-accent-hover text-white"
@@ -374,7 +381,7 @@ export default function NRFPage({
                   }
                 }}
               >
-                {i18n.t(k.LOG_IN1)}
+                {t(k.LOG_IN1)}
               </Button>
             </div>
           )}

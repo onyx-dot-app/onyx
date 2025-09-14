@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -84,10 +86,11 @@ function SelectFeedbackType({
   value: Feedback | "all";
   onValueChange: (value: Feedback | "all") => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
       <Text className="my-auto mr-2 font-medium mb-1">
-        {i18n.t(k.FEEDBACK_TYPE)}
+        {t(k.FEEDBACK_TYPE)}
       </Text>
       <div className="max-w-sm space-y-6">
         <Select
@@ -95,33 +98,31 @@ function SelectFeedbackType({
           onValueChange={onValueChange as (value: string) => void}
         >
           <SelectTrigger>
-            <SelectValue
-              placeholder={i18n.t(k.SELECT_FEEDBACK_TYPE_PLACEHOLDER)}
-            />
+            <SelectValue placeholder={t(k.SELECT_FEEDBACK_TYPE_PLACEHOLDER)} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">
               <div className="flex items-center gap-2">
                 <FiMinus className="h-4 w-4" />
-                <span>{i18n.t(k.ANY1)}</span>
+                <span>{t(k.ANY1)}</span>
               </div>
             </SelectItem>
             <SelectItem value="like">
               <div className="flex items-center gap-2">
                 <FiSmile className="h-4 w-4" />
-                <span>{i18n.t(k.LIKE)}</span>
+                <span>{t(k.LIKE)}</span>
               </div>
             </SelectItem>
             <SelectItem value="dislike">
               <div className="flex items-center gap-2">
                 <FiFrown className="h-4 w-4" />
-                <span>{i18n.t(k.DISLIKE)}</span>
+                <span>{t(k.DISLIKE)}</span>
               </div>
             </SelectItem>
             <SelectItem value="mixed">
               <div className="flex items-center gap-2">
                 <FiMeh className="h-4 w-4" />
-                <span>{i18n.t(k.MIXED)}</span>
+                <span>{t(k.MIXED)}</span>
               </div>
             </SelectItem>
           </SelectContent>
@@ -132,6 +133,7 @@ function SelectFeedbackType({
 }
 
 export function QueryHistoryTable() {
+  const { t } = useTranslation();
   const [dateRange, setDateRange] = useState<DateRange>(undefined);
   const [filters, setFilters] = useState<{
     feedback_type?: Feedback | "all";
@@ -176,7 +178,7 @@ export function QueryHistoryTable() {
   if (error) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.QUERY_HISTORY_ERROR)}
+        errorTitle={t(k.QUERY_HISTORY_ERROR)}
         errorMsg={error?.message}
       />
     );
@@ -214,12 +216,12 @@ export function QueryHistoryTable() {
         <Table className="mt-5">
           <TableHeader>
             <TableRow>
-              <TableHead>{i18n.t(k.FIRST_USER_MESSAGE)}</TableHead>
-              <TableHead>{i18n.t(k.FIRST_AI_RESPONSE)}</TableHead>
-              <TableHead>{i18n.t(k.FEEDBACK)}</TableHead>
-              <TableHead>{i18n.t(k.USER)}</TableHead>
-              <TableHead>{i18n.t(k.PERSONA)}</TableHead>
-              <TableHead>{i18n.t(k.DATE)}</TableHead>
+              <TableHead>{t(k.FIRST_USER_MESSAGE)}</TableHead>
+              <TableHead>{t(k.FIRST_AI_RESPONSE)}</TableHead>
+              <TableHead>{t(k.FEEDBACK)}</TableHead>
+              <TableHead>{t(k.USER)}</TableHead>
+              <TableHead>{t(k.PERSONA)}</TableHead>
+              <TableHead>{t(k.DATE)}</TableHead>
             </TableRow>
           </TableHeader>
           {isLoading ? (

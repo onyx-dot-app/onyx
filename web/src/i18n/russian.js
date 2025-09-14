@@ -2116,6 +2116,7 @@ module.exports = {
   [k.RENAME]: `Переименовать`,
   [k.DELETE]: `Удалить`,
   [k.SWITCH_TO_RUSSIAN]: `Переключить на русский`,
+  [k.SWITCH_TO_ENGLISH]: `Switch to English`,
   [k.VIEW_FILES]: `Просмотр файлов`,
   [k.WARNING]: `Предупреждение`,
   [k.ADVANCED_SETTINGS]: `Расширенные настройки`,
@@ -3028,4 +3029,8 @@ module.exports = {
   // Additional missing keys - Russian translations
   [k.PROCESSING]: `Обработка`,
   [k.FAILED_TO_CREATE_PROMPT]: `Не удалось создать промпт`,
+
+  // PersonaTable.tsx missing keys
+  [k.TYPE]: `Тип`,
+  [k.VISIBILITY]: `Видимость`,
 };

@@ -5,7 +5,7 @@ import {
   setDefaultVisionProvider,
 } from "@/lib/llm/visionLLM";
 import { destructureValue, structureValue } from "@/lib/llm/utils";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "@/i18n/keys";
 
 // Define a type for the popup setter function
@@ -16,6 +16,7 @@ type SetPopup = (popup: {
 
 // Accept the setPopup function as a parameter
 export function useVisionProviders(setPopup: SetPopup) {
+  const { t } = useTranslation();
   const [visionProviders, setVisionProviders] = useState<VisionProvider[]>([]);
   const [visionLLM, setVisionLLM] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,16 +50,16 @@ export function useVisionProviders(setPopup: SetPopup) {
         }
       }
     } catch (error) {
-      console.error(i18n.t(k.ERROR_LOADING_VISION_PROVIDERS), error);
+      console.error(t(k.ERROR_LOADING_VISION_PROVIDERS), error);
       setError(
         error instanceof Error
           ? error.message
-          : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
+          : t(k.UNKNOWN_ERROR_OCCURRED)
       );
       setPopup({
-        message: i18n.t(k.FAILED_TO_LOAD_VISION_PROVIDERS, {
+        message: t(k.FAILED_TO_LOAD_VISION_PROVIDERS, {
           error:
-            error instanceof Error ? error.message : i18n.t(k.UNKNOWN_ERROR),
+            error instanceof Error ? error.message : t(k.UNKNOWN_ERROR),
         }),
         type: "error",
       });
@@ -71,7 +72,7 @@ export function useVisionProviders(setPopup: SetPopup) {
     async (llmValue: string | null) => {
       if (!llmValue) {
         setPopup({
-          message: i18n.t(k.SELECT_VALID_VISION_MODEL),
+          message: t(k.SELECT_VALID_VISION_MODEL),
           type: "error",
         });
         return false;
@@ -83,13 +84,13 @@ export function useVisionProviders(setPopup: SetPopup) {
         // Find the provider ID
         const providerObj = visionProviders.find((p) => p.name === name);
         if (!providerObj) {
-          throw new Error(i18n.t(k.PROVIDER_NOT_FOUND));
+          throw new Error(t(k.PROVIDER_NOT_FOUND));
         }
 
         await setDefaultVisionProvider(providerObj.id, modelName);
 
         setPopup({
-          message: i18n.t(k.DEFAULT_PROVIDER_UPDATED_SUCCESS),
+          message: t(k.DEFAULT_PROVIDER_UPDATED_SUCCESS),
           type: "success",
         });
         setVisionLLM(llmValue);
@@ -102,9 +103,9 @@ export function useVisionProviders(setPopup: SetPopup) {
         const errorMessage =
           error instanceof Error
             ? error.message
-            : i18n.t(k.UNKNOWN_ERROR_OCCURRED);
+            : t(k.UNKNOWN_ERROR_OCCURRED);
         setPopup({
-          message: i18n.t(k.FAILED_TO_UPDATE_DEFAULT_VISION_PROVIDER, {
+          message: t(k.FAILED_TO_UPDATE_DEFAULT_VISION_PROVIDER, {
             error: errorMessage,
           }),
           type: "error",

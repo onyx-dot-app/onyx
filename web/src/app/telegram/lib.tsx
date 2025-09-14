@@ -1,5 +1,8 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../i18n/keys";
+import i18n from "../../i18n/init";
 import {
   AnswerPiecePacket,
   OnyxDocument,

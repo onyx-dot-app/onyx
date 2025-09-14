@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
@@ -25,18 +27,19 @@ function LLMProviderUpdateModal({
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
+  const { t } = useTranslation();
   const providerName = existingLlmProvider?.name
     ? `"${existingLlmProvider.name}"`
     : llmProviderDescriptor?.display_name ||
       llmProviderDescriptor?.name ||
-      i18n.t(k.LLM_SERVICE_PROVIDER);
+      t(k.LLM_SERVICE_PROVIDER);
 
   const hasAdvancedOptions = llmProviderDescriptor?.name != "azure";
 
   return (
     <Modal
       title={`${
-        llmProviderDescriptor ? i18n.t(k.CONFIGURE) : i18n.t(k.SETUP)
+        llmProviderDescriptor ? t(k.CONFIGURE) : t(k.SETUP)
       } ${providerName}`}
       onOutsideClick={() => onClose()}
     >
@@ -72,6 +75,7 @@ function LLMProviderDisplay({
   existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }) {
+  const { t } = useTranslation();
   const [formIsVisible, setFormIsVisible] = useState(false);
   const { popup, setPopup } = usePopup();
 
@@ -100,7 +104,7 @@ function LLMProviderDisplay({
                   const errorMsg = (await response.json()).detail;
                   setPopup({
                     type: "error",
-                    message: `${i18n.t(
+                    message: `${t(
                       k.FAILED_TO_SET_PROVIDER_AS_DEFA
                     )} ${errorMsg}`,
                   });
@@ -110,11 +114,11 @@ function LLMProviderDisplay({
                 mutate(LLM_PROVIDERS_ADMIN_URL);
                 setPopup({
                   type: "success",
-                  message: i18n.t(k.PROVIDER_SET_AS_DEFAULT_SUCCES),
+                  message: t(k.PROVIDER_SET_AS_DEFAULT_SUCCES),
                 });
               }}
             >
-              {i18n.t(k.SET_AS_DEFAULT)}
+              {t(k.SET_AS_DEFAULT)}
             </div>
           )}
         </div>
@@ -122,9 +126,9 @@ function LLMProviderDisplay({
         {existingLlmProvider && (
           <div className="my-auto ml-3">
             {existingLlmProvider.is_default_provider ? (
-              <Badge variant="agent">{i18n.t(k.DEFAULT2)}</Badge>
+              <Badge variant="agent">{t(k.DEFAULT2)}</Badge>
             ) : (
-              <Badge variant="success">{i18n.t(k.ENABLED)}</Badge>
+              <Badge variant="success">{t(k.ENABLED)}</Badge>
             )}
           </div>
         )}
@@ -134,7 +138,7 @@ function LLMProviderDisplay({
             variant={existingLlmProvider ? "success-reverse" : "navigate"}
             onClick={() => setFormIsVisible(true)}
           >
-            {existingLlmProvider ? i18n.t(k.EDIT) : i18n.t(k.SET_UP)}
+            {existingLlmProvider ? t(k.EDIT) : t(k.SET_UP)}
           </Button>
         </div>
       </div>
@@ -159,6 +163,7 @@ export function ConfiguredLLMProviderDisplay({
   existingLlmProviders: LLMProviderView[];
   llmProviderDescriptors: WellKnownLLMProviderDescriptor[];
 }) {
+  const { t } = useTranslation();
   existingLlmProviders = existingLlmProviders.sort((a, b) => {
     if (a.is_default_provider && !b.is_default_provider) {
       return -1;

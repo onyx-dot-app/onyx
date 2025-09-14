@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { adminSearch } from "./lib";
@@ -30,6 +30,7 @@ const DocumentDisplay = ({
   refresh: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
 }) => {
+  const { t } = useTranslation();
   return (
     <div
       key={document.document_id}
@@ -53,7 +54,7 @@ const DocumentDisplay = ({
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
         <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
-          <p className="mr-1 my-auto">{i18n.t(k.BOOST)}</p>
+          <p className="mr-1 my-auto">{t(k.BOOST)}</p>
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
@@ -73,9 +74,9 @@ const DocumentDisplay = ({
             } else {
               setPopup({
                 type: "error",
-                message: `${i18n.t(k.FAILED_TO_UPDATE_DOCUMENT)} ${getErrorMsg(
+                message: `${t(k.FAILED_TO_UPDATE_DOCUMENT)} ${getErrorMsg(
                   response
-                )}${i18n.t(k._26)}`,
+                )}${t(k._26)}`,
               });
             }
           }}
@@ -83,9 +84,9 @@ const DocumentDisplay = ({
         >
           <div className="my-auto">
             {document.hidden ? (
-              <div className="text-error">{i18n.t(k.HIDDEN)}</div>
+              <div className="text-error">{t(k.HIDDEN)}</div>
             ) : (
-              i18n.t(k.VISIBLE)
+              t(k.VISIBLE)
             )}
           </div>
           <div className="ml-1 my-auto">
@@ -114,6 +115,7 @@ export function Explorer({
   connectors: Connector<any>[];
   documentSets: DocumentSet[];
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 
@@ -178,7 +180,7 @@ export function Explorer({
             className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
             role="textarea"
             aria-multiline
-            placeholder={i18n.t(k.FIND_DOCUMENTS_PLACEHOLDER)}
+            placeholder={t(k.FIND_DOCUMENTS_PLACEHOLDER)}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -224,7 +226,7 @@ export function Explorer({
       )}
       {!query && (
         <div className="flex text-text-darker mt-3">
-          {i18n.t(k.SEARCH_FOR_A_DOCUMENT_ABOVE_TO)}
+          {t(k.SEARCH_FOR_A_DOCUMENT_ABOVE_TO)}
         </div>
       )}
     </div>

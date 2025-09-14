@@ -1,5 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
@@ -85,7 +87,7 @@ function IntegerInput({
   value,
   onChange,
   id,
-  placeholder = i18n.t(k.ENTER_NUMBER_PLACEHOLDER), // Default placeholder if none is provided
+  placeholder,
 }: {
   label: string;
   sublabel: string;
@@ -94,6 +96,8 @@ function IntegerInput({
   id?: string;
   placeholder?: string;
 }) {
+  const { t } = useTranslation();
+  const defaultPlaceholder = placeholder || t(k.ENTER_NUMBER_PLACEHOLDER);
   return (
     <label className="flex flex-col text-sm mb-4">
       <Label>{label}</Label>
@@ -106,13 +110,14 @@ function IntegerInput({
         min="1"
         step="1"
         id={id}
-        placeholder={placeholder}
+        placeholder={defaultPlaceholder}
       />
     </label>
   );
 }
 
 export function SettingsForm() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -163,7 +168,7 @@ export function SettingsForm() {
       mutate({ token: value });
       return true;
     } else {
-      alert(i18n.t(k.TOKEN_UPDATE_ERROR));
+      alert(t(k.TOKEN_UPDATE_ERROR));
       return false;
     }
   };
@@ -199,15 +204,15 @@ export function SettingsForm() {
 
       router.refresh();
       setPopup({
-        message: i18n.t(k.SETTINGS_UPDATED_SUCCESS),
+        message: t(k.SETTINGS_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
-      // {i18n.t(k.CANCEL_OPTIMISTIC_UPDATE)}
+      // {t(k.CANCEL_OPTIMISTIC_UPDATE)}
       setSettings(settings);
-      console.error(i18n.t(k.SETTINGS_UPDATE_ERROR), error);
+      console.error(t(k.SETTINGS_UPDATE_ERROR), error);
       setPopup({
-        message: i18n.t(k.SETTINGS_UPDATE_ERROR),
+        message: t(k.SETTINGS_UPDATE_ERROR),
         type: "error",
       });
     }
@@ -253,10 +258,10 @@ export function SettingsForm() {
   return (
     <div className="flex flex-col pb-8">
       {popup}
-      <Title className="mb-4">{i18n.t(k.WORKSPACE_SETTINGS)}</Title>
+      <Title className="mb-4">{t(k.WORKSPACE_SETTINGS)}</Title>
       <Checkbox
-        label={i18n.t(k.AUTO_SCROLL_LABEL)}
-        sublabel={i18n.t(k.AUTO_SCROLL_SUBLABEL)}
+        label={t(k.AUTO_SCROLL_LABEL)}
+        sublabel={t(k.AUTO_SCROLL_SUBLABEL)}
         checked={settings.auto_scroll}
         onChange={(e) =>
           handleToggleSettingsField("auto_scroll", e.target.checked)
@@ -264,8 +269,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label={i18n.t(k.OVERRIDE_DEFAULT_TEMPERATURE_LABEL)}
-        sublabel={i18n.t(k.OVERRIDE_DEFAULT_TEMPERATURE_SUBLABEL)}
+        label={t(k.OVERRIDE_DEFAULT_TEMPERATURE_LABEL)}
+        sublabel={t(k.OVERRIDE_DEFAULT_TEMPERATURE_SUBLABEL)}
         checked={settings.temperature_override_enabled}
         onChange={(e) =>
           handleToggleSettingsField(
@@ -276,8 +281,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label={i18n.t(k.ANONYMOUS_USERS_LABEL)}
-        sublabel={i18n.t(k.ANONYMOUS_USERS_SUBLABEL)}
+        label={t(k.ANONYMOUS_USERS_LABEL)}
+        sublabel={t(k.ANONYMOUS_USERS_SUBLABEL)}
         checked={settings.anonymous_user_enabled}
         onChange={(e) =>
           handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
@@ -285,8 +290,8 @@ export function SettingsForm() {
       />
 
       <Checkbox
-        label={i18n.t(k.AGENT_SEARCH_LABEL)}
-        sublabel={i18n.t(k.AGENT_SEARCH_SUBLABEL)}
+        label={t(k.AGENT_SEARCH_LABEL)}
+        sublabel={t(k.AGENT_SEARCH_SUBLABEL)}
         checked={settings.pro_search_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("pro_search_enabled", e.target.checked)
@@ -302,19 +307,17 @@ export function SettingsForm() {
           onOutsideClick={() => setShowConfirmModal(false)}
         >
           <div className="flex flex-col gap-4">
-            <h2 className="text-xl font-bold">
-              {i18n.t(k.ENABLE_ANONYMOUS_USERS)}
-            </h2>
-            <p>{i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_ENABL)}</p>
+            <h2 className="text-xl font-bold">{t(k.ENABLE_ANONYMOUS_USERS)}</h2>
+            <p>{t(k.ARE_YOU_SURE_YOU_WANT_TO_ENABL)}</p>
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => setShowConfirmModal(false)}
               >
-                {i18n.t(k.CANCEL)}
+                {t(k.CANCEL)}
               </Button>
               <Button onClick={handleConfirmAnonymousUsers}>
-                {i18n.t(k.CONFIRM)}
+                {t(k.CONFIRM)}
               </Button>
             </div>
           </div>
@@ -322,10 +325,10 @@ export function SettingsForm() {
       )}
       {isEnterpriseEnabled && (
         <>
-          <Title className="mt-8 mb-4">{i18n.t(k.CHAT_SETTINGS)}</Title>
+          <Title className="mt-8 mb-4">{t(k.CHAT_SETTINGS)}</Title>
           <IntegerInput
-            label={i18n.t(k.CHAT_RETENTION_LABEL)}
-            sublabel={i18n.t(k.CHAT_RETENTION_SUBLABEL)}
+            label={t(k.CHAT_RETENTION_LABEL)}
+            sublabel={t(k.CHAT_RETENTION_SUBLABEL)}
             value={chatRetention === "" ? null : Number(chatRetention)}
             onChange={(e) => {
               const numValue = parseInt(e.target.value, 10);
@@ -334,7 +337,7 @@ export function SettingsForm() {
               }
             }}
             id="chatRetentionInput"
-            placeholder={i18n.t(k.INFINITE_RETENTION_PLACEHOLDER)}
+            placeholder={t(k.INFINITE_RETENTION_PLACEHOLDER)}
           />
 
           <div className="mr-auto flex gap-2">
@@ -344,7 +347,7 @@ export function SettingsForm() {
               size="sm"
               className="mr-auto"
             >
-              {i18n.t(k.SET_RETENTION_LIMIT)}
+              {t(k.SET_RETENTION_LIMIT)}
             </Button>
             <Button
               onClick={handleClearChatRetention}
@@ -352,19 +355,19 @@ export function SettingsForm() {
               size="sm"
               className="mr-auto"
             >
-              {i18n.t(k.RETAIN_ALL)}
+              {t(k.RETAIN_ALL)}
             </Button>
           </div>
         </>
       )}
 
       {/* Image Processing Settings */}
-      <Title className="mt-8 mb-4">{i18n.t(k.IMAGE_PROCESSING)}</Title>
+      <Title className="mt-8 mb-4">{t(k.IMAGE_PROCESSING)}</Title>
 
       <div className="flex flex-col gap-2">
         <Checkbox
-          label={i18n.t(k.ENABLE_IMAGE_EXTRACTION_LABEL)}
-          sublabel={i18n.t(k.ENABLE_IMAGE_EXTRACTION_SUBLABEL)}
+          label={t(k.ENABLE_IMAGE_EXTRACTION_LABEL)}
+          sublabel={t(k.ENABLE_IMAGE_EXTRACTION_SUBLABEL)}
           checked={settings.image_extraction_and_analysis_enabled ?? false}
           onChange={(e) =>
             handleToggleSettingsField(
@@ -375,8 +378,8 @@ export function SettingsForm() {
         />
 
         <Checkbox
-          label={i18n.t(k.ENABLE_IMAGE_ANALYSIS_LABEL)}
-          sublabel={i18n.t(k.ENABLE_IMAGE_ANALYSIS_SUBLABEL)}
+          label={t(k.ENABLE_IMAGE_ANALYSIS_LABEL)}
+          sublabel={t(k.ENABLE_IMAGE_ANALYSIS_SUBLABEL)}
           checked={settings.search_time_image_analysis_enabled ?? false}
           onChange={(e) =>
             handleToggleSettingsField(
@@ -387,8 +390,8 @@ export function SettingsForm() {
         />
 
         <IntegerInput
-          label={i18n.t(k.MAX_IMAGE_SIZE_LABEL)}
-          sublabel={i18n.t(k.MAX_IMAGE_SIZE_SUBLABEL)}
+          label={t(k.MAX_IMAGE_SIZE_LABEL)}
+          sublabel={t(k.MAX_IMAGE_SIZE_SUBLABEL)}
           value={settings.image_analysis_max_size_mb ?? null}
           onChange={(e) => {
             const value = e.target.value ? parseInt(e.target.value) : null;
@@ -399,18 +402,18 @@ export function SettingsForm() {
             }
           }}
           id="image-analysis-max-size"
-          placeholder={i18n.t(k.MAX_IMAGE_SIZE_PLACEHOLDER)}
+          placeholder={t(k.MAX_IMAGE_SIZE_PLACEHOLDER)}
         />
 
         {/* Default Vision LLM Section */}
         <div className="mt-4">
-          <Label>{i18n.t(k.DEFAULT_VISION_LLM)}</Label>
-          <SubLabel>{i18n.t(k.SELECT_THE_DEFAULT_LLM_TO_USE)}</SubLabel>
+          <Label>{t(k.DEFAULT_VISION_LLM)}</Label>
+          <SubLabel>{t(k.SELECT_THE_DEFAULT_LLM_TO_USE)}</SubLabel>
 
           <div className="mt-2 max-w-xs">
             {!visionProviders || visionProviders.length === 0 ? (
               <div className="text-sm text-gray-500">
-                {i18n.t(k.NO_VISION_PROVIDERS_FOUND_PLE)}
+                {t(k.NO_VISION_PROVIDERS_FOUND_PLE)}
               </div>
             ) : visionProviders.length > 0 ? (
               <>
@@ -431,20 +434,20 @@ export function SettingsForm() {
                   variant="default"
                   size="sm"
                 >
-                  {i18n.t(k.SET_DEFAULT_VISION_LLM)}
+                  {t(k.SET_DEFAULT_VISION_LLM)}
                 </Button>
               </>
             ) : (
               <div className="text-sm text-gray-500">
-                {i18n.t(k.NO_VISION_CAPABLE_LLMS_FOUND)}
+                {t(k.NO_VISION_CAPABLE_LLMS_FOUND)}
               </div>
             )}
           </div>
         </div>
 
-        <Title className="mb-4 mt-6">{i18n.t(k.TELEGRAM_INTEGRATION)}</Title>
+        <Title className="mb-4 mt-6">{t(k.TELEGRAM_INTEGRATION)}</Title>
         <div className="block font-medium text-base">
-          {i18n.t(k.TELEGRAM_BOT_TOKEN)}
+          {t(k.TELEGRAM_BOT_TOKEN)}
         </div>
         <div className="w-fit">
           <EditableValue

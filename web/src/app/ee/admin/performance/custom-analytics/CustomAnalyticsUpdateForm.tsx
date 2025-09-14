@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
@@ -11,6 +11,7 @@ import Text from "@/components/ui/text";
 import { useContext, useState } from "react";
 
 export function CustomAnalyticsUpdateForm() {
+  const { t } = useTranslation();
   const settings = useContext(SettingsContext);
   const customAnalyticsScript = settings?.customAnalyticsScript;
 
@@ -22,7 +23,7 @@ export function CustomAnalyticsUpdateForm() {
 
   if (!settings) {
     return (
-      <Callout type="danger" title={i18n.t(k.FAILED_TO_GET_SETTINGS)}></Callout>
+      <Callout type="danger" title={t(k.FAILED_TO_GET_SETTINGS)}></Callout>
     );
   }
 
@@ -49,29 +50,27 @@ export function CustomAnalyticsUpdateForm() {
           if (response.ok) {
             setPopup({
               type: "success",
-              message: i18n.t(k.CUSTOM_ANALYTICS_SCRIPT_UPDATE),
+              message: t(k.CUSTOM_ANALYTICS_SCRIPT_UPDATE),
             });
           } else {
             const errorMsg = (await response.json()).detail;
             setPopup({
               type: "error",
-              message: `${i18n.t(
-                k.FAILED_TO_UPDATE_CUSTOM_ANALYT
-              )}${errorMsg}${i18n.t(k._17)}`,
+              message: `${t(k.FAILED_TO_UPDATE_CUSTOM_ANALYT)}${errorMsg}${t(
+                k._17
+              )}`,
             });
           }
           setSecretKey("");
         }}
       >
         <div className="mb-4">
-          <Label>{i18n.t(k.SCRIPT)}</Label>
-          <Text className="mb-3">
-            {i18n.t(k.SPECIFY_THE_JAVASCRIPT_THAT_SH)}
-          </Text>
+          <Label>{t(k.SCRIPT)}</Label>
+          <Text className="mb-3">{t(k.SPECIFY_THE_JAVASCRIPT_THAT_SH)}</Text>
           <Text className="mb-2">
-            {i18n.t(k.DO_NOT_INCLUDE_THE)}{" "}
-            <span className="font-mono">{i18n.t(k.SCRIPT_SCRIPT)}</span>{" "}
-            {i18n.t(k.TAGS_IF_YOU_UPLOAD_A_SCRIPT_B)}
+            {t(k.DO_NOT_INCLUDE_THE)}{" "}
+            <span className="font-mono">{t(k.SCRIPT_SCRIPT)}</span>{" "}
+            {t(k.TAGS_IF_YOU_UPLOAD_A_SCRIPT_B)}
           </Text>
           <textarea
             className={`
@@ -88,12 +87,12 @@ export function CustomAnalyticsUpdateForm() {
           />
         </div>
 
-        <Label>{i18n.t(k.SECRET_KEY)}</Label>
+        <Label>{t(k.SECRET_KEY)}</Label>
         <SubLabel>
           <>
-            {i18n.t(k.FOR_SECURITY_REASONS_YOU_MUST)}{" "}
-            <i>{i18n.t(k.CUSTOM_ANALYTICS_SECRET_KEY)}</i>{" "}
-            {i18n.t(k.ENVIRONMENT_VARIABLE_SET_WHEN)}
+            {t(k.FOR_SECURITY_REASONS_YOU_MUST)}{" "}
+            <i>{t(k.CUSTOM_ANALYTICS_SECRET_KEY)}</i>{" "}
+            {t(k.ENVIRONMENT_VARIABLE_SET_WHEN)}
           </>
         </SubLabel>
         <input
@@ -111,7 +110,7 @@ export function CustomAnalyticsUpdateForm() {
         />
 
         <Button className="mt-4" type="submit">
-          {i18n.t(k.UPDATE)}
+          {t(k.UPDATE)}
         </Button>
       </form>
     </div>

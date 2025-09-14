@@ -1,5 +1,7 @@
-import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import React, {
   Dispatch,
   forwardRef,
@@ -54,6 +56,7 @@ const RerankingDetailsForm = forwardRef<
     },
     ref
   ) => {
+    const { t } = useTranslation();
     const [showGpuWarningModalModel, setShowGpuWarningModalModel] =
       useState<RerankingModel | null>(null);
     const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -74,7 +77,7 @@ const RerankingDetailsForm = forwardRef<
         .nullable()
         .test(
           "required-if-cohere",
-          i18n.t(k.COHERE_API_KEY_REQUIRED),
+          t(k.COHERE_API_KEY_REQUIRED),
           function (value) {
             const { rerank_provider_type } = this.parent;
             return (
@@ -84,12 +87,12 @@ const RerankingDetailsForm = forwardRef<
           }
         ),
       rerank_api_url: Yup.string()
-        .url(i18n.t(k.VALID_URL_REQUIRED))
-        .matches(/^https?:\/\//, i18n.t(k.URL_MUST_START_HTTP))
+        .url(t(k.VALID_URL_REQUIRED))
+        .matches(/^https?:\/\//, t(k.URL_MUST_START_HTTP))
         .nullable()
         .test(
           "required-if-litellm",
-          i18n.t(k.LITELLM_API_URL_REQUIRED),
+          t(k.LITELLM_API_URL_REQUIRED),
           function (value) {
             const { rerank_provider_type } = this.parent;
             return (
@@ -150,7 +153,7 @@ const RerankingDetailsForm = forwardRef<
 
           return (
             <div className="p-2 rounded-lg max-w-4xl mx-auto">
-              <p className="mb-4">{i18n.t(k.SELECT_FROM_CLOUD_SELF_HOSTED1)}</p>
+              <p className="mb-4">{t(k.SELECT_FROM_CLOUD_SELF_HOSTED1)}</p>
               <div className="text-sm mr-auto mb-6 divide-x-2 flex">
                 {originalRerankingDetails.rerank_model_name && (
                   <button
@@ -161,7 +164,7 @@ const RerankingDetailsForm = forwardRef<
                         : " hover:underline bg-background-100"
                     }`}
                   >
-                    {i18n.t(k.CURRENT)}
+                    {t(k.CURRENT)}
                   </button>
                 )}
                 <div
@@ -177,7 +180,7 @@ const RerankingDetailsForm = forwardRef<
                         : " hover:underline bg-neutral-100 dark:bg-neutral-900"
                     }`}
                   >
-                    {i18n.t(k.CLOUD_BASED)}
+                    {t(k.CLOUD_BASED)}
                   </button>
                 </div>
 
@@ -190,7 +193,7 @@ const RerankingDetailsForm = forwardRef<
                         : "hover:underline bg-neutral-100 dark:bg-neutral-900"
                     }`}
                   >
-                    {i18n.t(k.SELF_HOSTED)}
+                    {t(k.SELF_HOSTED)}
                   </button>
                 </div>
                 {values.rerank_model_name && (
@@ -199,7 +202,7 @@ const RerankingDetailsForm = forwardRef<
                       onClick={() => resetRerankingValues()}
                       className={`mx-2 p-2 font-bold rounded bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 hover:underline`}
                     >
-                      {i18n.t(k.REMOVE_RERANKING)}
+                      {t(k.REMOVE_RERANKING)}
                     </button>
                   </div>
                 )}
@@ -309,9 +312,7 @@ const RerankingDetailsForm = forwardRef<
                           {card.description}
                         </p>
                         <div className="text-xs text-text-500">
-                          {card.cloud
-                            ? i18n.t(k.CLOUD_BASED)
-                            : i18n.t(k.SELF_HOSTED)}
+                          {card.cloud ? t(k.CLOUD_BASED) : t(k.SELF_HOSTED)}
                         </div>
                       </div>
                     );
@@ -322,19 +323,19 @@ const RerankingDetailsForm = forwardRef<
                   <Modal
                     onOutsideClick={() => setShowGpuWarningModalModel(null)}
                     width="w-[500px] flex flex-col"
-                    title={i18n.t(k.GPU_NOT_ENABLED)}
+                    title={t(k.GPU_NOT_ENABLED)}
                   >
                     <>
                       <p className="text-error font-semibold">
-                        {i18n.t(k.WARNING2)}
+                        {t(k.WARNING2)}
                       </p>
-                      <p>{i18n.t(k.LOCAL_RERANKING_MODELS_REQUIRE)}</p>
+                      <p>{t(k.LOCAL_RERANKING_MODELS_REQUIRE)}</p>
                       <div className="flex justify-end">
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
                           variant="submit"
                         >
-                          {i18n.t(k.UNDERSTOOD)}
+                          {t(k.UNDERSTOOD)}
                         </Button>
                       </div>
                     </>
@@ -347,7 +348,7 @@ const RerankingDetailsForm = forwardRef<
                       setShowLiteLLMConfigurationModal(false);
                     }}
                     width="w-[800px]"
-                    title={i18n.t(k.API_KEY_CONFIGURATION)}
+                    title={t(k.API_KEY_CONFIGURATION)}
                   >
                     <div className="w-full  flex flex-col gap-y-4 px-4">
                       <TextFormField
@@ -362,15 +363,15 @@ const RerankingDetailsForm = forwardRef<
                           setFieldValue("rerank_api_url", value);
                         }}
                         type="text"
-                        label={i18n.t(k.LITELLM_PROXY_URL)}
+                        label={t(k.LITELLM_PROXY_URL)}
                         name="rerank_api_url"
                       />
 
                       <TextFormField
-                        subtext={i18n.t(k.SET_ACCESS_KEY_FOR_LITELLM)}
+                        subtext={t(k.SET_ACCESS_KEY_FOR_LITELLM)}
                         placeholder={
                           values.rerank_api_key
-                            ? i18n.t(k._28).repeat(values.rerank_api_key.length)
+                            ? t(k._28).repeat(values.rerank_api_key.length)
                             : undefined
                         }
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -382,18 +383,16 @@ const RerankingDetailsForm = forwardRef<
                           setFieldValue("rerank_api_key", value);
                         }}
                         type="password"
-                        label={i18n.t(k.LITELLM_PROXY_KEY)}
+                        label={t(k.LITELLM_PROXY_KEY)}
                         name="rerank_api_key"
                         optional
                       />
 
                       <TextFormField
-                        subtext={i18n.t(k.SET_MODEL_NAME_FOR_LITELLM)}
+                        subtext={t(k.SET_MODEL_NAME_FOR_LITELLM)}
                         placeholder={
                           values.rerank_model_name
-                            ? i18n
-                                .t(k._28)
-                                .repeat(values.rerank_model_name.length)
+                            ? t(k._28).repeat(values.rerank_model_name.length)
                             : undefined
                         }
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,7 +403,7 @@ const RerankingDetailsForm = forwardRef<
                           });
                           setFieldValue("rerank_model_name", value);
                         }}
-                        label={i18n.t(k.LITELLM_MODEL_NAME)}
+                        label={t(k.LITELLM_MODEL_NAME)}
                         name="rerank_model_name"
                         optional
                       />
@@ -416,7 +415,7 @@ const RerankingDetailsForm = forwardRef<
                           }}
                           variant="submit"
                         >
-                          {i18n.t(k.UPDATE)}
+                          {t(k.UPDATE)}
                         </Button>
                       </div>
                     </div>
@@ -438,17 +437,17 @@ const RerankingDetailsForm = forwardRef<
                       setIsApiKeyModalOpen(false);
                     }}
                     width="w-[800px]"
-                    title={i18n.t(k.API_KEY_CONFIGURATION)}
+                    title={t(k.API_KEY_CONFIGURATION)}
                   >
                     <div className="w-full px-4">
                       <TextFormField
                         placeholder={
                           values.rerank_api_key
-                            ? i18n.t(k._28).repeat(values.rerank_api_key.length)
+                            ? t(k._28).repeat(values.rerank_api_key.length)
                             : values.rerank_provider_type ===
                               RerankerProvider.BEDROCK
-                            ? i18n.t(k.AWS_ACCESSKEY_SECRETKEY_REGION)
-                            : i18n.t(k.ENTER_YOUR_API_KEY)
+                            ? t(k.AWS_ACCESSKEY_SECRETKEY_REGION)
+                            : t(k.ENTER_YOUR_API_KEY)
                         }
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           const value = e.target.value;
@@ -462,8 +461,8 @@ const RerankingDetailsForm = forwardRef<
                         label={
                           values.rerank_provider_type ===
                           RerankerProvider.BEDROCK
-                            ? i18n.t(k.AWS_CREDENTIALS_IN_FORMAT_AWS)
-                            : i18n.t(k.COHERE_API_KEY)
+                            ? t(k.AWS_CREDENTIALS_IN_FORMAT_AWS)
+                            : t(k.COHERE_API_KEY)
                         }
                         name="rerank_api_key"
                       />
@@ -473,7 +472,7 @@ const RerankingDetailsForm = forwardRef<
                           onClick={() => setIsApiKeyModalOpen(false)}
                           variant="submit"
                         >
-                          {i18n.t(k.UPDATE)}
+                          {t(k.UPDATE)}
                         </Button>
                       </div>
                     </div>

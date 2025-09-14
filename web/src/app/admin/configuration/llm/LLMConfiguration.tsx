@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { Modal } from "@/components/Modal";
@@ -31,6 +31,7 @@ function LLMProviderUpdateModal({
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
+  const { t } = useTranslation();
   const providerName =
     llmProviderDescriptor?.display_name ||
     llmProviderDescriptor?.name ||
@@ -41,7 +42,7 @@ function LLMProviderUpdateModal({
 
   return (
     <Modal
-      title={`${i18n.t(k.SETUP)} ${providerName}`}
+      title={`${t(k.SETUP)} ${providerName}`}
       onOutsideClick={() => onClose()}
     >
       <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -74,6 +75,7 @@ function DefaultLLMProviderDisplay({
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null;
   shouldMarkAsDefault?: boolean;
 }) {
+  const { t } = useTranslation();
   const [formIsVisible, setFormIsVisible] = useState(false);
   const { popup, setPopup } = usePopup();
 
@@ -88,7 +90,7 @@ function DefaultLLMProviderDisplay({
         </div>
         <div className="ml-auto">
           <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
-            {i18n.t(k.SET_UP)}
+            {t(k.SET_UP)}
           </Button>
         </div>
       </div>
@@ -109,12 +111,13 @@ function AddCustomLLMProvider({
 }: {
   existingLlmProviders: LLMProviderView[];
 }) {
+  const { t } = useTranslation();
   const [formIsVisible, setFormIsVisible] = useState(false);
 
   if (formIsVisible) {
     return (
       <Modal
-        title={`${i18n.t(k.SETUP_CUSTOM_LLM_PROVIDER)}`}
+        title={`${t(k.SETUP_CUSTOM_LLM_PROVIDER)}`}
         onOutsideClick={() => setFormIsVisible(false)}
       >
         <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -129,12 +132,13 @@ function AddCustomLLMProvider({
 
   return (
     <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
-      {i18n.t(k.ADD_CUSTOM_LLM_PROVIDER)}
+      {t(k.ADD_CUSTOM_LLM_PROVIDER)}
     </Button>
   );
 }
 
 export function LLMConfiguration() {
+  const { t } = useTranslation();
   const { data: llmProviderDescriptors } = useSWR<
     WellKnownLLMProviderDescriptor[]
   >("/api/admin/llm/built-in/options", errorHandlingFetcher);
@@ -149,26 +153,24 @@ export function LLMConfiguration() {
 
   return (
     <>
-      <Title className="mb-2">{i18n.t(k.ENABLED_LLM_PROVIDERS)}</Title>
+      <Title className="mb-2">{t(k.ENABLED_LLM_PROVIDERS)}</Title>
 
       {existingLlmProviders.length > 0 ? (
         <>
-          <Text className="mb-4">
-            {i18n.t(k.IF_MULTIPLE_LLM_PROVIDERS_ARE)}
-          </Text>
+          <Text className="mb-4">{t(k.IF_MULTIPLE_LLM_PROVIDERS_ARE)}</Text>
           <ConfiguredLLMProviderDisplay
             existingLlmProviders={existingLlmProviders}
             llmProviderDescriptors={llmProviderDescriptors}
           />
         </>
       ) : (
-        <Callout type="warning" title={i18n.t(k.NO_LLM_PROVIDERS_CONFIGURED)}>
-          {i18n.t(k.PLEASE_SET_ONE_UP_BELOW_IN_ORD)}
+        <Callout type="warning" title={t(k.NO_LLM_PROVIDERS_CONFIGURED)}>
+          {t(k.PLEASE_SET_ONE_UP_BELOW_IN_ORD)}
         </Callout>
       )}
 
-      <Title className="mb-2 mt-6">{i18n.t(k.ADD_LLM_PROVIDER)}</Title>
-      <Text className="mb-4">{i18n.t(k.ADD_A_NEW_LLM_PROVIDER_BY_EITH)}</Text>
+      <Title className="mb-2 mt-6">{t(k.ADD_LLM_PROVIDER)}</Title>
+      <Text className="mb-4">{t(k.ADD_A_NEW_LLM_PROVIDER_BY_EITH)}</Text>
 
       <div className="gap-y-4 flex flex-col">
         {llmProviderDescriptors.map((llmProviderDescriptor) => (

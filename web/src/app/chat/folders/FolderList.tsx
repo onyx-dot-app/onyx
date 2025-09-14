@@ -1,5 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -43,6 +45,7 @@ const FolderItem = ({
   showShareModal: ((chatSession: ChatSession) => void) | undefined;
   showDeleteModal: ((chatSession: ChatSession) => void) | undefined;
 }) => {
+  const { t } = useTranslation();
   const { refreshChatSessions } = useChatContext();
   const [isExpanded, setIsExpanded] = useState<boolean>(isInitiallyExpanded);
   const [isEditing, setIsEditing] = useState<boolean>(initiallySelected);
@@ -100,7 +103,7 @@ const FolderItem = ({
       router.refresh(); // Refresh values to update the sidebar
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_SAVE_FOLDER_NAME),
+        message: t(k.FAILED_TO_SAVE_FOLDER_NAME),
         type: "error",
       });
     }
@@ -120,7 +123,7 @@ const FolderItem = ({
       await deleteFolder(folder.folder_id!);
       router.refresh();
     } catch (error) {
-      setPopup({ message: i18n.t(k.FAILED_TO_DELETE_FOLDER), type: "error" });
+      setPopup({ message: t(k.FAILED_TO_DELETE_FOLDER), type: "error" });
     } finally {
       setShowDeleteConfirm(false);
     }
@@ -165,7 +168,7 @@ const FolderItem = ({
       router.refresh();
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_ADD_CHAT_TO_FOLDER),
+        message: t(k.FAILED_TO_ADD_CHAT_TO_FOLDER),
         type: "error",
       });
     }
@@ -253,22 +256,22 @@ const FolderItem = ({
                     popover={
                       <div className="p-2 w-[225px] bg-background-100 rounded shadow-lg">
                         <p className="text-sm mb-2">
-                          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET3)}{" "}
+                          {t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET3)}{" "}
                           <i>{folder.folder_name}</i>
-                          {i18n.t(k._10)}
+                          {t(k._10)}
                         </p>
                         <div className="flex justify-end">
                           <button
                             onClick={confirmDelete}
                             className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs mr-2"
                           >
-                            {i18n.t(k.YES)}
+                            {t(k.YES)}
                           </button>
                           <button
                             onClick={cancelDelete}
                             className="bg-background-300 hover:bg-background-200 px-2 py-1 rounded text-xs"
                           >
-                            {i18n.t(k.NO)}
+                            {t(k.NO)}
                           </button>
                         </div>
                       </div>
@@ -333,6 +336,7 @@ export const FolderList = ({
   showShareModal: ((chatSession: ChatSession) => void) | undefined;
   showDeleteModal: ((chatSession: ChatSession) => void) | undefined;
 }) => {
+  const { t } = useTranslation();
   if (folders.length === 0) {
     return null;
   }
@@ -355,7 +359,7 @@ export const FolderList = ({
       {folders.length == 1 && folders[0].chat_sessions.length == 0 && (
         <p className="text-sm font-normal text-subtle mt-2">
           {" "}
-          {i18n.t(k.DRAG_A_CHAT_INTO_A_FOLDER_TO_S)}{" "}
+          {t(k.DRAG_A_CHAT_INTO_A_FOLDER_TO_S)}{" "}
         </p>
       )}
     </div>

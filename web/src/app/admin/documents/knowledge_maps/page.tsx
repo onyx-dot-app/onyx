@@ -1,6 +1,6 @@
 "use client";
 
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { DeleteButton } from "@/components/DeleteButton";
@@ -28,6 +28,7 @@ import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 const numToDisplay = 50;
 
 const Page = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
 
   const {
@@ -51,11 +52,11 @@ const Page = () => {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<BookOpen size={32} />}
-        title={i18n.t(k.KNOWLEDGE_MAPS)}
+        title={t(k.KNOWLEDGE_MAPS)}
       />
 
       <Text className="mb-3">
-        <b>{i18n.t(k.KNOWLEDGE_MAP)}</b> {i18n.t(k.KNOWLEDGE_MAP_DESCRIPTION)}
+        <b>{t(k.KNOWLEDGE_MAP)}</b> {t(k.KNOWLEDGE_MAP_DESCRIPTION)}
       </Text>
 
       <div className="mb-3"></div>
@@ -63,20 +64,20 @@ const Page = () => {
       <div className="flex mb-6">
         <Link href="/admin/documents/knowledge_maps/new">
           <Button size="xs" color="green" className="ml-2 my-auto">
-            {i18n.t(k.CREATE_KNOWLEDGE_MAP)}
+            {t(k.CREATE_KNOWLEDGE_MAP)}
           </Button>
         </Link>
       </div>
 
       {!!knowledgeMaps?.length && (
         <div>
-          <Title>{i18n.t(k.EXISTING_KNOWLEDGE_MAPS)}</Title>
+          <Title>{t(k.EXISTING_KNOWLEDGE_MAPS)}</Title>
           <Table className="overflow-visible mt-2">
             <TableHead>
               <TableRow>
-                <TableHeaderCell>{i18n.t(k.TITLE)}</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.CONNECTORS)}</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.DELETE)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.TITLE)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.CONNECTORS)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.DELETE)}</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -125,15 +126,15 @@ const Page = () => {
                             );
                             if (response.ok) {
                               setPopup({
-                                message: `${i18n.t(k.KNOWLEDGE_MAP)} "${
+                                message: `${t(k.KNOWLEDGE_MAP)} "${
                                   knowledgeMap.name
-                                }" ${i18n.t(k.KNOWLEDGE_MAP_DELETION_SUCCESS)}`,
+                                }" ${t(k.KNOWLEDGE_MAP_DELETION_SUCCESS)}`,
                                 type: "success",
                               });
                             } else {
                               const errorMsg = (await response.json()).detail;
                               setPopup({
-                                message: `${i18n.t(
+                                message: `${t(
                                   k.KNOWLEDGE_MAP_DELETION_FAILED
                                 )} ${errorMsg}`,
                                 type: "error",

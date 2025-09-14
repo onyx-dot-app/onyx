@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../../i18n/keys";
 import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import { useEffect, useState } from "react";
@@ -55,6 +57,7 @@ export const KnowledgeMapCreationForm = ({
   setPopup,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const { t } = useTranslation();
   const isUpdate = existingDocumentSet !== undefined;
   const [selectedDoc, setSelectedDoc] = useState<number | null>(
     existingDocumentSet ? existingDocumentSet.document_set_id : null
@@ -72,10 +75,8 @@ export const KnowledgeMapCreationForm = ({
             : "",
         }}
         validationSchema={Yup.object().shape({
-          name: Yup.string().required(i18n.t(k.ENTER_KNOWLEDGE_MAP_NAME)),
-          description: Yup.string().required(
-            i18n.t(k.ENTER_DESCRIPTION_FOR_SET)
-          ),
+          name: Yup.string().required(t(k.ENTER_KNOWLEDGE_MAP_NAME)),
+          description: Yup.string().required(t(k.ENTER_DESCRIPTION_FOR_SET)),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -99,8 +100,8 @@ export const KnowledgeMapCreationForm = ({
           if (response.ok) {
             setPopup({
               message: isUpdate
-                ? i18n.t(k.KNOWLEDGE_MAP_UPDATED_SUCCESS)
-                : i18n.t(k.KNOWLEDGE_MAP_CREATED_SUCCESS),
+                ? t(k.KNOWLEDGE_MAP_UPDATED_SUCCESS)
+                : t(k.KNOWLEDGE_MAP_CREATED_SUCCESS),
               type: "success",
             });
             const responseData = await response.json();
@@ -110,8 +111,8 @@ export const KnowledgeMapCreationForm = ({
             const errorMsg = await response.text();
             setPopup({
               message: isUpdate
-                ? `${i18n.t(k.KNOWLEDGE_MAP_UPDATE_ERROR)} ${errorMsg}`
-                : `${i18n.t(k.KNOWLEDGE_MAP_CREATE_ERROR)} ${errorMsg}`,
+                ? `${t(k.KNOWLEDGE_MAP_UPDATE_ERROR)} ${errorMsg}`
+                : `${t(k.KNOWLEDGE_MAP_CREATE_ERROR)} ${errorMsg}`,
               type: "error",
             });
           }
@@ -121,29 +122,29 @@ export const KnowledgeMapCreationForm = ({
           <Form>
             <TextFormField
               name="name"
-              label={i18n.t(k.NAME_LABEL)}
-              placeholder={i18n.t(k.KNOWLEDGE_MAP_NAME_PLACEHOLDER)}
+              label={t(k.NAME_LABEL)}
+              placeholder={t(k.KNOWLEDGE_MAP_NAME_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
             <TextFormField
               name="description"
-              label={i18n.t(k.DESCRIPTION_LABEL)}
-              placeholder={i18n.t(k.KNOWLEDGE_MAP_DESCRIPTION_PLACEHOLDER)}
+              label={t(k.DESCRIPTION_LABEL)}
+              placeholder={t(k.KNOWLEDGE_MAP_DESCRIPTION_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="flowiseId"
-              label={i18n.t(k.FLOWISE_PIPELINE_LABEL)}
-              placeholder={i18n.t(k.FLOWISE_PIPELINE_PLACEHOLDER)}
+              label={t(k.FLOWISE_PIPELINE_LABEL)}
+              placeholder={t(k.FLOWISE_PIPELINE_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <h2 className="mb-1 font-medium text-base">
-              {i18n.t(k.SELECT_DOCUMENT_SET)}
+              {t(k.SELECT_DOCUMENT_SET)}
             </h2>
             <p className="mb-3 text-xs">
-              {i18n.t(k.KNOWLEDGE_MAP_FORMATION_DESCRIPTION)}
+              {t(k.KNOWLEDGE_MAP_FORMATION_DESCRIPTION)}
             </p>
             <FieldArray
               name="cc_pair_ids"
@@ -198,7 +199,7 @@ export const KnowledgeMapCreationForm = ({
                 disabled={isSubmitting}
                 className="w-64 mx-auto"
               >
-                {isUpdate ? i18n.t(k.UPDATE) : i18n.t(k.CREATE)}
+                {isUpdate ? t(k.UPDATE) : t(k.CREATE)}
               </Button>
             </div>
           </Form>
@@ -207,22 +208,20 @@ export const KnowledgeMapCreationForm = ({
 
       {isUpdate && (
         <div>
-          <Title>{i18n.t(k.KNOWLEDGE_MAP_VIEW_EDIT)}</Title>
+          <Title>{t(k.KNOWLEDGE_MAP_VIEW_EDIT)}</Title>
           <Table className="overflow-visible mt-2">
             <TableHead>
               <TableRow>
-                <TableHeaderCell>{i18n.t(k.TOPIC_NAME)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.TOPIC_NAME)}</TableHeaderCell>
                 <TableHeaderCell>
-                  {i18n.t(k.TOPIC_DESCRIPTION_HEADER)}
+                  {t(k.TOPIC_DESCRIPTION_HEADER)}
                 </TableHeaderCell>
-                <TableHeaderCell>
-                  {i18n.t(k.QUERY_EXAMPLES_HEADER)}
-                </TableHeaderCell>
+                <TableHeaderCell>{t(k.QUERY_EXAMPLES_HEADER)}</TableHeaderCell>
                 <TableHeaderCell>key_json</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.SOURCE_HEADER)}</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.SELECTION_HEADER)}</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.KNOWLEDGE_HEADER)}</TableHeaderCell>
-                <TableHeaderCell>{i18n.t(k.EXTRACTION_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.SOURCE_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.SELECTION_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.KNOWLEDGE_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.EXTRACTION_HEADER)}</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -264,7 +263,7 @@ export const KnowledgeMapCreationForm = ({
                 generateAnswers(existingDocumentSet.id);
               }}
             >
-              {i18n.t(k.EXTRACT_BUTTON)}
+              {t(k.EXTRACT_BUTTON)}
             </Button>
           </div>
         </div>

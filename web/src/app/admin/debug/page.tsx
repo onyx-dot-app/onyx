@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { useState, useEffect } from "react";
@@ -47,7 +47,7 @@ function Main() {
       const response = await fetch(
         `/api/admin/long-term-logs/${category}/download`
       );
-      if (!response.ok) throw new Error(i18n.t(k.FAILED_TO_LOAD_LOGS));
+      if (!response.ok) throw new Error(t(k.FAILED_TO_LOAD_LOGS));
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -75,8 +75,7 @@ function Main() {
       {isDownloading && <Spinner />}
       <div className="mb-8">
         <Text className="mb-3">
-          <b>{i18n.t(k.DEBUG_LOGS)}</b>{" "}
-          {i18n.t(k.PROVIDE_DETAILED_INFORMATION_A)}
+          <b>{t(k.DEBUG_LOGS)}</b> {t(k.PROVIDE_DETAILED_INFORMATION_A)}
         </Text>
 
         {categories.length > 0 && (
@@ -84,8 +83,8 @@ function Main() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{i18n.t(k.CATEGORY)}</TableHead>
-                  <TableHead>{i18n.t(k.ACTIONS)}</TableHead>
+                  <TableHead>{t(k.CATEGORY)}</TableHead>
+                  <TableHead>{t(k.ACTIONS)}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -103,7 +102,7 @@ function Main() {
                         className="flex items-center gap-2"
                       >
                         <FiDownload className="h-4 w-4" />
-                        {i18n.t(k.DOWNLOAD_LOGS)}
+                        {t(k.DOWNLOAD_LOGS)}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -118,12 +117,10 @@ function Main() {
 }
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
-      <AdminPageTitle
-        icon={<FiDownload size={32} />}
-        title={i18n.t(k.DEBUG_LOGS)}
-      />
+      <AdminPageTitle icon={<FiDownload size={32} />} title={t(k.DEBUG_LOGS)} />
       <Main />
     </div>
   );

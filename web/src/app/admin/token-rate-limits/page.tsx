@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -27,12 +27,6 @@ const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
 const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
 const USER_GROUP_FETCH_URL = `${BASE_URL}/user-groups`;
 
-const GLOBAL_DESCRIPTION = i18n.t(k.GLOBAL_RATE_LIMITS_APPLY_TO_AL);
-
-const USER_DESCRIPTION = i18n.t(k.USER_RATE_LIMITS_APPLY_TO_INDI);
-
-const USER_GROUP_DESCRIPTION = i18n.t(k.USER_GROUP_RATE_LIMITS_APPLY_T);
-
 const handleCreateTokenRateLimit = async (
   target_scope: Scope,
   period_hours: number,
@@ -57,11 +51,16 @@ const handleCreateTokenRateLimit = async (
 };
 
 function Main() {
+  const { t } = useTranslation();
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const { popup, setPopup } = usePopup();
 
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  const GLOBAL_DESCRIPTION = t(k.GLOBAL_RATE_LIMITS_APPLY_TO_AL);
+  const USER_DESCRIPTION = t(k.USER_RATE_LIMITS_APPLY_TO_INDI);
+  const USER_GROUP_DESCRIPTION = t(k.USER_GROUP_RATE_LIMITS_APPLY_T);
 
   const updateTable = (target_scope: Scope) => {
     if (target_scope === Scope.GLOBAL) {
@@ -102,24 +101,24 @@ function Main() {
     <div>
       {popup}
 
-      <Text className="mb-2">{i18n.t(k.TOKEN_RATE_LIMITS_ENABLE_YOU_C)}</Text>
+      <Text className="mb-2">{t(k.TOKEN_RATE_LIMITS_ENABLE_YOU_C)}</Text>
 
       <ul className="list-disc mt-2 ml-4 mb-2">
         <li>
-          <Text>{i18n.t(k.SET_A_GLOBAL_RATE_LIMIT_TO_CON)}</Text>
+          <Text>{t(k.SET_A_GLOBAL_RATE_LIMIT_TO_CON)}</Text>
         </li>
         {isPaidEnterpriseFeaturesEnabled && (
           <>
             <li>
-              <Text>{i18n.t(k.SET_RATE_LIMITS_FOR_USERS_TO_E)}</Text>
+              <Text>{t(k.SET_RATE_LIMITS_FOR_USERS_TO_E)}</Text>
             </li>
             <li>
-              <Text>{i18n.t(k.SET_RATE_LIMITS_FOR_USER_GROUP)}</Text>
+              <Text>{t(k.SET_RATE_LIMITS_FOR_USER_GROUP)}</Text>
             </li>
           </>
         )}
         <li>
-          <Text>{i18n.t(k.ENABLE_AND_DISABLE_RATE_LIMITS)}</Text>
+          <Text>{t(k.ENABLE_AND_DISABLE_RATE_LIMITS)}</Text>
         </li>
       </ul>
 
@@ -136,35 +135,35 @@ function Main() {
           <TabsList>
             <TabsTrigger value="0" className="flex items-center gap-2">
               <FiGlobe />
-              {i18n.t(k.GLOBAL)}
+              {t(k.GLOBAL)}
             </TabsTrigger>
             <TabsTrigger value="1" className="flex items-center gap-2">
               <FiUser />
-              {i18n.t(k.USER)}
+              {t(k.USER)}
             </TabsTrigger>
             <TabsTrigger value="2" className="flex items-center gap-2">
               <FiUsers />
-              {i18n.t(k.USER_GROUPS)}
+              {t(k.USER_GROUPS)}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="0">
             <GenericTokenRateLimitTable
               fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-              title={i18n.t(k.GLOBAL_TOKEN_RATE_LIMITS)}
+              title={t(k.GLOBAL_TOKEN_RATE_LIMITS)}
               description={GLOBAL_DESCRIPTION}
             />
           </TabsContent>
           <TabsContent value="1">
             <GenericTokenRateLimitTable
               fetchUrl={USER_TOKEN_FETCH_URL}
-              title={i18n.t(k.USER_TOKEN_RATE_LIMITS)}
+              title={t(k.USER_TOKEN_RATE_LIMITS)}
               description={USER_DESCRIPTION}
             />
           </TabsContent>
           <TabsContent value="2">
             <GenericTokenRateLimitTable
               fetchUrl={USER_GROUP_FETCH_URL}
-              title={i18n.t(k.USER_GROUP_TOKEN_RATE_LIMITS)}
+              title={t(k.USER_GROUP_TOKEN_RATE_LIMITS)}
               description={USER_GROUP_DESCRIPTION}
               responseMapper={(data: Record<string, TokenRateLimit[]>) =>
                 Object.entries(data).flatMap(([group_name, elements]) =>
@@ -183,7 +182,7 @@ function Main() {
         <div className="mt-6">
           <GenericTokenRateLimitTable
             fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-            title={i18n.t(k.GLOBAL_TOKEN_RATE_LIMITS)}
+            title={t(k.GLOBAL_TOKEN_RATE_LIMITS)}
             description={GLOBAL_DESCRIPTION}
           />
         </div>
@@ -203,10 +202,11 @@ function Main() {
 }
 
 export default function Page() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title={i18n.t(k.TOKEN_RATE_LIMITS)}
+        title={t(k.TOKEN_RATE_LIMITS)}
         icon={<ShieldIcon size={32} />}
       />
 

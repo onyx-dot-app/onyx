@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
+import { JSX } from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../i18n/keys";
 import {
   CCPairBasicInfo,
@@ -166,6 +167,7 @@ export function AssistantEditor({
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;
 }) {
+  const { t } = useTranslation();
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -749,20 +751,20 @@ export function AssistantEditor({
               <p className="text-base font-normal text-2xl">
                 {existingPersona ? (
                   <>
-                    {i18n.t(k.EDIT_ASSISTANT)} <b>{existingPersona.name}</b>
+                    {t(k.EDIT_ASSISTANT)} <b>{existingPersona.name}</b>
                   </>
                 ) : (
-                  i18n.t(k.CREATE_NEW_ASSISTANT)
+                  t(k.CREATE_NEW_ASSISTANT)
                 )}
               </p>
               <div className="max-w-4xl w-full">
                 <Separator />
                 <div className="flex gap-x-2 items-center">
                   <div className="block font-medium text-sm">
-                    {i18n.t(k.ASSISTANT_ICON)}
+                    {t(k.ASSISTANT_ICON)}
                   </div>
                 </div>
-                <SubLabel>{i18n.t(k.ASSISTANT_ICON_DESCRIPTION)}</SubLabel>
+                <SubLabel>{t(k.ASSISTANT_ICON_DESCRIPTION)}</SubLabel>
                 <div className="flex gap-x-2 items-center">
                   <div
                     className="p-4 cursor-pointer  rounded-full flex  "
@@ -775,14 +777,14 @@ export function AssistantEditor({
                     {values.uploaded_image ? (
                       <img
                         src={URL.createObjectURL(values.uploaded_image)}
-                        alt={i18n.t(k.UPLOAD_ASSISTANT_ICON)}
+                        alt={t(k.UPLOAD_ASSISTANT_ICON)}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : existingPersona?.uploaded_image_id &&
                       !removePersonaImage ? (
                       <img
                         src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                        alt={i18n.t(k.UPLOAD_ASSISTANT_ICON)}
+                        alt={t(k.UPLOAD_ASSISTANT_ICON)}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (
@@ -812,8 +814,8 @@ export function AssistantEditor({
                     >
                       <CameraIcon size={14} />
                       {values.uploaded_image
-                        ? i18n.t(k.UPLOAD_NEW_IMAGE)
-                        : i18n.t(k.UPLOAD_ASSISTANT_ICON)}
+                        ? t(k.UPLOAD_NEW_IMAGE)
+                        : t(k.UPLOAD_ASSISTANT_ICON)}
                     </Button>
 
                     {values.uploaded_image && (
@@ -829,9 +831,9 @@ export function AssistantEditor({
                       >
                         <TrashIcon className="h-3 w-3" />
                         {removePersonaImage
-                          ? i18n.t(k.RETURN_TO_PREVIOUS)
-                          : i18n.t(k.DELETE)}
-                        {i18n.t(k.IMAGE)}
+                          ? t(k.RETURN_TO_PREVIOUS)
+                          : t(k.DELETE)}
+                        {t(k.IMAGE)}
                       </Button>
                     )}
 
@@ -855,7 +857,7 @@ export function AssistantEditor({
                           }}
                         >
                           <NewChatIcon size={14} />
-                          {i18n.t(k.GENERATE_ICON)}
+                          {t(k.GENERATE_ICON)}
                         </Button>
                       )}
 
@@ -874,7 +876,7 @@ export function AssistantEditor({
                           }}
                         >
                           <SwapIcon className="h-3 w-3" />
-                          {i18n.t(k.RETURN_TO_PREVIOUS_IMAGE)}
+                          {t(k.RETURN_TO_PREVIOUS_IMAGE)}
                         </Button>
                       )}
 
@@ -892,7 +894,7 @@ export function AssistantEditor({
                           }}
                         >
                           <TrashIcon className="h-3 w-3" />
-                          {i18n.t(k.DELETE_IMAGE)}
+                          {t(k.DELETE_IMAGE)}
                         </Button>
                       )}
                   </div>
@@ -902,8 +904,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="name"
-                label={i18n.t(k.TITLE_LABEL)}
-                placeholder={i18n.t(k.TITLE_PLACEHOLDER)}
+                label={t(k.TITLE_LABEL)}
+                placeholder={t(k.TITLE_PLACEHOLDER)}
                 aria-label="assistant-name-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
@@ -911,8 +913,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="description"
-                label={i18n.t(k.DESCRIPTION_LABEL)}
-                placeholder={i18n.t(k.DESCRIPTION_PLACEHOLDER)}
+                label={t(k.DESCRIPTION_LABEL)}
+                placeholder={t(k.DESCRIPTION_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
@@ -921,9 +923,9 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-4xl"
                 name="system_prompt"
-                label={i18n.t(k.INSTRUCTIONS_LABEL)}
+                label={t(k.INSTRUCTIONS_LABEL)}
                 isTextArea={true}
-                placeholder={i18n.t(k.INSTRUCTIONS_PLACEHOLDER)}
+                placeholder={t(k.INSTRUCTIONS_PLACEHOLDER)}
                 data-testid="assistant-instructions-input"
                 className="[&_textarea]:placeholder:text-text-muted/50"
               />
@@ -937,7 +939,7 @@ export function AssistantEditor({
                         <div>
                           <div className="flex items-start gap-x-2">
                             <p className="block font-medium text-sm">
-                              {i18n.t(k.KNOWLEDGE_BASE_LABEL)}
+                              {t(k.KNOWLEDGE_BASE_LABEL)}
                             </p>
                             <div className="flex items-center">
                               <TooltipProvider delayDuration={0}>
@@ -965,7 +967,7 @@ export function AssistantEditor({
                                   {ccPairs.length === 0 && (
                                     <TooltipContent side="top" align="center">
                                       <p className="bg-background-900 max-w-[200px] text-sm rounded-lg p-1.5 text-white">
-                                        {i18n.t(k.KNOWLEDGE_ACTION_REQUIREMENT)}
+                                        {t(k.KNOWLEDGE_ACTION_REQUIREMENT)}
                                       </p>
                                     </TooltipContent>
                                   )}
@@ -1001,7 +1003,7 @@ export function AssistantEditor({
                                   <BookIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  {i18n.t(k.GROUP_KNOWLEDGE_BASE)}
+                                  {t(k.GROUP_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
 
@@ -1022,7 +1024,7 @@ export function AssistantEditor({
                                   <FileIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  {i18n.t(k.USER_KNOWLEDGE_BASE)}
+                                  {t(k.USER_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
                             </div>
@@ -1035,7 +1037,7 @@ export function AssistantEditor({
                         !admin && (
                           <div className="text-sm flex flex-col items-start">
                             <SubLabel>
-                              {i18n.t(k.ADD_DOCUMENTS_INSTRUCTION)}
+                              {t(k.ADD_DOCUMENTS_INSTRUCTION)}
                             </SubLabel>
                             {(selectedFiles.length > 0 ||
                               selectedFolders.length > 0) && (
@@ -1066,7 +1068,7 @@ export function AssistantEditor({
                               }}
                               className="text-primary hover:underline"
                             >
-                              {i18n.t(k.ADD_USER_FILES_BUTTON)}
+                              {t(k.ADD_USER_FILES_BUTTON)}
                             </button>
                           </div>
                         )}
@@ -1077,19 +1079,19 @@ export function AssistantEditor({
                             <div>
                               <SubLabel>
                                 <>
-                                  {i18n.t(k.SELECT_DOCUMENT_SETS_TEXT)}{" "}
+                                  {t(k.SELECT_DOCUMENT_SETS_TEXT)}{" "}
                                   {!user || user.role === "admin" ? (
                                     <Link
                                       href="/admin/documents/sets"
                                       className="font-semibold underline hover:underline text-text"
                                       target="_blank"
                                     >
-                                      {i18n.t(k.DOCUMENT_SETS_LABEL)}
+                                      {t(k.DOCUMENT_SETS_LABEL)}
                                     </Link>
                                   ) : (
-                                    i18n.t(k.DOCUMENT_SETS_TEXT)
+                                    t(k.DOCUMENT_SETS_TEXT)
                                   )}{" "}
-                                  {i18n.t(k.DOCUMENT_SETS_DESCRIPTION)}
+                                  {t(k.DOCUMENT_SETS_DESCRIPTION)}
                                 </>
                               </SubLabel>
                             </div>
@@ -1130,7 +1132,7 @@ export function AssistantEditor({
                                   href="/admin/documents/sets/new"
                                   className="text-primary hover:underline"
                                 >
-                                  {i18n.t(k.CREATE_DOCUMENT_SET_BUTTON)}
+                                  {t(k.CREATE_DOCUMENT_SET_BUTTON)}
                                 </Link>
                               </p>
                             )}
@@ -1142,7 +1144,7 @@ export function AssistantEditor({
                   <Separator />
                   <div className="py-2">
                     <p className="block font-medium text-sm mb-2">
-                      {i18n.t(k.TOOLS_LABEL)}
+                      {t(k.TOOLS_LABEL)}
                     </p>
 
                     {imageGenerationTool && (
@@ -1151,15 +1153,15 @@ export function AssistantEditor({
                           <BooleanFormField
                             name={`enabled_tools_map.${imageGenerationTool.id}`}
                             label={imageGenerationTool.display_name}
-                            subtext={i18n.t(k.IMAGE_GENERATION_SUBTEXT)}
+                            subtext={t(k.IMAGE_GENERATION_SUBTEXT)}
                             disabled={
                               !currentLLMSupportsImageOutput ||
                               !isImageGenerationAvailable
                             }
                             disabledTooltip={
                               !currentLLMSupportsImageOutput
-                                ? i18n.t(k.IMAGE_GENERATION_REQUIREMENT)
-                                : i18n.t(k.IMAGE_GENERATION_CONFIG_REQUIREMENT)
+                                ? t(k.IMAGE_GENERATION_REQUIREMENT)
+                                : t(k.IMAGE_GENERATION_CONFIG_REQUIREMENT)
                             }
                           />
                         </div>
@@ -1170,8 +1172,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${langflowTool.id}`}
-                          label={i18n.t(k.LANGFLOW_TOOL_LABEL)}
-                          subtext={i18n.t(k.LANGFLOW_TOOL_SUBTEXT)}
+                          label={t(k.LANGFLOW_TOOL_LABEL)}
+                          subtext={t(k.LANGFLOW_TOOL_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(langflowTool.id);
                           }}
@@ -1182,15 +1184,15 @@ export function AssistantEditor({
                             <>
                               <TextFormField
                                 name="pipeline_id"
-                                label={i18n.t(k.PIPELINE_ID_LABEL)}
-                                placeholder={i18n.t(k.PIPELINE_ID_PLACEHOLDER)}
-                                subtext={i18n.t(k.PIPELINE_ID_SUBTEXT)}
+                                label={t(k.PIPELINE_ID_LABEL)}
+                                placeholder={t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={t(k.PIPELINE_ID_SUBTEXT)}
                               />
 
                               <BooleanFormField
                                 name="use_default"
-                                label={i18n.t(k.USE_DEFAULT_LABEL)}
-                                subtext={i18n.t(k.USE_DEFAULT_SUBTEXT)}
+                                label={t(k.USE_DEFAULT_LABEL)}
+                                subtext={t(k.USE_DEFAULT_SUBTEXT)}
                               />
                             </>
                           </div>
@@ -1202,8 +1204,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${docFormatterTool.id}`}
-                          label={i18n.t(k.DOC_FORMATTER_LABEL)}
-                          subtext={i18n.t(k.DOC_FORMATTER_SUBTEXT)}
+                          label={t(k.DOC_FORMATTER_LABEL)}
+                          subtext={t(k.DOC_FORMATTER_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(docFormatterTool.id);
                           }}
@@ -1214,9 +1216,9 @@ export function AssistantEditor({
                             <>
                               <TextFormField
                                 name="pipeline_id"
-                                label={i18n.t(k.PIPELINE_ID_LABEL)}
-                                placeholder={i18n.t(k.PIPELINE_ID_PLACEHOLDER)}
-                                subtext={i18n.t(k.PIPELINE_ID_SUBTEXT)}
+                                label={t(k.PIPELINE_ID_LABEL)}
+                                placeholder={t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={t(k.PIPELINE_ID_SUBTEXT)}
                               />
 
                               <Button
@@ -1239,7 +1241,7 @@ export function AssistantEditor({
                                 }}
                               >
                                 <CameraIcon size={14} />
-                                {i18n.t(k.UPLOAD_TEMPLATE_FILE)}
+                                {t(k.UPLOAD_TEMPLATE_FILE)}
                               </Button>
                               {values.template_file && (
                                 <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
@@ -1257,7 +1259,7 @@ export function AssistantEditor({
                         <BooleanFormField
                           name={`enabled_tools_map.${internetSearchTool.id}`}
                           label={internetSearchTool.display_name}
-                          subtext={i18n.t(k.INTERNET_SEARCH_SUBTEXT)}
+                          subtext={t(k.INTERNET_SEARCH_SUBTEXT)}
                         />
                       </>
                     )}
@@ -1266,8 +1268,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${knowledgeMapTool.id}`}
-                          label={i18n.t(k.KNOWLEDGE_MAP_TOOL_LABEL)}
-                          subtext={i18n.t(k.KNOWLEDGE_MAP_TOOL_SUBTEXT)}
+                          label={t(k.KNOWLEDGE_MAP_TOOL_LABEL)}
+                          subtext={t(k.KNOWLEDGE_MAP_TOOL_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(knowledgeMapTool?.id);
                           }}
@@ -1277,11 +1279,11 @@ export function AssistantEditor({
                           <div className="pl-4 border-l-2 ml-4 border-border">
                             {ccPairs.length > 0 && (
                               <>
-                                <Label>{i18n.t(k.KNOWLEDGE_MAPS_LABEL)}</Label>
+                                <Label>{t(k.KNOWLEDGE_MAPS_LABEL)}</Label>
 
                                 <div>
                                   <SubLabel>
-                                    {i18n.t(k.KNOWLEDGE_MAPS_SELECTION_TEXT)}
+                                    {t(k.KNOWLEDGE_MAPS_SELECTION_TEXT)}
                                   </SubLabel>
                                 </div>
                                 {knowledgeMaps.length > 0 ? (
@@ -1365,9 +1367,9 @@ export function AssistantEditor({
                                   />
                                 ) : (
                                   <i className="text-sm">
-                                    {i18n.t(k.NO_KNOWLEDGE_MAPS_AVAILABLE)}
+                                    {t(k.NO_KNOWLEDGE_MAPS_AVAILABLE)}
                                     {user?.role !== "admin" && (
-                                      <>{i18n.t(k.CONTACT_ADMIN_FOR_FEATURE)}</>
+                                      <>{t(k.CONTACT_ADMIN_FOR_FEATURE)}</>
                                     )}
                                   </i>
                                 )}
@@ -1395,7 +1397,7 @@ export function AssistantEditor({
               <div className="-mt-2">
                 <div className="flex gap-x-2 mb-2 items-center">
                   <div className="block font-medium text-sm">
-                    {i18n.t(k.DEFAULT_MODEL_LABEL)}
+                    {t(k.DEFAULT_MODEL_LABEL)}
                   </div>
                 </div>
                 <LLMSelector
@@ -1447,8 +1449,8 @@ export function AssistantEditor({
                           }
                         }}
                         name="is_default_persona"
-                        label={i18n.t(k.FAVORITE_ASSISTANT_LABEL)}
-                        subtext={i18n.t(k.FAVORITE_ASSISTANT_SUBTEXT)}
+                        label={t(k.FAVORITE_ASSISTANT_LABEL)}
+                        subtext={t(k.FAVORITE_ASSISTANT_SUBTEXT)}
                       />
                     )}
 
@@ -1456,10 +1458,10 @@ export function AssistantEditor({
 
                     <div className="flex gap-x-2 items-center ">
                       <div className="block font-medium text-sm">
-                        {i18n.t(k.ACCESS_LABEL)}
+                        {t(k.ACCESS_LABEL)}
                       </div>
                     </div>
-                    <SubLabel>{i18n.t(k.ACCESS_MANAGEMENT_TEXT)}</SubLabel>
+                    <SubLabel>{t(k.ACCESS_MANAGEMENT_TEXT)}</SubLabel>
 
                     <div className="min-h-[100px]">
                       <div className="flex items-center mb-2">
@@ -1495,13 +1497,13 @@ export function AssistantEditor({
                             </TooltipTrigger>
                             {values.is_default_persona && (
                               <TooltipContent side="top" align="center">
-                                {i18n.t(k.DEFAULT_PERSONA_MUST_BE_PUBLIC)}
+                                {t(k.DEFAULT_PERSONA_MUST_BE_PUBLIC)}
                               </TooltipContent>
                             )}
                           </Tooltip>
                         </TooltipProvider>
                         <span className="text-sm ml-2">
-                          {i18n.t(k.ORGANIZATION_PUBLIC)}
+                          {t(k.ORGANIZATION_PUBLIC)}
                         </span>
                       </div>
 
@@ -1509,23 +1511,23 @@ export function AssistantEditor({
                         <div className="flex items-center text-warning mt-2">
                           <InfoIcon size={16} className="mr-2" />
                           <span className="text-sm">
-                            {i18n.t(k.DEFAULT_PERSONA_VISIBILITY_WARNING)}
+                            {t(k.DEFAULT_PERSONA_VISIBILITY_WARNING)}
                           </span>
                         </div>
                       )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
-                          {i18n.t(k.ASSISTANT_AVAILABLE_TO_ALL)}
+                          {t(k.ASSISTANT_AVAILABLE_TO_ALL)}
                         </p>
                       ) : (
                         <>
                           <p className="text-sm text-text-dark mb-2">
-                            {i18n.t(k.ASSISTANT_AVAILABLE_TO_SPECIFIC)}
+                            {t(k.ASSISTANT_AVAILABLE_TO_SPECIFIC)}
                           </p>
                           <div className="mt-2">
                             <Label className="mb-2" small>
-                              {i18n.t(k.SHARE_WITH_USERS_AND_GROUPS)}
+                              {t(k.SHARE_WITH_USERS_AND_GROUPS)}
                             </Label>
 
                             <SearchMultiSelectDropdown
@@ -1626,11 +1628,11 @@ export function AssistantEditor({
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
-                        {i18n.t(k.STARTER_MESSAGES_LABEL)}
+                        {t(k.STARTER_MESSAGES_LABEL)}
                       </div>
                     </div>
 
-                    <SubLabel>{i18n.t(k.STARTER_MESSAGES_SUBTEXT)}</SubLabel>
+                    <SubLabel>{t(k.STARTER_MESSAGES_SUBTEXT)}</SubLabel>
 
                     <div className="w-full">
                       <FieldArray
@@ -1657,14 +1659,14 @@ export function AssistantEditor({
                     <Separator />
                     <div className="flex gap-x-2 items-center mt-4 ">
                       <div className="block font-medium text-sm">
-                        {i18n.t(k.LABELS_LABEL)}
+                        {t(k.LABELS_LABEL)}
                       </div>
                     </div>
                     <p
                       className="text-sm text-subtle"
                       style={{ color: "rgb(113, 114, 121)" }}
                     >
-                      {i18n.t(k.SELECT_LABELS_TO_CLASSIFY)}
+                      {t(k.SELECT_LABELS_TO_CLASSIFY)}
                     </p>
                     <div className="mt-3">
                       <SearchMultiSelectDropdown
@@ -1769,14 +1771,14 @@ export function AssistantEditor({
                   <div className="flex flex-col gap-y-4">
                     <div className="flex flex-col gap-y-4">
                       <h3 className="font-medium text-sm">
-                        {i18n.t(k.KNOWLEDGE_OPTIONS_LABEL)}
+                        {t(k.KNOWLEDGE_OPTIONS_LABEL)}
                       </h3>
                       <div className="flex flex-col gap-y-4 ml-4">
                         <TextFormField
                           small={true}
                           name="num_chunks"
-                          label={i18n.t(k.OPTIONAL_CONTEXT_DOCUMENTS)}
-                          placeholder={i18n.t(k.DEFAULT_10)}
+                          label={t(k.OPTIONAL_CONTEXT_DOCUMENTS)}
+                          placeholder={t(k.DEFAULT_10)}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "" || /^[0-9]+$/.test(value)) {
@@ -1789,8 +1791,8 @@ export function AssistantEditor({
                           width="max-w-xl"
                           type="date"
                           small
-                          subtext={i18n.t(k.DOCUMENTS_BEFORE_DATE_IGNORED)}
-                          label={i18n.t(k.OPTIONAL_KNOWLEDGE_END_DATE)}
+                          subtext={t(k.DOCUMENTS_BEFORE_DATE_IGNORED)}
+                          label={t(k.OPTIONAL_KNOWLEDGE_END_DATE)}
                           name="search_start_date"
                         />
 
@@ -1798,16 +1800,16 @@ export function AssistantEditor({
                           small
                           removeIndent
                           name="llm_relevance_filter"
-                          label={i18n.t(k.AI_RELEVANCE_FILTER_LABEL)}
-                          subtext={i18n.t(k.AI_RELEVANCE_FILTER_SUBTEXT)}
+                          label={t(k.AI_RELEVANCE_FILTER_LABEL)}
+                          subtext={t(k.AI_RELEVANCE_FILTER_SUBTEXT)}
                         />
 
                         <BooleanFormField
                           small
                           removeIndent
                           name="include_citations"
-                          label={i18n.t(k.CITATIONS_LABEL)}
-                          subtext={i18n.t(k.CITATIONS_SUBTEXT)}
+                          label={t(k.CITATIONS_LABEL)}
+                          subtext={t(k.CITATIONS_SUBTEXT)}
                         />
                       </div>
                     </div>
@@ -1818,8 +1820,8 @@ export function AssistantEditor({
                     small
                     removeIndent
                     name="datetime_aware"
-                    label={i18n.t(k.DATETIME_AWARE_LABEL)}
-                    subtext={i18n.t(k.DATETIME_AWARE_SUBTEXT)}
+                    label={t(k.DATETIME_AWARE_LABEL)}
+                    subtext={t(k.DATETIME_AWARE_SUBTEXT)}
                   />
 
                   <Separator />
@@ -1827,13 +1829,13 @@ export function AssistantEditor({
                   <TextFormField
                     maxWidth="max-w-4xl"
                     name="task_prompt"
-                    label={i18n.t(k.OPTIONAL_REMINDERS_LABEL)}
+                    label={t(k.OPTIONAL_REMINDERS_LABEL)}
                     isTextArea={true}
-                    placeholder={i18n.t(k.REMINDERS_PLACEHOLDER)}
+                    placeholder={t(k.REMINDERS_PLACEHOLDER)}
                     onChange={(e) => {
                       setFieldValue("task_prompt", e.target.value);
                     }}
-                    explanationText={i18n.t(k.LEARN_ABOUT_PROMPTS)}
+                    explanationText={t(k.LEARN_ABOUT_PROMPTS)}
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
@@ -1845,14 +1847,14 @@ export function AssistantEditor({
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
                 >
-                  {isUpdate ? i18n.t(k.UPDATE_BUTTON) : i18n.t(k.CREATE_BUTTON)}
+                  {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.back()}
                 >
-                  {i18n.t(k.CANCEL_BUTTON)}
+                  {t(k.CANCEL_BUTTON)}
                 </Button>
               </div>
 
@@ -1863,7 +1865,7 @@ export function AssistantEditor({
                     onClick={openDeleteModal}
                     type="button"
                   >
-                    {i18n.t(k.DELETE_BUTTON)}
+                    {t(k.DELETE_BUTTON)}
                   </Button>
                 )}
               </div>

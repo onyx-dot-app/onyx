@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import { ValidSources } from "@/lib/types";
@@ -44,6 +44,7 @@ export default function CredentialSection({
   sourceType: ValidSources;
   refresh: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -94,7 +95,7 @@ export default function CredentialSection({
       const errorData = await response.json();
       setPopup({
         message: `Issue swapping credential: ${
-          errorData.detail || errorData.message || i18n.t(k.UNKNOWN_ERROR)
+          errorData.detail || errorData.message || t(k.UNKNOWN_ERROR)
         }`,
 
         type: "error",
@@ -161,10 +162,10 @@ export default function CredentialSection({
       {popup}
 
       <div className="flex gap-x-2">
-        <p>{i18n.t(k.CURRENT_CREDENTIAL)}</p>
+        <p>{t(k.CURRENT_CREDENTIAL)}</p>
         <Text className="ml-1 italic font-bold my-auto">
           {ccPair.credential.name ||
-            `${i18n.t(k.CREDENTIAL1)}${ccPair.credential.id}`}
+            `${t(k.CREDENTIAL1)}${ccPair.credential.id}`}
         </Text>
       </div>
       <div className="flex text-sm justify-start mr-auto gap-x-2">
@@ -175,14 +176,14 @@ export default function CredentialSection({
           className="flex items-center gap-x-2 cursor-pointer bg-neutral-800 border-neutral-600 border-2 hover:bg-neutral-700 p-1.5 rounded-lg text-neutral-300"
         >
           <FaSwatchbook />
-          {i18n.t(k.UPDATE_CREDENTIALS)}
+          {t(k.UPDATE_CREDENTIALS)}
         </button>
       </div>
       {showModifyCredential && (
         <Modal
           onOutsideClick={closeModifyCredential}
           className="max-w-3xl rounded-lg"
-          title={i18n.t(k.UPDATE_CREDENTIALS_TITLE)}
+          title={t(k.UPDATE_CREDENTIALS_TITLE)}
         >
           <ModifyCredential
             close={closeModifyCredential}
@@ -205,7 +206,7 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeEditingCredential}
           className="max-w-3xl rounded-lg"
-          title={i18n.t(k.CHANGE_CREDENTIALS_TITLE)}
+          title={t(k.CHANGE_CREDENTIALS_TITLE)}
         >
           <EditCredential
             onUpdate={onUpdateCredential}
@@ -220,9 +221,9 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeCreateCredential}
           className="max-w-3xl flex flex-col items-start rounded-lg"
-          title={`${i18n.t(k.CREATE1)} ${getSourceDisplayName(
-            sourceType
-          )} ${i18n.t(k.CREDENTIAL2)}`}
+          title={`${t(k.CREATE1)} ${getSourceDisplayName(sourceType)} ${t(
+            k.CREDENTIAL2
+          )}`}
         >
           {oauthDetailsLoading ? (
             <Spinner />

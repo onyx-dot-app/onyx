@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export function ModifyStatusButtonCluster({
 }: {
   ccPair: CCPairFullInfo;
 }) {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -59,10 +60,10 @@ export function ModifyStatusButtonCluster({
 
   // Compute the button text based on current state and backend status
   const isNotActive = statusIsNotCurrentlyActive(ccPair.status);
-  const buttonText = isNotActive ? i18n.t(k.RE_ENABLE) : i18n.t(k.PAUSE);
+  const buttonText = isNotActive ? t(k.RE_ENABLE) : t(k.PAUSE);
   const tooltip = isNotActive
-    ? i18n.t(k.CLICK_TO_START_INDEXING_AGAIN)
-    : i18n.t(k.PAUSE_TOOLTIP_DESCRIPTION);
+    ? t(k.CLICK_TO_START_INDEXING_AGAIN)
+    : t(k.PAUSE_TOOLTIP_DESCRIPTION);
 
   return (
     <>
@@ -82,7 +83,7 @@ export function ModifyStatusButtonCluster({
       >
         {isUpdating ? (
           <LoadingAnimation
-            text={isNotActive ? i18n.t(k.RESUMING) : i18n.t(k.PAUSING)}
+            text={isNotActive ? t(k.RESUMING) : t(k.PAUSING)}
             size="text-md"
           />
         ) : (
@@ -91,15 +92,15 @@ export function ModifyStatusButtonCluster({
       </Button>
       {showConfirmModal && (
         <ConfirmEntityModal
-          entityType={i18n.t(k.INVALID_CONNECTOR)}
+          entityType={t(k.INVALID_CONNECTOR)}
           entityName={ccPair.name}
           onClose={() => setShowConfirmModal(false)}
           onSubmit={() => {
             setShowConfirmModal(false);
             updateStatus(ConnectorCredentialPairStatus.ACTIVE);
           }}
-          additionalDetails={i18n.t(k.INVALID_CONNECTOR_DETAILS)}
-          actionButtonText={i18n.t(k.RE_ENABLE)}
+          additionalDetails={t(k.INVALID_CONNECTOR_DETAILS)}
+          actionButtonText={t(k.RE_ENABLE)}
           variant="action"
         />
       )}

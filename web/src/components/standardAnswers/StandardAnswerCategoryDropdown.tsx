@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { FC } from "react";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
@@ -17,6 +19,7 @@ interface StandardAnswerCategoryDropdownFieldProps {
 export const StandardAnswerCategoryDropdownField: FC<
   StandardAnswerCategoryDropdownFieldProps
 > = ({ standardAnswerCategoryResponse, categories, setCategories }) => {
+  const { t } = useTranslation();
   if (!standardAnswerCategoryResponse.paidEnterpriseFeaturesEnabled) {
     return null;
   }
@@ -24,8 +27,8 @@ export const StandardAnswerCategoryDropdownField: FC<
   if (standardAnswerCategoryResponse.error != null) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
-        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${
+        errorTitle={t(k.SOMETHING_WENT_WRONG)}
+        errorMsg={`${t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${
           standardAnswerCategoryResponse.error.message
         }`}
       />
@@ -39,7 +42,7 @@ export const StandardAnswerCategoryDropdownField: FC<
   return (
     <>
       <div>
-        <Label>{i18n.t(k.STANDARD_ANSWER_CATEGORIES)}</Label>
+        <Label>{t(k.STANDARD_ANSWER_CATEGORIES)}</Label>
         <div className="w-64">
           <MultiSelectDropdown
             name="standard_answer_categories"

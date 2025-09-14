@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../i18n/keys";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
@@ -14,6 +16,7 @@ export const ConnectorEditor = ({
   setSetCCPairIds,
   allCCPairs,
 }: ConnectorEditorProps) => {
+  const { t } = useTranslation();
   // Filter out public docs, since they don't make sense as part of a group
   const privateCCPairs = allCCPairs.filter(
     (ccPair) => ccPair.access_type === "private"
@@ -22,11 +25,11 @@ export const ConnectorEditor = ({
   return (
     <ConnectorMultiSelect
       name="connectors"
-      label={i18n.t(k.CONNECTORS_LABEL)}
+      label={t(k.CONNECTORS_LABEL)}
       connectors={privateCCPairs}
       selectedIds={selectedCCPairIds}
       onChange={setSetCCPairIds}
-      placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
+      placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
       showError={true}
     />
   );

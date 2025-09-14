@@ -1,16 +1,18 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
+  JSX,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  RefObject,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
@@ -134,6 +136,7 @@ export const AgenticMessage = ({
   toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;
 }) => {
+  const { t } = useTranslation();
   const [noShowingMessage, setNoShowingMessage] = useState(isComplete);
 
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
@@ -520,7 +523,7 @@ export const AgenticMessage = ({
                       <div className="w-full  py-4 flex flex-col gap-4">
                         <div className="flex items-center gap-x-2 px-4">
                           <div className="text-black text-lg font-medium">
-                            {i18n.t(k.ANSWER)}
+                            {t(k.ANSWER)}
                           </div>
 
                           <StatusRefinement
@@ -552,7 +555,12 @@ export const AgenticMessage = ({
                         <div className="px-4">
                           {typeof content === "string" ? (
                             <div
-                              onCopy={(e) => handleCopy(e, markdownRef)}
+                              onCopy={(e) =>
+                                handleCopy(
+                                  e,
+                                  markdownRef as RefObject<HTMLDivElement>
+                                )
+                              }
                               ref={markdownRef}
                               className="overflow-x-visible !text-sm max-w-content-max"
                             >
@@ -616,14 +624,14 @@ export const AgenticMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content={i18n.t(k.COPY)}>
+                          <CustomTooltip showTick line content={t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
                                   (isViewingInitialAnswer
                                     ? finalContent
                                     : finalAlternativeContent) as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
@@ -631,7 +639,7 @@ export const AgenticMessage = ({
                           <CustomTooltip
                             showTick
                             line
-                            content={i18n.t(k.GOOD_ANSWER)}
+                            content={t(k.GOOD_ANSWER)}
                           >
                             <HoverableIcon
                               icon={<LikeFeedback />}
@@ -641,7 +649,7 @@ export const AgenticMessage = ({
                           <CustomTooltip
                             showTick
                             line
-                            content={i18n.t(k.BAD_ANSWER)}
+                            content={t(k.BAD_ANSWER)}
                           >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
@@ -653,7 +661,7 @@ export const AgenticMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content={i18n.t(k.REGENERATE)}
+                              content={t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -712,14 +720,14 @@ export const AgenticMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content={i18n.t(k.COPY)}>
+                          <CustomTooltip showTick line content={t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
                                   (isViewingInitialAnswer
                                     ? finalContent
                                     : finalAlternativeContent) as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
@@ -728,7 +736,7 @@ export const AgenticMessage = ({
                           <CustomTooltip
                             showTick
                             line
-                            content={i18n.t(k.GOOD_ANSWER)}
+                            content={t(k.GOOD_ANSWER)}
                           >
                             <HoverableIcon
                               icon={<LikeFeedback />}
@@ -739,7 +747,7 @@ export const AgenticMessage = ({
                           <CustomTooltip
                             showTick
                             line
-                            content={i18n.t(k.BAD_ANSWER)}
+                            content={t(k.BAD_ANSWER)}
                           >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
@@ -751,7 +759,7 @@ export const AgenticMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content={i18n.t(k.REGENERATE)}
+                              content={t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -792,6 +800,7 @@ function MessageSwitcher({
   handlePrevious: () => void;
   handleNext: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center text-sm space-x-0.5">
       <Hoverable
@@ -800,7 +809,7 @@ function MessageSwitcher({
       />
 
       <span className="text-text-darker select-none">
-        {currentPage} {i18n.t(k._6)} {totalPages}
+        {currentPage} {t(k._6)} {totalPages}
       </span>
 
       <Hoverable

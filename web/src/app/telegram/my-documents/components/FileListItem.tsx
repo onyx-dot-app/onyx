@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React, { useState, useEffect, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,6 +69,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
   folders,
   status,
 }) => {
+  const { t } = useTranslation();
   const { setPopup, popup } = usePopup();
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
@@ -111,9 +114,9 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <p className="text-xs font-medium text-red-500">
-                {i18n.t(k.INDEXING_FAILED)}
+                {t(k.INDEXING_FAILED)}
                 <br />
-                {i18n.t(k.YOU_CAN_ATTEMPT_A_REINDEX_TO_C)}
+                {t(k.YOU_CAN_ATTEMPT_A_REINDEX_TO_C)}
               </p>
             </div>
             <div className="flex flex-col gap-2">
@@ -125,7 +128,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                   e.preventDefault();
                   e.stopPropagation();
                   setIsPopoverOpen(false);
-                  fetch(`${i18n.t(k.API_USER_FILE_REINDEX)}`, {
+                  fetch(`${t(k.API_USER_FILE_REINDEX)}`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -134,26 +137,26 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                   })
                     .then((response) => {
                       if (!response.ok) {
-                        throw new Error(i18n.t(k.FAILED_TO_REINDEX_FILE_ERROR));
+                        throw new Error(t(k.FAILED_TO_REINDEX_FILE_ERROR));
                       }
                       setIndexingStatus(false);
                       refreshFolderDetails();
                       setPopup({
                         type: "success",
-                        message: i18n.t(k.REINDEXING_WILL_START_SHORTLY),
+                        message: t(k.REINDEXING_WILL_START_SHORTLY),
                       });
                     })
                     .catch((error) => {
                       console.error("Error reindexing file:", error);
                       setPopup({
                         type: "error",
-                        message: i18n.t(k.FAILED_TO_REINDEX_FILE),
+                        message: t(k.FAILED_TO_REINDEX_FILE),
                       });
                     });
                 }}
               >
                 <FiRefreshCw className="mr-2 h-3.5 w-3.5" />
-                {i18n.t(k.REINDEX1)}
+                {t(k.REINDEX1)}
               </Button>
               <Button
                 variant="outline"
@@ -166,7 +169,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                 }}
               >
                 <FiTrash2 className="mr-2 h-3.5 w-3.5" />
-                {i18n.t(k.DELETE)}
+                {t(k.DELETE)}
               </Button>
             </div>
           </div>
@@ -233,15 +236,15 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           {file.status == FileStatus.INDEXING ||
           file.status == FileStatus.REINDEXING ? (
             <>
-              {i18n.t(k.N_A_INDEXING)}
+              {t(k.N_A_INDEXING)}
               <AnimatedDots />
             </>
           ) : file.status == FileStatus.FAILED ? (
-            <>{i18n.t(k.FAILED)}</>
+            <>{t(k.FAILED)}</>
           ) : file.token_count !== undefined ? (
-            `${file.token_count?.toLocaleString()} ${i18n.t(k.TOKENS)}`
+            `${file.token_count?.toLocaleString()} ${t(k.TOKENS)}`
           ) : (
-            i18n.t(k.N_A)
+            t(k.N_A)
           )}
         </div>
       </div>
@@ -270,32 +273,32 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               <div className="space-y-0">
                 <Button variant="menu" onClick={() => setShowMoveOptions(true)}>
                   <FolderMoveIcon size={16} className="h-4 w-4" />
-                  {i18n.t(k.MOVE)}
+                  {t(k.MOVE)}
                 </Button>
                 <Button
                   variant="menu"
                   onClick={() => onRename(file.id, file.name, false)}
                 >
                   <FiEdit className="h-4 w-4" />
-                  {i18n.t(k.RENAME)}
+                  {t(k.RENAME)}
                 </Button>
                 <Button variant="menu" onClick={handleDelete}>
                   <FiTrash className="h-4 w-4" />
-                  {i18n.t(k.DELETE)}
+                  {t(k.DELETE)}
                 </Button>
                 <Button
                   variant="menu"
                   onClick={() => onDownload(file.document_id)}
                 >
                   <FiDownload className="h-4 w-4" />
-                  {i18n.t(k.DOWNLOAD)}
+                  {t(k.DOWNLOAD)}
                 </Button>
               </div>
             ) : (
               <div className="p-2 text-text-dark space-y-2">
                 <div className="flex items-center space-x-2 mb-4">
                   <h3 className="text-sm  px-2 font-semibold">
-                    {i18n.t(k.MOVE_TO)}{" "}
+                    {t(k.MOVE_TO)}{" "}
                   </h3>
                 </div>
                 <div className="max-h-60 default-scrollbar overflow-y-auto pr-2">
@@ -320,7 +323,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                         folder.id !== -1 && folder.id !== file.folder_id
                     ).length === 0 && (
                       <div className="text-sm text-gray-500 px-2 text-center">
-                        {i18n.t(k.NO_FOLDERS_AVAILABLE_TO_MOVE_T)}
+                        {t(k.NO_FOLDERS_AVAILABLE_TO_MOVE_T)}
                       </div>
                     )}
                   </div>

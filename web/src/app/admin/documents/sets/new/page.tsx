@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookmarkIcon } from "@/components/icons/icons";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
@@ -58,13 +60,14 @@ function Main() {
 }
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
       <BackButton />
 
       <AdminPageTitle
         icon={<BookmarkIcon size={32} />}
-        title={i18n.t(k.NEW_DOCUMENT_SET)}
+        title={t(k.NEW_DOCUMENT_SET)}
       />
 
       <Main />

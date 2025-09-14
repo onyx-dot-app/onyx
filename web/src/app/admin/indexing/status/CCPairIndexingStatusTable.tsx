@@ -1,5 +1,5 @@
-import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
+import { useTranslation } from "@/hooks/useTranslation";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Table,
@@ -58,6 +58,7 @@ function SummaryRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   const activePercentage = (summary.active / summary.count) * 100;
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -82,18 +83,18 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          {i18n.t(k.TOTAL_CONNECTORS)}
+          {t(k.TOTAL_CONNECTORS)}
         </div>
         <div className="text-xl font-semibold">{summary.count}</div>
       </TableCell>
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          {i18n.t(k.ACTIVE_CONNECTORS)}
+          {t(k.ACTIVE_CONNECTORS)}
         </div>
         <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
           {summary.active}
-          {i18n.t(k._6)}
+          {t(k._6)}
           {summary.count}
         </p>
       </TableCell>
@@ -101,11 +102,11 @@ function SummaryRow({
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
           <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            {i18n.t(k.PUBLIC_CONNECTORS)}
+            {t(k.PUBLIC_CONNECTORS)}
           </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
             {summary.public}
-            {i18n.t(k._6)}
+            {t(k._6)}
             {summary.count}
           </p>
         </TableCell>
@@ -113,7 +114,7 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          {i18n.t(k.TOTAL_DOCS_INDEXED)}
+          {t(k.TOTAL_DOCS_INDEXED)}
         </div>
         <div className="text-xl font-semibold">
           {summary.totalDocsIndexed.toLocaleString()}
@@ -122,7 +123,7 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          {i18n.t(k.ERRORS)}
+          {t(k.ERRORS)}
         </div>
 
         <div className="flex items-center text-lg gap-x-1 font-semibold">
@@ -145,6 +146,7 @@ function ConnectorRow({
   invisible?: boolean;
   isEditable: boolean;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -158,14 +160,14 @@ function ConnectorRow({
       ccPairsIndexingStatus.cc_pair_status ===
       ConnectorCredentialPairStatus.DELETING
     ) {
-      return <Badge variant="destructive">{i18n.t(k.DELETING)}</Badge>;
+      return <Badge variant="destructive">{t(k.DELETING)}</Badge>;
     } else if (
       ccPairsIndexingStatus.cc_pair_status ===
       ConnectorCredentialPairStatus.PAUSED
     ) {
       return (
         <Badge icon={FiPauseCircle} variant="paused">
-          {i18n.t(k.PAUSED)}
+          {t(k.PAUSED)}
         </Badge>
       );
     } else if (
@@ -174,11 +176,11 @@ function ConnectorRow({
     ) {
       return (
         <Badge
-          tooltip={i18n.t(k.CONNECTOR_INVALID_STATE_TOOLTIP)}
+          tooltip={t(k.CONNECTOR_INVALID_STATE_TOOLTIP)}
           circle
           variant="invalid"
         >
-          {i18n.t(k.INVALID)}
+          {t(k.INVALID)}
         </Badge>
       );
     }
@@ -188,21 +190,21 @@ function ConnectorRow({
       case "in_progress":
         return (
           <Badge circle variant="success">
-            {i18n.t(k.INDEXING)}
+            {t(k.INDEXING)}
           </Badge>
         );
 
       case "not_started":
         return (
           <Badge circle variant="not_started">
-            {i18n.t(k.SCHEDULED)}
+            {t(k.SCHEDULED)}
           </Badge>
         );
 
       default:
         return (
           <Badge circle variant="success">
-            {i18n.t(k.ACTIVE)}
+            {t(k.ACTIVE)}
           </Badge>
         );
     }
@@ -235,18 +237,18 @@ border border-border dark:border-neutral-700
         <TableCell>
           {ccPairsIndexingStatus.access_type === "public" ? (
             <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
-              {i18n.t(k.PUBLIC)}
+              {t(k.PUBLIC)}
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
             <Badge
               variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}
             >
-              {i18n.t(k.AUTO_SYNC1)}
+              {t(k.AUTO_SYNC1)}
             </Badge>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
-              {i18n.t(k.PRIVATE1)}
+              {t(k.PRIVATE1)}
             </Badge>
           )}
         </TableCell>
@@ -269,7 +271,7 @@ border border-border dark:border-neutral-700
                 />
               </TooltipTrigger>
               <TooltipContent>
-                <p>{i18n.t(k.MANAGE_CONNECTOR)}</p>
+                <p>{t(k.MANAGE_CONNECTOR)}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -286,6 +288,7 @@ export function CCPairIndexingStatusTable({
   ccPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
   editableCcPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
 }) {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -545,11 +548,11 @@ export function CCPairIndexingStatusTable({
             invisible
             ccPairsIndexingStatus={{
               cc_pair_id: 1,
-              name: i18n.t(k.SAMPLE_FILE_CONNECTOR),
+              name: t(k.SAMPLE_FILE_CONNECTOR),
               cc_pair_status: ConnectorCredentialPairStatus.ACTIVE,
               last_status: "success",
               connector: {
-                name: i18n.t(k.SAMPLE_FILE_CONNECTOR),
+                name: t(k.SAMPLE_FILE_CONNECTOR),
                 source: ValidSources.File,
                 input_type: "poll",
                 connector_specific_config: {
@@ -566,7 +569,7 @@ export function CCPairIndexingStatusTable({
               },
               credential: {
                 id: 1,
-                name: i18n.t(k.SAMPLE_CREDENTIAL),
+                name: t(k.SAMPLE_CREDENTIAL),
                 source: ValidSources.File,
                 user_id: "1",
                 time_created: "2023-07-01T12:00:00Z",
@@ -588,14 +591,14 @@ export function CCPairIndexingStatusTable({
           <input
             type="text"
             ref={searchInputRef}
-            placeholder={i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
+            placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
 
           <Button className="h-9" onClick={() => toggleSources()}>
-            {!shouldExpand ? i18n.t(k.COLLAPSE_ALL) : i18n.t(k.EXPAND_ALL)}
+            {!shouldExpand ? t(k.COLLAPSE_ALL) : t(k.EXPAND_ALL)}
           </Button>
 
           <div className="flex items-center gap-2">
@@ -609,14 +612,14 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.accessType &&
                   filterOptions.accessType.length > 0 && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      {i18n.t(k.ACCESS1)} {filterOptions.accessType.join(", ")}
+                      {t(k.ACCESS1)} {filterOptions.accessType.join(", ")}
                     </Badge>
                   )}
 
                 {filterOptions.lastStatus &&
                   filterOptions.lastStatus.length > 0 && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      {i18n.t(k.STATUS2)}{" "}
+                      {t(k.STATUS2)}{" "}
                       {filterOptions.lastStatus
                         .map((s) => s.replace(/_/g, " "))
                         .join(", ")}
@@ -626,7 +629,7 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.docsCountFilter.operator &&
                   filterOptions.docsCountFilter.value !== null && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      {i18n.t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
+                      {t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
                       {filterOptions.docsCountFilter.value}
                     </Badge>
                   )}
@@ -634,8 +637,8 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.docsCountFilter.operator &&
                   filterOptions.docsCountFilter.value === null && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      {i18n.t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
-                      {i18n.t(k.ANY)}
+                      {t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
+                      {t(k.ANY)}
                     </Badge>
                   )}
 
@@ -657,7 +660,7 @@ export function CCPairIndexingStatusTable({
                   }}
                 >
                   <span className="text-red-500 dark:text-red-400">
-                    {i18n.t(k.CLEAR)}
+                    {t(k.CLEAR)}
                   </span>
                 </Badge>
               </div>
@@ -693,14 +696,14 @@ export function CCPairIndexingStatusTable({
                   {connectorsToggled[source] && (
                     <>
                       <TableRow className="border border-border dark:border-neutral-700">
-                        <TableHead>{i18n.t(k.NAME)}</TableHead>
-                        <TableHead>{i18n.t(k.LAST_INDEXED)}</TableHead>
-                        <TableHead>{i18n.t(k.ACTIVITY)}</TableHead>
+                        <TableHead>{t(k.NAME)}</TableHead>
+                        <TableHead>{t(k.LAST_INDEXED)}</TableHead>
+                        <TableHead>{t(k.ACTIVITY)}</TableHead>
                         {isPaidEnterpriseFeaturesEnabled && (
-                          <TableHead>{i18n.t(k.PERMISSIONS)}</TableHead>
+                          <TableHead>{t(k.PERMISSIONS)}</TableHead>
                         )}
-                        <TableHead>{i18n.t(k.TOTAL_DOCS)}</TableHead>
-                        <TableHead>{i18n.t(k.LAST_STATUS)}</TableHead>
+                        <TableHead>{t(k.TOTAL_DOCS)}</TableHead>
+                        <TableHead>{t(k.LAST_STATUS)}</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                       {(sourceMatches ? statuses : matchingConnectors).map(

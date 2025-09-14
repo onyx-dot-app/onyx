@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 import React, { useState, useRef, useEffect } from "react";
 import { ConnectorStatus } from "@/lib/types";
@@ -25,9 +27,11 @@ export const ConnectorMultiSelect = ({
   selectedIds,
   onChange,
   disabled = false,
-  placeholder = i18n.t(k.SEARCH_CONNECTORS_PLACEHOLDER),
+  placeholder,
   showError = false,
 }: ConnectorMultiSelectProps) => {
+  const { t } = useTranslation();
+  const finalPlaceholder = placeholder || t(k.SEARCH_CONNECTORS_PLACEHOLDER);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -108,8 +112,8 @@ export const ConnectorMultiSelect = ({
   };
 
   const effectivePlaceholder = allConnectorsSelected
-    ? i18n.t(k.ALL_CONNECTORS_SELECTED)
-    : placeholder;
+    ? t(k.ALL_CONNECTORS_SELECTED)
+    : finalPlaceholder;
 
   const isInputDisabled = disabled || allConnectorsSelected;
 
@@ -118,7 +122,7 @@ export const ConnectorMultiSelect = ({
       {label && <Label className="text-base font-medium">{label}</Label>}
 
       <p className="text-xs text-neutral-500 ">
-        {i18n.t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S1)}
+        {t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S1)}
       </p>
       <div className="relative">
         <div
@@ -157,8 +161,8 @@ export const ConnectorMultiSelect = ({
             {filteredUnselectedConnectors.length === 0 ? (
               <div className="py-4 text-center text-xs text-neutral-500">
                 {searchQuery
-                  ? i18n.t(k.NO_MATCHING_CONNECTORS_FOUND)
-                  : i18n.t(k.NO_MORE_CONNECTORS_AVAILABLE)}
+                  ? t(k.NO_MATCHING_CONNECTORS_FOUND)
+                  : t(k.NO_MORE_CONNECTORS_AVAILABLE)}
               </div>
             ) : (
               <div>
@@ -217,7 +221,7 @@ export const ConnectorMultiSelect = ({
         </div>
       ) : (
         <div className="mt-3 p-3 border border-dashed border-neutral-300 rounded-md bg-neutral-50 text-neutral-500 text-xs">
-          {i18n.t(k.NO_CONNECTORS_SELECTED_SEARCH)}
+          {t(k.NO_CONNECTORS_SELECTED_SEARCH)}
         </div>
       )}
 

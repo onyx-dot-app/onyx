@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -33,6 +35,7 @@ export const OnyxApiKeyForm = ({
   onCreateApiKey,
   apiKey,
 }: OnyxApiKeyFormProps) => {
+  const { t } = useTranslation();
   const [selectedUser, setSelectedUser] = useState<
     | {
         name: string;
@@ -53,7 +56,7 @@ export const OnyxApiKeyForm = ({
     <Modal onOutsideClick={onClose} width="w-2/6">
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate ? i18n.t(k.UPDATE_API_KEY) : i18n.t(k.CREATE_A_NEW_API_KEY)}
+          {isUpdate ? t(k.UPDATE_API_KEY) : t(k.CREATE_A_NEW_API_KEY)}
         </h2>
 
         <Separator />
@@ -85,8 +88,8 @@ export const OnyxApiKeyForm = ({
             if (response.ok) {
               setPopup({
                 message: isUpdate
-                  ? i18n.t(k.SUCCESSFULLY_UPDATED_API_KEY)
-                  : i18n.t(k.SUCCESSFULLY_CREATED_API_KEY),
+                  ? t(k.SUCCESSFULLY_UPDATED_API_KEY)
+                  : t(k.SUCCESSFULLY_CREATED_API_KEY),
 
                 type: "success",
               });
@@ -99,8 +102,8 @@ export const OnyxApiKeyForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `${i18n.t(k.ERROR_UPDATING_API_KEY)} ${errorMsg}`
-                  : `${i18n.t(k.ERROR_CREATING_API_KEY)} ${errorMsg}`,
+                  ? `${t(k.ERROR_UPDATING_API_KEY)} ${errorMsg}`
+                  : `${t(k.ERROR_CREATING_API_KEY)} ${errorMsg}`,
                 type: "error",
               });
             }
@@ -109,19 +112,19 @@ export const OnyxApiKeyForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form className="w-full overflow-visible">
               <Text className="mb-4 text-lg">
-                {i18n.t(k.CHOOSE_A_MEMORABLE_NAME_FOR_YO)}
+                {t(k.CHOOSE_A_MEMORABLE_NAME_FOR_YO)}
               </Text>
 
               <TextFormField
                 name="name"
-                label={i18n.t(k.API_KEY_NAME_LABEL)}
+                label={t(k.API_KEY_NAME_LABEL)}
                 autoCompleteDisabled={true}
               />
 
               <SelectorFormField
                 // defaultValue is managed by Formik
-                label={i18n.t(k.ROLE_LABEL)}
-                subtext={i18n.t(k.ROLE_SUBTEXT)}
+                label={t(k.ROLE_LABEL)}
+                subtext={t(k.ROLE_SUBTEXT)}
                 name="role"
                 options={[
                   {
@@ -171,7 +174,7 @@ export const OnyxApiKeyForm = ({
               {selectedUser?.name && (
                 <div className="mb-6">
                   <h4 className="text-sm font-medium text-text-700 mb-2">
-                    {i18n.t(k.SELECTED_USERS)}
+                    {t(k.SELECTED_USERS)}
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     <div
@@ -194,7 +197,7 @@ export const OnyxApiKeyForm = ({
                 variant="submit"
                 disabled={isSubmitting}
               >
-                {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
+                {isUpdate ? t(k.UPDATE1) : t(k.CREATE)}
               </Button>
             </Form>
           )}

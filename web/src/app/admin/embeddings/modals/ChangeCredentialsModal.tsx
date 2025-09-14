@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React, { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -32,6 +34,7 @@ export function ChangeCredentialsModal({
   isProxy?: boolean;
   isAzure?: boolean;
 }) {
+  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
   const [apiUrl, setApiUrl] = useState("");
   const [modelName, setModelName] = useState("");
@@ -45,7 +48,7 @@ export function ChangeCredentialsModal({
   const clearFileInput = () => {
     setFileName("");
     if (fileInputRef.current) {
-      fileInputRef.current.value = i18n.t(k._1);
+      fileInputRef.current.value = t(k._1);
     }
   };
 
@@ -65,13 +68,13 @@ export function ChangeCredentialsModal({
           jsonContent = JSON.parse(fileContent);
           setApiKey(JSON.stringify(jsonContent));
         } catch (parseError) {
-          throw new Error(i18n.t(k.FAILED_TO_PARSE_JSON_FILE));
+          throw new Error(t(k.FAILED_TO_PARSE_JSON_FILE));
         }
       } catch (error) {
         setTestError(
           error instanceof Error
             ? error.message
-            : i18n.t(k.UNKNOWN_ERROR_PROCESSING_FILE)
+            : t(k.UNKNOWN_ERROR_PROCESSING_FILE)
         );
         setApiKey("");
         clearFileInput();
@@ -101,9 +104,7 @@ export function ChangeCredentialsModal({
       onDeleted();
     } catch (error) {
       setDeletionError(
-        error instanceof Error
-          ? error.message
-          : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
+        error instanceof Error ? error.message : t(k.UNKNOWN_ERROR_OCCURRED)
       );
     } finally {
       setIsProcessing(false);
@@ -147,7 +148,7 @@ export function ChangeCredentialsModal({
         const errorData = await updateResponse.json();
         throw new Error(
           errorData.detail ||
-            `${i18n.t(k.FAILED_TO_UPDATE_PROVIDER_CHECK_API)} ${
+            `${t(k.FAILED_TO_UPDATE_PROVIDER_CHECK_API)} ${
               isProxy ? "API URL" : "API key"
             }`
         );
@@ -156,9 +157,7 @@ export function ChangeCredentialsModal({
       onConfirm();
     } catch (error) {
       setTestError(
-        error instanceof Error
-          ? error.message
-          : i18n.t(k.UNKNOWN_ERROR_OCCURRED)
+        error instanceof Error ? error.message : t(k.UNKNOWN_ERROR_OCCURRED)
       );
     }
   };
@@ -166,8 +165,8 @@ export function ChangeCredentialsModal({
     <Modal
       width="max-w-3xl"
       icon={provider.icon}
-      title={`${i18n.t(k.MODIFY_YOUR)} ${provider.provider_type} ${
-        isProxy ? i18n.t(k.CONFIGURATION) : i18n.t(k.KEY)
+      title={`${t(k.MODIFY_YOUR)} ${provider.provider_type} ${
+        isProxy ? t(k.CONFIGURATION) : t(k.KEY)
       }`}
       onOutsideClick={onCancel}
     >
@@ -175,15 +174,15 @@ export function ChangeCredentialsModal({
         {!isAzure && (
           <>
             <p className="mb-4">
-              {i18n.t(k.YOU_CAN_MODIFY_YOUR_CONFIGURAT)}
-              {isProxy ? i18n.t(k.OR_API_URL) : i18n.t(k._8)}
+              {t(k.YOU_CAN_MODIFY_YOUR_CONFIGURAT)}
+              {isProxy ? t(k.OR_API_URL) : t(k._8)}
             </p>
 
             <div className="mb-4 flex flex-col gap-y-2">
-              <Label className="mt-2">{i18n.t(k.API_KEY)}</Label>
+              <Label className="mt-2">{t(k.API_KEY)}</Label>
               {useFileUpload ? (
                 <>
-                  <Label className="mt-2">{i18n.t(k.UPLOAD_JSON_FILE)}</Label>
+                  <Label className="mt-2">{t(k.UPLOAD_JSON_FILE)}</Label>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -194,7 +193,7 @@ export function ChangeCredentialsModal({
 
                   {fileName && (
                     <p>
-                      {i18n.t(k.UPLOADED_FILE)} {fileName}
+                      {t(k.UPLOADED_FILE)} {fileName}
                     </p>
                   )}
                 </>
@@ -212,14 +211,14 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiKey}
                     onChange={(e: any) => setApiKey(e.target.value)}
-                    placeholder={i18n.t(k.PASTE_YOUR_API_KEY_HERE)}
+                    placeholder={t(k.PASTE_YOUR_API_KEY_HERE)}
                   />
                 </>
               )}
 
               {isProxy && (
                 <>
-                  <Label className="mt-2">{i18n.t(k.API_URL)}</Label>
+                  <Label className="mt-2">{t(k.API_URL)}</Label>
 
                   <input
                     className={`
@@ -233,13 +232,13 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiUrl}
                     onChange={(e: any) => setApiUrl(e.target.value)}
-                    placeholder={i18n.t(k.PASTE_YOUR_API_URL_HERE)}
+                    placeholder={t(k.PASTE_YOUR_API_URL_HERE)}
                   />
 
                   {deletionError && (
                     <Callout
                       type="danger"
-                      title={i18n.t(k.ERROR_TITLE)}
+                      title={t(k.ERROR_TITLE)}
                       className="mt-4"
                     >
                       {deletionError}
@@ -247,8 +246,8 @@ export function ChangeCredentialsModal({
                   )}
 
                   <div>
-                    <Label className="mt-2">{i18n.t(k.TEST_MODEL)}</Label>
-                    <p>{i18n.t(k.SINCE_YOU_ARE_USING_A_LITELLM)}</p>
+                    <Label className="mt-2">{t(k.TEST_MODEL)}</Label>
+                    <p>{t(k.SINCE_YOU_ARE_USING_A_LITELLM)}</p>
                   </div>
                   <input
                     className={`
@@ -262,7 +261,7 @@ export function ChangeCredentialsModal({
                  `}
                     value={modelName}
                     onChange={(e: any) => setModelName(e.target.value)}
-                    placeholder={i18n.t(k.PASTE_YOUR_MODEL_NAME_HERE)}
+                    placeholder={t(k.PASTE_YOUR_MODEL_NAME_HERE)}
                   />
                 </>
               )}
@@ -270,7 +269,7 @@ export function ChangeCredentialsModal({
               {testError && (
                 <Callout
                   type="danger"
-                  title={i18n.t(k.ERROR_TITLE)}
+                  title={t(k.ERROR_TITLE)}
                   className="my-4"
                 >
                   {testError}
@@ -283,7 +282,7 @@ export function ChangeCredentialsModal({
                 onClick={() => handleSubmit()}
                 disabled={!apiKey}
               >
-                {i18n.t(k.UPDATE_CONFIGURATION)}
+                {t(k.UPDATE_CONFIGURATION)}
               </Button>
 
               <Separator />
@@ -292,19 +291,19 @@ export function ChangeCredentialsModal({
         )}
 
         <Text className="mt-4 font-bold text-lg mb-2">
-          {i18n.t(k.YOU_CAN_DELETE_YOUR_CONFIGURAT)}
+          {t(k.YOU_CAN_DELETE_YOUR_CONFIGURAT)}
         </Text>
-        <Text className="mb-2">{i18n.t(k.THIS_IS_ONLY_POSSIBLE_IF_YOU_H)}</Text>
+        <Text className="mb-2">{t(k.THIS_IS_ONLY_POSSIBLE_IF_YOU_H)}</Text>
 
         <Button
           className="mr-auto"
           onClick={handleDelete}
           variant="destructive"
         >
-          {i18n.t(k.DELETE_CONFIGURATION)}
+          {t(k.DELETE_CONFIGURATION)}
         </Button>
         {deletionError && (
-          <Callout type="danger" title={i18n.t(k.ERROR_TITLE)} className="mt-4">
+          <Callout type="danger" title={t(k.ERROR_TITLE)} className="mt-4">
             {deletionError}
           </Callout>
         )}

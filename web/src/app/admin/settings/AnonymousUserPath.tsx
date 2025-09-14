@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import useSWR from "swr";
@@ -17,6 +17,7 @@ export function AnonymousUserPath({
 }: {
   setPopup: (popup: PopupSpec) => void;
 }) {
+  const { t } = useTranslation();
   const settings = useContext(SettingsContext);
   const [customPath, setCustomPath] = useState<string | null>(null);
 
@@ -43,7 +44,7 @@ export function AnonymousUserPath({
     try {
       if (!customPath) {
         setPopup({
-          message: i18n.t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
+          message: t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
           type: "error",
         });
         return;
@@ -51,7 +52,7 @@ export function AnonymousUserPath({
       // Validate custom path
       if (!customPath.trim()) {
         setPopup({
-          message: i18n.t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
+          message: t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
           type: "error",
         });
         return;
@@ -59,7 +60,7 @@ export function AnonymousUserPath({
 
       if (!/^[a-zA-Z0-9-]+$/.test(customPath)) {
         setPopup({
-          message: i18n.t(k.CUSTOM_PATH_CAN_ONLY_CONTAIN_L),
+          message: t(k.CUSTOM_PATH_CAN_ONLY_CONTAIN_L),
           type: "error",
         });
         return;
@@ -78,19 +79,19 @@ export function AnonymousUserPath({
       if (!response.ok) {
         const detail = await response.json();
         setPopup({
-          message: detail.detail || i18n.t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH),
+          message: detail.detail || t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH),
           type: "error",
         });
         return;
       }
       mutate(); // Revalidate the SWR cache
       setPopup({
-        message: i18n.t(k.ANONYMOUS_USER_PATH_UPDATED_SU),
+        message: t(k.ANONYMOUS_USER_PATH_UPDATED_SU),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: `${i18n.t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH)} ${error}`,
+        message: `${t(k.FAILED_TO_UPDATE_ANONYMOUS_PATH)} ${error}`,
         type: "error",
       });
       console.error("Error updating anonymous user path:", error);
@@ -100,14 +101,14 @@ export function AnonymousUserPath({
   return (
     <div className="mt-4 ml-6 max-w-xl p-6 bg-white shadow-lg border border-background-200 rounded-lg">
       <h4 className="font-semibold text-lg text-text-800 mb-3">
-        {i18n.t(k.ANONYMOUS_USER_ACCESS)}
+        {t(k.ANONYMOUS_USER_ACCESS)}
       </h4>
       <p className="text-text-600 text-sm mb-4">
-        {i18n.t(k.ENABLE_THIS_TO_ALLOW_NON_AUTHE)}
+        {t(k.ENABLE_THIS_TO_ALLOW_NON_AUTHE)}
         {anonymousUserPath
-          ? i18n.t(k.CUSTOMIZE_THE_ACCESS_PATH_FOR)
-          : i18n.t(k.SET_A_CUSTOM_ACCESS_PATH_FOR_A)}{" "}
-        {i18n.t(k.ANONYMOUS_USERS_WILL_ONLY_BE_A)}
+          ? t(k.CUSTOMIZE_THE_ACCESS_PATH_FOR)
+          : t(k.SET_A_CUSTOM_ACCESS_PATH_FOR_A)}{" "}
+        {t(k.ANONYMOUS_USERS_WILL_ONLY_BE_A)}
       </p>
       {isLoading ? (
         <ThreeDotsLoader />
@@ -116,12 +117,12 @@ export function AnonymousUserPath({
           <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
             <span className="inline-flex items-center rounded-l-md border border-r-0 border-background-300 bg-background-50 px-3 text-text-500 sm:text-sm h-10">
               {settings?.webDomain}
-              {i18n.t(k.ANONYMOUS)}
+              {t(k.ANONYMOUS)}
             </span>
             <Input
               type="text"
               className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-background-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
-              placeholder={i18n.t(k.YOUR_PATH_PLACEHOLDER)}
+              placeholder={t(k.YOUR_PATH_PLACEHOLDER)}
               value={customPath ?? anonymousUserPath ?? ""}
               onChange={(e) => setCustomPath(e.target.value)}
             />
@@ -133,7 +134,7 @@ export function AnonymousUserPath({
               size="sm"
               className="h-10 px-4"
             >
-              {i18n.t(k.UPDATE_PATH)}
+              {t(k.UPDATE_PATH)}
             </Button>
             <Button
               variant="outline"
@@ -144,13 +145,13 @@ export function AnonymousUserPath({
                   `${settings?.webDomain}/anonymous/${anonymousUserPath}`
                 );
                 setPopup({
-                  message: i18n.t(k.INVITE_LINK_COPIED),
+                  message: t(k.INVITE_LINK_COPIED),
                   type: "success",
                 });
               }}
             >
               <ClipboardIcon className="h-4 w-4" />
-              {i18n.t(k.COPY)}
+              {t(k.COPY)}
             </Button>
           </div>
         </div>

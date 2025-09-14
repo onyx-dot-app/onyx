@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import { updateUserGroup } from "./lib";
@@ -20,12 +22,13 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
   onClose,
   setPopup,
 }) => {
+  const { t } = useTranslation();
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   return (
     <Modal
       className="max-w-xl overflow-visible"
-      title={i18n.t(k.ADD_NEW_USER)}
+      title={t(k.ADD_NEW_USER)}
       onOutsideClick={() => onClose()}
     >
       <div className="flex flex-col">
@@ -51,7 +54,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
             });
             if (response.ok) {
               setPopup({
-                message: i18n.t(k.SUCCESSFULLY_ADDED_USERS_TO_GR),
+                message: t(k.SUCCESSFULLY_ADDED_USERS_TO_GR),
                 type: "success",
               });
               onClose();
@@ -59,9 +62,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: `${i18n.t(
-                  k.FAILED_TO_ADD_USERS_TO_GROUP
-                )} ${errorMsg}`,
+                message: `${t(k.FAILED_TO_ADD_USERS_TO_GROUP)} ${errorMsg}`,
                 type: "error",
               });
               onClose();

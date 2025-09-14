@@ -3,8 +3,11 @@ import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelecto
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
-import i18n from "@/i18n/init";
+("use client");
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../i18n/keys";
+import i18n from "../../i18n/init";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useEffect } from "react";
 import { FiPlusCircle } from "react-icons/fi";
@@ -42,6 +44,7 @@ export function SimplifiedChatInputBar({
   availableDocumentSets,
   availableTags,
 }: ChatInputBarProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -170,7 +173,7 @@ export function SimplifiedChatInputBar({
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder={i18n.t(k.ASK_ME_ANYTHING)}
+          placeholder={t(k.ASK_ME_ANYTHING)}
           value={message}
           onKeyDown={(event) => {
             if (
@@ -190,7 +193,7 @@ export function SimplifiedChatInputBar({
         <div className="flex items-center space-x-3 mr-12 px-4 pb-2">
           <ChatInputOption
             flexPriority="stiff"
-            label={i18n.t(k.FILE_LABEL)}
+            label={t(k.FILE_LABEL)}
             name="File"
             Icon={FiPlusCircle}
             onClick={() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../../i18n/keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import {
@@ -47,7 +47,7 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
   if (knowledgeMapsError || ccPairsError || !ccPairs) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.FAILED_TO_FETCH_KNOWLEDGE_MAP)}
+        errorTitle={t(k.FAILED_TO_FETCH_KNOWLEDGE_MAP)}
         errorMsg={knowledgeMapsError}
       />
     );
@@ -60,8 +60,8 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
   if (!knowledgeMap) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.KNOWLEDGE_MAP_NOT_FOUND)}
-        errorMsg={`${i18n.t(
+        errorTitle={t(k.KNOWLEDGE_MAP_NOT_FOUND)}
+        errorMsg={`${t(
           k.KNOWLEDGE_MAP_NOT_FOUND_WITH_ID
         )} ${knowledgeMapId}`}
       />
@@ -103,8 +103,8 @@ export default function Page(props: {
   if (!knowledgeMapId || typeof knowledgeMapId !== "string") {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.INVALID_KNOWLEDGE_MAP_ID)}
-        errorMsg={i18n.t(k.KNOWLEDGE_MAP_ID_MUST_BE_STRING)}
+        errorTitle={t(k.INVALID_KNOWLEDGE_MAP_ID)}
+        errorMsg={t(k.KNOWLEDGE_MAP_ID_MUST_BE_STRING)}
       />
     );
   }
@@ -114,8 +114,8 @@ export default function Page(props: {
   if (isNaN(knowledgeMapIdNumber)) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.INVALID_KNOWLEDGE_MAP_ID)}
-        errorMsg={`${i18n.t(
+        errorTitle={t(k.INVALID_KNOWLEDGE_MAP_ID)}
+        errorMsg={`${t(
           k.KNOWLEDGE_MAP_ID_NOT_NUMBER
         )} "${knowledgeMapId}"`}
       />

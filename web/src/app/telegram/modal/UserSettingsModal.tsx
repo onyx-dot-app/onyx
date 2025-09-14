@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -45,6 +47,7 @@ export function UserSettingsModal({
   onClose: () => void;
   defaultModel: string | null;
 }) {
+  const { t } = useTranslation();
   const {
     refreshUser,
     user,
@@ -150,17 +153,17 @@ export function UserSettingsModal({
           setCurrentLlm(destructureValue(defaultModel));
         }
         setPopup({
-          message: i18n.t(k.DEFAULT_MODEL_UPDATED_SUCCESS),
+          message: t(k.DEFAULT_MODEL_UPDATED_SUCCESS),
           type: "success",
         });
         refreshUser();
         router.refresh();
       } else {
-        throw new Error(i18n.t(k.FAILED_TO_UPDATE_DEFAULT_MODEL));
+        throw new Error(t(k.FAILED_TO_UPDATE_DEFAULT_MODEL));
       }
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_UPDATE_DEFAULT_MODEL),
+        message: t(k.FAILED_TO_UPDATE_DEFAULT_MODEL),
         type: "error",
       });
     }
@@ -172,7 +175,7 @@ export function UserSettingsModal({
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      setPopup({ message: i18n.t(k.PASSWORDS_DO_NOT_MATCH), type: "error" });
+      setPopup({ message: t(k.PASSWORDS_DO_NOT_MATCH), type: "error" });
       return;
     }
 
@@ -192,7 +195,7 @@ export function UserSettingsModal({
 
       if (response.ok) {
         setPopup({
-          message: i18n.t(k.PASSWORD_CHANGED_SUCCESS),
+          message: t(k.PASSWORD_CHANGED_SUCCESS),
           type: "success",
         });
         setCurrentPassword("");
@@ -201,13 +204,13 @@ export function UserSettingsModal({
       } else {
         const errorData = await response.json();
         setPopup({
-          message: errorData.detail || i18n.t(k.FAILED_TO_CHANGE_PASSWORD),
+          message: errorData.detail || t(k.FAILED_TO_CHANGE_PASSWORD),
           type: "error",
         });
       }
     } catch (error) {
       setPopup({
-        message: i18n.t(k.ERROR_CHANGING_PASSWORD),
+        message: t(k.ERROR_CHANGING_PASSWORD),
         type: "error",
       });
     } finally {
@@ -222,17 +225,17 @@ export function UserSettingsModal({
       const response = await deleteAllChatSessions();
       if (response.ok) {
         setPopup({
-          message: i18n.t(k.ALL_CHAT_SESSIONS_DELETED),
+          message: t(k.ALL_CHAT_SESSIONS_DELETED),
           type: "success",
         });
         refreshChatSessions();
         router.push("/chat");
       } else {
-        throw new Error(i18n.t(k.FAILED_TO_DELETE_ALL_SESSIONS));
+        throw new Error(t(k.FAILED_TO_DELETE_ALL_SESSIONS));
       }
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_DELETE_ALL_SESSIONS),
+        message: t(k.FAILED_TO_DELETE_ALL_SESSIONS),
         type: "error",
       });
     } finally {
@@ -249,7 +252,7 @@ export function UserSettingsModal({
       }`}
     >
       <div className="p-2">
-        <h2 className="text-xl font-bold mb-4">{i18n.t(k.USER_SETTINGS)}</h2>
+        <h2 className="text-xl font-bold mb-4">{t(k.USER_SETTINGS)}</h2>
         <Separator className="mb-6" />
         <div className="flex">
           {showPasswordSection && (
@@ -265,7 +268,7 @@ export function UserSettingsModal({
                       }`}
                       onClick={() => setActiveSection("settings")}
                     >
-                      {i18n.t(k.SETTINGS)}
+                      {t(k.SETTINGS)}
                     </button>
                   </li>
                   <li>
@@ -277,7 +280,7 @@ export function UserSettingsModal({
                       }`}
                       onClick={() => setActiveSection("password")}
                     >
-                      {i18n.t(k.PASSWORD1)}
+                      {t(k.PASSWORD1)}
                     </button>
                   </li>
                 </ul>
@@ -288,7 +291,7 @@ export function UserSettingsModal({
             {activeSection === "settings" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium">{i18n.t(k.THEME)}</h3>
+                  <h3 className="text-lg font-medium">{t(k.THEME)}</h3>
                   <Select
                     value={selectedTheme}
                     onValueChange={(value) => {
@@ -298,7 +301,7 @@ export function UserSettingsModal({
                   >
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue
-                        placeholder={i18n.t(k.SELECT_THEME_PLACEHOLDER)}
+                        placeholder={t(k.SELECT_THEME_PLACEHOLDER)}
                       />
                     </SelectTrigger>
                     <SelectContent>
@@ -306,28 +309,24 @@ export function UserSettingsModal({
                         value="system"
                         icon={<Monitor className="h-4 w-4" />}
                       >
-                        {i18n.t(k.SYSTEM)}
+                        {t(k.SYSTEM)}
                       </SelectItem>
                       <SelectItem
                         value="light"
                         icon={<Sun className="h-4 w-4" />}
                       >
-                        {i18n.t(k.LIGHT)}
+                        {t(k.LIGHT)}
                       </SelectItem>
                       <SelectItem icon={<Moon />} value="dark">
-                        {i18n.t(k.DARK)}
+                        {t(k.DARK)}
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium">
-                      {i18n.t(k.AUTO_SCROLL)}
-                    </h3>
-                    <SubLabel>
-                      {i18n.t(k.AUTOMATICALLY_SCROLL_TO_NEW_CO)}
-                    </SubLabel>
+                    <h3 className="text-lg font-medium">{t(k.AUTO_SCROLL)}</h3>
+                    <SubLabel>{t(k.AUTOMATICALLY_SCROLL_TO_NEW_CO)}</SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences.auto_scroll}
@@ -339,11 +338,9 @@ export function UserSettingsModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-medium">
-                      {i18n.t(k.TEMPERATURE_OVERRIDE)}
+                      {t(k.TEMPERATURE_OVERRIDE)}
                     </h3>
-                    <SubLabel>
-                      {i18n.t(k.SET_THE_TEMPERATURE_FOR_THE_LL)}
-                    </SubLabel>
+                    <SubLabel>{t(k.SET_THE_TEMPERATURE_FOR_THE_LL)}</SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences.temperature_override_enabled}
@@ -355,11 +352,9 @@ export function UserSettingsModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-medium">
-                      {i18n.t(k.PROMPT_SHORTCUTS)}
+                      {t(k.PROMPT_SHORTCUTS)}
                     </h3>
-                    <SubLabel>
-                      {i18n.t(k.ENABLE_KEYBOARD_SHORTCUTS_FOR)}
-                    </SubLabel>
+                    <SubLabel>{t(k.ENABLE_KEYBOARD_SHORTCUTS_FOR)}</SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences?.shortcut_enabled}
@@ -369,9 +364,7 @@ export function UserSettingsModal({
                   />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium">
-                    {i18n.t(k.DEFAULT_MODEL)}
-                  </h3>
+                  <h3 className="text-lg font-medium">{t(k.DEFAULT_MODEL)}</h3>
                   <LLMSelector
                     userSettings
                     llmProviders={llmProviders}
@@ -404,7 +397,7 @@ export function UserSettingsModal({
                   {!showDeleteConfirmation ? (
                     <div className="space-y-3">
                       <p className="text-sm text-neutral-600 ">
-                        {i18n.t(k.THIS_WILL_PERMANENTLY_DELETE_A)}
+                        {t(k.THIS_WILL_PERMANENTLY_DELETE_A)}
                       </p>
                       <Button
                         variant="destructive"
@@ -412,13 +405,13 @@ export function UserSettingsModal({
                         onClick={() => setShowDeleteConfirmation(true)}
                       >
                         <FiTrash2 className="mr-2" size={14} />
-                        {i18n.t(k.DELETE_ALL_CHATS)}
+                        {t(k.DELETE_ALL_CHATS)}
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-neutral-600 ">
-                        {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET4)}
+                        {t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET4)}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -429,8 +422,8 @@ export function UserSettingsModal({
                           disabled={isDeleteAllLoading}
                         >
                           {isDeleteAllLoading
-                            ? i18n.t(k.DELETING1)
-                            : i18n.t(k.YES_DELETE_ALL)}
+                            ? t(k.DELETING1)
+                            : t(k.YES_DELETE_ALL)}
                         </Button>
                         <Button
                           variant="outline"
@@ -438,7 +431,7 @@ export function UserSettingsModal({
                           onClick={() => setShowDeleteConfirmation(false)}
                           disabled={isDeleteAllLoading}
                         >
-                          {i18n.t(k.CANCEL)}
+                          {t(k.CANCEL)}
                         </Button>
                       </div>
                     </div>
@@ -450,16 +443,14 @@ export function UserSettingsModal({
               <div className="space-y-6">
                 <div className="space-y-2">
                   <h3 className="text-xl font-medium">
-                    {i18n.t(k.CHANGE_PASSWORD)}
+                    {t(k.CHANGE_PASSWORD)}
                   </h3>
-                  <SubLabel>
-                    {i18n.t(k.ENTER_YOUR_CURRENT_PASSWORD_AN)}
-                  </SubLabel>
+                  <SubLabel>{t(k.ENTER_YOUR_CURRENT_PASSWORD_AN)}</SubLabel>
                 </div>
                 <form onSubmit={handleChangePassword} className="w-full">
                   <div className="w-full">
                     <label htmlFor="currentPassword" className="block mb-1">
-                      {i18n.t(k.CURRENT_PASSWORD)}
+                      {t(k.CURRENT_PASSWORD)}
                     </label>
                     <Input
                       id="currentPassword"
@@ -472,7 +463,7 @@ export function UserSettingsModal({
                   </div>
                   <div className="w-full">
                     <label htmlFor="newPassword" className="block mb-1">
-                      {i18n.t(k.NEW_PASSWORD2)}
+                      {t(k.NEW_PASSWORD2)}
                     </label>
                     <Input
                       id="newPassword"
@@ -485,7 +476,7 @@ export function UserSettingsModal({
                   </div>
                   <div className="w-full">
                     <label htmlFor="confirmPassword" className="block mb-1">
-                      {i18n.t(k.CONFIRM_NEW_PASSWORD)}
+                      {t(k.CONFIRM_NEW_PASSWORD)}
                     </label>
                     <Input
                       id="confirmPassword"
@@ -497,7 +488,7 @@ export function UserSettingsModal({
                     />
                   </div>
                   <Button type="submit" disabled={isLoading} className="w-full">
-                    {isLoading ? i18n.t(k.CHANGING) : i18n.t(k.CHANGE_PASSWORD)}
+                    {isLoading ? t(k.CHANGING) : t(k.CHANGE_PASSWORD)}
                   </Button>
                 </form>
               </div>

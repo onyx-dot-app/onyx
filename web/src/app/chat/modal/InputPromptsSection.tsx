@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
@@ -35,6 +37,7 @@ export function InputPromptsSection({
   refreshInputPrompts,
   setPopup,
 }: InputPromptsSectionProps) {
+  const { t } = useTranslation();
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<InputPrompt | null>(null);
   const [newPrompt, setNewPrompt] = useState<Partial<InputPrompt>>({});
@@ -64,15 +67,15 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error(i18n.t(k.FAILED_TO_UPDATE_PROMPT));
+        throw new Error(t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       setEditingPromptId(null);
       setEditedPrompt(null);
       refreshInputPrompts();
-      setPopup({ message: i18n.t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
+      setPopup({ message: t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: i18n.t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
+      setPopup({ message: t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
@@ -83,14 +86,14 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error(i18n.t(k.FAILED_TO_DELETE_PROMPT));
+        throw new Error(t(k.FAILED_TO_DELETE_PROMPT));
       }
 
       refreshInputPrompts();
-      setPopup({ message: i18n.t(k.PROMPT_DELETED_SUCCESS), type: "success" });
+      setPopup({ message: t(k.PROMPT_DELETED_SUCCESS), type: "success" });
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_DELETE_PROMPT_ERROR),
+        message: t(k.FAILED_TO_DELETE_PROMPT_ERROR),
         type: "error",
       });
     }
@@ -105,16 +108,16 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error(i18n.t(k.FAILED_TO_CREATE_PROMPT_ERROR));
+        throw new Error(t(k.FAILED_TO_CREATE_PROMPT_ERROR));
       }
 
       setNewPrompt({});
       setIsCreatingNew(false);
       refreshInputPrompts();
-      setPopup({ message: i18n.t(k.PROMPT_CREATED_SUCCESS), type: "success" });
+      setPopup({ message: t(k.PROMPT_CREATED_SUCCESS), type: "success" });
     } catch (error) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_CREATE_PROMPT_MESSAGE),
+        message: t(k.FAILED_TO_CREATE_PROMPT_MESSAGE),
         type: "error",
       });
     }
@@ -129,20 +132,20 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error(i18n.t(k.FAILED_TO_UPDATE_PROMPT));
+        throw new Error(t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       refreshInputPrompts();
-      setPopup({ message: i18n.t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
+      setPopup({ message: t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: i18n.t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
+      setPopup({ message: t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">{i18n.t(k.INPUT_PROMPTS)}</h3>
+        <h3 className="text-lg font-semibold">{t(k.INPUT_PROMPTS)}</h3>
         <Button
           variant="ghost"
           size="sm"
@@ -161,10 +164,10 @@ export function InputPromptsSection({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-1/4">{i18n.t(k.PROMPT1)}</TableHead>
-                <TableHead className="w-1/2">{i18n.t(k.CONTENT1)}</TableHead>
-                <TableHead className="w-1/12">{i18n.t(k.ACTIVE)}</TableHead>
-                <TableHead className="w-1/6">{i18n.t(k.ACTIONS)}</TableHead>
+                <TableHead className="w-1/4">{t(k.PROMPT1)}</TableHead>
+                <TableHead className="w-1/2">{t(k.CONTENT1)}</TableHead>
+                <TableHead className="w-1/12">{t(k.ACTIVE)}</TableHead>
+                <TableHead className="w-1/6">{t(k.ACTIONS)}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -259,7 +262,7 @@ export function InputPromptsSection({
           {isCreatingNew ? (
             <div className="space-y-2 border p-4 rounded-md">
               <Input
-                placeholder={i18n.t(k.NEW_PROMPT_PLACEHOLDER)}
+                placeholder={t(k.NEW_PROMPT_PLACEHOLDER)}
                 value={newPrompt.prompt || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -267,7 +270,7 @@ export function InputPromptsSection({
               />
 
               <Textarea
-                placeholder={i18n.t(k.NEW_CONTENT_PLACEHOLDER)}
+                placeholder={t(k.NEW_CONTENT_PLACEHOLDER)}
                 value={newPrompt.content || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, content: e.target.value })
@@ -276,16 +279,16 @@ export function InputPromptsSection({
               />
 
               <div className="flex space-x-2">
-                <Button onClick={handleCreate}>{i18n.t(k.CREATE1)}</Button>
+                <Button onClick={handleCreate}>{t(k.CREATE1)}</Button>
                 <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
-                  {i18n.t(k.CANCEL)}
+                  {t(k.CANCEL)}
                 </Button>
               </div>
             </div>
           ) : (
             <Button onClick={() => setIsCreatingNew(true)} className="w-full">
               <PlusIcon size={14} className="mr-2" />
-              {i18n.t(k.CREATE_NEW_PROMPT)}
+              {t(k.CREATE_NEW_PROMPT)}
             </Button>
           )}
         </>

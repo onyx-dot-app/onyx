@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { GroupsIcon } from "@/components/icons/icons";
@@ -40,17 +40,15 @@ const Main = () => {
   }
 
   if (error || !data) {
-    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
+    return <div className="text-red-600">{t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   if (ccPairsError || !ccPairs) {
-    return (
-      <div className="text-red-600">{i18n.t(k.ERROR_LOADING_CONNECTORS)}</div>
-    );
+    return <div className="text-red-600">{t(k.ERROR_LOADING_CONNECTORS)}</div>;
   }
 
   if (usersError || !users) {
-    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
+    return <div className="text-red-600">{t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   return (
@@ -59,7 +57,7 @@ const Main = () => {
       {isAdmin && (
         <CreateButton
           onClick={() => setShowForm(true)}
-          text={i18n.t(k.CREATE_NEW_GROUP)}
+          text={t(k.CREATE_NEW_GROUP)}
         />
       )}
       {data.length > 0 && (
@@ -87,10 +85,11 @@ const Main = () => {
 };
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title={i18n.t(k.USER_GROUP_MANAGEMENT)}
+        title={t(k.USER_GROUP_MANAGEMENT)}
         icon={<GroupsIcon size={32} />}
       />
 

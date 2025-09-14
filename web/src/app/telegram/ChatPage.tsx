@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import {
@@ -56,6 +56,7 @@ import {
 } from "./lib";
 import {
   Dispatch,
+  RefObject,
   SetStateAction,
   use,
   useCallback,
@@ -174,6 +175,7 @@ export function ChatPage({
   initialFolders?: any;
   initialFiles?: any;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1135,7 +1137,7 @@ export function ChatPage({
 
   const continueGenerating = () => {
     onSubmit({
-      messageOverride: i18n.t(k.CONTINUE_GENERATING_PICK_UP_E),
+      messageOverride: t(k.CONTINUE_GENERATING_PICK_UP_E),
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
@@ -1146,9 +1148,9 @@ export function ChatPage({
 
   useScrollonStream({
     chatState: currentSessionChatState,
-    scrollableDivRef,
+    scrollableDivRef: scrollableDivRef as RefObject<HTMLDivElement>,
     scrollDist,
-    endDivRef,
+    endDivRef: endDivRef as RefObject<HTMLDivElement>,
     debounceNumber,
     mobile: settings?.isMobile,
     enableAutoScroll: autoScrollEnabled,
@@ -1223,12 +1225,12 @@ export function ChatPage({
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
         setPopup({
-          message: i18n.t(k.PLEASE_WAIT_FOR_THE_CONTENT_TO),
+          message: t(k.PLEASE_WAIT_FOR_THE_CONTENT_TO),
           type: "error",
         });
       } else {
         setPopup({
-          message: i18n.t(k.PLEASE_WAIT_FOR_THE_RESPONSE_T),
+          message: t(k.PLEASE_WAIT_FOR_THE_RESPONSE_T),
           type: "error",
         });
       }
@@ -1301,7 +1303,7 @@ export function ChatPage({
 
     if (!messageToResend && messageIdToResend !== undefined) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_RE_SEND_MESSAGE_PL),
+        message: t(k.FAILED_TO_RE_SEND_MESSAGE_PL),
 
         type: "error",
       });
@@ -1806,7 +1808,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
-      console.log(i18n.t(k.ERROR), e);
+      console.log(t(k.ERROR), e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1896,14 +1898,14 @@ export function ChatPage({
 
     if (response.ok) {
       setPopup({
-        message: i18n.t(k.THANKS_FOR_YOUR_FEEDBACK),
+        message: t(k.THANKS_FOR_YOUR_FEEDBACK),
         type: "success",
       });
     } else {
       const responseJson = await response.json();
       const errorMsg = responseJson.detail || responseJson.message;
       setPopup({
-        message: `${i18n.t(k.FAILED_TO_SEND_FEEDBACK)} ${errorMsg}`,
+        message: `${t(k.FAILED_TO_SEND_FEEDBACK)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -1924,7 +1926,7 @@ export function ChatPage({
     if (imageFiles.length > 0 && !llmAcceptsImages) {
       setPopup({
         type: "error",
-        message: i18n.t(k.THE_CURRENT_MODEL_DOES_NOT_SUP),
+        message: t(k.THE_CURRENT_MODEL_DOES_NOT_SUP),
       });
       return;
     }
@@ -1980,7 +1982,7 @@ export function ChatPage({
 
   useSidebarVisibility({
     sidebarVisible,
-    sidebarElementRef,
+    sidebarElementRef: sidebarElementRef as RefObject<HTMLDivElement>,
     showDocSidebar: showHistorySidebar,
     setShowDocSidebar: setShowHistorySidebar,
     setToggled: removeToggle,
@@ -2076,16 +2078,16 @@ export function ChatPage({
         });
 
         if (!response.ok) {
-          throw new Error(i18n.t(k.FAILED_TO_CREATE_CHAT_FROM_SLACK));
+          throw new Error(t(k.FAILED_TO_CREATE_CHAT_FROM_SLACK));
         }
 
         const data = await response.json();
 
         router?.push(data.redirect_url);
       } catch (error) {
-        console.error(i18n.t(k.ERROR_LOADING_CHAT_FROM_SLACK), error);
+        console.error(t(k.ERROR_LOADING_CHAT_FROM_SLACK), error);
         setPopup({
-          message: i18n.t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
+          message: t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
           type: "error",
         });
       }
@@ -2172,7 +2174,7 @@ export function ChatPage({
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
       setPopup({
-        message: i18n.t(k.NO_PREVIOUSLY_SUBMITTED_USER_M),
+        message: t(k.NO_PREVIOUSLY_SUBMITTED_USER_M),
         type: "error",
       });
       return;
@@ -2289,7 +2291,7 @@ export function ChatPage({
       {toggleDocSelection && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
-          buttonContent={i18n.t(k.SET_AS_CONTEXT)}
+          buttonContent={t(k.SET_AS_CONTEXT)}
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
@@ -2308,7 +2310,7 @@ export function ChatPage({
           <Modal
             hideDividerForTitle
             onOutsideClick={() => setDocumentSidebarVisible(false)}
-            title={i18n.t(k.SOURCES)}
+            title={t(k.SOURCES)}
           >
             <DocumentResults
               agenticMessage={
@@ -2579,25 +2581,25 @@ export function ChatPage({
                                 </div>
 
                                 <div className="text-4xl text-text font-normal text-center">
-                                  {i18n.t(k.TELEGRAM_ASSISTANTS_TITLE)}
+                                  {t(k.TELEGRAM_ASSISTANTS_TITLE)}
                                 </div>
                               </div>
                               <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
-                                {i18n.t(k.TELEGRAM_INTEGRATION_DESCRIPTION)}
+                                {t(k.TELEGRAM_INTEGRATION_DESCRIPTION)}
                                 <br />
-                                {i18n.t(k.TELEGRAM_USAGE_INSTRUCTION)}
+                                {t(k.TELEGRAM_USAGE_INSTRUCTION)}
                               </div>
                               <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
-                                {i18n.t(k.AUTHORIZATION_TOKEN)}{" "}
+                                {t(k.AUTHORIZATION_TOKEN)}{" "}
                                 {error || error?.detail
-                                  ? i18n.t(k.TOKEN_ERROR)
+                                  ? t(k.TOKEN_ERROR)
                                   : data?.token}
                               </div>
                               {data?.url && (
                                 <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
                                   <Link href={data?.url}>
                                     <Button size="sm">
-                                      {i18n.t(k.GO_TO_TELEGRAM_BOT)}
+                                      {t(k.GO_TO_TELEGRAM_BOT)}
                                     </Button>
                                   </Link>
                                 </div>

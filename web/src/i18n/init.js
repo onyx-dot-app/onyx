@@ -1,9 +1,10 @@
 import i18next from "i18next";
+import { initReactI18next } from "react-i18next";
 
 const russian = require("./russian");
 const english = require("./english");
 
-i18next.init({
+i18next.use(initReactI18next).init({
   lng: "ru",
   fallbackLng: "ru",
   preload: ["ru", "en"],
@@ -15,6 +16,9 @@ i18next.init({
   defaultNS: "translations",
   interpolation: {
     escapeValue: false, // not needed for react!!
+  },
+  react: {
+    useSuspense: false, // Disable suspense for better compatibility
   },
 });
 

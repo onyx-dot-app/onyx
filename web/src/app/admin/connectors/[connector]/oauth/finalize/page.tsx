@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../../i18n/keys";
 
 import { useEffect, useState } from "react";
@@ -56,19 +56,16 @@ function UpdateCloudURLOnCloudIdChange({
 }
 
 export default function OAuthFinalizePage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [statusMessage, setStatusMessage] = useState(i18n.t(k.PROCESSING));
-  const [statusDetails, setStatusDetails] = useState(
-    i18n.t(k.PLEASE_WAIT_SETUP)
-  );
+  const [statusMessage, setStatusMessage] = useState(t(k.PROCESSING));
+  const [statusDetails, setStatusDetails] = useState(t(k.PLEASE_WAIT_SETUP));
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // New state
-  const [pageTitle, setPageTitle] = useState(
-    i18n.t(k.FINALIZE_AUTH_THIRD_PARTY)
-  );
+  const [pageTitle, setPageTitle] = useState(t(k.FINALIZE_AUTH_THIRD_PARTY));
 
   const [accessibleResources, setAccessibleResources] = useState<
     ConfluenceAccessibleResource[]
@@ -87,8 +84,8 @@ export default function OAuthFinalizePage() {
       // sourceType (for looking up metadata) = "google_drive"
 
       if (isNaN(credential) || !connector) {
-        setStatusMessage(i18n.t(k.MALFORMED_OAUTH_FINALIZE_REQUEST));
-        setStatusDetails(i18n.t(k.INVALID_OR_MISSING_CREDENTIAL_ID));
+        setStatusMessage(t(k.MALFORMED_OAUTH_FINALIZE_REQUEST));
+        setStatusDetails(t(k.INVALID_OR_MISSING_CREDENTIAL_ID));
         setIsError(true);
         return;
       }
@@ -96,24 +93,22 @@ export default function OAuthFinalizePage() {
       const sourceType = connector.replaceAll("-", "_");
       if (!isValidSource(sourceType)) {
         setStatusMessage(
-          i18n.t(k.CONNECTOR_SOURCE_TYPE_NOT_EXIST, { connector: sourceType })
+          t(k.CONNECTOR_SOURCE_TYPE_NOT_EXIST, { connector: sourceType })
         );
-        setStatusDetails(
-          i18n.t(k.INVALID_SOURCE_TYPE, { connector: sourceType })
-        );
+        setStatusDetails(t(k.INVALID_SOURCE_TYPE, { connector: sourceType }));
         setIsError(true);
         return;
       }
 
       const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
       setPageTitle(
-        i18n.t(k.FINALIZE_AUTH_WITH_SERVICE, {
+        t(k.FINALIZE_AUTH_WITH_SERVICE, {
           service: sourceMetadata.displayName,
         })
       );
 
-      setStatusMessage(i18n.t(k.PROCESSING));
-      setStatusDetails(i18n.t(k.PLEASE_WAIT_GET_AVAILABLE_SITES));
+      setStatusMessage(t(k.PROCESSING));
+      setStatusDetails(t(k.PLEASE_WAIT_GET_AVAILABLE_SITES));
       setIsError(false); // Ensure no error state during loading
 
       try {
@@ -123,19 +118,19 @@ export default function OAuthFinalizePage() {
         );
 
         if (!response) {
-          throw new Error(i18n.t(k.EMPTY_OAUTH_RESPONSE));
+          throw new Error(t(k.EMPTY_OAUTH_RESPONSE));
         }
 
         setAccessibleResources(response.accessible_resources);
 
-        setStatusMessage(i18n.t(k.SELECT_CONFLUENCE_SITE));
+        setStatusMessage(t(k.SELECT_CONFLUENCE_SITE));
         setStatusDetails("");
 
         setIsError(false);
       } catch (error) {
         console.error("OAuth finalization error:", error);
-        setStatusMessage(i18n.t(k.OOPS_SOMETHING_WRONG));
-        setStatusDetails(i18n.t(k.OAUTH_FINALIZATION_ERROR_RETRY));
+        setStatusMessage(t(k.OOPS_SOMETHING_WRONG));
+        setStatusDetails(t(k.OAUTH_FINALIZATION_ERROR_RETRY));
         setIsError(true);
       }
     };
@@ -162,17 +157,15 @@ export default function OAuthFinalizePage() {
               cloud_url: "",
             }}
             validationSchema={Yup.object().shape({
-              credential_id: Yup.number().required(
-                i18n.t(k.CREDENTIAL_ID_REQUIRED)
-              ),
+              credential_id: Yup.number().required(t(k.CREDENTIAL_ID_REQUIRED)),
               cloud_id: Yup.string().required(
-                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_ID)
+                t(k.MUST_SELECT_CONFLUENCE_SITE_ID)
               ),
               cloud_name: Yup.string().required(
-                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_NAME)
+                t(k.MUST_SELECT_CONFLUENCE_SITE_NAME)
               ),
               cloud_url: Yup.string().required(
-                i18n.t(k.MUST_SELECT_CONFLUENCE_SITE_URL)
+                t(k.MUST_SELECT_CONFLUENCE_SITE_URL)
               ),
             })}
             validateOnMount
@@ -180,14 +173,14 @@ export default function OAuthFinalizePage() {
               formikHelpers.setSubmitting(true);
               try {
                 if (!values.cloud_id) {
-                  throw new Error(i18n.t(k.CLOUD_ID_REQUIRED));
+                  throw new Error(t(k.CLOUD_ID_REQUIRED));
                 }
                 if (!values.cloud_name) {
-                  throw new Error(i18n.t(k.CLOUD_NAME_REQUIRED));
+                  throw new Error(t(k.CLOUD_NAME_REQUIRED));
                 }
 
                 if (!values.cloud_url) {
-                  throw new Error(i18n.t(k.CLOUD_URL_REQUIRED));
+                  throw new Error(t(k.CLOUD_URL_REQUIRED));
                 }
 
                 const response = await handleOAuthConfluenceFinalize(
@@ -200,14 +193,14 @@ export default function OAuthFinalizePage() {
 
                 if (response) {
                   setRedirectUrl(response.redirect_url);
-                  setStatusMessage(i18n.t(k.CONFLUENCE_AUTH_COMPLETED));
+                  setStatusMessage(t(k.CONFLUENCE_AUTH_COMPLETED));
                 }
 
                 setIsSubmitted(true);
               } catch (error) {
                 console.error(error);
-                setStatusMessage(i18n.t(k.ERROR_DURING_SUBMISSION));
-                setStatusDetails(i18n.t(k.SUBMISSION_ERROR_TRY_AGAIN));
+                setStatusMessage(t(k.ERROR_DURING_SUBMISSION));
+                setStatusDetails(t(k.SUBMISSION_ERROR_TRY_AGAIN));
                 setIsError(true);
                 formikHelpers.setSubmitting(false);
               }
@@ -268,7 +261,7 @@ export default function OAuthFinalizePage() {
                     variant="submit"
                     disabled={!isValid || isSubmitting}
                   >
-                    {isSubmitting ? i18n.t(k.SUBMITTING) : i18n.t(k.SUBMIT1)}
+                    {isSubmitting ? t(k.SUBMITTING) : t(k.SUBMIT1)}
                   </Button>
                 )}
               </Form>
@@ -278,11 +271,11 @@ export default function OAuthFinalizePage() {
           {redirectUrl && !isError && (
             <div className="mt-4">
               <p className="text-sm">
-                {i18n.t(k.AUTHORIZATION_FINALIZED_CLICK)}{" "}
+                {t(k.AUTHORIZATION_FINALIZED_CLICK)}{" "}
                 <a href={redirectUrl} className="text-blue-500 underline">
-                  {i18n.t(k.HERE)}
+                  {t(k.HERE)}
                 </a>{" "}
-                {i18n.t(k.TO_CONTINUE)}
+                {t(k.TO_CONTINUE)}
               </p>
             </div>
           )}

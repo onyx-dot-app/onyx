@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React, { useRef, useState } from "react";
 import Text from "@/components/ui/text";
@@ -35,6 +35,7 @@ export function ProviderCreationModal({
   isProxy?: boolean;
   isAzure?: boolean;
 }) {
+  const { t } = useTranslation();
   const useFileUpload = selectedProvider.provider_type == "Google";
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -54,25 +55,25 @@ export function ProviderCreationModal({
   };
 
   const validationSchema = Yup.object({
-    provider_type: Yup.string().required(i18n.t(k.PROVIDER_TYPE_REQUIRED)),
+    provider_type: Yup.string().required(t(k.PROVIDER_TYPE_REQUIRED)),
     api_key:
       isProxy || isAzure
         ? Yup.string()
         : useFileUpload
         ? Yup.string()
-        : Yup.string().required(i18n.t(k.API_KEY_REQUIRED)),
+        : Yup.string().required(t(k.API_KEY_REQUIRED)),
     model_name: isProxy
-      ? Yup.string().required(i18n.t(k.MODEL_NAME_REQUIRED))
+      ? Yup.string().required(t(k.MODEL_NAME_REQUIRED))
       : Yup.string().nullable(),
     api_url:
       isProxy || isAzure
-        ? Yup.string().required(i18n.t(k.API_URL_REQUIRED))
+        ? Yup.string().required(t(k.API_URL_REQUIRED))
         : Yup.string(),
     deployment_name: isAzure
-      ? Yup.string().required(i18n.t(k.DEPLOYMENT_NAME_REQUIRED))
+      ? Yup.string().required(t(k.DEPLOYMENT_NAME_REQUIRED))
       : Yup.string(),
     api_version: isAzure
-      ? Yup.string().required(i18n.t(k.API_VERSION_REQUIRED))
+      ? Yup.string().required(t(k.API_VERSION_REQUIRED))
       : Yup.string(),
     custom_config: Yup.array().of(Yup.array().of(Yup.string()).length(2)),
   });
@@ -93,7 +94,7 @@ export function ProviderCreationModal({
         try {
           jsonContent = JSON.parse(fileContent);
         } catch (parseError) {
-          throw new Error(i18n.t(k.FAILED_TO_PARSE_JSON_FILE));
+          throw new Error(t(k.FAILED_TO_PARSE_JSON_FILE));
         }
         setFieldValue("api_key", JSON.stringify(jsonContent));
       } catch (error) {
@@ -162,9 +163,7 @@ export function ProviderCreationModal({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.detail || i18n.t(k.FAILED_TO_UPDATE_PROVIDER)
-        );
+        throw new Error(errorData.detail || t(k.FAILED_TO_UPDATE_PROVIDER));
       }
 
       onConfirm();
@@ -172,7 +171,7 @@ export function ProviderCreationModal({
       if (error instanceof Error) {
         setErrorMsg(error.message);
       } else {
-        setErrorMsg(i18n.t(k.UNKNOWN_ERROR_OCCURRED));
+        setErrorMsg(t(k.UNKNOWN_ERROR_OCCURRED));
       }
     } finally {
       setIsProcessing(false);
@@ -182,7 +181,7 @@ export function ProviderCreationModal({
 
   return (
     <Modal
-      title={`${i18n.t(k.CONFIGURE)} ${selectedProvider.provider_type}`}
+      title={`${t(k.CONFIGURE)} ${selectedProvider.provider_type}`}
       onOutsideClick={onCancel}
       icon={selectedProvider.icon}
     >
@@ -195,23 +194,23 @@ export function ProviderCreationModal({
           {({ isSubmitting, handleSubmit, setFieldValue }) => (
             <Form onSubmit={handleSubmit} className="space-y-4">
               <Text className="text-lg mb-2">
-                {i18n.t(k.YOU_ARE_SETTING_THE_CREDENTIAL)}{" "}
+                {t(k.YOU_ARE_SETTING_THE_CREDENTIAL)}{" "}
                 <a
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.docsLink}
                   rel="noreferrer"
                 >
-                  {i18n.t(k.HERE)}
+                  {t(k.HERE)}
                 </a>{" "}
-                {i18n.t(k.AND_GATHER_YOUR)}{" "}
+                {t(k.AND_GATHER_YOUR)}{" "}
                 <a
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.apiLink}
                   rel="noreferrer"
                 >
-                  {isProxy || isAzure ? i18n.t(k.API_URL) : i18n.t(k.API_KEY1)}
+                  {isProxy || isAzure ? t(k.API_URL) : t(k.API_KEY1)}
                 </a>
               </Text>
 
@@ -228,10 +227,10 @@ export function ProviderCreationModal({
                 {isProxy && (
                   <TextFormField
                     name="model_name"
-                    label={`${i18n.t(k.MODEL_NAME)} ${
-                      isProxy ? i18n.t(k.FOR_TESTING) : ""
+                    label={`${t(k.MODEL_NAME)} ${
+                      isProxy ? t(k.FOR_TESTING) : ""
                     }`}
-                    placeholder={i18n.t(k.MODEL_NAME)}
+                    placeholder={t(k.MODEL_NAME)}
                     type="text"
                   />
                 )}
@@ -239,8 +238,8 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="deployment_name"
-                    label={i18n.t(k.DEPLOYMENT_NAME)}
-                    placeholder={i18n.t(k.DEPLOYMENT_NAME)}
+                    label={t(k.DEPLOYMENT_NAME)}
+                    placeholder={t(k.DEPLOYMENT_NAME)}
                     type="text"
                   />
                 )}
@@ -248,15 +247,15 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="api_version"
-                    label={i18n.t(k.API_VERSION)}
-                    placeholder={i18n.t(k.API_VERSION)}
+                    label={t(k.API_VERSION)}
+                    placeholder={t(k.API_VERSION)}
                     type="text"
                   />
                 )}
 
                 {useFileUpload ? (
                   <>
-                    <Label>{i18n.t(k.UPLOAD_JSON_FILE)}</Label>
+                    <Label>{t(k.UPLOAD_JSON_FILE)}</Label>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -267,15 +266,15 @@ export function ProviderCreationModal({
 
                     {fileName && (
                       <p>
-                        {i18n.t(k.UPLOADED_FILE)} {fileName}
+                        {t(k.UPLOADED_FILE)} {fileName}
                       </p>
                     )}
                   </>
                 ) : (
                   <TextFormField
                     name="api_key"
-                    label={`${i18n.t(k.API_KEY)} ${
-                      isProxy ? i18n.t(k.FOR_NON_LOCAL_DEPLOYMENTS) : ""
+                    label={`${t(k.API_KEY)} ${
+                      isProxy ? t(k.FOR_NON_LOCAL_DEPLOYMENTS) : ""
                     }`}
                     placeholder="API Key"
                     type="password"
@@ -288,12 +287,12 @@ export function ProviderCreationModal({
                   className="underline cursor-pointer"
                   rel="noreferrer"
                 >
-                  {i18n.t(k.LEARN_MORE_HERE)}
+                  {t(k.LEARN_MORE_HERE)}
                 </a>
               </div>
 
               {errorMsg && (
-                <Callout title={i18n.t(k.ERROR)} type="danger">
+                <Callout title={t(k.ERROR)} type="danger">
                   {errorMsg}
                 </Callout>
               )}
@@ -307,9 +306,9 @@ export function ProviderCreationModal({
                 {isProcessing ? (
                   <LoadingAnimation />
                 ) : existingProvider ? (
-                  i18n.t(k.UPDATE)
+                  t(k.UPDATE)
                 ) : (
-                  i18n.t(k.CREATE1)
+                  t(k.CREATE1)
                 )}
               </Button>
             </Form>

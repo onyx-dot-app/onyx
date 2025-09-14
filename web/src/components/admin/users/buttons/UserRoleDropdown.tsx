@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import {
   type User,
@@ -29,6 +29,7 @@ const UserRoleDropdown = ({
   onSuccess: () => void;
   onError: (message: string) => void;
 }) => {
+  const { t } = useTranslation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingRole, setPendingRole] = useState<string | null>(null);
 
@@ -110,12 +111,12 @@ const UserRoleDropdown = ({
       </Select>
       {showConfirmModal && (
         <GenericConfirmModal
-          title={i18n.t(k.CHANGE_CURATOR_ROLE)}
-          message={`${i18n.t(k.WARNING_SWITCHING_ROLES_FROM)} ${
+          title={t(k.CHANGE_CURATOR_ROLE)}
+          message={`${t(k.WARNING_SWITCHING_ROLES_FROM)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
-          } ${i18n.t(k.WILL_REMOVE_THEIR_STATUS_AS_IN)}`}
-          confirmText={`${i18n.t(k.SWITCH_ROLE_TO)} ${
+          } ${t(k.WILL_REMOVE_THEIR_STATUS_AS_IN)}`}
+          confirmText={`${t(k.SWITCH_ROLE_TO)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
           }`}

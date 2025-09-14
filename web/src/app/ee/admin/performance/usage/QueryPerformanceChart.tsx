@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
@@ -15,6 +15,7 @@ export function QueryPerformanceChart({
 }: {
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const {
     data: queryAnalyticsData,
     isLoading: isQueryAnalyticsLoading,
@@ -41,7 +42,7 @@ export function QueryPerformanceChart({
   ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">{i18n.t(k.FAILED_TO_FETCH_QUERY_DATA)}</p>
+        <p className="m-auto">{t(k.FAILED_TO_FETCH_QUERY_DATA)}</p>
       </div>
     );
   } else {
@@ -71,11 +72,10 @@ export function QueryPerformanceChart({
           return {
             Day: dateStr,
             Queries: queryAnalyticsForDate?.total_queries || 0,
-            i18n.t(k.UNIQUE_USERS):
-              userAnalyticsForDate?.total_active_users || 0,
+            [t(k.UNIQUE_USERS)]: userAnalyticsForDate?.total_active_users || 0,
           };
         })}
-        categories={[i18n.t(k.QUERIES), i18n.t(k.UNIQUE_USERS)]}
+        categories={[t(k.QUERIES), t(k.UNIQUE_USERS)]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisFormatter={(number: number) =>
@@ -99,8 +99,8 @@ export function QueryPerformanceChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>{i18n.t(k.USAGE)}</Title>
-      <Text>{i18n.t(k.USAGE_OVER_TIME)}</Text>
+      <Title>{t(k.USAGE)}</Title>
+      <Text>{t(k.USAGE_OVER_TIME)}</Text>
       {chart}
     </CardSection>
   );

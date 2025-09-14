@@ -1,6 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
+import i18n from "../../../i18n/init";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,7 @@ function ActionForm({
     React.Dispatch<React.SetStateAction<MethodSpec[] | null>>
   ];
 }) {
+  const { t } = useTranslation();
   const [definitionError, setDefinitionError] = definitionErrorState;
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -112,9 +114,9 @@ function ActionForm({
       <div className="relative w-full">
         <TextFormField
           name="definition"
-          label={i18n.t(k.DEFINITION_LABEL)}
-          subtext={i18n.t(k.DEFINITION_SUBTEXT)}
-          placeholder={i18n.t(k.OPENAPI_SCHEMA_PLACEHOLDER)}
+          label={t(k.DEFINITION_LABEL)}
+          subtext={t(k.DEFINITION_SUBTEXT)}
+          placeholder={t(k.OPENAPI_SCHEMA_PLACEHOLDER)}
           isTextArea={true}
           defaultHeight="h-96"
           fontSize="sm"
@@ -151,7 +153,7 @@ function ActionForm({
             }
           }}
         >
-          {i18n.t(k.FORMAT)}
+          {t(k.FORMAT)}
         </button>
       </div>
       {definitionError && (
@@ -182,23 +184,23 @@ function ActionForm({
               clipRule="evenodd"
             />
           </svg>
-          {i18n.t(k.LEARN_MORE_ABOUT_ACTIONS_IN_OU)}
+          {t(k.LEARN_MORE_ABOUT_ACTIONS_IN_OU)}
         </Link>
       </div>
 
       {methodSpecs && methodSpecs.length > 0 && (
         <div className="my-4">
           <h3 className="text-base font-semibold mb-2">
-            {i18n.t(k.AVAILABLE_METHODS)}
+            {t(k.AVAILABLE_METHODS)}
           </h3>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white border border-background-200">
               <thead>
                 <tr>
-                  <th className="px-4 py-2 border-b">{i18n.t(k.NAME)}</th>
-                  <th className="px-4 py-2 border-b">{i18n.t(k.SUMMARY)}</th>
-                  <th className="px-4 py-2 border-b">{i18n.t(k.METHOD)}</th>
-                  <th className="px-4 py-2 border-b">{i18n.t(k.PATH)}</th>
+                  <th className="px-4 py-2 border-b">{t(k.NAME)}</th>
+                  <th className="px-4 py-2 border-b">{t(k.SUMMARY)}</th>
+                  <th className="px-4 py-2 border-b">{t(k.METHOD)}</th>
+                  <th className="px-4 py-2 border-b">{t(k.PATH)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -226,10 +228,10 @@ function ActionForm({
       {showAdvancedOptions && (
         <div>
           <h3 className="text-xl font-bold mb-2 text-primary-600">
-            {i18n.t(k.CUSTOM_HEADERS)}
+            {t(k.CUSTOM_HEADERS)}
           </h3>
           <p className="text-sm mb-6 text-text-600 italic">
-            {i18n.t(k.SPECIFY_CUSTOM_HEADERS_FOR_EAC)}
+            {t(k.SPECIFY_CUSTOM_HEADERS_FOR_EAC)}
           </p>
           <FieldArray
             name="customHeaders"
@@ -243,18 +245,14 @@ function ActionForm({
                         className="flex items-center space-x-2 bg-background-50 p-3 rounded-lg shadow-sm"
                       >
                         <Field
-                          name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
-                            k.KEY1
-                          )}`}
-                          placeholder={i18n.t(k.HEADER_KEY_PLACEHOLDER)}
+                          name={`${t(k.CUSTOMHEADERS)}${index}${t(k.KEY1)}`}
+                          placeholder={t(k.HEADER_KEY_PLACEHOLDER)}
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
                         <Field
-                          name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
-                            k.VALUE
-                          )}`}
-                          placeholder={i18n.t(k.HEADER_VALUE_PLACEHOLDER)}
+                          name={`${t(k.CUSTOMHEADERS)}${index}${t(k.VALUE)}`}
+                          placeholder={t(k.HEADER_VALUE_PLACEHOLDER)}
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
@@ -265,7 +263,7 @@ function ActionForm({
                           size="sm"
                           className="transition-colors duration-200 hover:bg-red-600"
                         >
-                          {i18n.t(k.REMOVE)}
+                          {t(k.REMOVE)}
                         </Button>
                       </div>
                     )
@@ -279,7 +277,7 @@ function ActionForm({
                   size="sm"
                   className="transition-colors duration-200"
                 >
-                  {i18n.t(k.ADD_NEW_HEADER)}
+                  {t(k.ADD_NEW_HEADER)}
                 </Button>
               </div>
             )}
@@ -287,7 +285,7 @@ function ActionForm({
 
           <div className="mt-6">
             <h3 className="text-xl font-bold mb-2 text-primary-600">
-              {i18n.t(k.AUTHENTICATION)}
+              {t(k.AUTHENTICATION)}
             </h3>
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
@@ -325,7 +323,7 @@ function ActionForm({
                       ) && (
                         <TooltipContent side="top" align="center">
                           <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                            {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
+                            {t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
                           </p>
                         </TooltipContent>
                       )}
@@ -336,17 +334,17 @@ function ActionForm({
                       htmlFor="passthrough_auth"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                     >
-                      {i18n.t(k.PASS_THROUGH_USER_S_OAUTH_TOKE)}
+                      {t(k.PASS_THROUGH_USER_S_OAUTH_TOKE)}
                     </label>
                     <p className="text-xs text-subtle mt-1">
-                      {i18n.t(k.WHEN_ENABLED_THE_USER_S_OAUTH)}
+                      {t(k.WHEN_ENABLED_THE_USER_S_OAUTH)}
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
               <p className="text-sm text-subtle">
-                {i18n.t(k.OAUTH_PASSTHROUGH_IS_ONLY_AVAI)}
+                {t(k.OAUTH_PASSTHROUGH_IS_ONLY_AVAI)}
               </p>
             )}
           </div>
@@ -363,7 +361,7 @@ function ActionForm({
           type="submit"
           disabled={isSubmitting || !!definitionError}
         >
-          {existingTool ? i18n.t(k.UPDATE_ACTION) : i18n.t(k.CREATE_ACTION)}
+          {existingTool ? t(k.UPDATE_ACTION) : t(k.CREATE_ACTION)}
         </Button>
       </div>
     </Form>
@@ -390,6 +388,7 @@ const ToolSchema = Yup.object().shape({
 });
 
 export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
+  const { t } = useTranslation() as { t: (key: string) => string };
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
@@ -419,7 +418,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           );
           if (hasAuthHeader && values.passthrough_auth) {
             setPopup({
-              message: i18n.t(k.CANNOT_ENABLE_AUTH_WITH_HEADERS),
+              message: t(k.CANNOT_ENABLE_AUTH_WITH_HEADERS),
               type: "error",
             });
             console.log(
@@ -453,7 +452,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           }
           if (response.error) {
             setPopup({
-              message: i18n.t(k.FAILED_TO_CREATE_TOOL) + response.error,
+              message: t(k.FAILED_TO_CREATE_TOOL) + response.error,
               type: "error",
             });
             return;

@@ -1,6 +1,6 @@
 "use client";
 
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookOpen, InfoIcon } from "@/components/icons/icons";
@@ -15,6 +15,7 @@ import { KnowledgeMapCreationForm } from "./KnowledgeMapCreationForm";
 import { useDocumentSets } from "../../sets/hooks";
 
 function Main() {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -34,7 +35,7 @@ function Main() {
   if (ccPairsError || !ccPairs) {
     return (
       <ErrorCallout
-        errorTitle={i18n.t(k.FAILED_TO_FETCH_KNOWLEDGE_MAPS)}
+        errorTitle={t(k.FAILED_TO_FETCH_KNOWLEDGE_MAPS)}
         errorMsg={ccPairsError}
       />
     );
@@ -59,13 +60,14 @@ function Main() {
 }
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
       <BackButton />
 
       <AdminPageTitle
         icon={<BookOpen size={32} />}
-        title={i18n.t(k.NEW_KNOWLEDGE_MAP)}
+        title={t(k.NEW_KNOWLEDGE_MAP)}
       />
 
       <Main />

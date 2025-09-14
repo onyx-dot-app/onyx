@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { CloudEmbeddingModel, EmbeddingProvider } from "./interfaces";
 import { Formik, Form } from "formik";
@@ -20,6 +22,7 @@ export function CustomEmbeddingModelForm({
   provider: EmbeddingDetails;
   embeddingType: EmbeddingProvider;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
       <Formik
@@ -39,17 +42,15 @@ export function CustomEmbeddingModelForm({
           }
         }
         validationSchema={Yup.object().shape({
-          model_name: Yup.string().required(i18n.t(k.MODEL_NAME_REQUIRED)),
-          model_dim: Yup.number().required(i18n.t(k.MODEL_DIMENSION_REQUIRED)),
+          model_name: Yup.string().required(t(k.MODEL_NAME_REQUIRED)),
+          model_dim: Yup.number().required(t(k.MODEL_DIMENSION_REQUIRED)),
           normalize: Yup.boolean().required(),
           query_prefix: Yup.string(),
           pass_prefix: Yup.string(),
-          provider_type: Yup.string().required(
-            i18n.t(k.PROVIDER_TYPE_REQUIRED)
-          ),
+          provider_type: Yup.string().required(t(k.PROVIDER_TYPE_REQUIRED)),
           api_key: Yup.string().optional(),
           enabled: Yup.boolean(),
-          api_url: Yup.string().required(i18n.t(k.API_BASE_URL_REQUIRED)),
+          api_url: Yup.string().required(t(k.API_BASE_URL_REQUIRED)),
           description: Yup.string(),
           index_name: Yup.string().nullable(),
         })}
@@ -60,29 +61,29 @@ export function CustomEmbeddingModelForm({
         {({ isSubmitting, submitForm, errors }) => (
           <Form>
             <Text className="text-xl text-text-900 font-bold mb-4">
-              {i18n.t(k.SPECIFY_DETAILS_FOR_YOUR)}{" "}
+              {t(k.SPECIFY_DETAILS_FOR_YOUR)}{" "}
               {embeddingType === EmbeddingProvider.AZURE
-                ? i18n.t(k.AZURE)
-                : i18n.t(k.LITELLM)}{" "}
-              {i18n.t(k.PROVIDER_S_MODEL)}
+                ? t(k.AZURE)
+                : t(k.LITELLM)}{" "}
+              {t(k.PROVIDER_S_MODEL)}
             </Text>
             <TextFormField
               name="model_name"
-              label={i18n.t(k.MODEL_NAME_LABEL)}
-              subtext={`${i18n.t(k.THE_NAME_OF_THE)} ${
+              label={t(k.MODEL_NAME_LABEL)}
+              subtext={`${t(k.THE_NAME_OF_THE)} ${
                 embeddingType === EmbeddingProvider.AZURE
-                  ? i18n.t(k.AZURE)
-                  : i18n.t(k.LITELLM)
-              } ${i18n.t(k.MODEL1)}`}
-              placeholder={i18n.t(k.EXAMPLE_PLACEHOLDER)}
+                  ? t(k.AZURE)
+                  : t(k.LITELLM)
+              } ${t(k.MODEL1)}`}
+              placeholder={t(k.EXAMPLE_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="model_dim"
-              label={i18n.t(k.MODEL_DIMENSION_LABEL)}
-              subtext={i18n.t(k.MODEL_DIMENSION_SUBTEXT)}
-              placeholder={i18n.t(k.EXAMPLE_1536)}
+              label={t(k.MODEL_DIMENSION_LABEL)}
+              subtext={t(k.MODEL_DIMENSION_SUBTEXT)}
+              placeholder={t(k.EXAMPLE_1536)}
               type="number"
               autoCompleteDisabled={true}
             />
@@ -90,21 +91,21 @@ export function CustomEmbeddingModelForm({
             <BooleanFormField
               removeIndent
               name="normalize"
-              label={i18n.t(k.NORMALIZATION)}
-              subtext={i18n.t(k.NORMALIZE_EMBEDDINGS)}
+              label={t(k.NORMALIZATION)}
+              subtext={t(k.NORMALIZE_EMBEDDINGS)}
             />
 
             <TextFormField
               name="query_prefix"
-              label={i18n.t(k.QUERY_PREFIX_LABEL)}
-              subtext={i18n.t(k.QUERY_PREFIX_SUBTEXT)}
+              label={t(k.QUERY_PREFIX_LABEL)}
+              subtext={t(k.QUERY_PREFIX_SUBTEXT)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="passage_prefix"
-              label={i18n.t(k.PASSAGE_PREFIX_LABEL)}
-              subtext={i18n.t(k.PASSAGE_PREFIX_SUBTEXT)}
+              label={t(k.PASSAGE_PREFIX_LABEL)}
+              subtext={t(k.PASSAGE_PREFIX_SUBTEXT)}
               autoCompleteDisabled={true}
             />
 
@@ -113,11 +114,11 @@ export function CustomEmbeddingModelForm({
               disabled={isSubmitting}
               className="w-64 mx-auto"
             >
-              {i18n.t(k.CONFIGURE)}{" "}
+              {t(k.CONFIGURE)}{" "}
               {embeddingType === EmbeddingProvider.AZURE
-                ? i18n.t(k.AZURE)
-                : i18n.t(k.LITELLM)}{" "}
-              {i18n.t(k.MODEL2)}
+                ? t(k.AZURE)
+                : t(k.LITELLM)}{" "}
+              {t(k.MODEL2)}
             </Button>
           </Form>
         )}

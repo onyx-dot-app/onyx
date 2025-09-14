@@ -2441,6 +2441,7 @@ module.exports = {
   [k.RENAME]: `Rename`,
   [k.DELETE]: `Delete`,
   [k.SWITCH_TO_RUSSIAN]: `Switch to Russian`,
+  [k.SWITCH_TO_ENGLISH]: `Переключить на английский`,
   [k.VIEW_FILES]: `View files`,
   [k.WARNING]: `Warning`,
   [k.ADVANCED_SETTINGS]: `Advanced settings`,
@@ -3327,4 +3328,8 @@ module.exports = {
   // Additional missing keys - English translations
   [k.PROCESSING]: `Processing`,
   [k.FAILED_TO_CREATE_PROMPT]: `Failed to create prompt`,
+
+  // PersonaTable.tsx missing keys
+  [k.TYPE]: `Type`,
+  [k.VISIBILITY]: `Visibility`,
 };

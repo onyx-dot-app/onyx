@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
@@ -58,6 +60,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
     },
     ref
   ) => {
+    const { t } = useTranslation();
     // Fetch contextual costs
     const { data: contextualCosts, error: costError } = useSWR<
       LLMContextualCost[]
@@ -110,7 +113,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
               .nullable()
               .test(
                 "required-if-contextual-rag",
-                i18n.t(k.LLM_REQUIRED_FOR_CONTEXTUAL_RAG),
+                t(k.LLM_REQUIRED_FOR_CONTEXTUAL_RAG),
                 function (value) {
                   const enableContextualRag = this.parent.enable_contextual_rag;
                   console.log("enableContextualRag", enableContextualRag);
@@ -120,23 +123,19 @@ const AdvancedEmbeddingFormPage = forwardRef<
               ),
             disable_rerank_for_streaming: Yup.boolean(),
             num_rerank: Yup.number()
-              .required(i18n.t(k.RERANK_RESULTS_COUNT_REQUIRED))
-              .min(1, i18n.t(k.MUST_BE_AT_LEAST_1)),
+              .required(t(k.RERANK_RESULTS_COUNT_REQUIRED))
+              .min(1, t(k.MUST_BE_AT_LEAST_1)),
             embedding_precision: Yup.string().nullable(),
             reduced_dimension: Yup.number()
               .nullable()
               .test(
                 "positive",
-                i18n.t(k.MUST_BE_256_OR_HIGHER),
+                t(k.MUST_BE_256_OR_HIGHER),
                 (value) => value === null || value === undefined || value >= 256
               )
-              .test(
-                "openai",
-                i18n.t(k.REDUCED_DIMENSIONS_OPENAI_ONLY),
-                (value) => {
-                  return embeddingProviderType === "openai" || value === null;
-                }
-              ),
+              .test("openai", t(k.REDUCED_DIMENSIONS_OPENAI_ONLY), (value) => {
+                return embeddingProviderType === "openai" || value === null;
+              }),
           })}
           onSubmit={async (_, { setSubmitting }) => {
             setSubmitting(false);
@@ -182,7 +181,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
                       .nullable()
                       .test(
                         "required-if-contextual-rag",
-                        i18n.t(k.LLM_REQUIRED_FOR_CONTEXTUAL_RAG),
+                        t(k.LLM_REQUIRED_FOR_CONTEXTUAL_RAG),
                         function (value) {
                           const enableContextualRag =
                             this.parent.enable_contextual_rag;
@@ -196,20 +195,20 @@ const AdvancedEmbeddingFormPage = forwardRef<
                       ),
                     disable_rerank_for_streaming: Yup.boolean(),
                     num_rerank: Yup.number()
-                      .required(i18n.t(k.RERANK_RESULTS_REQUIRED))
-                      .min(1, i18n.t(k.MUST_BE_AT_LEAST_1)),
+                      .required(t(k.RERANK_RESULTS_REQUIRED))
+                      .min(1, t(k.MUST_BE_AT_LEAST_1)),
                     embedding_precision: Yup.string().nullable(),
                     Reduced_dimension: Yup.number()
                       .nullable()
                       .test(
                         "positive",
-                        i18n.t(k.MUST_BE_256_OR_HIGHER),
+                        t(k.MUST_BE_256_OR_HIGHER),
                         (value) =>
                           value === null || value === undefined || value >= 256
                       )
                       .test(
                         "openai",
-                        i18n.t(k.REDUCED_DIMENSIONS_OPENAI_ONLY_SHORT),
+                        t(k.REDUCED_DIMENSIONS_OPENAI_ONLY_SHORT),
                         (value) => {
                           return (
                             embeddingProviderType === "openai" || value === null
@@ -240,18 +239,14 @@ const AdvancedEmbeddingFormPage = forwardRef<
               <FieldArray name="multilingual_expansion">
                 {({ push, remove }) => (
                   <div className="w-full">
-                    <Label>{i18n.t(k.MULTI_LINGUAL_EXPANSION)}</Label>
+                    <Label>{t(k.MULTI_LINGUAL_EXPANSION)}</Label>
 
-                    <SubLabel>
-                      {i18n.t(k.ADD_ADDITIONAL_LANGUAGES_TO_TH)}
-                    </SubLabel>
+                    <SubLabel>{t(k.ADD_ADDITIONAL_LANGUAGES_TO_TH)}</SubLabel>
                     {values.multilingual_expansion.map(
                       (_: any, index: number) => (
                         <div key={index} className="w-full flex mb-4">
                           <Field
-                            name={`${i18n.t(
-                              k.MULTILINGUAL_EXPANSION1
-                            )}${index}`}
+                            name={`${t(k.MULTILINGUAL_EXPANSION1)}${index}`}
                             className={`w-full bg-input text-sm p-2  border border-border-medium rounded-md
                                       focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mr-2`}
                           />
@@ -275,45 +270,45 @@ const AdvancedEmbeddingFormPage = forwardRef<
                         hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-opacity-50`}
                     >
                       <FaPlus className="mr-2" />
-                      {i18n.t(k.ADD_LANGUAGE)}
+                      {t(k.ADD_LANGUAGE)}
                     </button>
                   </div>
                 )}
               </FieldArray>
 
               <BooleanFormField
-                subtext={i18n.t(k.MULTIPASS_INDEXING_SUBTEXT)}
+                subtext={t(k.MULTIPASS_INDEXING_SUBTEXT)}
                 optional
-                label={i18n.t(k.MULTIPASS_INDEXING_LABEL)}
+                label={t(k.MULTIPASS_INDEXING_LABEL)}
                 name="multipass_indexing"
               />
 
               <BooleanFormField
-                subtext={i18n.t(k.DISABLE_RERANK_STREAMING_SUBTEXT)}
+                subtext={t(k.DISABLE_RERANK_STREAMING_SUBTEXT)}
                 optional
-                label={i18n.t(k.DISABLE_RERANK_STREAMING_LABEL)}
+                label={t(k.DISABLE_RERANK_STREAMING_LABEL)}
                 name="disable_rerank_for_streaming"
               />
 
               <BooleanFormField
-                subtext={i18n.t(k.CONTEXTUAL_RAG_SUBTEXT)}
+                subtext={t(k.CONTEXTUAL_RAG_SUBTEXT)}
                 optional
-                label={i18n.t(k.CONTEXTUAL_RAG_LABEL)}
+                label={t(k.CONTEXTUAL_RAG_LABEL)}
                 name="enable_contextual_rag"
               />
 
               <div>
                 <SelectorFormField
                   name="contextual_rag_llm"
-                  label={i18n.t(k.CONTEXTUAL_RAG_LLM_LABEL)}
+                  label={t(k.CONTEXTUAL_RAG_LLM_LABEL)}
                   subtext={
                     costError
-                      ? i18n.t(k.ERROR_LOADING_LLM_MODELS_PLEA)
+                      ? t(k.ERROR_LOADING_LLM_MODELS_PLEA)
                       : !contextualCosts
-                      ? i18n.t(k.LOADING_AVAILABLE_LLM_MODELS)
+                      ? t(k.LOADING_AVAILABLE_LLM_MODELS)
                       : values.enable_contextual_rag
-                      ? i18n.t(k.SELECT_THE_LLM_MODEL_TO_USE_FO)
-                      : i18n.t(k.ENABLE_CONTEXTUAL_RAG_ABOVE_TO)
+                      ? t(k.SELECT_THE_LLM_MODEL_TO_USE_FO)
+                      : t(k.ENABLE_CONTEXTUAL_RAG_ABOVE_TO)
                   }
                   options={llmOptions}
                   disabled={
@@ -329,9 +324,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
                     <div className="mt-2 text-sm text-text-600">
                       {contextualCosts ? (
                         <>
-                          {i18n.t(k.ESTIMATED_COST_FOR_PROCESSING)}{" "}
+                          {t(k.ESTIMATED_COST_FOR_PROCESSING)}{" "}
                           {COST_CALCULATION_TOKENS.toLocaleString()}{" "}
-                          {i18n.t(k.TOKENS1)}{" "}
+                          {t(k.TOKENS1)}{" "}
                           <span className="font-medium">
                             {getSelectedModelCost(values.contextual_rag_llm)
                               ? formatCost(
@@ -339,33 +334,33 @@ const AdvancedEmbeddingFormPage = forwardRef<
                                     values.contextual_rag_llm
                                   )!.cost
                                 )
-                              : i18n.t(k.COST_INFORMATION_NOT_AVAILABLE)}
+                              : t(k.COST_INFORMATION_NOT_AVAILABLE)}
                           </span>
                         </>
                       ) : (
-                        i18n.t(k.LOADING_COST_INFORMATION)
+                        t(k.LOADING_COST_INFORMATION)
                       )}
                     </div>
                   )}
               </div>
               <NumberInput
-                description={i18n.t(k.RERANK_RESULTS_DESCRIPTION)}
+                description={t(k.RERANK_RESULTS_DESCRIPTION)}
                 optional={false}
-                label={i18n.t(k.RERANK_RESULTS_LABEL)}
+                label={t(k.RERANK_RESULTS_LABEL)}
                 name="num_rerank"
               />
 
               <SelectorFormField
                 name="embedding_precision"
-                label={i18n.t(k.EMBEDDING_PRECISION_LABEL)}
+                label={t(k.EMBEDDING_PRECISION_LABEL)}
                 options={embeddingPrecisionOptions}
-                subtext={i18n.t(k.EMBEDDING_PRECISION_SUBTEXT)}
+                subtext={t(k.EMBEDDING_PRECISION_SUBTEXT)}
               />
 
               <NumberInput
-                description={i18n.t(k.REDUCED_DIMENSION_DESCRIPTION)}
+                description={t(k.REDUCED_DIMENSION_DESCRIPTION)}
                 optional={true}
-                label={i18n.t(k.REDUCED_DIMENSION_LABEL)}
+                label={t(k.REDUCED_DIMENSION_LABEL)}
                 name="reduced_dimension"
               />
             </Form>

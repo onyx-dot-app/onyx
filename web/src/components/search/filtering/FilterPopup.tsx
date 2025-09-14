@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import {
@@ -46,6 +46,7 @@ export function FilterPopup({
   filterManager,
   trigger,
 }: FilterPopupProps) {
+  const { t } = useTranslation();
   const [selectedFilter, setSelectedFilter] = useState<FilterCategories>(
     FilterCategories.date
   );
@@ -99,13 +100,13 @@ export function FilterPopup({
       1
     ).getDay();
     const days = [
-      i18n.t(k.SU),
-      i18n.t(k.MO),
-      i18n.t(k.TU),
-      i18n.t(k.WE),
-      i18n.t(k.TH),
-      i18n.t(k.FR),
-      i18n.t(k.SA),
+      t(k.SU),
+      t(k.MO),
+      t(k.TU),
+      t(k.WE),
+      t(k.TH),
+      t(k.FR),
+      t(k.SA),
     ];
 
     const isDateInRange = (date: Date) => {
@@ -279,28 +280,28 @@ export function FilterPopup({
               <FilterOption
                 category={FilterCategories.date}
                 icon={<FiCalendar className="w-4 h-4" />}
-                label={i18n.t(k.DATE_LABEL)}
+                label={t(k.DATE_LABEL)}
               />
 
               {availableSources.length > 0 && (
                 <FilterOption
                   category={FilterCategories.sources}
                   icon={<FiDatabase className="w-4 h-4" />}
-                  label={i18n.t(k.SOURCES_LABEL)}
+                  label={t(k.SOURCES_LABEL)}
                 />
               )}
               {availableDocumentSets.length > 0 && (
                 <FilterOption
                   category={FilterCategories.documentSets}
                   icon={<FiBook className="w-4 h-4" />}
-                  label={i18n.t(k.SETS_LABEL)}
+                  label={t(k.SETS_LABEL)}
                 />
               )}
               {availableTags.length > 0 && (
                 <FilterOption
                   category={FilterCategories.tags}
                   icon={<FiTag className="w-4 h-4" />}
-                  label={i18n.t(k.TAGS_LABEL)}
+                  label={t(k.TAGS_LABEL)}
                 />
               )}
             </ul>
@@ -311,14 +312,14 @@ export function FilterPopup({
                 {renderCalendar()}
                 {filterManager.timeRange ? (
                   <div className="mt-2 text-xs text-text-600">
-                    {i18n.t(k.SELECTED1)} {/* @ts-ignore */}
-                    {filterManager.timeRange.from.toLocaleDateString()}{" "}
-                    {i18n.t(k._)} {/* @ts-ignore */}
+                    {t(k.SELECTED1)} {/* @ts-ignore */}
+                    {filterManager.timeRange.from.toLocaleDateString()} {t(k._)}{" "}
+                    {/* @ts-ignore */}
                     {filterManager.timeRange.to.toLocaleDateString()}
                   </div>
                 ) : (
                   <div className="mt-2 text-xs text-text-600">
-                    {i18n.t(k.NO_TIME_RESTRICTION_SELECTED)}
+                    {t(k.NO_TIME_RESTRICTION_SELECTED)}
                   </div>
                 )}
 
@@ -329,7 +330,7 @@ export function FilterPopup({
                     }}
                     className="mt-2 text-xs text-text-dark hover:text-text transition-colors duration-200"
                   >
-                    {i18n.t(k.RESET_DATE_FILTER)}
+                    {t(k.RESET_DATE_FILTER)}
                   </button>
                 )}
               </div>
@@ -337,11 +338,9 @@ export function FilterPopup({
             {selectedFilter === FilterCategories.sources && (
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold">{i18n.t(k.SOURCES)}</h3>
+                  <h3 className="text-sm font-semibold">{t(k.SOURCES)}</h3>
                   <div className="flex gap-x-2 items-center ">
-                    <p className="text-xs text-text-dark">
-                      {i18n.t(k.SELECT_ALL)}
-                    </p>
+                    <p className="text-xs text-text-dark">{t(k.SELECT_ALL)}</p>
                     <Checkbox
                       size="sm"
                       id="select-all-sources"
@@ -375,7 +374,7 @@ export function FilterPopup({
               <div className="pt-4 h-full flex flex-col w-full">
                 <div className="flex pb-2 px-4">
                   <Input
-                    placeholder={i18n.t(k.SEARCH_DOCUMENT_SETS_PLACEHOLDER)}
+                    placeholder={t(k.SEARCH_DOCUMENT_SETS_PLACEHOLDER)}
                     value={documentSetSearch}
                     onChange={(e) => setDocumentSetSearch(e.target.value)}
                     className="border border-text-subtle w-full"
@@ -415,27 +414,27 @@ export function FilterPopup({
             }}
             className="text-xs"
           >
-            {i18n.t(k.CLEAR_FILTERS)}
+            {t(k.CLEAR_FILTERS)}
           </Button>
           <div className="text-xs text-text-500 flex items-center space-x-1">
             {filterManager.selectedSources.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedSources.length} {i18n.t(k.SOURCES1)}
+                {filterManager.selectedSources.length} {t(k.SOURCES1)}
               </span>
             )}
             {filterManager.selectedDocumentSets.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedDocumentSets.length} {i18n.t(k.SETS)}
+                {filterManager.selectedDocumentSets.length} {t(k.SETS)}
               </span>
             )}
             {filterManager.selectedTags.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedTags.length} {i18n.t(k.TAGS1)}
+                {filterManager.selectedTags.length} {t(k.TAGS1)}
               </span>
             )}
             {filterManager.timeRange && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {i18n.t(k.DATE_RANGE1)}
+                {t(k.DATE_RANGE1)}
               </span>
             )}
           </div>

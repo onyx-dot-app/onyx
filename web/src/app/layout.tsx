@@ -28,10 +28,13 @@ import { Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { DocumentsProvider } from "./chat/my-documents/DocumentsContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import "../i18n/init";
+import i18n from "../i18n/init";
+import k from "../i18n/keys";
+import { I18nextProvider } from "react-i18next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -129,9 +132,13 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="text-text min-h-screen bg-background">
-            <PHProvider>{content}</PHProvider>
-          </div>
+          <I18nextProvider i18n={i18n}>
+            <LanguageProvider>
+              <div className="text-text min-h-screen bg-background">
+                <PHProvider>{content}</PHProvider>
+              </div>
+            </LanguageProvider>
+          </I18nextProvider>
         </ThemeProvider>
       </body>
     </html>

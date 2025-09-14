@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
@@ -233,6 +233,7 @@ export function ChatInputBar({
   proSearchEnabled,
   setProSearchEnabled,
 }: ChatInputBarProps) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const {
     selectedFiles,
@@ -463,7 +464,7 @@ export function ChatInputBar({
                     </p>
                     <p className="text-text-dark font-light line-clamp-1">
                       {currentAssistant.id == selectedAssistant.id &&
-                        i18n.t(k.DEFAULT_IN_PAREN)}
+                        t(k.DEFAULT_IN_PAREN)}
                       {currentAssistant.description}
                     </p>
                   </button>
@@ -479,7 +480,7 @@ export function ChatInputBar({
                   href="/assistants/new"
                 >
                   <FiPlus size={17} />
-                  <p>{i18n.t(k.CREATE_A_NEW_ASSISTANT)}</p>
+                  <p>{t(k.CREATE_A_NEW_ASSISTANT)}</p>
                 </a>
               </div>
             </div>
@@ -504,7 +505,7 @@ export function ChatInputBar({
                     >
                       <p className="font-bold">
                         {currentPrompt.prompt}
-                        {i18n.t(k._2)}
+                        {t(k._2)}
                       </p>
                       <p className="text-left flex-grow mr-auto line-clamp-1">
                         {currentPrompt.content?.trim()}
@@ -523,7 +524,7 @@ export function ChatInputBar({
                   href="/chat/input-prompts"
                 >
                   <FiPlus size={17} />
-                  <p>{i18n.t(k.CREATE_A_NEW_PROMPT)}</p>
+                  <p>{t(k.CREATE_A_NEW_PROMPT)}</p>
                 </a>
               </div>
             </div>
@@ -622,7 +623,7 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`${i18n.t(k.MESSAGE2)} ${i18n.t(
+              placeholder={`${t(k.MESSAGE2)} ${t(
                 k.TO_ASSISTANT_TEXT
               )} ${truncateString(selectedAssistant.name, 70)}...`}
               value={message}
@@ -742,9 +743,7 @@ export function ChatInputBar({
                         toggleDocumentSidebar();
                       }}
                       icon={<FileIcon size={16} />}
-                      title={`${selectedDocuments.length} ${i18n.t(
-                        k.SELECTED
-                      )}`}
+                      title={`${selectedDocuments.length} ${t(k.SELECTED)}`}
                       onRemove={removeDocs}
                     />
                   )}
@@ -762,7 +761,7 @@ export function ChatInputBar({
                             />
                           )
                         }
-                        title={file.name || i18n.t(k.FILE2) + file.id}
+                        title={file.name || t(k.FILE2) + file.id}
                         onRemove={() => {
                           setCurrentMessageFiles(
                             currentMessageFiles.filter(
@@ -775,7 +774,7 @@ export function ChatInputBar({
                       <SourceChip
                         key={`file-${index}`}
                         icon={<FileIcon className="text-red-500" size={16} />}
-                        title={file.name || i18n.t(k.FILE2)}
+                        title={file.name || t(k.FILE2)}
                         onRemove={() => {
                           setCurrentMessageFiles(
                             currentMessageFiles.filter(
@@ -794,13 +793,13 @@ export function ChatInputBar({
               <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
-                  label={i18n.t(k.FILE_LABEL)}
+                  label={t(k.FILE_LABEL)}
                   name="File"
                   Icon={FiPlusCircle}
                   onClick={() => {
                     toggleDocSelection();
                   }}
-                  tooltipContent={i18n.t(k.UPLOAD_AND_ATTACH_FILES)}
+                  tooltipContent={t(k.UPLOAD_AND_ATTACH_FILES)}
                 />
 
                 <LLMPopover
@@ -825,7 +824,7 @@ export function ChatInputBar({
                           llmManager?.currentLlm.modelName ||
                             "claude-3-5-sonnet-20240620"
                         )}
-                        tooltipContent={i18n.t(k.TOGGLE_MODELS_TOOLTIP)}
+                        tooltipContent={t(k.TOGGLE_MODELS_TOOLTIP)}
                       />
                     </button>
                   }
@@ -845,11 +844,11 @@ export function ChatInputBar({
                     trigger={
                       <ChatInputOption
                         flexPriority="stiff"
-                        label={i18n.t(k.FILTERS_LABEL)}
+                        label={t(k.FILTERS_LABEL)}
                         name="Filters"
                         Icon={FiFilter}
                         toggle
-                        tooltipContent={i18n.t(k.FILTER_SEARCH_TOOLTIP)}
+                        tooltipContent={t(k.FILTER_SEARCH_TOOLTIP)}
                       />
                     }
                   />

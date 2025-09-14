@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import React, { useMemo, useState } from "react";
@@ -66,6 +66,7 @@ interface AssistantModalProps {
 }
 
 export function AssistantModal({ hideModal }: AssistantModalProps) {
+  const { t } = useTranslation();
   const { assistants, pinnedAssistants } = useAssistants();
   const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();
@@ -133,7 +134,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
           <button
             onClick={hideModal}
             className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
-            aria-label={i18n.t(k.CLOSE_MODAL)}
+            aria-label={t(k.CLOSE_MODAL)}
           >
             <XIcon className="w-5 h-5" />
           </button>
@@ -175,14 +176,14 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                   className="h-10 cursor-pointer px-6 py-3 bg-background-800 hover:bg-black rounded-md border border-black justify-center items-center gap-2.5 inline-flex"
                 >
                   <div className="text-text-50 text-lg font-normal leading-normal">
-                    {i18n.t(k.CREATE1)}
+                    {t(k.CREATE1)}
                   </div>
                 </button>
               </div>
               <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
                 <FilterIcon className="text-text-800" size={16} />
                 <AssistantBadgeSelector
-                  text={i18n.t(k.PINNED)}
+                  text={t(k.PINNED)}
                   selected={assistantFilters[AssistantFilter.Pinned]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Pinned)
@@ -190,7 +191,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text={i18n.t(k.PERSONAL)}
+                  text={t(k.PERSONAL)}
                   selected={assistantFilters[AssistantFilter.Mine]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Mine)
@@ -198,7 +199,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text={i18n.t(k.PRIVATE)}
+                  text={t(k.PRIVATE)}
                   selected={assistantFilters[AssistantFilter.Private]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Private)
@@ -206,7 +207,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text={i18n.t(k.PUBLIC)}
+                  text={t(k.PUBLIC)}
                   selected={assistantFilters[AssistantFilter.Public]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Public)
@@ -218,7 +219,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
 
             <div className="flex-grow overflow-y-auto">
               <h2 className="text-2xl font-semibold text-text-800 mb-2 px-4 py-2">
-                {i18n.t(k.FEATURED_ASSISTANTS)}
+                {t(k.FEATURED_ASSISTANTS)}
               </h2>
 
               <div className="w-full px-2 pb-10 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
@@ -236,7 +237,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                   ))
                 ) : (
                   <div className="col-span-2 text-center text-text-500">
-                    {i18n.t(k.NO_FEATURED_ASSISTANTS_MATCH_F)}
+                    {t(k.NO_FEATURED_ASSISTANTS_MATCH_F)}
                   </div>
                 )}
               </div>
@@ -244,7 +245,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
               {allAssistants && allAssistants.length > 0 && (
                 <>
                   <h2 className="text-2xl font-semibold text-text-800 mt-4 mb-2 px-4 py-2">
-                    {i18n.t(k.ALL_ASSISTANTS)}
+                    {t(k.ALL_ASSISTANTS)}
                   </h2>
 
                   <div className="w-full mt-2 px-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">

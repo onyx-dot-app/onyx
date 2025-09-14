@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
@@ -22,6 +22,7 @@ import {
 import Cookies from "js-cookie";
 
 const ResetPasswordPage: React.FC = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
@@ -47,7 +48,7 @@ const ResetPasswordPage: React.FC = () => {
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
           <Title className="mb-2 mx-auto font-bold">
-            {i18n.t(k.RESET_PASSWORD)}
+            {t(k.RESET_PASSWORD)}
           </Title>
         </div>
         {isWorking && <Spinner />}
@@ -58,19 +59,19 @@ const ResetPasswordPage: React.FC = () => {
             confirmPassword: "",
           }}
           validationSchema={Yup.object().shape({
-            password: Yup.string().required(i18n.t(k.PASSWORD_REQUIRED)),
+            password: Yup.string().required(t(k.PASSWORD_REQUIRED)),
             confirmPassword: Yup.string()
               .oneOf(
                 [Yup.ref("password"), undefined],
-                i18n.t(k.PASSWORDS_MUST_MATCH)
+                t(k.PASSWORDS_MUST_MATCH)
               )
-              .required(i18n.t(k.CONFIRM_PASSWORD_REQUIRED)),
+              .required(t(k.CONFIRM_PASSWORD_REQUIRED)),
           })}
           onSubmit={async (values) => {
             if (!token) {
               setPopup({
                 type: "error",
-                message: i18n.t(k.INVALID_OR_MISSING_RESET_TOKEN),
+                message: t(k.INVALID_OR_MISSING_RESET_TOKEN),
               });
               return;
             }
@@ -79,7 +80,7 @@ const ResetPasswordPage: React.FC = () => {
               await resetPassword(token, values.password);
               setPopup({
                 type: "success",
-                message: i18n.t(k.PASSWORD_RESET_SUCCESSFULLY_R),
+                message: t(k.PASSWORD_RESET_SUCCESSFULLY_R),
               });
               setTimeout(() => {
                 redirect("/auth/login");
@@ -88,12 +89,12 @@ const ResetPasswordPage: React.FC = () => {
               if (error instanceof Error) {
                 setPopup({
                   type: "error",
-                  message: error.message || i18n.t(k.PASSWORD_RESET_ERROR),
+                  message: error.message || t(k.PASSWORD_RESET_ERROR),
                 });
               } else {
                 setPopup({
                   type: "error",
-                  message: i18n.t(k.AN_UNEXPECTED_ERROR_OCCURRED),
+                  message: t(k.AN_UNEXPECTED_ERROR_OCCURRED),
                 });
               }
             } finally {
@@ -105,16 +106,16 @@ const ResetPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="password"
-                label={i18n.t(k.NEW_PASSWORD)}
+                label={t(k.NEW_PASSWORD)}
                 type="password"
-                placeholder={i18n.t(k.ENTER_NEW_PASSWORD)}
+                placeholder={t(k.ENTER_NEW_PASSWORD)}
               />
 
               <TextFormField
                 name="confirmPassword"
-                label={i18n.t(k.CONFIRM_NEW_PASSWORD)}
+                label={t(k.CONFIRM_NEW_PASSWORD)}
                 type="password"
-                placeholder={i18n.t(k.CONFIRM_NEW_PASSWORD_PLACEHOLDER)}
+                placeholder={t(k.CONFIRM_NEW_PASSWORD_PLACEHOLDER)}
               />
 
               <div className="flex">
@@ -123,7 +124,7 @@ const ResetPasswordPage: React.FC = () => {
                   disabled={isSubmitting}
                   className="mx-auto w-full"
                 >
-                  {i18n.t(k.RESET_PASSWORD)}
+                  {t(k.RESET_PASSWORD)}
                 </Button>
               </div>
             </Form>
@@ -132,7 +133,7 @@ const ResetPasswordPage: React.FC = () => {
         <div className="flex">
           <Text className="mt-4 mx-auto">
             <Link href="/auth/login" className="text-link font-medium">
-              {i18n.t(k.BACK_TO_LOGIN)}
+              {t(k.BACK_TO_LOGIN)}
             </Link>
           </Text>
         </div>

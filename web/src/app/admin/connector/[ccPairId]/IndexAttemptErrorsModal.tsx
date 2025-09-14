@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import {
@@ -40,12 +42,13 @@ export default function IndexAttemptErrorsModal({
   currentPage,
   pageSize = DEFAULT_PAGE_SIZE,
 }: IndexAttemptErrorsModalProps) {
+  const { t } = useTranslation();
   const totalPages = Math.ceil(errors.total_items / pageSize);
   const hasUnresolvedErrors = errors.items.some((error) => !error.is_resolved);
 
   return (
     <Modal
-      title={i18n.t(k.INDEXING_ERRORS_TITLE)}
+      title={t(k.INDEXING_ERRORS_TITLE)}
       onOutsideClick={onClose}
       width="max-w-6xl"
     >
@@ -53,15 +56,15 @@ export default function IndexAttemptErrorsModal({
         <div className="flex flex-col gap-2">
           {isResolvingErrors ? (
             <div className="text-sm text-text-default">
-              {i18n.t(k.CURRENTLY_ATTEMPTING_TO_RESOLV)}
+              {t(k.CURRENTLY_ATTEMPTING_TO_RESOLV)}
             </div>
           ) : (
             <>
               <div className="text-sm text-text-default">
-                {i18n.t(k.BELOW_ARE_THE_ERRORS_ENCOUNTER)}
+                {t(k.BELOW_ARE_THE_ERRORS_ENCOUNTER)}
               </div>
               <div className="text-sm text-text-default">
-                {i18n.t(k.CLICK_THE_BUTTON_BELOW_TO_KICK)}
+                {t(k.CLICK_THE_BUTTON_BELOW_TO_KICK)}
               </div>
             </>
           )}
@@ -70,10 +73,10 @@ export default function IndexAttemptErrorsModal({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{i18n.t(k.TIME)}</TableHead>
-              <TableHead>{i18n.t(k.DOCUMENT_ID)}</TableHead>
-              <TableHead className="w-1/2">{i18n.t(k.ERROR_MESSAGE)}</TableHead>
-              <TableHead>{i18n.t(k.STATUS)}</TableHead>
+              <TableHead>{t(k.TIME)}</TableHead>
+              <TableHead>{t(k.DOCUMENT_ID)}</TableHead>
+              <TableHead className="w-1/2">{t(k.ERROR_MESSAGE)}</TableHead>
+              <TableHead>{t(k.STATUS)}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -88,12 +91,10 @@ export default function IndexAttemptErrorsModal({
                       rel="noopener noreferrer"
                       className="text-link hover:underline"
                     >
-                      {error.document_id ||
-                        error.entity_id ||
-                        i18n.t(k.UNKNOWN)}
+                      {error.document_id || error.entity_id || t(k.UNKNOWN)}
                     </a>
                   ) : (
-                    error.document_id || error.entity_id || i18n.t(k.UNKNOWN)
+                    error.document_id || error.entity_id || t(k.UNKNOWN)
                   )}
                 </TableCell>
                 <TableCell className="whitespace-normal">
@@ -107,9 +108,7 @@ export default function IndexAttemptErrorsModal({
                         : "bg-red-100 text-red-800"
                     }`}
                   >
-                    {error.is_resolved
-                      ? i18n.t(k.RESOLVED)
-                      : i18n.t(k.UNRESOLVED)}
+                    {error.is_resolved ? t(k.RESOLVED) : t(k.UNRESOLVED)}
                   </span>
                 </TableCell>
               </TableRow>
@@ -136,7 +135,7 @@ export default function IndexAttemptErrorsModal({
                   variant="default"
                   className="ml-4 whitespace-nowrap"
                 >
-                  {i18n.t(k.RESOLVE_ALL)}
+                  {t(k.RESOLVE_ALL)}
                 </Button>
               )}
             </div>

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -35,6 +37,7 @@ export function AssistantSharingModal({
   show,
   onClose,
 }: AssistantSharingModalProps) {
+  const { t } = useTranslation();
   const { refreshAssistants } = useAssistants();
   const { popup, setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -66,7 +69,7 @@ export function AssistantSharingModal({
       setIsUpdating(false);
       if (error) {
         setPopup({
-          message: i18n.t(k.FAILED_TO_SHARE_ASSISTANT, { error }),
+          message: t(k.FAILED_TO_SHARE_ASSISTANT, { error }),
           type: "error",
         });
       }
@@ -85,7 +88,7 @@ export function AssistantSharingModal({
   } else {
     sharedStatus = (
       <div>
-        {i18n.t(k.SHARED_WITH)}{" "}
+        {t(k.SHARED_WITH)}{" "}
         <div className="flex flex-wrap gap-x-2 mt-2">
           {sharedUsersWithoutOwner.map((u) => (
             <Bubble
@@ -108,9 +111,7 @@ export function AssistantSharingModal({
                   setIsUpdating(false);
                   if (error) {
                     setPopup({
-                      message: `${i18n.t(
-                        k.FAILED_TO_REMOVE_ASSISTANT
-                      )} ${error}`,
+                      message: `${t(k.FAILED_TO_REMOVE_ASSISTANT)} ${error}`,
                       type: "error",
                     });
                   }
@@ -144,20 +145,16 @@ export function AssistantSharingModal({
       >
         <div>
           <p className="text-text-600 text-lg mb-6">
-            {i18n.t(k.MANAGE_ACCESS_TO_THIS_ASSISTAN)}
+            {t(k.MANAGE_ACCESS_TO_THIS_ASSISTAN)}
           </p>
 
           <div className="mb-8 flex flex-col gap-y-4">
-            <h3 className="text-lg font-semibold">
-              {i18n.t(k.CURRENT_STATUS)}
-            </h3>
+            <h3 className="text-lg font-semibold">{t(k.CURRENT_STATUS)}</h3>
             <div className="bg-background-50 rounded-lg">{sharedStatus}</div>
           </div>
 
           <div className="mb-8 flex flex-col gap-y-4">
-            <h3 className="text-lg font-semibold">
-              {i18n.t(k.SHARE_ASSISTANT)}
-            </h3>
+            <h3 className="text-lg font-semibold">{t(k.SHARE_ASSISTANT)}</h3>
             <SearchMultiSelectDropdown
               options={allUsers
                 .filter(
@@ -195,7 +192,7 @@ export function AssistantSharingModal({
           {selectedUsers.length > 0 && (
             <div className="mb-6">
               <h4 className="text-sm font-medium text-text-700 mb-2">
-                {i18n.t(k.SELECTED_USERS)}
+                {t(k.SELECTED_USERS)}
               </h4>
               <div className="flex flex-wrap gap-2">
                 {selectedUsers.map((selectedUser) => (
@@ -227,7 +224,7 @@ export function AssistantSharingModal({
               size="sm"
               variant="secondary"
             >
-              {i18n.t(k.SHARE_WITH_SELECTED_USERS)}
+              {t(k.SHARE_WITH_SELECTED_USERS)}
             </Button>
           )}
         </div>

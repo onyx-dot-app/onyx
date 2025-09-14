@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
@@ -58,6 +58,7 @@ enum ReindexType {
 }
 
 export default function EmbeddingForm() {
+  const { t } = useTranslation();
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -226,7 +227,7 @@ export default function EmbeddingForm() {
       return true;
     } else {
       setPopup({
-        message: i18n.t(k.FAILED_TO_UPDATE_SEARCH_SETTINGS),
+        message: t(k.FAILED_TO_UPDATE_SEARCH_SETTINGS),
         type: "error",
       });
       return false;
@@ -270,7 +271,7 @@ export default function EmbeddingForm() {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
-                  navigateToEmbeddingPage(i18n.t(k.SEARCH_SETTINGS1));
+                  navigateToEmbeddingPage(t(k.SEARCH_SETTINGS1));
                 }
               }}
               disabled={!isOverallFormValid}
@@ -294,8 +295,8 @@ export default function EmbeddingForm() {
                 w-32"
             >
               {reindexType == ReindexType.REINDEX
-                ? i18n.t(k.RE_INDEX1)
-                : i18n.t(k.INSTANT_SWITCH)}
+                ? t(k.RE_INDEX1)
+                : t(k.INSTANT_SWITCH)}
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -334,10 +335,10 @@ export default function EmbeddingForm() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger className="w-full text-left">
-                        {i18n.t(k.RECOMMENDED_RE_INDEX)}
+                        {t(k.RECOMMENDED_RE_INDEX)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{i18n.t(k.RE_RUNS_ALL_CONNECTORS_IN_THE)}</p>
+                        <p>{t(k.RE_RUNS_ALL_CONNECTORS_IN_THE)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -350,10 +351,10 @@ export default function EmbeddingForm() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger className="w-full text-left">
-                        {i18n.t(k.INSTANT_SWITCH)}
+                        {t(k.INSTANT_SWITCH)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{i18n.t(k.IMMEDIATELY_SWITCHES_TO_NEW_SE)}</p>
+                        <p>{t(k.IMMEDIATELY_SWITCHES_TO_NEW_SE)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -371,23 +372,23 @@ export default function EmbeddingForm() {
 
               <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
                 <p className="font-semibold mb-2">
-                  {i18n.t(k.NEEDS_RE_INDEXING_DUE_TO)}
+                  {t(k.NEEDS_RE_INDEXING_DUE_TO)}
                 </p>
                 <ul className="list-disc pl-5">
                   {currentEmbeddingModel != selectedProvider && (
-                    <li>{i18n.t(k.CHANGED_EMBEDDING_PROVIDER)}</li>
+                    <li>{t(k.CHANGED_EMBEDDING_PROVIDER)}</li>
                   )}
                   {searchSettings?.multipass_indexing !=
                     advancedEmbeddingDetails.multipass_indexing && (
-                    <li>{i18n.t(k.MULTIPASS_INDEXING_MODIFICATIO)}</li>
+                    <li>{t(k.MULTIPASS_INDEXING_MODIFICATIO)}</li>
                   )}
                   {searchSettings?.embedding_precision !=
                     advancedEmbeddingDetails.embedding_precision && (
-                    <li>{i18n.t(k.EMBEDDING_PRECISION_MODIFICATI)}</li>
+                    <li>{t(k.EMBEDDING_PRECISION_MODIFICATI)}</li>
                   )}
                   {searchSettings?.reduced_dimension !=
                     advancedEmbeddingDetails.reduced_dimension && (
-                    <li>{i18n.t(k.REDUCED_DIMENSION_MODIFICATION)}</li>
+                    <li>{t(k.REDUCED_DIMENSION_MODIFICATION)}</li>
                   )}
                   {(searchSettings?.enable_contextual_rag !=
                     advancedEmbeddingDetails.enable_contextual_rag ||
@@ -395,7 +396,7 @@ export default function EmbeddingForm() {
                       advancedEmbeddingDetails.contextual_rag_llm_name ||
                     searchSettings?.contextual_rag_llm_provider !=
                       advancedEmbeddingDetails.contextual_rag_llm_provider) && (
-                    <li>{i18n.t(k.CONTEXTUAL_RAG_MODIFICATION)}</li>
+                    <li>{t(k.CONTEXTUAL_RAG_MODIFICATION)}</li>
                   )}
                 </ul>
               </div>
@@ -411,15 +412,13 @@ export default function EmbeddingForm() {
                 />
 
                 <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
-                  <p className="font-semibold mb-2">
-                    {i18n.t(k.VALIDATION_ERRORS)}
-                  </p>
+                  <p className="font-semibold mb-2">{t(k.VALIDATION_ERRORS)}</p>
                   <ul className="list-disc pl-5">
                     {Object.entries(combinedFormErrors).map(
                       ([field, error]) => (
                         <li key={field}>
                           {field}
-                          {i18n.t(k._2)} {error}
+                          {t(k._2)} {error}
                         </li>
                       )
                     )}
@@ -434,11 +433,11 @@ export default function EmbeddingForm() {
             className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
             onClick={() => {
               updateSearch();
-              navigateToEmbeddingPage(i18n.t(k.SEARCH_SETTINGS1));
+              navigateToEmbeddingPage(t(k.SEARCH_SETTINGS1));
             }}
             disabled={!isOverallFormValid}
           >
-            {i18n.t(k.UPDATE_SEARCH)}
+            {t(k.UPDATE_SEARCH)}
           </button>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
@@ -451,7 +450,7 @@ export default function EmbeddingForm() {
 
                 <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
                   <p className="font-semibold mb-2 text-red-400">
-                    {i18n.t(k.VALIDATION_ERRORS)}
+                    {t(k.VALIDATION_ERRORS)}
                   </p>
                   <ul className="list-disc pl-5">
                     {Object.entries(combinedFormErrors).map(
@@ -474,9 +473,7 @@ export default function EmbeddingForm() {
     return <ThreeDotsLoader />;
   }
   if (currentEmbeddingModelError || !currentEmbeddingModel) {
-    return (
-      <ErrorCallout errorTitle={i18n.t(k.FAILED_TO_GET_EMBEDDING_STATUS)} />
-    );
+    return <ErrorCallout errorTitle={t(k.FAILED_TO_GET_EMBEDDING_STATUS)} />;
   }
 
   const updateCurrentModel = (newModel: string) => {
@@ -535,12 +532,12 @@ export default function EmbeddingForm() {
       navigateToEmbeddingPage("embedding model");
     } else {
       setPopup({
-        message: i18n.t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL),
+        message: t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL),
         type: "error",
       });
 
       alert(
-        i18n.t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL_ALERT, {
+        t(k.FAILED_TO_UPDATE_EMBEDDING_MODEL_ALERT, {
           response: await response.text(),
         })
       );
@@ -558,11 +555,9 @@ export default function EmbeddingForm() {
         {formStep == 0 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              {i18n.t(k.SELECT_AN_EMBEDDING_MODEL)}
+              {t(k.SELECT_AN_EMBEDDING_MODEL)}
             </h2>
-            <Text className="mb-4">
-              {i18n.t(k.NOTE_THAT_UPDATING_THE_BACKING)}
-            </Text>
+            <Text className="mb-4">{t(k.NOTE_THAT_UPDATING_THE_BACKING)}</Text>
             <CardSection>
               <EmbeddingModelSelection
                 updateCurrentModel={updateCurrentModel}
@@ -589,7 +584,7 @@ export default function EmbeddingForm() {
                   }
                 }}
               >
-                {i18n.t(k.CONTINUE)}
+                {t(k.CONTINUE)}
                 <ArrowRight />
               </button>
             </div>
@@ -599,25 +594,24 @@ export default function EmbeddingForm() {
           <Modal
             onOutsideClick={() => setShowPoorModel(false)}
             width="max-w-3xl"
-            title={`${i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_SELEC)} ${
+            title={`${t(k.ARE_YOU_SURE_YOU_WANT_TO_SELEC)} ${
               selectedProvider.model_name
-            }${i18n.t(k._10)}`}
+            }${t(k._10)}`}
           >
             <>
               <div className="text-lg">
-                {selectedProvider.model_name}{" "}
-                {i18n.t(k.IS_A_LOWER_ACCURACY_MODEL)}
+                {selectedProvider.model_name} {t(k.IS_A_LOWER_ACCURACY_MODEL)}
                 <br />
-                {i18n.t(k.WE_RECOMMEND_THE_FOLLOWING_ALT)}
-                <li>{i18n.t(k.COHERE_EMBED_ENGLISH_V_FOR)}</li>
-                <li>{i18n.t(k.NOMIC_NOMIC_EMBED_TEXT_V_FOR)}</li>
+                {t(k.WE_RECOMMEND_THE_FOLLOWING_ALT)}
+                <li>{t(k.COHERE_EMBED_ENGLISH_V_FOR)}</li>
+                <li>{t(k.NOMIC_NOMIC_EMBED_TEXT_V_FOR)}</li>
               </div>
               <div className="flex mt-4 justify-between">
                 <Button
                   variant="secondary"
                   onClick={() => setShowPoorModel(false)}
                 >
-                  {i18n.t(k.CANCEL_UPDATE)}
+                  {t(k.CANCEL_UPDATE)}
                 </Button>
                 <Button
                   onClick={() => {
@@ -625,7 +619,7 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  {i18n.t(k.CONTINUE_WITH)} {selectedProvider.model_name}
+                  {t(k.CONTINUE_WITH)} {selectedProvider.model_name}
                 </Button>
               </div>
             </>
@@ -646,11 +640,9 @@ export default function EmbeddingForm() {
         {formStep == 1 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              {i18n.t(k.SELECT_A_RERANKING_MODEL)}
+              {t(k.SELECT_A_RERANKING_MODEL)}
             </h2>
-            <Text className="mb-4">
-              {i18n.t(k.UPDATING_THE_RERANKING_MODEL_D)}
-            </Text>
+            <Text className="mb-4">{t(k.UPDATING_THE_RERANKING_MODEL_D)}</Text>
 
             <CardSection>
               <RerankingDetailsForm
@@ -674,7 +666,7 @@ export default function EmbeddingForm() {
                 onClick={() => prevFormStep()}
               >
                 <ArrowLeft />
-                {i18n.t(k.PREVIOUS)}
+                {t(k.PREVIOUS)}
               </button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
@@ -686,7 +678,7 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  {i18n.t(k.ADVANCED)}
+                  {t(k.ADVANCED)}
                   <ArrowRight />
                 </button>
               </div>
@@ -696,11 +688,9 @@ export default function EmbeddingForm() {
         {formStep == 2 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              {i18n.t(k.ADVANCED_SEARCH_CONFIGURATION)}
+              {t(k.ADVANCED_SEARCH_CONFIGURATION)}
             </h2>
-            <Text className="mb-4">
-              {i18n.t(k.CONFIGURE_ADVANCED_EMBEDDING_A)}
-            </Text>
+            <Text className="mb-4">{t(k.CONFIGURE_ADVANCED_EMBEDDING_A)}</Text>
 
             <CardSection>
               <AdvancedEmbeddingFormPage
@@ -719,7 +709,7 @@ export default function EmbeddingForm() {
                 onClick={() => prevFormStep()}
               >
                 <ArrowLeft />
-                {i18n.t(k.PREVIOUS)}
+                {t(k.PREVIOUS)}
               </button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { useFormContext } from "@/components/context/FormContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
@@ -16,12 +18,14 @@ function BackButton({
   isAdmin,
   isCurator,
   user,
+  t,
 }: {
   isAdmin: boolean;
   isCurator: boolean;
   user: User | null;
+  t: (key: string, options?: any) => string;
 }) {
-  const buttonText = isAdmin ? i18n.t(k.ADMIN_PANEL) : i18n.t(k.CURATOR_PANEL);
+  const buttonText = isAdmin ? t(k.ADMIN_PANEL) : t(k.CURATOR_PANEL);
 
   if (!isAdmin && !isCurator) {
     console.error(
@@ -47,6 +51,7 @@ function BackButton({
 }
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const combinedSettings = useContext(SettingsContext);
@@ -58,10 +63,10 @@ export default function Sidebar() {
   const noCredential = credentialTemplates[connector] == null;
 
   const settingSteps = [
-    ...(!noCredential ? [i18n.t(k.CREDENTIALS)] : []),
-    i18n.t(k.CONNECTOR),
+    ...(!noCredential ? [t(k.CREDENTIALS)] : []),
+    t(k.CONNECTOR),
 
-    ...(connector == "file" ? [] : [i18n.t(k.ADVANCED_OPTIONAL)]),
+    ...(connector == "file" ? [] : [t(k.ADVANCED_OPTIONAL)]),
   ];
 
   return (
@@ -88,12 +93,17 @@ export default function Sidebar() {
               {enterpriseSettings && enterpriseSettings.application_name ? (
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               ) : (
-                <HeaderTitle>{i18n.t(k.ONYX)}</HeaderTitle>
+                <HeaderTitle>{t(k.ONYX)}</HeaderTitle>
               )}
             </div>
           </div>
 
-          <BackButton isAdmin={isAdmin} isCurator={isCurator} user={user} />
+          <BackButton
+            isAdmin={isAdmin}
+            isCurator={isCurator}
+            user={user}
+            t={t}
+          />
 
           <div className="h-full flex">
             <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -103,8 +113,8 @@ export default function Sidebar() {
                 )}
                 {settingSteps.map((step, index) => {
                   const allowed =
-                    (step == i18n.t(k.CONNECTOR) && allowCreate) ||
-                    (step == i18n.t(k.ADVANCED_OPTIONAL) && allowAdvanced) ||
+                    (step == t(k.CONNECTOR) && allowCreate) ||
+                    (step == t(k.ADVANCED_OPTIONAL) && allowAdvanced) ||
                     index <= formStep;
 
                   return (

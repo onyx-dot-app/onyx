@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import * as Yup from "yup";
@@ -37,6 +37,7 @@ export const CreateRateLimitModal = ({
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) => {
+  const { t } = useTranslation();
   const [modalUserGroups, setModalUserGroups] = useState([]);
   const [shouldFetchUserGroups, setShouldFetchUserGroups] = useState(
     forSpecificScope === Scope.USER_GROUP
@@ -56,7 +57,7 @@ export const CreateRateLimitModal = ({
       } catch (error) {
         setPopup({
           type: "error",
-          message: i18n.t(k.FAILED_TO_GET_USER_GROUPS, { error }),
+          message: t(k.FAILED_TO_GET_USER_GROUPS, { error }),
         });
       }
     };
@@ -72,7 +73,7 @@ export const CreateRateLimitModal = ({
 
   return (
     <Modal
-      title={i18n.t(k.CREATE_TOKEN_RATE_LIMIT)}
+      title={t(k.CREATE_TOKEN_RATE_LIMIT)}
       onOutsideClick={() => setIsOpen(false)}
       width="max-w-2xl w-full"
     >
@@ -86,15 +87,15 @@ export const CreateRateLimitModal = ({
         }}
         validationSchema={Yup.object().shape({
           period_hours: Yup.number()
-            .required(i18n.t(k.TIME_WINDOW_REQUIRED))
-            .min(1, i18n.t(k.TIME_WINDOW_MIN_1_HOUR)),
+            .required(t(k.TIME_WINDOW_REQUIRED))
+            .min(1, t(k.TIME_WINDOW_MIN_1_HOUR)),
           token_budget: Yup.number()
-            .required(i18n.t(k.TOKEN_BUDGET_REQUIRED))
-            .min(1, i18n.t(k.TOKEN_BUDGET_MIN_1)),
-          target_scope: Yup.string().required(i18n.t(k.TARGET_SCOPE_REQUIRED)),
+            .required(t(k.TOKEN_BUDGET_REQUIRED))
+            .min(1, t(k.TOKEN_BUDGET_MIN_1)),
+          target_scope: Yup.string().required(t(k.TARGET_SCOPE_REQUIRED)),
           user_group_id: Yup.string().test(
             "user_group_id",
-            i18n.t(k.USER_GROUP_REQUIRED),
+            t(k.USER_GROUP_REQUIRED),
             (value, context) => {
               return (
                 context.parent.target_scope !== "user_group" ||
@@ -122,9 +123,9 @@ export const CreateRateLimitModal = ({
                 name="target_scope"
                 label="Target Scope"
                 options={[
-                  { name: i18n.t(k.GLOBAL), value: Scope.GLOBAL },
-                  { name: i18n.t(k.USER), value: Scope.USER },
-                  { name: i18n.t(k.USER_GROUP), value: Scope.USER_GROUP },
+                  { name: t(k.GLOBAL), value: Scope.GLOBAL },
+                  { name: t(k.USER), value: Scope.USER },
+                  { name: t(k.USER_GROUP), value: Scope.USER_GROUP },
                 ]}
                 includeDefault={false}
                 onSelect={(selected) => {
@@ -139,21 +140,21 @@ export const CreateRateLimitModal = ({
               values.target_scope === Scope.USER_GROUP && (
                 <SelectorFormField
                   name="user_group_id"
-                  label={i18n.t(k.USER_GROUP_LABEL)}
+                  label={t(k.USER_GROUP_LABEL)}
                   options={modalUserGroups}
                   includeDefault={false}
                 />
               )}
             <TextFormField
               name="period_hours"
-              label={i18n.t(k.TIME_WINDOW_HOURS)}
+              label={t(k.TIME_WINDOW_HOURS)}
               type="number"
               placeholder=""
             />
 
             <TextFormField
               name="token_budget"
-              label={i18n.t(k.TOKEN_BUDGET_THOUSANDS)}
+              label={t(k.TOKEN_BUDGET_THOUSANDS)}
               type="number"
               placeholder=""
             />
@@ -164,7 +165,7 @@ export const CreateRateLimitModal = ({
               size="sm"
               disabled={isSubmitting}
             >
-              {i18n.t(k.CREATE)}
+              {t(k.CREATE)}
             </Button>
           </Form>
         )}

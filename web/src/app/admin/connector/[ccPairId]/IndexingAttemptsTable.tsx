@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { useState } from "react";
@@ -51,6 +51,7 @@ export function IndexingAttemptsTable({
   totalPages,
   onPageChange,
 }: IndexingAttemptsTableProps) {
+  const { t } = useTranslation();
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
@@ -59,10 +60,10 @@ export function IndexingAttemptsTable({
     return (
       <Callout
         className="mt-4"
-        title={i18n.t(k.NO_INDEXING_ATTEMPTS_SCHEDULED)}
+        title={t(k.NO_INDEXING_ATTEMPTS_SCHEDULED)}
         type="notice"
       >
-        {i18n.t(k.INDEX_ATTEMPTS_ARE_SCHEDULED_I)}
+        {t(k.INDEX_ATTEMPTS_ARE_SCHEDULED_I)}
       </Callout>
     );
   }
@@ -83,27 +84,27 @@ export function IndexingAttemptsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.TIME_STARTED)}</TableHead>
-            <TableHead>{i18n.t(k.STATUS)}</TableHead>
-            <TableHead>{i18n.t(k.NEW_DOC_CNT)}</TableHead>
+            <TableHead>{t(k.TIME_STARTED)}</TableHead>
+            <TableHead>{t(k.STATUS)}</TableHead>
+            <TableHead>{t(k.NEW_DOC_CNT)}</TableHead>
             <TableHead>
               <div className="w-fit">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help flex items-center">
-                        {i18n.t(k.TOTAL_DOC_CNT)}
+                        {t(k.TOTAL_DOC_CNT)}
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {i18n.t(k.TOTAL_NUMBER_OF_DOCUMENTS_REPL)}
+                      {t(k.TOTAL_NUMBER_OF_DOCUMENTS_REPL)}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
             </TableHead>
-            <TableHead>{i18n.t(k.ERROR_MESSAGE)}</TableHead>
+            <TableHead>{t(k.ERROR_MESSAGE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -115,7 +116,7 @@ export function IndexingAttemptsTable({
                 <TableCell>
                   {indexAttempt.time_started
                     ? localizeAndPrettify(indexAttempt.time_started)
-                    : i18n.t(k._)}
+                    : t(k._)}
                 </TableCell>
                 <TableCell>
                   <IndexAttemptStatus
@@ -124,12 +125,12 @@ export function IndexingAttemptsTable({
 
                   {docsPerMinute ? (
                     <div className="text-xs mt-1">
-                      {docsPerMinute} {i18n.t(k.DOCS_MIN)}
+                      {docsPerMinute} {t(k.DOCS_MIN)}
                     </div>
                   ) : (
-                    indexAttempt.status === i18n.t(k.SUCCESS) && (
+                    indexAttempt.status === t(k.SUCCESS) && (
                       <div className="text-xs mt-1">
-                        {i18n.t(k.NO_ADDITIONAL_DOCS_PROCESSED)}
+                        {t(k.NO_ADDITIONAL_DOCS_PROCESSED)}
                       </div>
                     )
                   )}
@@ -140,9 +141,9 @@ export function IndexingAttemptsTable({
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
-                          {i18n.t(k.ALSO_REMOVED)}{" "}
+                          {t(k.ALSO_REMOVED)}{" "}
                           {indexAttempt.docs_removed_from_index}{" "}
-                          {i18n.t(k.DOCS_THAT_WERE_DETECTED_AS_DEL)}
+                          {t(k.DOCS_THAT_WERE_DETECTED_AS_DEL)}
                         </div>
                       )}
                     </div>
@@ -171,7 +172,7 @@ export function IndexingAttemptsTable({
                         }}
                         className="mt-2 text-link cursor-pointer select-none"
                       >
-                        {i18n.t(k.VIEW_FULL_TRACE)}
+                        {t(k.VIEW_FULL_TRACE)}
                       </div>
                     )}
                   </div>

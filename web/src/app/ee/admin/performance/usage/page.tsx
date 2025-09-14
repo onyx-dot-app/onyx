@@ -1,6 +1,6 @@
 "use client";
 
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../../../../i18n/keys";
 import { DateRangeSelector } from "../DateRangeSelector";
 import { FeedbackChart } from "./FeedbackChart";
@@ -13,12 +13,13 @@ import UsageReports from "./UsageReports";
 import { Separator } from "@/components/ui/separator";
 
 export default function AnalyticsPage() {
+  const { t } = useTranslation();
   const [timeRange, setTimeRange] = useTimeRange();
 
   return (
     <main className="pt-4 mx-auto container">
       <AdminPageTitle
-        title={i18n.t(k.USAGE_STATISTICS)}
+        title={t(k.USAGE_STATISTICS)}
         icon={<FiActivity size={32} />}
       />
 

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import { ApiKeyForm } from "./ApiKeyForm";
@@ -15,6 +15,7 @@ export const ApiKeyModal = ({
   hide?: () => void;
   setPopup: (popup: PopupSpec) => void;
 }) => {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const {
@@ -28,25 +29,25 @@ export const ApiKeyModal = ({
   }
   return (
     <Modal
-      title={i18n.t(k.CONFIGURE_AI_MODEL_TITLE)}
+      title={t(k.CONFIGURE_AI_MODEL_TITLE)}
       width="max-w-3xl w-full"
       onOutsideClick={hide ? () => hide() : undefined}
     >
       <>
         <div className="mb-5 text-sm text-neutral-700 dark:text-neutral-200">
-          {i18n.t(k.PLEASE_PROVIDE_AN_API_KEY_YO)}
+          {t(k.PLEASE_PROVIDE_AN_API_KEY_YO)}
 
           <br />
           {hide && (
             <>
-              {i18n.t(k.IF_YOU_WOULD_RATHER_LOOK_AROUN)}{" "}
+              {t(k.IF_YOU_WOULD_RATHER_LOOK_AROUN)}{" "}
               <strong
                 onClick={() => hide()}
                 className="text-link cursor-pointer"
               >
-                {i18n.t(k.SKIP_THIS_STEP)}
+                {t(k.SKIP_THIS_STEP)}
               </strong>
-              {i18n.t(k._8)}
+              {t(k._8)}
             </>
           )}
         </div>

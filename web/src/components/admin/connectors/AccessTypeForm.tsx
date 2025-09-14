@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { DefaultDropdown } from "@/components/Dropdown";
 import {
@@ -24,6 +26,7 @@ export function AccessTypeForm({
 }: {
   connector: ConfigurableSources;
 }) {
+  const { t } = useTranslation();
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
 
@@ -52,25 +55,25 @@ export function AccessTypeForm({
 
   const options = [
     {
-      name: i18n.t(k.PRIVATE),
+      name: t(k.PRIVATE),
       value: "private",
-      description: i18n.t(k.PRIVATE_DESCRIPTION),
+      description: t(k.PRIVATE_DESCRIPTION),
     },
   ];
 
   if (isAdmin) {
     options.push({
-      name: i18n.t(k.PUBLIC),
+      name: t(k.PUBLIC),
       value: "public",
-      description: i18n.t(k.PUBLIC_DESCRIPTION),
+      description: t(k.PUBLIC_DESCRIPTION),
     });
   }
 
   if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
     options.push({
-      name: i18n.t(k.AUTO_SYNC_PERMISSIONS),
+      name: t(k.AUTO_SYNC_PERMISSIONS),
       value: "sync",
-      description: i18n.t(k.AUTO_SYNC_DESCRIPTION),
+      description: t(k.AUTO_SYNC_DESCRIPTION),
     });
   }
 
@@ -80,10 +83,10 @@ export function AccessTypeForm({
         <>
           <div>
             <label className="text-text-950 font-medium">
-              {i18n.t(k.DOCUMENT_ACCESS)}
+              {t(k.DOCUMENT_ACCESS)}
             </label>
             <p className="text-sm text-text-500">
-              {i18n.t(k.CONTROL_WHO_HAS_ACCESS_TO_THE)}
+              {t(k.CONTROL_WHO_HAS_ACCESS_TO_THE)}
             </p>
           </div>
           <DefaultDropdown

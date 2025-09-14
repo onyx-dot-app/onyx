@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../../i18n/keys";
 import React, { useState, useRef, useEffect } from "react";
 import {
@@ -97,6 +97,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onUploadComplete,
   onUploadProgress,
 }) => {
+  const { t } = useTranslation();
   const [uploadType, setUploadType] = useState<"file" | "url">("file");
   const [fileUrl, setFileUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -323,7 +324,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     if (!fileUrl) return;
 
     if (!validateUrl(fileUrl)) {
-      setUrlError(i18n.t(k.ENTER_VALID_URL));
+      setUrlError(t(k.ENTER_VALID_URL));
       return;
     }
 
@@ -447,21 +448,19 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium">
-              {i18n.t(k.UNSUPPORTED_FILE_TYPE)}
-              {invalidFiles.length > 1 ? i18n.t(k.S) : ""}
+              {t(k.UNSUPPORTED_FILE_TYPE)}
+              {invalidFiles.length > 1 ? t(k.S) : ""}
             </p>
             <p className="mt-1">
               {invalidFiles.length > 1
-                ? `${i18n.t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
+                ? `${t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
                     .slice(0, 3)
-                    .join(i18n.t(k._3))}${
+                    .join(t(k._3))}${
                     invalidFiles.length > 3
-                      ? ` ${i18n.t(k.AND)} ${invalidFiles.length - 3} ${i18n.t(
-                          k.MORE
-                        )}`
+                      ? ` ${t(k.AND)} ${invalidFiles.length - 3} ${t(k.MORE)}`
                       : ""
                   }`
-                : `${i18n.t(k.THE_FILE)}${invalidFiles[0]}${i18n.t(
+                : `${t(k.THE_FILE)}${invalidFiles[0]}${t(
                     k.CANNOT_BE_UPLOADED
                   )}`}
             </p>
@@ -521,8 +520,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     <div className="mt-2">
                       <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">
                         {isDragging
-                          ? i18n.t(k.DROP_FILES_HERE)
-                          : i18n.t(k.DRAG_DROP_OR_CLICK_TO_UPLOAD)}
+                          ? t(k.DROP_FILES_HERE)
+                          : t(k.DRAG_DROP_OR_CLICK_TO_UPLOAD)}
                       </p>
                     </div>
                     <input
@@ -546,7 +545,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         <input
                           ref={urlInputRef}
                           type="text"
-                          placeholder={i18n.t(k.ENTER_URL_PLACEHOLDER)}
+                          placeholder={t(k.ENTER_URL_PLACEHOLDER)}
                           className={`w-full text-sm py-2 px-3 border rounded-md bg-transparent focus:outline-none focus:ring-1 
                             ${
                               urlError
@@ -599,7 +598,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           onClick={() => setUploadType("file")}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>{i18n.t(k.FILE2)}</span>
+          <span>{t(k.FILE2)}</span>
         </button>
         <button
           type="button"
@@ -611,7 +610,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           onClick={() => setUploadType("url")}
         >
           <Link className="w-3.5 h-3.5" />
-          <span>{i18n.t(k.URL)}</span>
+          <span>{t(k.URL)}</span>
         </button>
       </div>
     </div>
