@@ -87,7 +87,11 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import {
+  IMAGE_GENERATION_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/app/chat/components/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
@@ -98,11 +102,13 @@ function findSearchTool(tools: ToolSnapshot[]) {
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
+  return tools.find(
+    (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+  );
 }
 
-function findInternetSearchTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
+function findWebSearchTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -206,14 +212,14 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
-  const internetSearchTool = findInternetSearchTool(tools);
+  const webSearchTool = findWebSearchTool(tools);
 
   // Separate MCP tools from regular custom tools
   const allCustomTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
   );
 
   const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
@@ -284,7 +290,7 @@ export function AssistantEditor({
     ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
-    ...(internetSearchTool ? [internetSearchTool] : []),
+    ...(webSearchTool ? [webSearchTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -602,10 +608,7 @@ export function AssistantEditor({
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
 
-          if (
-            internetSearchTool &&
-            enabledTools.includes(internetSearchTool.id)
-          ) {
+          if (webSearchTool && enabledTools.includes(webSearchTool.id)) {
             // Internet searches should generally be datetime-aware
             formikHelpers.setFieldValue("datetime_aware", true);
           }
@@ -1208,11 +1211,11 @@ export function AssistantEditor({
                         </>
                       )}
 
-                      {internetSearchTool && (
+                      {webSearchTool && (
                         <>
                           <BooleanFormField
-                            name={`enabled_tools_map.${internetSearchTool.id}`}
-                            label={internetSearchTool.display_name}
+                            name={`enabled_tools_map.${webSearchTool.id}`}
+                            label={webSearchTool.display_name}
                             subtext="Access real-time information and search the web for up-to-date results"
                           />
                         </>

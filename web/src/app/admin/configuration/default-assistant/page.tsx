@@ -7,7 +7,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/components/ui/text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ChatIcon, OnyxSparkleIcon } from "@/components/icons/icons";
+import { OnyxSparkleIcon } from "@/components/icons/icons";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";

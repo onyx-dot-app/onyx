@@ -85,7 +85,7 @@ class SearchToolConfig(BaseModel):
     bypass_acl: bool = False
 
 
-class InternetSearchToolConfig(BaseModel):
+class WebSearchToolConfig(BaseModel):
     answer_style_config: AnswerStyleConfig = Field(
         default_factory=lambda: AnswerStyleConfig(
             citation_config=CitationConfig(all_docs_useful=True)
@@ -160,7 +160,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 # Note: this is not very clear / not the way things should generally be done. (+impure function)
 # TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
-    tool_config: SearchToolConfig | InternetSearchToolConfig,
+    tool_config: SearchToolConfig | WebSearchToolConfig,
     tools: list[Tool],
     llm: LLM,
 ) -> None:
@@ -188,7 +188,7 @@ def construct_tools(
     fast_llm: LLM,
     run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
-    internet_search_tool_config: InternetSearchToolConfig | None = None,
+    internet_search_tool_config: WebSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
@@ -266,7 +266,7 @@ def construct_tools(
             # Handle Internet Search Tool
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 if not internet_search_tool_config:
-                    internet_search_tool_config = InternetSearchToolConfig()
+                    internet_search_tool_config = WebSearchToolConfig()
 
                 try:
                     tool_dict[db_tool_model.id] = [

@@ -20,7 +20,6 @@ from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSI
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -42,6 +41,7 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -586,7 +586,7 @@ def upsert_persona(
 
     # ensure all specified tools are valid
     if tools:
-        validate_persona_tools(tools)
+        validate_persona_tools(tools, db_session)
 
     if existing_persona:
         # Built-in personas can only be updated through YAML configuration.
@@ -759,12 +759,12 @@ def update_persona_visibility(
     db_session.commit()
 
 
-def validate_persona_tools(tools: list[Tool]) -> None:
+def validate_persona_tools(tools: list[Tool], db_session: Session) -> None:
     for tool in tools:
-        if tool.in_code_tool_id == "InternetSearchTool" and not EXA_API_KEY:
-            raise ValueError(
-                "Internet Search API key not found, please contact your Onyx admin to get it added!"
-            )
+        if tool.in_code_tool_id is not None:
+            tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
+            if not tool_cls.is_available(db_session):
+                raise ValueError(f"Tool {tool.in_code_tool_id} is not available")
 
 
 # TODO: since this gets called with every chat message, could it be more efficient to pregenerate

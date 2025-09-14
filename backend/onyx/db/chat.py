@@ -79,6 +79,17 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
+)
+from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+    OktaProfileTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -1444,7 +1455,7 @@ def translate_db_message_to_packets(
                     tool = get_tool_by_id(tool_id, db_session)
                     tool_name = tool.name
 
-                    if tool_name in ["SearchTool", "KnowledgeGraphTool"]:
+                    if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
 
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
 
@@ -1453,14 +1464,14 @@ def translate_db_message_to_packets(
                         )
                         step_nr += 1
 
-                    elif tool_name == "InternetSearchTool":
+                    elif tool_name == WebSearchTool.__name__:
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
                         packet_list.extend(
                             create_search_packets(tasks, cited_docs, True, step_nr)
                         )
                         step_nr += 1
 
-                    elif tool_name == "ImageGenerationTool":
+                    elif tool_name == ImageGenerationTool.__name__:
 
                         if sub_step.generated_images is None:
                             raise ValueError("No generated images found")
@@ -1472,7 +1483,7 @@ def translate_db_message_to_packets(
                         )
                         step_nr += 1
 
-                    elif tool_name == "OktaProfileTool":
+                    elif tool_name == OktaProfileTool.__name__:
                         # TODO: convert all response types to enums
                         packet_list.extend(
                             create_custom_tool_packets(

@@ -22,8 +22,6 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
-  NewChatIcon,
-  ChatIcon,
   OnyxSparkleIcon,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";

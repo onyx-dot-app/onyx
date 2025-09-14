@@ -88,8 +88,8 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import ImageGenerationToolConfig
-from onyx.tools.tool_constructor import InternetSearchToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_constructor import WebSearchToolConfig
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -590,7 +590,7 @@ def stream_chat_message_objects(
                 latest_query_files=latest_query_files,
                 bypass_acl=bypass_acl,
             ),
-            internet_search_tool_config=InternetSearchToolConfig(
+            internet_search_tool_config=WebSearchToolConfig(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
             ),

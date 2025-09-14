@@ -26,7 +26,7 @@ import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../../admin/settings/interfaces";
 import {
   IMAGE_GENERATION_TOOL_ID,
-  INTERNET_SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { Packet } from "./streamingModels";
@@ -584,7 +584,7 @@ export function personaIncludesRetrieval(
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+      [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
   );
 }
 

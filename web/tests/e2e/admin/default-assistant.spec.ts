@@ -331,7 +331,7 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Check that the request failed with 400 or 422 (validation error)
     expect(response.ok).toBe(false);
-    expect([400, 422, 500].includes(response.status)).toBe(true); // Accept multiple error codes for now
+    expect([400, 422].includes(response.status)).toBe(true);
     // The error message should indicate invalid tool IDs
     if (response.status === 400) {
       expect(response.body).toContain("Invalid tool IDs");

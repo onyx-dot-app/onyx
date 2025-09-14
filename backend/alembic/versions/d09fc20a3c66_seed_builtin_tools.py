@@ -18,6 +18,7 @@ depends_on = None
 
 
 # Tool definitions - core tools that should always be seeded
+# Names/in_code_tool_id are the same as the class names in the tool_implementations package
 BUILT_IN_TOOLS = [
     {
         "name": "SearchTool",

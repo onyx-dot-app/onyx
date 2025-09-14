@@ -34,7 +34,6 @@ import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
-import { Logo } from "@/components/logo/Logo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
