@@ -3,6 +3,7 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.chat_configs import INPUT_PROMPT_YAML
@@ -123,7 +124,11 @@ def setup_onyx(
         and not search_settings.provider_type
         and not search_settings.rerank_provider_type
     ):
-        warm_up_cross_encoder(search_settings.rerank_model_name)
+        # In integration tests, do not block API startup on warm-up
+        warm_up_cross_encoder(
+            search_settings.rerank_model_name,
+            non_blocking=INTEGRATION_TESTS_MODE,
+        )
 
     logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
     download_nltk_data()
@@ -160,12 +165,14 @@ def setup_onyx(
 
     logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
     if search_settings.provider_type is None:
+        # In integration tests, do not block API startup on warm-up
         warm_up_bi_encoder(
             embedding_model=EmbeddingModel.from_db_model(
                 search_settings=search_settings,
                 server_host=MODEL_SERVER_HOST,
                 server_port=MODEL_SERVER_PORT,
             ),
+            non_blocking=INTEGRATION_TESTS_MODE,
         )
 
     # update multipass indexing setting based on GPU availability

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { useRouter } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/components/ui/text";
@@ -9,6 +10,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { OnyxSparkleIcon } from "@/components/icons/icons";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
@@ -42,7 +44,9 @@ interface AvailableTool {
 // Tools are now fetched from the backend dynamically
 
 function DefaultAssistantConfig() {
+  const router = useRouter();
   const { popup, setPopup } = usePopup();
+  const { refreshAssistants } = useAssistantsContext();
   const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
@@ -98,6 +102,8 @@ function DefaultAssistantConfig() {
     try {
       await persistConfiguration({ tool_ids: Array.from(next) });
       await mutate("/api/admin/default-assistant/configuration");
+      router.refresh();
+      await refreshAssistants();
     } catch (e) {
       const rollback = new Set(enabledTools);
       if (rollback.has(toolId)) {
@@ -129,6 +135,8 @@ function DefaultAssistantConfig() {
     try {
       await persistConfiguration({ system_prompt: currentPrompt });
       await mutate("/api/admin/default-assistant/configuration");
+      router.refresh();
+      await refreshAssistants();
       setOriginalPrompt(currentPrompt);
       setPopup({
         message: "Instructions updated successfully!",
