@@ -108,7 +108,9 @@ function TableRow({ entityType }: { entityType: EntityType }) {
     <div className="hover:bg-accent-background-hovered transition-colors duration-200 ease-in-out">
       <div className="grid grid-cols-12 px-8 py-4">
         <div
-          className={`grid grid-cols-11 col-span-11 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
+          className={`grid grid-cols-11 col-span-11 transition-opacity duration-150 ease-in-out ${
+            entityTypeState.active ? "" : "opacity-60"
+          }`}
         >
           <div className="col-span-1 flex items-center">
             <span className="font-medium text-sm">

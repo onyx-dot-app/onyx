@@ -11,24 +11,44 @@ export async function prepareOAuthAuthorizationRequest(
   connector: string,
   finalRedirect: string | null // a redirect (not the oauth redirect) for the user to return to after oauth is complete)
 ): Promise<OAuthPrepareAuthorizationResponse> {
-  let url = `/api/oauth/prepare-authorization-request?connector=${encodeURIComponent(
-    connector
-  )}`;
+  let url: string;
+  let method: string;
+  let body: any;
 
-  // Conditionally append the `redirect_on_success` parameter
-  if (finalRedirect) {
-    url += `&redirect_on_success=${encodeURIComponent(finalRedirect)}`;
+  // For Linear, use the standard OAuth flow
+  if (connector === "linear") {
+    url = `/api/connector/oauth/authorize/${connector}`;
+    if (finalRedirect) {
+      url += `?desired_return_url=${encodeURIComponent(finalRedirect)}`;
+    }
+    method = "GET";
+    body = undefined;
+  } else {
+    // For other connectors, use the ee OAuth flow
+    url = `/api/oauth/prepare-authorization-request?connector=${encodeURIComponent(
+      connector
+    )}`;
+
+    // Conditionally append the `redirect_on_success` parameter
+    if (finalRedirect) {
+      url += `&redirect_on_success=${encodeURIComponent(finalRedirect)}`;
+    }
+
+    method = "POST";
+    body = JSON.stringify({
+      connector: connector,
+      redirect_on_success: finalRedirect,
+    });
   }
 
   const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      connector: connector,
-      redirect_on_success: finalRedirect,
-    }),
+    method: method,
+    headers: body
+      ? {
+          "Content-Type": "application/json",
+        }
+      : undefined,
+    body: body,
   });
 
   if (!response.ok) {
@@ -59,6 +79,10 @@ export async function handleOAuthAuthorizationResponse(
     return handleOAuthConfluenceAuthorizationResponse(code, state);
   }
 
+  if (connector === "linear") {
+    return handleOAuthLinearAuthorizationResponse(code, state);
+  }
+
   return;
 }
 
@@ -81,20 +105,11 @@ export async function handleFederatedOAuthCallback(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle federated OAuth callback: ${response.status}`;
-
-    try {
-      const responseBody = await response.text();
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle federated OAuth callback: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response and extract the data field
@@ -131,20 +146,11 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Slack authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Slack authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -169,20 +175,11 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Google Drive authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -209,20 +206,11 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence authorization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -252,26 +240,14 @@ export async function handleOAuthConfluencePrepareFinalization(
 
   const response = await fetch(url, {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence prepare finalization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence prepare finalization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
@@ -300,23 +276,53 @@ export async function handleOAuthConfluenceFinalize(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence finalization response: ${response.status}`;
-
-    try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Confluence finalization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
   }
 
   // Parse the JSON response
   const data = (await response.json()) as OAuthConfluenceFinalizeResponse;
   return data;
+}
+
+export async function handleOAuthLinearAuthorizationResponse(
+  code: string,
+  state: string
+): Promise<OAuthBaseCallbackResponse> {
+  const url = `/api/connector/oauth/callback/linear?code=${encodeURIComponent(
+    code
+  )}&state=${encodeURIComponent(state)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const requestId = response.headers.get("x-request-id") || "n/a";
+    const statusText = response.statusText || "Unknown";
+    throw new Error(
+      `Failed to handle OAuth Linear authorization response: ${response.status} ${statusText} (req: ${requestId})`
+    );
+  }
+
+  // Backend returns { redirect_url: string }; adapt to OAuthBaseCallbackResponse
+  const raw = (await response.json()) as { redirect_url?: string };
+  if (!raw || !raw.redirect_url) {
+    throw new Error(
+      "Invalid OAuth Linear callback response: missing redirect_url"
+    );
+  }
+
+  return {
+    success: true,
+    message: "OAuth authorization successful",
+    finalize_url: null,
+    redirect_on_success: raw.redirect_url,
+  };
 }

@@ -17,6 +17,7 @@ from fastapi import Response
 from fastapi import UploadFile
 from google.oauth2.credentials import Credentials  # type: ignore
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -282,6 +283,66 @@ def delete_google_service_gmail_account_key(
 
     return StatusResponse(
         success=True, message="Successfully deleted Google Service Account Key"
+    )
+
+
+# Linear App Credentials endpoints
+@router.get("/admin/connector/linear/app-credential")
+def check_linear_app_credentials_exist(
+    _: User = Depends(current_curator_or_admin_user),
+) -> dict[str, str]:
+    from onyx.connectors.linear.linear_kv import get_linear_app_cred
+
+    try:
+        creds = get_linear_app_cred()
+        return {"client_id": creds.client_id}
+    except ValueError:
+        # Align with other connectors: return 404 when not configured
+        raise HTTPException(status_code=404, detail="Linear App Credentials not found")
+
+
+class LinearAppCredentialIn(BaseModel):
+    client_id: str = Field(min_length=1)
+    client_secret: str = Field(min_length=1)
+
+
+@router.put("/admin/connector/linear/app-credential")
+def upsert_linear_app_credentials(
+    app_credentials: LinearAppCredentialIn, _: User = Depends(current_admin_user)
+) -> StatusResponse:
+    from onyx.connectors.linear.linear_kv import (
+        upsert_linear_app_cred,
+        LinearAppCredentials,
+    )
+
+    try:
+        creds = LinearAppCredentials(
+            client_id=app_credentials.client_id,
+            client_secret=app_credentials.client_secret,
+        )
+        upsert_linear_app_cred(creds)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return StatusResponse(
+        success=True, message="Successfully saved Linear App Credentials"
+    )
+
+
+@router.delete("/admin/connector/linear/app-credential")
+def delete_linear_app_credentials(
+    _: User = Depends(current_admin_user),
+) -> StatusResponse:
+    from onyx.connectors.linear.linear_kv import delete_linear_app_cred
+    from onyx.key_value_store.interface import KvKeyNotFoundError
+
+    try:
+        delete_linear_app_cred()
+    except KvKeyNotFoundError as e:
+        # Align with Google app-credential delete: return 400 on missing key
+        raise HTTPException(status_code=400, detail=str(e))
+    return StatusResponse(
+        success=True, message="Successfully deleted Linear App Credentials"
     )
 
 

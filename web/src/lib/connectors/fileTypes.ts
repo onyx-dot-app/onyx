@@ -60,7 +60,9 @@ export class TypedFile {
         !validation.allowedExtensions.includes(`.${extension}`)
       ) {
         errors.push(
-          `File must have one of these extensions: ${validation.allowedExtensions.join(", ")}`
+          `File must have one of these extensions: ${validation.allowedExtensions.join(
+            ", "
+          )}`
         );
       }
     }
@@ -74,7 +76,9 @@ export class TypedFile {
         }
       } catch (error) {
         errors.push(
-          `Content validation error: ${error instanceof Error ? error.message : "Unknown error"}`
+          `Content validation error: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
         );
       }
     }

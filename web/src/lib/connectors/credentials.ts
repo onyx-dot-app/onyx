@@ -146,6 +146,7 @@ export interface LoopioCredentialJson {
 }
 
 export interface LinearCredentialJson {
+  // Canonical key for OAuth/manual token for Linear
   linear_access_token: string;
 }
 
@@ -529,6 +530,7 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Linear
   linear_access_token: "Linear Access Token",
+  access_token: "Access Token",
 
   // HubSpot
   hubspot_access_token: "HubSpot Access Token",

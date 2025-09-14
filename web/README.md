@@ -44,11 +44,12 @@ npx playwright test
 ```
 
 To run a single test:
+
 ```
 npx playwright test landing-page.spec.ts
 ```
 
-If running locally, interactive options can help you see exactly what is happening in 
+If running locally, interactive options can help you see exactly what is happening in
 the test.
 
 ```

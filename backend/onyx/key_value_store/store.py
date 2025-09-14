@@ -28,14 +28,21 @@ class PgRedisKVStore(KeyValueStore):
             self.redis_client = get_redis_client()
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
-        # Not encrypted in Redis, but encrypted in Postgres
+        # Cache policy: never cache sensitive values (encrypt=True) in Redis.
+        # Non-sensitive values are cached with TTL to avoid unbounded persistence.
         try:
-            self.redis_client.set(
-                REDIS_KEY_PREFIX + key, json.dumps(val), ex=KV_REDIS_KEY_EXPIRATION
-            )
+            if encrypt:
+                # Proactively remove any previously cached plaintext
+                self.redis_client.delete(REDIS_KEY_PREFIX + key)
+            else:
+                self.redis_client.set(
+                    REDIS_KEY_PREFIX + key,
+                    json.dumps(val),
+                    ex=KV_REDIS_KEY_EXPIRATION,
+                )
         except Exception as e:
             # Fallback gracefully to Postgres if Redis fails
-            logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
+            logger.error(f"Failed to update Redis cache for key '{key}': {str(e)}")
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
@@ -72,6 +79,7 @@ class PgRedisKVStore(KeyValueStore):
             if not obj:
                 raise KvKeyNotFoundError
 
+            is_encrypted = obj.encrypted_value is not None and obj.value is None
             if obj.value is not None:
                 value = obj.value
             elif obj.encrypted_value is not None:
@@ -80,9 +88,18 @@ class PgRedisKVStore(KeyValueStore):
                 value = None
 
             try:
-                self.redis_client.set(REDIS_KEY_PREFIX + key, json.dumps(value))
+                if is_encrypted:
+                    # Ensure secrets are not left in Redis
+                    self.redis_client.delete(REDIS_KEY_PREFIX + key)
+                else:
+                    # Cache non-sensitive values with TTL
+                    self.redis_client.set(
+                        REDIS_KEY_PREFIX + key,
+                        json.dumps(value),
+                        ex=KV_REDIS_KEY_EXPIRATION,
+                    )
             except Exception as e:
-                logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
+                logger.error(f"Failed to update Redis cache for key '{key}': {str(e)}")
 
             return cast(JSON_ro, value)
 
