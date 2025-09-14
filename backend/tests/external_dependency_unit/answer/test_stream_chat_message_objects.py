@@ -30,7 +30,9 @@ def test_stream_chat_message_objects_without_web_search(
     """
 
     # Mock the model server HTTP calls for embeddings
-    def mock_post(url, json=None, headers=None, **kwargs):
+    def mock_post(
+        url: str, json: dict | None = None, headers: dict | None = None, **kwargs
+    ) -> MagicMock:
         """Mock requests.post for model server embedding calls"""
         mock_response = MagicMock()
 
