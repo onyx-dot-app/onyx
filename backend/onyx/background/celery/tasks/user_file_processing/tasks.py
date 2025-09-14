@@ -11,6 +11,7 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -189,6 +190,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # update the doument id to userfile id in the documents
                 for document in documents:
                     document.id = str(user_file_id)
+                    document.source = DocumentSource.USER_FILE
 
                 # real work happens here!
                 index_pipeline_result = run_indexing_pipeline(
