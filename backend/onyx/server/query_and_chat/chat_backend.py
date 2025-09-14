@@ -52,6 +52,7 @@ from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import check_project_ownership
+from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.exceptions import GenAIDisabledException
@@ -597,7 +598,6 @@ def get_available_context_tokens_for_session(
         raise HTTPException(status_code=400, detail="Chat session has no persona")
 
     available = compute_max_document_tokens_for_persona(
-        db_session=db_session,
         persona=chat_session.persona,
     )
 
@@ -707,7 +707,14 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     _: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> Response:
+
+    # For user files, we need to get the file id from the user file id
+    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
+    if file_id_from_user_file:
+        file_id = file_id_from_user_file
+
     file_store = get_default_file_store()
     file_record = file_store.read_file_record(file_id)
     if not file_record:
