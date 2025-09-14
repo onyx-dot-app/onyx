@@ -43,7 +43,6 @@ from onyx.secondary_llm_flows.starter_message_creation import (
 )
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
-from onyx.server.features.persona.models import ImageGenerationToolStatus
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
@@ -52,7 +51,6 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
-from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
@@ -351,17 +349,6 @@ def delete_persona(
         user=user,
         db_session=db_session,
     )
-
-
-@basic_router.get("/image-generation-tool")
-def get_image_generation_tool(
-    _: User | None = Depends(
-        current_user
-    ),  # User param not used but kept for consistency
-    db_session: Session = Depends(get_session),
-) -> ImageGenerationToolStatus:  # Use bool instead of str for boolean values
-    is_available = is_image_generation_available(db_session=db_session)
-    return ImageGenerationToolStatus(is_available=is_available)
 
 
 @basic_router.get("")

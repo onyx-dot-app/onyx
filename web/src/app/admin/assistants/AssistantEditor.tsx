@@ -56,7 +56,6 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
-import { useUser } from "@/components/user/UserProvider";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -136,12 +135,8 @@ export function AssistantEditor({
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
 }) {
-  const { refreshAssistants, isImageGenerationAvailable } =
-    useAssistantsContext();
-  const [isInternetSearchAvailable, setIsInternetSearchAvailable] =
-    useState<boolean>(false);
+  const { refreshAssistants } = useAssistantsContext();
 
-  const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -288,38 +283,12 @@ export function AssistantEditor({
     return mcpServers.find((server) => server.id === serverId) || null;
   };
 
-  // Determine Internet Search availability from admin tools endpoint
-  useEffect(() => {
-    const fetchAvailability = async () => {
-      try {
-        const res = await fetch("/api/admin/default-assistant/available-tools");
-        if (res.ok) {
-          const data = (await res.json()) as Array<{
-            in_code_tool_id: string;
-            is_available: boolean;
-          }>;
-          const internetTool = data.find(
-            (t) => t.in_code_tool_id === "WebSearchTool"
-          );
-          setIsInternetSearchAvailable(!!internetTool?.is_available);
-        }
-      } catch (e) {
-        // ignore; default stays false
-      }
-    };
-    fetchAvailability();
-  }, []);
-
   const availableTools = [
     ...customTools,
     ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
-    ...(imageGenerationTool && isImageGenerationAvailable
-      ? [imageGenerationTool]
-      : []),
-    ...(internetSearchTool && isInternetSearchAvailable
-      ? [internetSearchTool]
-      : []),
+    ...(imageGenerationTool ? [imageGenerationTool] : []),
+    ...(internetSearchTool ? [internetSearchTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -1225,17 +1194,14 @@ export function AssistantEditor({
                     <div className="py-2">
                       <p className="block font-medium text-sm mb-2">Actions</p>
 
-                      {imageGenerationTool && isImageGenerationAvailable && (
+                      {imageGenerationTool && (
                         <>
                           <div className="flex items-center content-start mb-2">
                             <BooleanFormField
                               name={`enabled_tools_map.${imageGenerationTool.id}`}
                               label={imageGenerationTool.display_name}
                               subtext="Generate and manipulate images using AI-powered tools"
-                              disabled={
-                                !currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable
-                              }
+                              disabled={!currentLLMSupportsImageOutput}
                               disabledTooltip={
                                 !currentLLMSupportsImageOutput
                                   ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
@@ -1246,7 +1212,7 @@ export function AssistantEditor({
                         </>
                       )}
 
-                      {internetSearchTool && isInternetSearchAvailable && (
+                      {internetSearchTool && (
                         <>
                           <BooleanFormField
                             name={`enabled_tools_map.${internetSearchTool.id}`}

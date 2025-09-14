@@ -29,7 +29,6 @@ interface AssistantsContextProps {
   finalAssistants: MinimalPersonaSnapshot[];
   ownedButHiddenAssistants: MinimalPersonaSnapshot[];
   refreshAssistants: () => Promise<void>;
-  isImageGenerationAvailable: boolean;
 
   // assistants that the user has explicitly pinned
   pinnedAssistants: MinimalPersonaSnapshot[];
@@ -95,25 +94,6 @@ export const AssistantsProvider: React.FC<{
     });
   }, [user?.preferences?.pinned_assistants, assistants]);
 
-  const [isImageGenerationAvailable, setIsImageGenerationAvailable] =
-    useState<boolean>(false);
-
-  useEffect(() => {
-    const checkImageGenerationAvailability = async () => {
-      try {
-        const response = await fetch("/api/persona/image-generation-tool");
-        if (response.ok) {
-          const { is_available } = await response.json();
-          setIsImageGenerationAvailable(is_available);
-        }
-      } catch (error) {
-        console.error("Error checking image generation availability:", error);
-      }
-    };
-
-    checkImageGenerationAvailability();
-  }, []);
-
   const refreshAssistants = async () => {
     try {
       const response = await fetch("/api/persona", {
@@ -169,7 +149,6 @@ export const AssistantsProvider: React.FC<{
         finalAssistants,
         ownedButHiddenAssistants,
         refreshAssistants,
-        isImageGenerationAvailable,
         setPinnedAssistants,
         pinnedAssistants,
         assistantPreferences,
