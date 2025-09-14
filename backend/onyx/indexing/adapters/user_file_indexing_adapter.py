@@ -15,6 +15,7 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.db.user_file import fetch_chunk_counts_for_user_files
 from onyx.db.user_file import fetch_user_project_ids_for_user_files
+from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -208,3 +209,12 @@ class UserFileIndexingAdapter:
                 str(user_file.id)
             ]
         self.db_session.commit()
+
+        # Store the plaintext in the file store for faster retrieval
+        # NOTE: this creates its own session to avoid committing the overall
+        # transaction.
+        for user_file_id, raw_text in result.user_file_id_to_raw_text.items():
+            store_user_file_plaintext(
+                user_file_id=user_file_id,
+                plaintext_content=raw_text,
+            )
