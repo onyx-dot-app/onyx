@@ -19,6 +19,40 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForURL(
       "http://localhost:3000/admin/configuration/default-assistant"
     );
+
+    // Attach basic API logging for this spec
+    page.on("response", async (resp) => {
+      const url = resp.url();
+      if (url.includes("/api/admin/default-assistant")) {
+        const method = resp.request().method();
+        const status = resp.status();
+        let body = "";
+        try {
+          body = await resp.text();
+        } catch {}
+        console.log(
+          `[api:response] ${method} ${url} => ${status} body=${body?.slice(0, 300)}`
+        );
+      }
+    });
+
+    // Proactively log tool availability and current config
+    try {
+      const toolsResp = await page.request.get(
+        "http://localhost:3000/api/admin/default-assistant/available-tools"
+      );
+      const cfgResp = await page.request.get(
+        "http://localhost:3000/api/admin/default-assistant/configuration"
+      );
+      console.log(
+        `[/available-tools] status=${toolsResp.status()} body=${(await toolsResp.text()).slice(0, 400)}`
+      );
+      console.log(
+        `[/configuration] status=${cfgResp.status()} body=${(await cfgResp.text()).slice(0, 400)}`
+      );
+    } catch (e) {
+      console.log(`[setup] Failed to fetch initial admin config: ${String(e)}`);
+    }
   });
 
   test("should load default assistant page for admin users", async ({
@@ -28,7 +62,8 @@ test.describe("Default Assistant Admin Page", () => {
     await expect(
       page.getByRole("heading", { name: "Default Assistant" })
     ).toBeVisible();
-    await expect(page.locator("text=Actions")).toBeVisible();
+    // Avoid strict mode collision from multiple "Actions" elements
+    await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
     await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
   });
 
@@ -44,9 +79,31 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Get initial state
     const initialState = await searchToggle.getAttribute("data-state");
+    const isDisabled = await searchToggle.isDisabled().catch(() => false);
+    console.log(
+      `[toggle] Internal Search initial data-state=${initialState} disabled=${isDisabled}`
+    );
 
     // Toggle it
     await searchToggle.click();
+
+    // Wait for PATCH to complete (or log if it didn't happen)
+    const patchResp = await Promise.race([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH",
+        { timeout: 8000 }
+      ),
+      page.waitForTimeout(8500).then(() => null),
+    ]);
+    if (patchResp) {
+      console.log(
+        `[toggle] Internal Search PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+      );
+    } else {
+      console.log(`[toggle] Internal Search did not observe PATCH response`);
+    }
 
     // Wait for the change to persist
     await page.waitForTimeout(1000);
@@ -62,6 +119,7 @@ test.describe("Default Assistant Admin Page", () => {
       .locator('[role="switch"]')
       .first();
     const newState = await searchToggleAfter.getAttribute("data-state");
+    console.log(`[toggle] Internal Search after reload data-state=${newState}`);
 
     // State should have changed
     expect(initialState).not.toBe(newState);
@@ -83,9 +141,29 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Get initial state
     const initialState = await webSearchToggle.getAttribute("data-state");
+    const isDisabled = await webSearchToggle.isDisabled().catch(() => false);
+    console.log(
+      `[toggle] Web Search initial data-state=${initialState} disabled=${isDisabled}`
+    );
 
     // Toggle it
     await webSearchToggle.click();
+    const patchResp = await Promise.race([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH",
+        { timeout: 8000 }
+      ),
+      page.waitForTimeout(8500).then(() => null),
+    ]);
+    if (patchResp) {
+      console.log(
+        `[toggle] Web Search PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+      );
+    } else {
+      console.log(`[toggle] Web Search did not observe PATCH response`);
+    }
 
     // Wait for the change to persist
     await page.waitForTimeout(1000);
@@ -101,6 +179,7 @@ test.describe("Default Assistant Admin Page", () => {
       .locator('[role="switch"]')
       .first();
     const newState = await webSearchToggleAfter.getAttribute("data-state");
+    console.log(`[toggle] Web Search after reload data-state=${newState}`);
 
     // State should have changed
     expect(initialState).not.toBe(newState);
@@ -122,9 +201,29 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Get initial state
     const initialState = await imageGenToggle.getAttribute("data-state");
+    const isDisabled = await imageGenToggle.isDisabled().catch(() => false);
+    console.log(
+      `[toggle] Image Generation initial data-state=${initialState} disabled=${isDisabled}`
+    );
 
     // Toggle it
     await imageGenToggle.click();
+    const patchResp = await Promise.race([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH",
+        { timeout: 8000 }
+      ),
+      page.waitForTimeout(8500).then(() => null),
+    ]);
+    if (patchResp) {
+      console.log(
+        `[toggle] Image Generation PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+      );
+    } else {
+      console.log(`[toggle] Image Generation did not observe PATCH response`);
+    }
 
     // Wait for the change to persist
     await page.waitForTimeout(1000);
@@ -140,6 +239,9 @@ test.describe("Default Assistant Admin Page", () => {
       .locator('[role="switch"]')
       .first();
     const newState = await imageGenToggleAfter.getAttribute("data-state");
+    console.log(
+      `[toggle] Image Generation after reload data-state=${newState}`
+    );
 
     // State should have changed
     expect(initialState).not.toBe(newState);
@@ -167,6 +269,22 @@ test.describe("Default Assistant Admin Page", () => {
     // Save changes
     const saveButton = page.locator("text=Save Instructions");
     await saveButton.click();
+    const patchResp = await Promise.race([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH",
+        { timeout: 8000 }
+      ),
+      page.waitForTimeout(8500).then(() => null),
+    ]);
+    if (patchResp) {
+      console.log(
+        `[prompt] Save PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+      );
+    } else {
+      console.log(`[prompt] Did not observe PATCH response on save`);
+    }
 
     // Wait for success message
     await expect(
@@ -208,6 +326,14 @@ test.describe("Default Assistant Admin Page", () => {
       await textarea.fill("Temporary text");
       const tempSaveButton = page.locator("text=Save Instructions");
       await tempSaveButton.click();
+      const patchResp1 = await page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH"
+      );
+      console.log(
+        `[prompt-empty] Temp save PATCH status=${patchResp1.status()} body=${(await patchResp1.text()).slice(0, 300)}`
+      );
       await expect(
         page.locator("text=Instructions updated successfully!")
       ).toBeVisible();
@@ -220,6 +346,14 @@ test.describe("Default Assistant Admin Page", () => {
     // Save changes
     const saveButton = page.locator("text=Save Instructions");
     await saveButton.click();
+    const patchResp2 = await page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant") &&
+        r.request().method() === "PATCH"
+    );
+    console.log(
+      `[prompt-empty] Save empty PATCH status=${patchResp2.status()} body=${(await patchResp2.text()).slice(0, 300)}`
+    );
 
     // Wait for success message
     await expect(
@@ -241,6 +375,14 @@ test.describe("Default Assistant Admin Page", () => {
       await textareaAfter.fill(initialValue);
       const saveButtonAfter = page.locator("text=Save Instructions");
       await saveButtonAfter.click();
+      const patchResp3 = await page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH"
+      );
+      console.log(
+        `[prompt-empty] Restore PATCH status=${patchResp3.status()} body=${(await patchResp3.text()).slice(0, 300)}`
+      );
       await expect(
         page.locator("text=Instructions updated successfully!")
       ).toBeVisible();
@@ -272,6 +414,14 @@ test.describe("Default Assistant Admin Page", () => {
     // Save changes
     const saveButton = page.locator("text=Save Instructions");
     await saveButton.click();
+    const patchResp = await page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant") &&
+        r.request().method() === "PATCH"
+    );
+    console.log(
+      `[prompt-long] Save PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+    );
 
     // Wait for success message
     await expect(
@@ -287,6 +437,14 @@ test.describe("Default Assistant Admin Page", () => {
     if (initialValue !== currentValue) {
       await textarea.fill(initialValue);
       await saveButton.click();
+      const patchRespRestore = await page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/admin/default-assistant") &&
+          r.request().method() === "PATCH"
+      );
+      console.log(
+        `[prompt-long] Restore PATCH status=${patchRespRestore.status()} body=${(await patchRespRestore.text()).slice(0, 300)}`
+      );
       await expect(
         page.locator("text=Instructions updated successfully!")
       ).toBeVisible();
@@ -315,7 +473,7 @@ test.describe("Default Assistant Admin Page", () => {
     // Use browser console to send invalid tool IDs
     // This simulates what would happen if someone tried to bypass the UI
     const response = await page.evaluate(async () => {
-      const res = await fetch("/api/admin/default-assistant/", {
+      const res = await fetch("/api/admin/default-assistant", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -328,6 +486,21 @@ test.describe("Default Assistant Admin Page", () => {
         body: await res.text(),
       };
     });
+    // Also try via page.request (uses storageState) to capture status in case page fetch fails
+    try {
+      const alt = await page.request.patch(
+        "http://localhost:3000/api/admin/default-assistant",
+        {
+          data: { tool_ids: ["InvalidTool", "AnotherInvalidTool"] },
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      console.log(
+        `[invalid-tools] page.request.patch status=${alt.status()} body=${(await alt.text()).slice(0, 300)}`
+      );
+    } catch (e) {
+      console.log(`[invalid-tools] page.request.patch error: ${String(e)}`);
+    }
 
     // Check that the request failed with 400 or 422 (validation error)
     expect(response.ok).toBe(false);

@@ -79,7 +79,8 @@ function DefaultAssistantConfig() {
   const persistConfiguration = async (
     updates: DefaultAssistantUpdateRequest
   ) => {
-    const response = await fetch("/api/admin/default-assistant/", {
+    // Avoid trailing slash to prevent 307 redirect (breaks CORS in CI)
+    const response = await fetch("/api/admin/default-assistant", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
