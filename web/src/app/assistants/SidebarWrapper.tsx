@@ -42,12 +42,11 @@ export default function SidebarWrapper<T extends object>({
   }, [sidebarVisible]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
-  const { folders, chatSessions, ccPairs } = useChatContext();
+  const {chatSessions, ccPairs } = useChatContext();
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
-
   const explicitlyUntoggle = () => {
     setShowDocSidebar(false);
 
@@ -112,7 +111,6 @@ export default function SidebarWrapper<T extends object>({
             toggled={sidebarVisible}
             existingChats={chatSessions}
             currentChatSession={null}
-            folders={folders}
           />
         </div>
       </div>

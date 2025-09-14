@@ -17,7 +17,6 @@ import {
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/components/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -55,13 +54,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
+import Projects from "./Projects";
 
 interface HistorySidebarProps {
   liveAssistant?: MinimalPersonaSnapshot | null;
   page: pageType;
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
-  folders?: Folder[];
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
@@ -181,7 +180,6 @@ export const HistorySidebar = React.memo(
         page,
         existingChats,
         currentChatSession,
-        folders,
         explicitlyUntoggle,
         toggleSidebar,
         removeToggle,
@@ -289,7 +287,7 @@ export const HistorySidebar = React.memo(
               />
             </div>
             {page == "chat" && (
-              <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
+              <div className="px-4 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center">
                 <Link
                   className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
                   href={
@@ -312,18 +310,6 @@ export const HistorySidebar = React.memo(
                     New Chat
                   </p>
                 </Link>
-                <Link
-                  className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href="/chat/my-documents"
-                >
-                  <KnowledgeGroupIcon
-                    size={20}
-                    className="flex-none text-text-history-sidebar-button"
-                  />
-                  <p className="my-auto flex font-normal items-center text-base">
-                    My Documents
-                  </p>
-                </Link>
                 {user?.preferences?.shortcut_enabled && (
                   <Link
                     className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
@@ -340,6 +326,7 @@ export const HistorySidebar = React.memo(
                 )}
               </div>
             )}
+            <Projects />
             <div className="h-full  relative overflow-x-hidden overflow-y-auto">
               <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
                 Assistants
@@ -427,7 +414,6 @@ export const HistorySidebar = React.memo(
                 closeSidebar={removeToggle}
                 existingChats={existingChats}
                 currentChatId={currentChatId}
-                folders={folders}
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from typing import cast
+from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -73,6 +74,7 @@ def basic_search(
 
     search_tool_info = state.available_tools[state.tools_used[-1]]
     search_tool = cast(SearchTool, search_tool_info.tool_object)
+    force_use_tool = graph_config.tooling.force_use_tool
 
     # sanity check
     if search_tool != graph_config.tooling.search_tool:
@@ -141,6 +143,15 @@ def basic_search(
     retrieved_docs: list[InferenceSection] = []
     callback_container: list[list[InferenceSection]] = []
 
+    user_file_ids: list[UUID] | None = None
+    project_id: int | None = None
+    if force_use_tool.override_kwargs and isinstance(
+        force_use_tool.override_kwargs, SearchToolOverrideKwargs
+    ):
+        override_kwargs = force_use_tool.override_kwargs
+        user_file_ids = override_kwargs.user_file_ids
+        project_id = override_kwargs.project_id
+
     # new db session to avoid concurrency issues
     with get_session_with_current_tenant() as search_db_session:
         for tool_response in search_tool.run(
@@ -153,6 +164,8 @@ def basic_search(
                 retrieved_sections_callback=callback_container.append,
                 skip_query_analysis=True,
                 original_query=rewritten_query,
+                user_file_ids=user_file_ids,
+                project_id=project_id,
             ),
         ):
             # get retrieved docs to send to the rest of the graph

@@ -19,6 +19,7 @@ from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
 from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -53,6 +54,7 @@ class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
     description: str | None = None
+    project_id: int | None = None
 
 
 class CreateChatSessionID(BaseModel):
@@ -92,9 +94,8 @@ class CreateChatMessageRequest(ChunkContext):
     # New message contents
     message: str
     # Files that we should attach to this message
-    file_descriptors: list[FileDescriptor]
-    user_file_ids: list[int] = []
-    user_folder_ids: list[int] = []
+    file_descriptors: list[FileDescriptor] = []
+    current_message_files: list[FileDescriptor] = []
 
     # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, then retrieval options are unused
@@ -189,9 +190,21 @@ class ChatSessionDetails(BaseModel):
     time_created: str
     time_updated: str
     shared_status: ChatSessionSharedStatus
-    folder_id: int | None = None
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+
+    @classmethod
+    def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
+        return cls(
+            id=model.id,
+            name=model.description,
+            persona_id=model.persona_id,
+            time_created=model.time_created.isoformat(),
+            time_updated=model.time_updated.isoformat(),
+            shared_status=model.shared_status,
+            current_alternate_model=model.current_alternate_model,
+            current_temperature_override=model.temperature_override,
+        )
 
 
 class ChatSessionsResponse(BaseModel):
@@ -299,7 +312,6 @@ class ChatSessionSummary(BaseModel):
     persona_id: int | None = None
     time_created: datetime
     shared_status: ChatSessionSharedStatus
-    folder_id: int | None = None
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
 

@@ -76,6 +76,7 @@ def default_build_user_message(
         if prompt_config.task_prompt
         else user_query
     )
+
     user_prompt = user_prompt.strip()
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(

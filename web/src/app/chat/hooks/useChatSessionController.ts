@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
 import {
   nameChatSession,
@@ -18,14 +18,14 @@ import {
 } from "../services/searchParams";
 import { FilterManager } from "@/lib/hooks";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FileDescriptor } from "../interfaces";
-import { FileResponse, FolderResponse } from "../my-documents/DocumentsContext";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { getCitations } from "../services/packetUtils";
+import { getAvailableContextTokens } from "../services/lib";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { ProjectFile } from "../projects/projectsService";
+import { getSessionProjectTokenCount } from "../projects/projectsService";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -37,7 +37,7 @@ interface UseChatSessionControllerProps {
   setSelectedAssistantFromId: (assistantId: number | null) => void;
   setSelectedDocuments: (documents: OnyxDocument[]) => void;
   setCurrentMessageFiles: (
-    files: FileDescriptor[] | ((prev: FileDescriptor[]) => FileDescriptor[])
+    files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])
   ) => void;
 
   // Refs
@@ -53,13 +53,10 @@ interface UseChatSessionControllerProps {
 
   // Actions
   clientScrollToBottom: (fast?: boolean) => void;
-  clearSelectedItems: () => void;
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
-    selectedFiles: FileResponse[];
-    selectedFolders: FolderResponse[];
-    currentMessageFiles: FileDescriptor[];
+    currentMessageFiles: ProjectFile[];
     useAgentSearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
@@ -81,10 +78,13 @@ export function useChatSessionController({
   submitOnLoadPerformed,
   hasPerformedInitialScroll,
   clientScrollToBottom,
-  clearSelectedItems,
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
+  const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
+    useState<number>(0);
+  const [availableContextTokens, setAvailableContextTokens] =
+    useState<number>(0);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -140,7 +140,6 @@ export function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-        clearSelectedItems();
         if (existingChatSessionId) {
           updateHasPerformedInitialScroll(existingChatSessionId, false);
         }
@@ -167,8 +166,6 @@ export function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
-            selectedFiles: [],
-            selectedFolders: [],
             currentMessageFiles: [],
             useAgentSearch: false,
           });
@@ -245,6 +242,34 @@ export function useChatSessionController({
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
+      // Fetch token count for this chat session's project (if any)
+      try {
+        if (chatSession.chat_session_id) {
+          const total = await getSessionProjectTokenCount(
+            chatSession.chat_session_id
+          );
+          setCurrentSessionFileTokenCount(total || 0);
+        } else {
+          setCurrentSessionFileTokenCount(0);
+        }
+      } catch (e) {
+        setCurrentSessionFileTokenCount(0);
+      }
+
+      // Fetch available context tokens for this chat session
+      try {
+        if (chatSession.chat_session_id) {
+          const available = await getAvailableContextTokens(
+            chatSession.chat_session_id
+          );
+          setAvailableContextTokens(available);
+        } else {
+          setAvailableContextTokens(0);
+        }
+      } catch (e) {
+        setAvailableContextTokens(0);
+      }
+
       // If this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
@@ -261,8 +286,6 @@ export function useChatSessionController({
         await onSubmit({
           message: seededMessage,
           isSeededChat: true,
-          selectedFiles: [],
-          selectedFolders: [],
           currentMessageFiles: [],
           useAgentSearch: false,
         });
@@ -337,6 +360,8 @@ export function useChatSessionController({
   );
 
   return {
+    currentSessionFileTokenCount,
+    availableContextTokens,
     onMessageSelection,
   };
 }
