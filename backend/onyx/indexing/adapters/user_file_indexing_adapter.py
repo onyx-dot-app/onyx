@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import time
 from collections.abc import Generator
 
@@ -204,6 +205,9 @@ class UserFileIndexingAdapter:
         )
         for user_file in user_files:
             user_file.status = UserFileStatus.COMPLETED
+            user_file.last_project_sync_at = datetime.datetime.now(
+                datetime.timezone.utc
+            )
             user_file.chunk_count = result.doc_id_to_new_chunk_cnt[str(user_file.id)]
             user_file.token_count = result.user_file_id_to_token_count[
                 str(user_file.id)

@@ -104,7 +104,7 @@ def parse_user_files(
 
     # If we have enough tokens, we don't need search
     # we can just pass them into the prompt directly
-    if have_enough_tokens:
+    if have_enough_tokens and False:
         # No search tool override needed - files can be passed directly
         return user_files, user_file_models, None
 

@@ -23,6 +23,7 @@ interface ChatSessionMorePopupProps {
   afterMove?: () => void;
   afterRemoveFromProject?: () => void;
   search?: boolean;
+  iconSize?: number;
 }
 
 export function ChatSessionMorePopup({
@@ -35,6 +36,7 @@ export function ChatSessionMorePopup({
   afterMove,
   afterRemoveFromProject,
   search,
+  iconSize = 16,
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -122,7 +124,7 @@ export function ChatSessionMorePopup({
             <div className="p-1 rounded">
               <FiMoreHorizontal
                 onClick={() => setPopoverOpen(true)}
-                size={16}
+                size={iconSize}
               />
             </div>
           }
