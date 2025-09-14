@@ -207,6 +207,8 @@ class DocumentSource(str, Enum):
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
+    # Special case for user files
+    USER_FILE = "user_file"
 
 
 class FederatedConnectorSource(str, Enum):
