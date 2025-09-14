@@ -514,7 +514,6 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack down -v
 
-
   required: 
     runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     needs: [integration-tests, multitenant-tests]   # add any other jobs that must pass
