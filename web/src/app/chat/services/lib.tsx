@@ -246,15 +246,6 @@ export async function* sendMessage({
     forced_tool_ids: forcedToolIds,
   };
 
-  try {
-    console.debug("[sendMessage] forcedToolIds param:", forcedToolIds);
-    console.debug(
-      "[sendMessage] payload tool ids:",
-      payload.allowed_tool_ids,
-      payload.forced_tool_ids
-    );
-  } catch {}
-
   const body = JSON.stringify(payload);
 
   const response = await fetch(`/api/chat/send-message`, {

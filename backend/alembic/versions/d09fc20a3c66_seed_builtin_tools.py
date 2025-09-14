@@ -120,6 +120,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # We don't remove the tools on downgrade since they may be in use
-    # The tools will be re-seeded by the application startup if needed
+    # We don't remove the tools on downgrade since it's totally fine to just
+    # have them around. If we upgrade again, it will be a no-op.
     pass

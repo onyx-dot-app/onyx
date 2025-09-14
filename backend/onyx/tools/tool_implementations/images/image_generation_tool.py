@@ -13,6 +13,7 @@ from typing_extensions import override
 
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
@@ -146,7 +147,8 @@ class ImageGenerationTool(Tool[None]):
         try:
             providers = fetch_existing_llm_providers(db_session)
             return any(
-                provider.provider == "openai" and provider.api_key is not None
+                (provider.provider == "openai" and provider.api_key is not None)
+                or (provider.provider == "azure" and AZURE_DALLE_API_KEY is not None)
                 for provider in providers
             )
         except Exception:
