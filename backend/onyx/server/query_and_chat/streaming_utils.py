@@ -310,7 +310,7 @@ def translate_db_message_to_packets(
 
                     sub_step_cited_docs = sub_step.cited_doc_results
                     if isinstance(sub_step_cited_docs, list):
-                        saved_search_docs: list[SavedSearchDoc] = []
+                        sub_step_saved_search_docs: list[SavedSearchDoc] = []
                         for doc_data in sub_step_cited_docs:
                             doc_data["db_doc_id"] = 1
                             doc_data["boost"] = 1
@@ -323,13 +323,13 @@ def translate_db_message_to_packets(
                             ):
                                 doc_data["updated_at"] = datetime.now()
 
-                            saved_search_docs.append(
+                            sub_step_saved_search_docs.append(
                                 SavedSearchDoc.from_dict(doc_data)
                                 if isinstance(doc_data, dict)
                                 else doc_data
                             )
 
-                        cited_docs.extend(saved_search_docs)
+                        cited_docs.extend(sub_step_saved_search_docs)
                     else:
                         packet_list.extend(
                             create_reasoning_packets(
