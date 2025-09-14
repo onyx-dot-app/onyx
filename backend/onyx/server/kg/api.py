@@ -19,6 +19,7 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.tools import get_builtin_tool
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
@@ -33,7 +34,6 @@ from onyx.server.kg.models import KGConfig
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from onyx.server.kg.models import SourceStatistics
-from onyx.tools.built_in_tools import get_builtin_tool
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )

@@ -41,7 +41,6 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -760,6 +759,9 @@ def update_persona_visibility(
 
 
 def validate_persona_tools(tools: list[Tool], db_session: Session) -> None:
+    # local import to avoid circular import. DB layer should not depend on tools layer.
+    from onyx.tools.built_in_tools import get_built_in_tool_by_id
+
     for tool in tools:
         if tool.in_code_tool_id is not None:
             tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)

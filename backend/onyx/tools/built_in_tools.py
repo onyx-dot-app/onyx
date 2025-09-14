@@ -1,9 +1,5 @@
 from typing import Type
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -35,42 +31,6 @@ BUILT_IN_TOOL_MAP: dict[str, Type[Tool]] = {
 
 def get_built_in_tool_ids() -> list[str]:
     return list(BUILT_IN_TOOL_MAP.keys())
-
-
-def get_builtin_tool(
-    db_session: Session,
-    tool_type: Type[
-        SearchTool | ImageGenerationTool | WebSearchTool | KnowledgeGraphTool
-    ],
-) -> ToolDBModel:
-    """
-    Retrieves a built-in tool from the database based on the tool type.
-    """
-    tool_id = next(
-        (
-            in_code_tool_id
-            for in_code_tool_id, tool_cls in BUILT_IN_TOOL_MAP.items()
-            if tool_cls.__name__ == tool_type.__name__
-        ),
-        None,
-    )
-
-    if not tool_id:
-        raise RuntimeError(
-            f"Tool type {tool_type.__name__} not found in the BUILT_IN_TOOLS list."
-        )
-
-    db_tool = db_session.execute(
-        select(ToolDBModel).where(ToolDBModel.in_code_tool_id == tool_id)
-    ).scalar_one_or_none()
-
-    if not db_tool:
-        raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
-
-    return db_tool
-
-
-_built_in_tools_cache: dict[str, Type[Tool]] | None = None
 
 
 def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[Tool]:

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ def test_stream_chat_message_objects_without_web_search(
 
     # Mock the model server HTTP calls for embeddings
     def mock_post(
-        url: str, json: dict | None = None, headers: dict | None = None, **kwargs
+        url: str, json: dict | None = None, headers: dict | None = None, **kwargs: Any
     ) -> MagicMock:
         """Mock requests.post for model server embedding calls"""
         mock_response = MagicMock()
