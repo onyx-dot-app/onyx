@@ -68,8 +68,7 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
@@ -766,12 +765,9 @@ class VespaIndex(DocumentIndex):
                 update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
 
         if user_fields is not None:
-            if user_fields.user_file_id is not None:
-                update_dict["fields"][USER_FILE] = {"assign": user_fields.user_file_id}
-
-            if user_fields.user_folder_id is not None:
-                update_dict["fields"][USER_FOLDER] = {
-                    "assign": user_fields.user_folder_id
+            if user_fields.user_projects is not None:
+                update_dict["fields"][USER_PROJECT] = {
+                    "assign": user_fields.user_projects
                 }
 
         if not update_dict["fields"]:

@@ -12,6 +12,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
@@ -26,6 +30,7 @@ from onyx.server.features.projects.models import TokenCountResponse
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -144,7 +149,19 @@ def unlink_user_file_from_project(
     # Remove the association if it exists
     if user_file in project.user_files:
         project.user_files.remove(user_file)
+        user_file.needs_project_sync = True
         db_session.commit()
+
+    tenant_id = get_current_tenant_id()
+    task = client_app.send_task(
+        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
+        kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
+        priority=OnyxCeleryPriority.HIGH,
+    )
+    logger.info(
+        f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"
+    )
 
     return Response(status_code=204)
 
@@ -179,8 +196,20 @@ def link_user_file_to_project(
         raise HTTPException(status_code=404, detail="File not found")
 
     if user_file not in project.user_files:
+        user_file.needs_project_sync = True
         project.user_files.append(user_file)
         db_session.commit()
+
+    tenant_id = get_current_tenant_id()
+    task = client_app.send_task(
+        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
+        kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
+        priority=OnyxCeleryPriority.HIGH,
+    )
+    logger.info(
+        f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"
+    )
 
     return UserFileSnapshot.from_model(user_file)
 

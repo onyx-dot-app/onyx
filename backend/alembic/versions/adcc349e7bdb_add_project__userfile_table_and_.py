@@ -201,6 +201,14 @@ def upgrade() -> None:
         "user_file",
         sa.Column("last_accessed_at", sa.DateTime(timezone=True), nullable=True),
     )
+    op.add_column(
+        "user_file",
+        sa.Column("needs_project_sync", sa.Boolean(), nullable=False, default=False),
+    )
+    op.add_column(
+        "user_file",
+        sa.Column("last_project_sync_at", sa.DateTime(timezone=True), nullable=True),
+    )
     # Store instructions directly on the project
     op.add_column(
         "user_project",
@@ -270,6 +278,8 @@ def downgrade() -> None:
 
     # Drop extra columns
     op.drop_column("user_file", "last_accessed_at")
+    op.drop_column("user_file", "needs_project_sync")
+    op.drop_column("user_file", "last_project_sync_at")
     # Recreate document_id on downgrade
     try:
         op.add_column(

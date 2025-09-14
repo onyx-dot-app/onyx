@@ -3293,6 +3293,12 @@ class UserFile(Base):
         nullable=False,
         default=UserFileStatus.PROCESSING,
     )
+    needs_project_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_accessed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

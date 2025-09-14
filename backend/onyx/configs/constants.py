@@ -351,7 +351,7 @@ class OnyxCeleryQueues:
 
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
-
+    USER_FILE_PROJECT_SYNC = "user_file_project_sync"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -402,6 +402,8 @@ class OnyxRedisLocks:
     # User file processing
     USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
+    USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
+    USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
 
 
 class OnyxRedisSignals:
@@ -472,6 +474,9 @@ class OnyxCeleryTask:
     # User file processing
     CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"
     PROCESS_SINGLE_USER_FILE = "process_single_user_file"
+    CHECK_FOR_USER_FILE_PROJECT_SYNC = "check_for_user_file_project_sync"
+    PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
+
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"

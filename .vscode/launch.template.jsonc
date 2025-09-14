@@ -652,7 +652,7 @@
         "--hostname=user_file_processing@%n",
         "--pool=threads",
         "-Q",
-        "user_file_processing"
+        "user_file_processing,user_file_project_sync"
       ],
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
