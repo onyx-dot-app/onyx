@@ -1,3 +1,4 @@
+{{- if gt (int .Values.inferenceCapability.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,3 +51,4 @@ spec:
         resources:
           {{- toYaml .Values.inferenceCapability.resources | nindent 10 }}
         {{- end }}
+{{- end }}

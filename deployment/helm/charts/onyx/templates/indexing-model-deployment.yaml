@@ -1,3 +1,4 @@
+{{- if gt (int .Values.indexCapability.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,3 +57,4 @@ spec:
         resources:
           {{- toYaml .Values.indexCapability.resources | nindent 10 }}
         {{- end }}
+{{- end }}

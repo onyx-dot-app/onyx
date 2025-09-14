@@ -732,12 +732,13 @@ class SharepointConnector(
                         item
                         for item in driveitems
                         if item.parent_reference.path
-                        and any(
-                            path_part == site_descriptor.folder_path
-                            or path_part.startswith(site_descriptor.folder_path + "/")
-                            for path_part in item.parent_reference.path.split("root:/")[
-                                1
-                            ].split("/")
+                        and "root:/" in item.parent_reference.path
+                        and (
+                            item.parent_reference.path.split("root:/")[1]
+                            == site_descriptor.folder_path
+                            or item.parent_reference.path.split("root:/")[1].startswith(
+                                site_descriptor.folder_path + "/"
+                            )
                         )
                     ]
                     if len(driveitems) == 0:
@@ -848,14 +849,13 @@ class SharepointConnector(
                             item
                             for item in driveitems
                             if item.parent_reference.path
-                            and any(
-                                path_part == site_descriptor.folder_path
-                                or path_part.startswith(
-                                    site_descriptor.folder_path + "/"
-                                )
-                                for path_part in item.parent_reference.path.split(
-                                    "root:/"
-                                )[1].split("/")
+                            and "root:/" in item.parent_reference.path
+                            and (
+                                item.parent_reference.path.split("root:/")[1]
+                                == site_descriptor.folder_path
+                                or item.parent_reference.path.split("root:/")[
+                                    1
+                                ].startswith(site_descriptor.folder_path + "/")
                             )
                         ]
                         if len(driveitems) == 0:

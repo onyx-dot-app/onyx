@@ -162,8 +162,14 @@ def basic_user(
         return user
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def reset_multitenant() -> None:
+    """Initialize multi-tenant state once per test session.
+
+    Intentionally avoid per-test resets to speed up the multitenant suite.
+    The underlying reset function honors SKIP_RESET to allow CI to disable
+    heavy resets entirely.
+    """
     reset_all_multitenant()
 
 

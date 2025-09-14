@@ -5,18 +5,13 @@ concurrency:
 
 on:
   merge_group:
-  pull_request:
-    branches:
-      - main
-      - "release/**"
+    types: [checks_requested]
 
 env:
-  # AWS ECR Configuration. Use us-west-2 since blacksmith's instances are located there.
-  # This allows for faster image writes/pulls due to colocation.
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # e.g., 123456789012.dkr.ecr.us-east-2.amazonaws.com
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
+  # Private Registry Configuration
+  PRIVATE_REGISTRY: experimental-registry.blacksmith.sh:5000
+  PRIVATE_REGISTRY_USERNAME: ${{ secrets.PRIVATE_REGISTRY_USERNAME }}
+  PRIVATE_REGISTRY_PASSWORD: ${{ secrets.PRIVATE_REGISTRY_PASSWORD }}
 
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -114,16 +109,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
@@ -134,7 +125,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
 
   build-model-server-image:
@@ -143,16 +134,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
@@ -163,7 +150,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
           outputs: type=registry
           provenance: false
@@ -175,16 +162,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Download OpenAPI artifacts
         uses: actions/download-artifact@v4
@@ -201,7 +184,7 @@ jobs:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
 
   integration-tests-mit:
@@ -224,16 +207,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -248,19 +227,19 @@ jobs:
         run: |
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
-          # Other images from ECR
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          # Pull images from private registry
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
           echo "All Docker images pulled successfully"
 
-          # Re-tag with expected names for docker-compose
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+          # Re-tag to remove registry prefix for docker-compose
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
@@ -393,3 +372,20 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+
+  
+  required: 
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    needs: [integration-tests-mit]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const needs = ${{ toJSON(needs) }};
+            const failed = Object.values(needs).some(n => n.result !== 'success');
+            if (failed) {
+              core.setFailed('One or more upstream jobs failed or were cancelled.');
+            } else {
+              core.notice('All required jobs succeeded.');
+            }
