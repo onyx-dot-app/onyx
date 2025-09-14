@@ -116,8 +116,7 @@ class VespaDocumentUserFields:
     Fields that are specific to the user who is indexing the document.
     """
 
-    user_file_id: str | None = None
-    user_folder_id: str | None = None
+    user_projects: list[int] | None = None
 
 
 @dataclass

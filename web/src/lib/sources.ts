@@ -386,6 +386,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: "https://docs.onyx.app/admin/connectors/official/file",
     isPopular: true,
   },
+  user_file: {
+    icon: FileIcon2,
+    displayName: "File",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/admin/connectors/official/file",
+    isPopular: true,
+  },
 
   // Other
   ingestion_api: {
