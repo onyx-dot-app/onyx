@@ -372,3 +372,20 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+
+  
+  required: 
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    needs: [integration-tests-mit]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const needs = ${{ toJSON(needs) }};
+            const failed = Object.values(needs).some(n => n.result !== 'success');
+            if (failed) {
+              core.setFailed('One or more upstream jobs failed or were cancelled.');
+            } else {
+              core.notice('All required jobs succeeded.');
+            }
