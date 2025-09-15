@@ -88,7 +88,7 @@ def ensure_full_deployment_setup(
                     "Vespa did not initialize within the specified timeout."
                 )
 
-        seed_initial_documents(db_session, tenant_id)
+        seed_initial_documents(db_session, tenant)
 
         _SETUP_COMPLETE = True
     finally:
