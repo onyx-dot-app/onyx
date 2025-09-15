@@ -54,8 +54,8 @@ export default function CreateProjectModal({
           <FolderPlus size={26} className="mb-2" />
           <DialogTitle>Create New Project</DialogTitle>
           <DialogDescription>
-            Use projects to organize your files and chats in one place, and add
-            custom instructions for ongoing work.
+            Projects help keep your chats organized. Add files and instructions
+            to easily start new conversations on the same topic.
           </DialogDescription>
         </DialogHeader>
         <div className="bg-background-100 dark:bg-transparent -mx-6 px-6 py-6 space-y-2">
