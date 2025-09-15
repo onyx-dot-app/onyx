@@ -60,7 +60,7 @@ def ensure_full_deployment_setup(
 
     try:
         with get_session_with_current_tenant() as db_session:
-            setup_postgres(db_session, tenant)
+            setup_postgres(db_session)
 
             # Initialize file store; ignore if not configured
             try:
