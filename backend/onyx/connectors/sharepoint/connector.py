@@ -58,7 +58,6 @@ from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSION
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_validation import EXCLUDED_IMAGE_TYPES
-from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
@@ -353,12 +352,14 @@ def _convert_driveitem_to_document_with_permissions(
         content_bytes = bytes(content.value)
 
     sections: list[TextSection | ImageSection] = []
+    file_ext = driveitem.name.split(".")[-1]
 
     if not content_bytes:
         logger.warning(
             f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
         )
-    elif is_valid_image_type(mime_type):
+    elif "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+        # NOTE: this if should use is_valid_image_type instead with mime_type
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
