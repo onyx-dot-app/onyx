@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import nltk
@@ -28,7 +29,6 @@ def ensure_full_deployment_setup(
 
     - Initializes DB engine and sets tenant context
     - Skips model warm-ups during setup
-    - Optionally stubs GPU status calls during setup
     - Runs setup_onyx (Postgres defaults, Vespa indices, seeded docs)
     - Initializes file store (best-effort)
     - Ensures Vespa indices exist
@@ -53,6 +53,10 @@ def ensure_full_deployment_setup(
     nltk.download("punkt_tab", quiet=True)
 
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
+    original_cwd = os.getcwd()
+    backend_dir = Path(__file__).resolve().parents[2]  # points to 'backend'
+    os.chdir(str(backend_dir))
+
     try:
         with get_session_with_current_tenant() as session:
             setup_onyx(session, tenant)
@@ -86,3 +90,4 @@ def ensure_full_deployment_setup(
         _SETUP_COMPLETE = True
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        os.chdir(original_cwd)

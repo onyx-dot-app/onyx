@@ -11,7 +11,7 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.startup.full_setup import (
+from tests.external_dependency_unit.full_setup import (
     ensure_full_deployment_setup,
 )
 
