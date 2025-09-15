@@ -361,7 +361,6 @@ def get_document_counts_for_cc_pairs_batched_parallel(
     batches: list[list[tuple[int, int]]] = [
         cc_ids[i : i + batch_size] for i in range(0, len(cc_ids), batch_size)
     ]
-    logger.info(f"Running {len(batches)} batches")
 
     funcs = [(_get_document_counts_for_cc_pairs_batch, (batch,)) for batch in batches]
     results = run_functions_tuples_in_parallel(
