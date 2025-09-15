@@ -13,7 +13,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
-from onyx.setup import setup_onyx
+from onyx.seeding.load_docs import seed_initial_documents
+from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -58,8 +59,8 @@ def ensure_full_deployment_setup(
     os.chdir(str(backend_dir))
 
     try:
-        with get_session_with_current_tenant() as session:
-            setup_onyx(session, tenant)
+        with get_session_with_current_tenant() as db_session:
+            setup_postgres(db_session, tenant)
 
             # Initialize file store; ignore if not configured
             try:
@@ -68,8 +69,8 @@ def ensure_full_deployment_setup(
                 pass
 
         # Also ensure indices exist explicitly (no-op if already created)
-        with get_session_with_current_tenant() as session:
-            active = get_active_search_settings(session)
+        with get_session_with_current_tenant() as db_session:
+            active = get_active_search_settings(db_session)
             document_index = get_default_document_index(
                 active.primary, active.secondary
             )
@@ -86,6 +87,8 @@ def ensure_full_deployment_setup(
                 raise RuntimeError(
                     "Vespa did not initialize within the specified timeout."
                 )
+
+        seed_initial_documents(db_session, tenant_id)
 
         _SETUP_COMPLETE = True
     finally:
