@@ -69,13 +69,9 @@ def test_stream_chat_message_objects_without_web_search(
         patch(
             "onyx.utils.gpu_utils._get_gpu_status_from_model_server", return_value=False
         ),
-        # Mock Vespa retrieval calls to avoid network access
+        # For some reason, Vespa fails in CI...
         patch(
-            "onyx.document_index.vespa.chunk_retrieval.query_vespa",
-            return_value=[],
-        ),
-        patch(
-            "onyx.document_index.vespa.chunk_retrieval.parallel_visit_api_retrieval",
+            "onyx.document_index.vespa.index.query_vespa",
             return_value=[],
         ),
     ):
