@@ -196,3 +196,8 @@ class BedrockModelsRequest(BaseModel):
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
     provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class OpenRouterModelsRequest(BaseModel):
+    api_key: str
+    api_base: str | None = None

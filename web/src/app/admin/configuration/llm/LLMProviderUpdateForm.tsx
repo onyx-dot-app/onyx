@@ -277,6 +277,87 @@ export function LLMProviderUpdateForm({
     }
   };
 
+  const fetchOpenRouterModels = async (values: any, setFieldValue: any) => {
+    if (llmProviderDescriptor.name !== "openrouter") {
+      return;
+    }
+
+    setIsFetchingModels(true);
+    setFetchModelsError("");
+
+    try {
+      const response = await fetch("/api/admin/llm/openrouter/available-models", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          api_key: values.api_key,
+          api_base: values.api_base || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to fetch models");
+      }
+
+      const availableModels: string[] = await response.json();
+
+      const updatedModelConfigs = availableModels.map((modelName) => {
+        const existingConfig = llmProviderDescriptor.model_configurations.find(
+          (config) => config.name === modelName
+        );
+
+        return {
+          name: modelName,
+          is_visible: existingConfig?.is_visible ?? false,
+          max_input_tokens: null,
+          supports_image_input: false,
+        };
+      });
+
+      llmProviderDescriptor.model_configurations = updatedModelConfigs;
+
+      const previouslySelectedModels = values.selected_model_names || [];
+      const stillAvailableSelectedModels = previouslySelectedModels.filter(
+        (modelName: string) => availableModels.includes(modelName)
+      );
+      setFieldValue("selected_model_names", stillAvailableSelectedModels);
+
+      if (
+        (!values.default_model_name ||
+          !availableModels.includes(values.default_model_name)) &&
+        availableModels.length > 0
+      ) {
+        setFieldValue("default_model_name", availableModels[0]);
+      }
+
+      if (
+        values.fast_default_model_name &&
+        !availableModels.includes(values.fast_default_model_name)
+      ) {
+        setFieldValue("fast_default_model_name", null);
+      }
+
+      setFieldValue("_modelListUpdated", Date.now());
+
+      setPopup?.({
+        message: `Fetched ${availableModels.length} OpenRouter models`,
+        type: "success",
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      setFetchModelsError(errorMessage);
+      setPopup?.({
+        message: `Failed to fetch OpenRouter models: ${errorMessage}`,
+        type: "error",
+      });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  };
+
   return (
     <Formik
       initialValues={initialValues}
@@ -434,6 +515,40 @@ export function LLMProviderUpdateForm({
             />
           )}
 
+          {llmProviderDescriptor.name === "openrouter" && (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  fetchOpenRouterModels(
+                    formikProps.values,
+                    formikProps.setFieldValue
+                  )
+                }
+                disabled={isFetchingModels || !formikProps.values.api_key}
+                className="w-fit"
+              >
+                {isFetchingModels ? (
+                  <>
+                    <LoadingAnimation size="text-sm" />
+                    <span className="ml-2">Fetching Models...</span>
+                  </>
+                ) : (
+                  "Fetch Available Models"
+                )}
+              </Button>
+
+              {fetchModelsError && (
+                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+              )}
+
+              <Text className="text-sm text-gray-600">
+                Enter your OpenRouter API key (and optional API base), then
+                click to fetch available models.
+              </Text>
+            </div>
+          )}
+
           {llmProviderDescriptor.api_key_required && (
             <TextFormField
               small={firstTimeConfiguration}
@@ -441,6 +556,11 @@ export function LLMProviderUpdateForm({
               label="API Key"
               placeholder="API Key"
               type="password"
+              subtext={
+                llmProviderDescriptor.name === "openrouter"
+                  ? "Your OpenRouter API key. API Base defaults to https://openrouter.ai/api/v1 if left blank."
+                  : undefined
+              }
             />
           )}
 
@@ -506,6 +626,13 @@ export function LLMProviderUpdateForm({
               throw new Error("Unreachable; there should only exist 2 options");
             }
           })}
+
+          {llmProviderDescriptor.name === "openrouter" && (
+            <Text className="text-xs text-gray-600">
+              Tip: OpenRouter recommends sending your site URL (referer) and app name.
+              You can set them above via &quot;Site URL (Referer)&quot; and &quot;App Name&quot; fields.
+            </Text>
+          )}
 
           {/* Bedrock-specific fetch models button */}
           {llmProviderDescriptor.name === "bedrock" && (
