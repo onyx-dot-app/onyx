@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import nltk
+import nltk  # type: ignore
 
 from onyx.configs import app_configs as app_configs_module
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
