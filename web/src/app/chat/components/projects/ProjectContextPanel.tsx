@@ -66,7 +66,7 @@ export function FileCard({
     <div
       className={`relative group flex items-center gap-3 border border-border rounded-xl ${
         isProcessing ? "bg-accent-background" : "bg-background-background"
-      } px-3 py-1 shadow-sm h-14`}
+      } px-3 py-1 shadow-sm h-14 w-52`}
     >
       {!isProcessing && (
         <button
