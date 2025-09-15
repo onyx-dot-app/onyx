@@ -55,7 +55,6 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] = [],
-        prompt_id: int | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -71,7 +70,6 @@ class ChatSessionManager:
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
-            prompt_id=prompt_id,
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed
@@ -152,6 +150,11 @@ class ChatSessionManager:
                 ind_to_tool_use[ind] = ToolResult(
                     tool_name=ToolName.IMAGE_GENERATION,
                 )
+                continue
+
+            if packet_type == "image_generation_tool_heartbeat":
+                # Track heartbeat packets for debugging/testing
+                analyzed.heartbeat_packets.append(data)
                 continue
 
             if packet_type == "internal_search_tool_delta":

@@ -16,6 +16,8 @@ export interface AuthMethodOption<TFields> {
   label: string;
   fields: TFields;
   description?: string;
+  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
+  disablePermSync?: boolean;
 }
 export interface CredentialTemplateWithAuth<TFields> {
   authentication_method?: string;
@@ -53,6 +55,11 @@ export interface GitbookCredentialJson {
 export interface GitlabCredentialJson {
   gitlab_url: string;
   gitlab_access_token: string;
+}
+
+export interface BitbucketCredentialJson {
+  bitbucket_email: string;
+  bitbucket_api_token: string;
 }
 
 export interface BookstackCredentialJson {
@@ -230,7 +237,6 @@ export interface DiscordCredentialJson {
 
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
-  freshdesk_password: string;
   freshdesk_api_key: string;
 }
 
@@ -267,6 +273,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  bitbucket: {
+    bitbucket_email: "",
+    bitbucket_api_token: "",
+  } as BitbucketCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
   bookstack: {
     bookstack_base_url: "",
@@ -325,6 +335,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+        disablePermSync: true,
       },
       {
         value: "certificate",
@@ -337,6 +348,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         },
         description:
           "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
@@ -365,6 +377,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     clickup_api_token: "",
     clickup_team_id: "",
   } as ClickupCredentialJson,
+
   s3: {
     authentication_method: "access_key",
     authMethods: [
@@ -375,6 +388,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
           aws_access_key_id: "",
           aws_secret_access_key: "",
         },
+        disablePermSync: false,
       },
       {
         value: "iam_role",
@@ -382,6 +396,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {
           aws_role_arn: "",
         },
+        disablePermSync: false,
       },
       {
         value: "assume_role",
@@ -389,6 +404,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {},
         description:
           "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,
@@ -409,7 +425,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as OCICredentialJson,
   freshdesk: {
     freshdesk_domain: "",
-    freshdesk_password: "",
     freshdesk_api_key: "",
   } as FreshdeskCredentialJson,
   fireflies: {
@@ -587,7 +602,6 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Freshdesk
   freshdesk_domain: "Freshdesk Domain",
-  freshdesk_password: "Freshdesk Password",
   freshdesk_api_key: "Freshdesk API Key",
 
   // Fireflies
@@ -601,6 +615,10 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // Bitbucket
+  bitbucket_email: "Bitbucket Account Email",
+  bitbucket_api_token: "Bitbucket API Token",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

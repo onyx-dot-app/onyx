@@ -17,7 +17,7 @@ logger = setup_logger()
 
 
 PROJECT_URL_PAT = "projects"
-JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
+JIRA_SERVER_API_VERSION = os.environ.get("JIRA_SERVER_API_VERSION") or "2"
 JIRA_CLOUD_API_VERSION = os.environ.get("JIRA_CLOUD_API_VERSION") or "3"
 
 
@@ -92,7 +92,7 @@ def build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
         return JIRA(
             token_auth=api_token,
             server=jira_base,
-            options={"rest_api_version": JIRA_API_VERSION},
+            options={"rest_api_version": JIRA_SERVER_API_VERSION},
         )
 
 

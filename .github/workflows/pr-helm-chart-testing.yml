@@ -53,27 +53,154 @@ jobs:
       if: steps.list-changed.outputs.changed == 'true'
       uses: helm/kind-action@v1.12.0
 
-    - name: Run chart-testing (install)
+    - name: Pre-install cluster status check
       if: steps.list-changed.outputs.changed == 'true'
-      run: ct install --all \
-        --helm-extra-set-args="\
-          --set=nginx.enabled=false \
-          --set=postgresql.enabled=false \
-          --set=redis.enabled=false \
-          --set=minio.enabled=false \
-          --set=vespa.enabled=false \
-          --set=slackbot.enabled=false \
-          --set=api.replicaCount=0 \
-          --set=inferenceCapability.replicaCount=0 \
-          --set=indexCapability.replicaCount=0 \
-          --set=celery_beat.replicaCount=0 \
-          --set=celery_worker_heavy.replicaCount=0 \
-          --set=celery_worker_docprocessing.replicaCount=0 \
-          --set=celery_worker_light.replicaCount=0 \
-          --set=celery_worker_monitoring.replicaCount=0 \
-          --set=celery_worker_primary.replicaCount=0 \
-          --set=celery_worker_user_files_indexing.replicaCount=0" \
-        --debug --config ct.yaml
+      run: |
+        echo "=== Pre-install Cluster Status ==="
+        kubectl get nodes -o wide
+        kubectl get pods --all-namespaces
+        kubectl get storageclass
+
+    - name: Add Helm repositories and update
+      if: steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Adding Helm repositories ==="
+        helm repo add bitnami https://charts.bitnami.com/bitnami
+        helm repo add vespa https://onyx-dot-app.github.io/vespa-helm-charts
+        helm repo update
+
+    - name: Pre-pull critical images
+      if: steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Pre-pulling critical images to avoid timeout ==="
+        # Get kind cluster name
+        KIND_CLUSTER=$(kubectl config current-context | sed 's/kind-//')
+        echo "Kind cluster: $KIND_CLUSTER"
+        
+        # Pre-pull images that are likely to be used
+        echo "Pre-pulling PostgreSQL image..."
+        docker pull postgres:15-alpine || echo "Failed to pull postgres:15-alpine"
+        kind load docker-image postgres:15-alpine --name $KIND_CLUSTER || echo "Failed to load postgres image"
+        
+        echo "Pre-pulling Redis image..."
+        docker pull redis:7-alpine || echo "Failed to pull redis:7-alpine"
+        kind load docker-image redis:7-alpine --name $KIND_CLUSTER || echo "Failed to load redis image"
+        
+        echo "Pre-pulling Onyx images..."
+        docker pull docker.io/onyxdotapp/onyx-web-server:latest || echo "Failed to pull onyx web server"
+        docker pull docker.io/onyxdotapp/onyx-backend:latest || echo "Failed to pull onyx backend"
+        kind load docker-image docker.io/onyxdotapp/onyx-web-server:latest --name $KIND_CLUSTER || echo "Failed to load onyx web server"
+        kind load docker-image docker.io/onyxdotapp/onyx-backend:latest --name $KIND_CLUSTER || echo "Failed to load onyx backend"
+        
+        echo "=== Images loaded into Kind cluster ==="
+        docker exec $KIND_CLUSTER-control-plane crictl images | grep -E "(postgres|redis|onyx)" || echo "Some images may still be loading..."
+
+    - name: Validate chart dependencies
+      if: steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Validating chart dependencies ==="
+        cd deployment/helm/charts/onyx
+        helm dependency update
+        helm lint .
+
+    - name: Run chart-testing (install) with enhanced monitoring
+      timeout-minutes: 25
+      if: steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Starting chart installation with monitoring ==="
+        
+        # Function to monitor cluster state
+        monitor_cluster() {
+          while true; do
+            echo "=== Cluster Status Check at $(date) ==="
+            # Only show non-running pods to reduce noise
+            NON_RUNNING_PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded --no-headers 2>/dev/null | wc -l)
+            if [ "$NON_RUNNING_PODS" -gt 0 ]; then
+              echo "Non-running pods:"
+              kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded
+            else
+              echo "All pods running successfully"
+            fi
+            # Only show recent events if there are issues
+            RECENT_EVENTS=$(kubectl get events --sort-by=.lastTimestamp --all-namespaces --field-selector=type!=Normal 2>/dev/null | tail -5)
+            if [ -n "$RECENT_EVENTS" ]; then
+              echo "Recent warnings/errors:"
+              echo "$RECENT_EVENTS"
+            fi
+            sleep 60
+          done
+        }
+        
+        # Start monitoring in background
+        monitor_cluster &
+        MONITOR_PID=$!
+        
+        # Set up cleanup
+        cleanup() {
+          echo "=== Cleaning up monitoring process ==="
+          kill $MONITOR_PID 2>/dev/null || true
+          echo "=== Final cluster state ==="
+          kubectl get pods --all-namespaces
+          kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -20
+        }
+        
+        # Trap cleanup on exit
+        trap cleanup EXIT
+        
+        # Run the actual installation with detailed logging
+        echo "=== Starting ct install ==="
+        ct install --all \
+          --helm-extra-set-args="\
+            --set=nginx.enabled=false \
+            --set=minio.enabled=false \
+            --set=vespa.enabled=false \
+            --set=slackbot.enabled=false \
+            --set=postgresql.enabled=true \
+            --set=postgresql.primary.persistence.enabled=false \
+            --set=redis.enabled=true \
+            --set=webserver.replicaCount=1 \
+            --set=api.replicaCount=0 \
+            --set=inferenceCapability.replicaCount=0 \
+            --set=indexCapability.replicaCount=0 \
+            --set=celery_beat.replicaCount=0 \
+            --set=celery_worker_heavy.replicaCount=0 \
+            --set=celery_worker_docfetching.replicaCount=0 \
+            --set=celery_worker_docprocessing.replicaCount=0 \
+            --set=celery_worker_light.replicaCount=0 \
+            --set=celery_worker_monitoring.replicaCount=0 \
+            --set=celery_worker_primary.replicaCount=0 \
+            --set=celery_worker_user_files_indexing.replicaCount=0" \
+          --helm-extra-args="--timeout 900s --debug" \
+          --debug --config ct.yaml
+        
+        echo "=== Installation completed successfully ==="
+        kubectl get pods --all-namespaces
+
+    - name: Post-install verification
+      if: steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Post-install verification ==="
+        kubectl get pods --all-namespaces
+        kubectl get services --all-namespaces
+        # Only show issues if they exist
+        kubectl describe pods --all-namespaces | grep -A 5 -B 2 "Failed\|Error\|Warning" || echo "No pod issues found"
+
+    - name: Cleanup on failure
+      if: failure() && steps.list-changed.outputs.changed == 'true'
+      run: |
+        echo "=== Cleanup on failure ==="
+        echo "=== Final cluster state ==="
+        kubectl get pods --all-namespaces
+        kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -10
+        
+        echo "=== Pod descriptions for debugging ==="
+        kubectl describe pods --all-namespaces | grep -A 10 -B 3 "Failed\|Error\|Warning\|Pending" || echo "No problematic pods found"
+        
+        echo "=== Recent logs for debugging ==="
+        kubectl logs --all-namespaces --tail=50 | grep -i "error\|timeout\|failed\|pull" || echo "No error logs found"
+        
+        echo "=== Helm releases ==="
+        helm list --all-namespaces
       # the following would install only changed charts, but we only have one chart so 
       # don't worry about that for now
       # run: ct install --target-branch ${{ github.event.repository.default_branch }}

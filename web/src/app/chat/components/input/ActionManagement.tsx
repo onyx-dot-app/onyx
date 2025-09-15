@@ -30,10 +30,10 @@ import {
   FiKey,
   FiLock,
   FiCheck,
-  FiAlertTriangle,
   FiLoader,
 } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
+import { useChatContext } from "@/components/context/ChatContext";
 
 interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -57,8 +57,18 @@ export function ActionItem({
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const label = tool ? tool.display_name || tool.name : providedLabel!;
+  // Generate test ID based on tool name if available
+  const toolName = tool?.name || providedLabel || "";
+  const testIdBase = toolName
+    .toLowerCase()
+    .replace(/tool$/i, "")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   return (
     <div
+      data-testid={`tool-option-${testIdBase}`}
       className={`
       group
       flex 
@@ -140,13 +150,6 @@ interface MCPServer {
   user_credentials?: Record<string, string>;
 }
 
-interface MCPTool {
-  name: string;
-  display_name?: string;
-  description?: string;
-  parameters?: any;
-}
-
 interface MCPServerItemProps {
   server: MCPServer;
   isExpanded: boolean;
@@ -187,12 +190,6 @@ function MCPServerItem({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent closing the main popup
     if (isAuthenticated && itemRef.current) {
-      console.log("MCPServerItem handleClick - passing element:", {
-        element: itemRef.current,
-        rect: itemRef.current.getBoundingClientRect(),
-        tagName: itemRef.current.tagName,
-        classes: itemRef.current.className,
-      });
       onToggleExpand(itemRef.current);
     } else if (!isAuthenticated) {
       onAuthenticate();
@@ -253,9 +250,7 @@ function MCPToolsList({
   selectedAssistant,
   preventMainPopupClose,
 }: MCPToolsListProps) {
-  console.log("MCPToolsList", tools, serverName, onClose, selectedAssistant);
   const [searchTerm, setSearchTerm] = useState("");
-  console.log("searchTerm", searchTerm);
   const {
     assistantPreferences,
     setSpecificAssistantPreferences,
@@ -263,7 +258,6 @@ function MCPToolsList({
     setForcedToolIds,
   } = useAssistantsContext();
 
-  console.log("assistantPreferences", assistantPreferences);
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
 
@@ -297,7 +291,6 @@ function MCPToolsList({
     );
   });
 
-  console.log("filteredTools2", filteredTools);
   return (
     <div
       className="
@@ -385,17 +378,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
     anchorElement: HTMLElement | null;
   }>({ serverId: null, serverName: "", anchorElement: null });
 
-  // Track if we're in the process of opening an MCP popup
-  const [isOpeningMcpPopup, setIsOpeningMcpPopup] = useState(false);
   const preventCloseRef = useRef(false);
-
-  // Debug logging
-  console.log(
-    "ActionToggle render - open:",
-    open,
-    "mcpToolsPopup.serverId:",
-    mcpToolsPopup.serverId
-  );
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -430,7 +413,10 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
     setForcedToolIds,
   } = useAssistantsContext();
 
-  const { isAdmin, isCurator, user } = useUser();
+  const { isAdmin, isCurator } = useUser();
+
+  const { availableTools } = useChatContext();
+  const availableToolIds = availableTools.map((tool) => tool.id);
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -454,8 +440,9 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   };
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
+  // and filter out tools that are not available
   const displayTools = selectedAssistant.tools.filter(
-    (tool) => !tool.mcp_server_id
+    (tool) => !tool.mcp_server_id && availableToolIds.includes(tool.id)
   );
 
   // Fetch MCP servers for the assistant on mount
@@ -659,13 +646,6 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
       <Popover
         open={open}
         onOpenChange={(newOpen) => {
-          console.log(
-            "Popover onOpenChange",
-            newOpen,
-            "preventCloseRef.current",
-            preventCloseRef.current
-          );
-
           // If we're trying to close but we should prevent it, don't close
           if (!newOpen && preventCloseRef.current) {
             console.log("Preventing popover close due to preventCloseRef");
@@ -706,7 +686,7 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             overflow-hidden 
             focus:outline-none
           "
-            data-testid="action-popover-trigger"
+            data-testid="action-management-toggle"
             title={open ? undefined : "Configure actions"}
           >
             <SlidersVerticalIcon size={16} className="my-auto flex-none" />
@@ -734,20 +714,20 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
             }
           }}
           className="
-          w-[244px] 
-          max-h-[300px]
-          text-text-600 
-          text-sm 
-          p-0 
-          bg-background 
-          border 
-          border-border 
-          rounded-xl 
-          shadow-xl 
-          overflow-hidden
-          flex
-          flex-col
-        "
+            w-[244px] 
+            max-h-[300px]
+            text-text-600 
+            text-sm 
+            p-0 
+            bg-background 
+            border 
+            border-border 
+            rounded-xl 
+            shadow-xl 
+            overflow-hidden
+            flex
+            flex-col
+          "
         >
           {/* Search Input */}
           <div className="pt-1 mx-1">
@@ -762,26 +742,29 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="
-                w-full 
-                pl-9 
-                pr-3 
-                py-2 
-                bg-background-50 
-                rounded-lg 
-                text-sm 
-                outline-none 
-                text-text-700
-                placeholder:text-text-400
-                dark:placeholder:text-neutral-600
-                dark:bg-neutral-950
-              "
+                  w-full 
+                  pl-9 
+                  pr-3 
+                  py-2 
+                  bg-background-50 
+                  rounded-lg 
+                  text-sm 
+                  outline-none 
+                  text-text-700
+                  placeholder:text-text-400
+                  dark:placeholder:text-neutral-600
+                  dark:bg-neutral-950
+                "
                 autoFocus
               />
             </div>
           </div>
 
           {/* Options */}
-          <div className="pt-2 flex-1 overflow-y-auto mx-1 pb-2 relative">
+          <div
+            data-testid="tool-options"
+            className="pt-2 flex-1 overflow-y-auto mx-1 pb-2 relative"
+          >
             {filteredTools.length === 0 && filteredMCPServers.length === 0 ? (
               <div className="text-center py-1 text-text-400">
                 No matching actions found

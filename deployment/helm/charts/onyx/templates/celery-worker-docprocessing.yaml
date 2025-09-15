@@ -1,3 +1,4 @@
+{{- if gt (int .Values.celery_worker_docprocessing.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,6 +34,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_worker_docprocessing.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: celery-worker-docprocessing
           securityContext:
@@ -92,3 +97,4 @@ spec:
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}

@@ -48,9 +48,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
@@ -59,6 +56,9 @@ from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
@@ -85,7 +85,7 @@ class SearchToolConfig(BaseModel):
     bypass_acl: bool = False
 
 
-class InternetSearchToolConfig(BaseModel):
+class WebSearchToolConfig(BaseModel):
     answer_style_config: AnswerStyleConfig = Field(
         default_factory=lambda: AnswerStyleConfig(
             citation_config=CitationConfig(all_docs_useful=True)
@@ -160,7 +160,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 # Note: this is not very clear / not the way things should generally be done. (+impure function)
 # TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
-    tool_config: SearchToolConfig | InternetSearchToolConfig,
+    tool_config: SearchToolConfig | WebSearchToolConfig,
     tools: list[Tool],
     llm: LLM,
 ) -> None:
@@ -188,7 +188,7 @@ def construct_tools(
     fast_llm: LLM,
     run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
-    internet_search_tool_config: InternetSearchToolConfig | None = None,
+    internet_search_tool_config: WebSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
@@ -208,9 +208,7 @@ def construct_tools(
             continue
 
         if db_tool_model.in_code_tool_id:
-            tool_cls = get_built_in_tool_by_id(
-                db_tool_model.in_code_tool_id, db_session
-            )
+            tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
 
             # Handle Search Tool
             if (
@@ -266,13 +264,13 @@ def construct_tools(
                 ]
 
             # Handle Internet Search Tool
-            elif tool_cls.__name__ == InternetSearchTool.__name__:
+            elif tool_cls.__name__ == WebSearchTool.__name__:
                 if not internet_search_tool_config:
-                    internet_search_tool_config = InternetSearchToolConfig()
+                    internet_search_tool_config = WebSearchToolConfig()
 
                 try:
                     tool_dict[db_tool_model.id] = [
-                        InternetSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
@@ -313,6 +311,7 @@ def construct_tools(
                 # skip the knowledge graph tool if KG is not enabled/exposed
                 kg_config = get_kg_config_settings()
                 if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
+                    logger.debug("Knowledge Graph Tool is not enabled/exposed")
                     continue
 
                 if persona.name != TMP_DRALPHA_PERSONA_NAME:

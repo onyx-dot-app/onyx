@@ -57,7 +57,7 @@ https://private-user-images.githubusercontent.com/32520769/414509312-48392e83-95
 **To try it out for free and get started in seconds, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
 Onyx can also be run locally (even on a laptop) or deployed on a virtual machine with a single
-`docker compose` command. Checkout our [docs](https://docs.onyx.app/quickstart) to learn more.
+`docker compose` command. Checkout our [docs](https://docs.onyx.app/deployment/getting_started/quickstart) to learn more.
 
 We also have built-in support for high-availability/scalable deployment on Kubernetes.
 References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
@@ -97,7 +97,7 @@ Keep knowledge and access up to sync across 40+ connectors:
 - Websites
 - And more ...
 
-See the full list [here](https://docs.onyx.app/connectors).
+See the full list [here](https://docs.onyx.app/admin/connectors/overview).
 
 
 ## 📚 Licensing

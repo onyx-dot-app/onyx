@@ -24,7 +24,7 @@ logger = setup_logger()
 
 def dr_basic_search_graph_builder() -> StateGraph:
     """
-    LangGraph graph builder for Internet Search Sub-Agent
+    LangGraph graph builder for Web Search Sub-Agent
     """
 
     graph = StateGraph(state_schema=SubAgentMainState, input=SubAgentInput)

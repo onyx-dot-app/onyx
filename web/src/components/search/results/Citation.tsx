@@ -76,7 +76,7 @@ export function Citation({
       : truncateText(title || "", MAX_CITATION_TEXT_LENGTH)) || "Unknown";
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <span

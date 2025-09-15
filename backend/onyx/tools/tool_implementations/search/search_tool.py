@@ -82,7 +82,7 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
     _NAME = "run_search"
-    _DISPLAY_NAME = "Search Tool"
+    _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
 
     def __init__(
@@ -293,7 +293,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
-        original_query = None
+        original_query = query
         precomputed_query_embedding = None
         precomputed_is_keyword = None
         precomputed_keywords = None
@@ -312,7 +312,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         kg_sources = None
         kg_chunk_id_zero_only = False
         if override_kwargs:
-            original_query = override_kwargs.original_query
+            original_query = override_kwargs.original_query or query
             precomputed_is_keyword = override_kwargs.precomputed_is_keyword
             precomputed_keywords = override_kwargs.precomputed_keywords
             precomputed_query_embedding = override_kwargs.precomputed_query_embedding

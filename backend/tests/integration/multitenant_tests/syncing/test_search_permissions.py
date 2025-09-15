@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import uuid4
 
 from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -16,15 +17,16 @@ from tests.integration.common_utils.test_models import ToolName
 
 def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:
     """Helper function to set up test tenants with documents and users."""
+    unique = uuid4().hex
     # Creating an admin user for Tenant 1
     admin_user1: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email=f"admin+{unique}@onyx-test.com",
     )
     assert UserManager.is_role(admin_user1, UserRole.ADMIN)
 
     # Create Tenant 2 and its Admin User
     admin_user2: DATestUser = UserManager.create(
-        email="admin2@onyx-test.com",
+        email=f"admin2+{unique}@onyx-test.com",
     )
     assert UserManager.is_role(admin_user2, UserRole.ADMIN)
 

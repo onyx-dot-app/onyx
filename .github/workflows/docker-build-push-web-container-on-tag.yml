@@ -150,12 +150,20 @@ jobs:
       # https://github.com/aquasecurity/trivy/discussions/7538
       # https://github.com/aquasecurity/trivy-action/issues/389
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        env:
-          TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
-          TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
-          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
+        uses: nick-fields/retry@v3
         with:
-          image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          severity: "CRITICAL,HIGH"
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
+              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
+              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
+              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
+              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image \
+              --skip-version-check \
+              --timeout 20m \
+              --severity CRITICAL,HIGH \
+              docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}

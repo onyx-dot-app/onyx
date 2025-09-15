@@ -99,7 +99,7 @@ jobs:
     needs: [check_model_server_changes]
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
-      [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-arm64"]
+      [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-arm64"]
     env:
       PLATFORM_PAIR: linux-arm64
     steps:
@@ -164,13 +164,20 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        env:
-          TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
-          TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
-          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
+        uses: nick-fields/retry@v3
         with:
-          image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          severity: "CRITICAL,HIGH"
-          timeout: "10m"
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
+              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
+              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
+              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
+              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image \
+              --skip-version-check \
+              --timeout 20m \
+              --severity CRITICAL,HIGH \
+              docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}

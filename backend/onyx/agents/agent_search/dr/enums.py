@@ -8,6 +8,7 @@ class ResearchType(str, Enum):
     LEGACY_AGENTIC = "LEGACY_AGENTIC"  # only used for legacy agentic search migrations
     THOUGHTFUL = "THOUGHTFUL"
     DEEP = "DEEP"
+    FAST = "FAST"
 
 
 class ResearchAnswerPurpose(str, Enum):
@@ -20,10 +21,10 @@ class ResearchAnswerPurpose(str, Enum):
 class DRPath(str, Enum):
     CLARIFIER = "Clarifier"
     ORCHESTRATOR = "Orchestrator"
-    INTERNAL_SEARCH = "Search Tool"
+    INTERNAL_SEARCH = "Internal Search"
     GENERIC_TOOL = "Generic Tool"
     KNOWLEDGE_GRAPH = "Knowledge Graph Search"
-    INTERNET_SEARCH = "Internet Search"
+    WEB_SEARCH = "Web Search"
     IMAGE_GENERATION = "Image Generation"
     GENERIC_INTERNAL_TOOL = "Generic Internal Tool"
     CLOSER = "Closer"

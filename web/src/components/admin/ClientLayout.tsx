@@ -22,6 +22,7 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
+  OnyxSparkleIcon,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -42,6 +43,7 @@ import Link from "next/link";
 import { Button } from "../ui/button";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
+import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 
 const connectors_items = () => [
   {
@@ -153,7 +155,8 @@ const collections = (
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
-  kgExposed: boolean
+  kgExposed: boolean,
+  customAnalyticsEnabled: boolean
 ) => [
   {
     name: "Connectors",
@@ -190,6 +193,15 @@ const collections = (
         {
           name: "Configuration",
           items: [
+            {
+              name: (
+                <div className="flex">
+                  <OnyxSparkleIcon className="text-text-700" size={18} />
+                  <div className="ml-1">Default Assistant</div>
+                </div>
+              ),
+              link: "/admin/configuration/default-assistant",
+            },
             {
               name: (
                 <div className="flex">
@@ -311,7 +323,7 @@ const collections = (
                         },
                       ]
                     : []),
-                  ...(!enableCloud
+                  ...(!enableCloud && customAnalyticsEnabled
                     ? [
                         {
                           name: (
@@ -393,6 +405,7 @@ export function ClientLayout({
   enableCloud: boolean;
 }) {
   const { kgExposed, isLoading } = useIsKGExposed();
+  const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
@@ -464,7 +477,8 @@ export function ClientLayout({
             enableCloud,
             enableEnterprise,
             settings,
-            kgExposed
+            kgExposed,
+            customAnalyticsEnabled
           )}
         />
       </div>

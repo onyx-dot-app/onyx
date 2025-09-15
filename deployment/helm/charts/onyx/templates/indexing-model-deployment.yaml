@@ -1,3 +1,4 @@
+{{- if gt (int .Values.indexCapability.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,6 +29,10 @@ spec:
       securityContext:
         {{- toYaml .Values.indexCapability.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- with .Values.indexCapability.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ .Values.indexCapability.name }}
         image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Values.global.version }}"
@@ -52,3 +57,4 @@ spec:
         resources:
           {{- toYaml .Values.indexCapability.resources | nindent 10 }}
         {{- end }}
+{{- end }}

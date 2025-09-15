@@ -9,6 +9,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
+from onyx.connectors.bitbucket.connector import BitbucketConnector
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
 from onyx.connectors.clickup.connector import ClickupConnector
@@ -125,6 +126,7 @@ def identify_connector_class(
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
         DocumentSource.IMAP: ImapConnector,
+        DocumentSource.BITBUCKET: BitbucketConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }

@@ -36,7 +36,7 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         next_tool_path
         in (
             DRPath.INTERNAL_SEARCH,
-            DRPath.INTERNET_SEARCH,
+            DRPath.WEB_SEARCH,
             DRPath.KNOWLEDGE_GRAPH,
             DRPath.IMAGE_GENERATION,
         )

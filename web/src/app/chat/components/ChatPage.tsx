@@ -18,6 +18,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
@@ -85,6 +86,7 @@ import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 import { MessagesDisplay } from "./MessagesDisplay";
+import { WelcomeMessage } from "./WelcomeMessage";
 
 export function ChatPage({
   toggle,
@@ -161,6 +163,10 @@ export function ChatPage({
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
+  const {
+    connectors: federatedConnectorOAuthStatus,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -796,6 +802,9 @@ export function ChatPage({
           updateCurrentLlm={llmManager.updateCurrentLlm}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectorOAuthStatus}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => {
             setUserSettingsToggled(false);
             setSettingsToggled(false);
@@ -1153,19 +1162,7 @@ export function ChatPage({
                             }`}
                           >
                             {showCenteredInput && (
-                              <div
-                                data-testid="chat-intro"
-                                className="row-start-1 self-end flex text-text-800 justify-center mb-6 transition-opacity duration-300"
-                              >
-                                <AssistantIcon
-                                  colorOverride="text-text-800"
-                                  assistant={liveAssistant}
-                                  size="large"
-                                />
-                                <div className="ml-4 flex justify-center items-center text-center text-3xl font-bold">
-                                  {liveAssistant.name}
-                                </div>
-                              </div>
+                              <WelcomeMessage assistant={liveAssistant} />
                             )}
                             <div
                               className={showCenteredInput ? "row-start-2" : ""}
@@ -1233,12 +1230,12 @@ export function ChatPage({
                               )}
                             {enterpriseSettings &&
                               enterpriseSettings.use_custom_logotype && (
-                                <div className="hidden lg:block absolute right-0 bottom-0">
+                                <div className="hidden lg:block fixed right-12 bottom-8 pointer-events-none z-10">
                                   <img
                                     src="/api/enterprise-settings/logotype"
                                     alt="logotype"
                                     style={{ objectFit: "contain" }}
-                                    className="w-fit h-8"
+                                    className="w-fit h-9"
                                   />
                                 </div>
                               )}

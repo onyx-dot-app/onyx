@@ -31,6 +31,7 @@ from office365.sharepoint.client_context import ClientContext  # type: ignore[im
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
@@ -64,7 +65,6 @@ SLIM_BATCH_SIZE = 1000
 
 
 ASPX_EXTENSION = ".aspx"
-REQUEST_TIMEOUT = 10
 
 
 class SiteDescriptor(BaseModel):
@@ -178,62 +178,176 @@ def acquire_token_for_rest(
     return TokenResponse.from_json(token)
 
 
+def _get_download_url(driveitem: DriveItem) -> str | None:
+    """Best-effort retrieval of the Microsoft Graph download URL from a DriveItem."""
+    try:
+        additional_data = getattr(driveitem, "additional_data", None)
+        if isinstance(additional_data, dict):
+            url = additional_data.get("@microsoft.graph.downloadUrl")
+            if isinstance(url, str) and url:
+                return url
+    except Exception:
+        pass
+
+    try:
+        driveitem_json = driveitem.to_json()
+        url = driveitem_json.get("@microsoft.graph.downloadUrl")
+        if isinstance(url, str) and url:
+            return url
+    except Exception:
+        pass
+    return None
+
+
+def _probe_remote_size(url: str, timeout: int) -> int | None:
+    """Determine remote size using HEAD or a range GET probe. Returns None if unknown."""
+    try:
+        head_resp = requests.head(url, timeout=timeout, allow_redirects=True)
+        head_resp.raise_for_status()
+        cl = head_resp.headers.get("Content-Length")
+        if cl and cl.isdigit():
+            return int(cl)
+    except requests.RequestException:
+        pass
+
+    # Fallback: Range request for first byte to read total from Content-Range
+    try:
+        with requests.get(
+            url,
+            headers={"Range": "bytes=0-0"},
+            timeout=timeout,
+            stream=True,
+        ) as range_resp:
+            range_resp.raise_for_status()
+            cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
+            if cr and "/" in cr:
+                total = cr.split("/")[-1]
+                if total.isdigit():
+                    return int(total)
+    except requests.RequestException:
+        pass
+
+    # If both HEAD and a range GET failed to reveal a size, signal unknown size.
+    # Callers should treat None as "size unavailable" and proceed with a safe
+    # streaming path that enforces a hard cap to avoid excessive memory usage.
+    return None
+
+
+def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
+    """Stream download content with an upper bound on bytes read.
+
+    Behavior:
+    - Checks `Content-Length` first and aborts early if it exceeds `cap`.
+    - Otherwise streams the body in chunks and stops once `cap` is surpassed.
+    - Raises `RuntimeError('size_cap_exceeded')` when the cap would be exceeded.
+    - Returns the full bytes if the content fits within `cap`.
+    """
+    with requests.get(url, stream=True, timeout=timeout) as resp:
+        resp.raise_for_status()
+
+        # If the server provides Content-Length, prefer an early decision.
+        cl_header = resp.headers.get("Content-Length")
+        if cl_header and cl_header.isdigit():
+            content_len = int(cl_header)
+            if content_len > cap:
+                logger.warning(
+                    f"Content-Length {content_len} exceeds cap {cap}; skipping download."
+                )
+                raise RuntimeError("size_cap_exceeded")
+
+        buf = io.BytesIO()
+        # Stream in 64KB chunks; adjust if needed for slower networks.
+        for chunk in resp.iter_content(64 * 1024):
+            if not chunk:
+                continue
+            buf.write(chunk)
+            if buf.tell() > cap:
+                # Avoid keeping a large partial buffer; close and signal caller to skip.
+                logger.warning(
+                    f"Streaming download exceeded cap {cap} bytes; aborting early."
+                )
+                raise RuntimeError("size_cap_exceeded")
+
+        return buf.getvalue()
+
+
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItem,
     drive_name: str,
     ctx: ClientContext | None,
     graph_client: GraphClient,
     include_permissions: bool = False,
-) -> Document:
+) -> Document | None:
 
-    if driveitem.name is None:
-        raise ValueError("DriveItem name is required")
-    if driveitem.id is None:
-        raise ValueError("DriveItem ID is required")
+    if not driveitem.name or not driveitem.id:
+        raise ValueError("DriveItem name/id is required")
 
-    try:
-        # Access size from the JSON representation since it's not exposed as a direct attribute
-        driveitem_json = driveitem.to_json()
-        size_value = driveitem_json.get("size")
-        if size_value is not None:
-            file_size = int(size_value)
-            if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
-                logger.warning(
-                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                    f"File size: {file_size} bytes. Skipping."
-                )
-                raise ValueError(
-                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
-                    f"File size: {file_size} bytes."
-                )
-        else:
-            logger.warning(
-                f"Could not access file size for '{driveitem.name}' Proceeding with download."
-            )
-    except (ValueError, TypeError, AttributeError, KeyError) as e:
-        logger.info(
-            f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
-        )
     if include_permissions and ctx is None:
         raise ValueError("ClientContext is required for permissions")
 
-    # Proceed with download if size is acceptable or not available
-    content = sleep_and_retry(driveitem.get_content(), "get_content")
+    # Determine size before downloading, when possible
+    file_size: int | None = None
+    try:
+        item_json = driveitem.to_json()
+        size_value = item_json.get("size")
+        if size_value is not None:
+            file_size = int(size_value)
+    except Exception as e:
+        logger.debug(
+            f"Could not access file size for '{driveitem.name}' from item JSON: {e}"
+        )
 
-    if content is None:
-        logger.warning(f"Could not access content for '{driveitem.name}'")
-        raise ValueError(f"Could not access content for '{driveitem.name}'")
+    download_url = _get_download_url(driveitem)
+    if file_size is None and download_url:
+        file_size = _probe_remote_size(download_url, REQUEST_TIMEOUT_SECONDS)
 
-    # Handle different content types
-    if isinstance(content.value, bytes):
-        content_bytes = content.value
-    else:
-        raise ValueError(f"Unsupported content type: {type(content.value)}")
+    if file_size is not None and file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
+        logger.warning(
+            f"Skipping '{driveitem.name}' over size threshold ({file_size} > {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes)."
+        )
+        return None
+
+    # Prefer downloadUrl streaming with size cap
+    content_bytes: bytes | None = None
+    if download_url:
+        try:
+            content_bytes = _download_with_cap(
+                download_url,
+                REQUEST_TIMEOUT_SECONDS,
+                SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+            )
+        except RuntimeError as e:
+            if "size_cap_exceeded" in str(e):
+                logger.warning(
+                    f"Skipping '{driveitem.name}' exceeded size cap during streaming."
+                )
+                return None
+            else:
+                raise
+        except requests.RequestException as e:
+            status = e.response.status_code if e.response is not None else -1
+            logger.warning(
+                f"Failed to download via downloadUrl for '{driveitem.name}' (status={status}); falling back to SDK."
+            )
+
+    # Fallback to SDK content if needed
+    if content_bytes is None:
+        content = sleep_and_retry(driveitem.get_content(), "get_content")
+        if content is None or not isinstance(
+            getattr(content, "value", None), (bytes, bytearray)
+        ):
+            logger.warning(f"Could not access content for '{driveitem.name}'")
+            raise ValueError(f"Could not access content for '{driveitem.name}'")
+        content_bytes = bytes(content.value)
 
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]
 
-    if "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+    if not content_bytes:
+        logger.warning(
+            f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
+        )
+    elif "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
@@ -510,10 +624,11 @@ class SharepointConnector(
         include_site_documents: bool = True,
     ) -> None:
         self.batch_size = batch_size
-        self._graph_client: GraphClient | None = None
+        self.sites = list(sites)
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
         )
+        self._graph_client: GraphClient | None = None
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
@@ -526,6 +641,13 @@ class SharepointConnector(
                 "At least one content type must be enabled. "
                 "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
             )
+
+        # Ensure sites are sharepoint urls
+        for site_url in self.sites:
+            if not site_url.startswith("https://") or "/sites/" not in site_url:
+                raise ConnectorValidationError(
+                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site)"
+                )
 
     @property
     def graph_client(self) -> GraphClient:
@@ -563,6 +685,8 @@ class SharepointConnector(
                         folder_path=folder_path,
                     )
                 )
+            else:
+                logger.warning(f"Site URL '{url}' is not a valid Sharepoint URL")
         return site_data_list
 
     def _get_drive_items_for_drive_name(
@@ -608,12 +732,13 @@ class SharepointConnector(
                         item
                         for item in driveitems
                         if item.parent_reference.path
-                        and any(
-                            path_part == site_descriptor.folder_path
-                            or path_part.startswith(site_descriptor.folder_path + "/")
-                            for path_part in item.parent_reference.path.split("root:/")[
-                                1
-                            ].split("/")
+                        and "root:/" in item.parent_reference.path
+                        and (
+                            item.parent_reference.path.split("root:/")[1]
+                            == site_descriptor.folder_path
+                            or item.parent_reference.path.split("root:/")[1].startswith(
+                                site_descriptor.folder_path + "/"
+                            )
                         )
                     ]
                     if len(driveitems) == 0:
@@ -724,14 +849,13 @@ class SharepointConnector(
                             item
                             for item in driveitems
                             if item.parent_reference.path
-                            and any(
-                                path_part == site_descriptor.folder_path
-                                or path_part.startswith(
-                                    site_descriptor.folder_path + "/"
-                                )
-                                for path_part in item.parent_reference.path.split(
-                                    "root:/"
-                                )[1].split("/")
+                            and "root:/" in item.parent_reference.path
+                            and (
+                                item.parent_reference.path.split("root:/")[1]
+                                == site_descriptor.folder_path
+                                or item.parent_reference.path.split("root:/")[
+                                    1
+                                ].startswith(site_descriptor.folder_path + "/")
                             )
                         ]
                         if len(driveitems) == 0:
@@ -839,7 +963,10 @@ class SharepointConnector(
         params = {"$expand": "canvasLayout"}
 
         response = requests.get(
-            pages_endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+            pages_endpoint,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         pages_data = response.json()
@@ -848,7 +975,9 @@ class SharepointConnector(
         # Handle pagination if there are more pages
         while "@odata.nextLink" in pages_data:
             next_url = pages_data["@odata.nextLink"]
-            response = requests.get(next_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            response = requests.get(
+                next_url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+            )
             response.raise_for_status()
             pages_data = response.json()
             all_pages.extend(pages_data.get("value", []))
@@ -1264,11 +1393,14 @@ class SharepointConnector(
                         include_permissions=include_permissions,
                     )
 
-                    if doc.sections:
-                        yield doc
-                    elif should_yield_if_empty:
-                        doc.sections = [TextSection(link=driveitem.web_url, text="")]
-                        yield doc
+                    if doc:
+                        if doc.sections:
+                            yield doc
+                        elif should_yield_if_empty:
+                            doc.sections = [
+                                TextSection(link=driveitem.web_url, text="")
+                            ]
+                            yield doc
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"

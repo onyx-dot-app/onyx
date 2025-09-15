@@ -1423,3 +1423,36 @@ understand relationships between entities."""
 
 KG_BETA_ASSISTANT_TASK_PROMPT = """"Help users explore and understand the knowledge graph by answering \
 questions about entities and their relationships."""
+
+
+# Just in case, for best practice, send a system message with key rules.
+# (The db user permissions executing the SQL will avoid issues anyway,
+# but it does not hurt to to put multiple checks in place.)
+SQL_INSTRUCTIONS_RELATIONSHIP_PROMPT = """
+You are an expert at generating SQL queries to answer questions about a knowledge graph.
+
+You will be given a lot of instructions later, but here rules that MUST BE FOLLOWED:
+  - the SQL generated MUST only use the table one table named 'relationship_table'. \
+This table is not a table that can be defined or overwritten by the user and the resulting SQL \
+statement, it MUST be seen as an existing table in the database.
+  - self-joins of the 'relationship_table' are allowed, as well as common table expressions \
+  that reference only the 'relationship_table'.
+  - no other table or view can in any way or shape be \
+involved in the generated SQL.
+  - no other database operations can be generated except for those that query the 'relationship_table'. \
+(WHERE, GROUP BY, etc. are certainly allowed, but no other database table can be used in the generated SQL.)
+"""
+
+SQL_INSTRUCTIONS_ENTITY_PROMPT = """
+You are an expert at generating SQL queries to answer questions about a knowledge graph.
+
+You will be given a lot of instructions later, but here rules that MUST BE FOLLOWED:
+  - the SQL generated MUST only use the table one table named 'entity_table'. \
+This table is not a table that can be defined or overwritten by the user and the resulting SQL \
+statement, it MUST be seen as an existing table in the database.
+  - common table expressions that reference only the 'entity_table' are allowed.
+  - no other table or view of a potential underlying schema can in any way or shape be \
+involved in the generated SQL.
+  - no other database operations can be generated except for those that query the 'entity_table'. \
+(WHERE, GROUP BY, etc. are certainly allowed, but no other database table can be used in the generated SQL.)
+"""

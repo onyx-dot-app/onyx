@@ -9,6 +9,7 @@ import Link from "next/link";
 import {
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -145,7 +146,9 @@ function SourceTileTooltipWrapper({
 export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [rawSearchTerm, setSearchTerm] = useState("");
+  const searchTerm = useDeferredValue(rawSearchTerm);
+
   const { data: federatedConnectors } = useFederatedConnectors();
   const settings = useContext(SettingsContext);
 
@@ -162,6 +165,7 @@ export default function Page() {
       searchInputRef.current.focus();
     }
   }, []);
+
   const filterSources = useCallback(
     (sources: SourceMetadata[]) => {
       if (!searchTerm) return sources;
@@ -217,6 +221,21 @@ export default function Page() {
     settings?.settings?.show_extra_connectors,
   ]);
 
+  // When searching, dedupe Popular against whatever is already in results
+  const resultIds = useMemo(() => {
+    if (!searchTerm) return new Set<string>();
+    return new Set(
+      Object.values(categorizedSources)
+        .flat()
+        .map((s) => s.internalName)
+    );
+  }, [categorizedSources, searchTerm]);
+
+  const dedupedPopular = useMemo(() => {
+    if (!searchTerm) return popularSources;
+    return popularSources.filter((s) => !resultIds.has(s.internalName));
+  }, [popularSources, resultIds, searchTerm]);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const filteredCategories = Object.entries(categorizedSources).filter(
@@ -264,19 +283,19 @@ export default function Page() {
         type="text"
         ref={searchInputRef}
         placeholder="Search connectors..."
-        value={searchTerm}
+        value={rawSearchTerm} // keep the input bound to immediate state
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
-      {popularSources.length > 0 && !searchTerm && (
+      {dedupedPopular.length > 0 && (
         <div className="mb-8">
           <div className="flex mt-8">
             <Title>Popular</Title>
           </div>
           <div className="flex flex-wrap gap-4 p-4">
-            {popularSources.map((source) => (
+            {dedupedPopular.map((source) => (
               <SourceTileTooltipWrapper
                 preSelect={false}
                 key={source.internalName}
@@ -300,7 +319,9 @@ export default function Page() {
               {sources.map((source, sourceInd) => (
                 <SourceTileTooltipWrapper
                   preSelect={
-                    searchTerm.length > 0 && categoryInd == 0 && sourceInd == 0
+                    (searchTerm?.length ?? 0) > 0 &&
+                    categoryInd == 0 &&
+                    sourceInd == 0
                   }
                   key={source.internalName}
                   sourceMetadata={source}

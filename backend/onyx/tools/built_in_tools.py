@@ -1,100 +1,36 @@
 import os
 from typing import Type
-from typing_extensions import TypedDict  # noreorder
 
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    get_default_provider,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
-from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
-from onyx.db.models import Persona
-from onyx.db.models import Tool as ToolDBModel
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
+from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+    OktaProfileTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class InCodeToolInfo(TypedDict):
-    cls: Type[Tool]
-    description: str
-    in_code_tool_id: str
-    display_name: str
+BUILT_IN_TOOL_MAP: dict[str, Type[Tool]] = {
+    SearchTool.__name__: SearchTool,
+    ImageGenerationTool.__name__: ImageGenerationTool,
+    WebSearchTool.__name__: WebSearchTool,
+    KnowledgeGraphTool.__name__: KnowledgeGraphTool,
+    OktaProfileTool.__name__: OktaProfileTool,
+}
 
 
-BUILT_IN_TOOLS: list[InCodeToolInfo] = [
-    InCodeToolInfo(
-        cls=SearchTool,
-        description="The Search Action allows the Assistant to search through connected knowledge to help build an answer.",
-        in_code_tool_id=SearchTool.__name__,
-        display_name=SearchTool._DISPLAY_NAME,
-    ),
-    InCodeToolInfo(
-        cls=ImageGenerationTool,
-        description=(
-            "The Image Generation Action allows the assistant to use DALL-E 3 or GPT-IMAGE-1 to generate images. "
-            "The action will be used when the user asks the assistant to generate an image."
-        ),
-        in_code_tool_id=ImageGenerationTool.__name__,
-        display_name=ImageGenerationTool._DISPLAY_NAME,
-    ),
-    # Show internet search tools if any providers are available
-    *(
-        [
-            InCodeToolInfo(
-                cls=InternetSearchTool,
-                description=(
-                    "The Internet Search Action allows the assistant "
-                    "to perform internet searches for up-to-date information."
-                ),
-                in_code_tool_id=InternetSearchTool.__name__,
-                display_name=InternetSearchTool._DISPLAY_NAME,
-            ),
-        ]
-        if (bool(get_default_provider()))
-        else []
-    ),
-    InCodeToolInfo(
-        cls=KnowledgeGraphTool,
-        description="""The Knowledge Graph Search Action allows the assistant to search the \
-    Knowledge Graph for information. This tool can (for now) only be active in the KG Beta Assistant, \
-    and it requires the Knowledge Graph to be enabled.""",
-        in_code_tool_id=KnowledgeGraphTool.__name__,
-        display_name=KnowledgeGraphTool._DISPLAY_NAME,
-    ),
-    # Show Okta Profile tool if the environment variables are set
-    *(
-        [
-            InCodeToolInfo(
-                cls=OktaProfileTool,
-                description="The Okta Profile Action allows the assistant to fetch the current user's information from Okta. \
-It could include the user's name, email, phone number, address as well as other information like who they report to and \
-who reports to them.",
-                in_code_tool_id=OktaProfileTool.__name__,
-                display_name=OktaProfileTool._DISPLAY_NAME,
-            )
-        ]
-        if OKTA_PROFILE_TOOL_ENABLED
-        else []
-    ),
-]
+def get_built_in_tool_ids() -> list[str]:
+    return list(BUILT_IN_TOOL_MAP.keys())
 
 
 def load_builtin_tools(db_session: Session) -> None:

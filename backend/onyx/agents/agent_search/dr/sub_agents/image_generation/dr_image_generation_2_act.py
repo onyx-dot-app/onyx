@@ -12,8 +12,13 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    IMAGE_GENERATION_HEARTBEAT_ID,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     IMAGE_GENERATION_RESPONSE_ID,
 )
@@ -65,7 +70,14 @@ def image_generation(
     image_generation_responses: list[ImageGenerationResponse] = []
 
     for tool_response in image_tool.run(prompt=branch_query):
-        if tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
+        if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
+            # Stream heartbeat to frontend
+            write_custom_event(
+                state.current_step_nr,
+                ImageGenerationToolHeartbeat(),
+                writer,
+            )
+        elif tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
             response = cast(list[ImageGenerationResponse], tool_response.response)
             image_generation_responses = response
             break

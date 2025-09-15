@@ -305,6 +305,7 @@ const FolderItem = ({
               isSelected={chatSession.id === currentChatId}
               showShareModal={showShareModal}
               showDeleteModal={showDeleteModal}
+              parentFolderName={folder.folder_name}
             />
           ))}
         </div>

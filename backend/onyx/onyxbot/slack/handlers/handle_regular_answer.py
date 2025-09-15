@@ -113,7 +113,6 @@ def handle_regular_answer(
     )
 
     document_set_names: list[str] | None = None
-    prompt = None
     # If no persona is specified, use the default search based persona
     # This way slack flow always has a persona
     persona = slack_channel_config.persona
@@ -123,12 +122,10 @@ def handle_regular_answer(
             document_set_names = [
                 document_set.name for document_set in persona.document_sets
             ]
-            prompt = persona.prompts[0] if persona.prompts else None
     else:
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
-        prompt = persona.prompts[0] if persona.prompts else None
 
     with get_session_with_current_tenant() as db_session:
         expecting_search_result = persona_has_search_tool(persona.id, db_session)
@@ -226,7 +223,6 @@ def handle_regular_answer(
                 persona_id=persona.id,
                 # This is not used in the Slack flow, only in the answer API
                 persona_override_config=None,
-                prompt=prompt,
                 message_ts_to_respond_to=message_ts_to_respond_to,
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow

@@ -14,14 +14,12 @@ class SubAgentUpdate(LoggerUpdate):
 
 class BranchUpdate(LoggerUpdate):
     branch_iteration_responses: Annotated[list[IterationAnswer], add] = []
-    urls_to_open: Annotated[list[str], add] = []
 
 
 class SubAgentInput(LoggerUpdate):
     iteration_nr: int = 0
     current_step_nr: int = 1
     query_list: list[str] = []
-    urls_to_open: Annotated[list[str], add] = []
     context: str | None = None
     active_source_types: list[DocumentSource] | None = None
     tools_used: Annotated[list[str], add] = []
@@ -41,7 +39,7 @@ class SubAgentMainState(
 
 class BranchInput(SubAgentInput):
     parallelization_nr: int = 0
-    branch_question: str | None = None
+    branch_question: str
 
 
 class CustomToolBranchInput(LoggerUpdate):

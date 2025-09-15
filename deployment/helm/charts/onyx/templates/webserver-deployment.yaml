@@ -1,3 +1,4 @@
+{{- if gt (int .Values.webserver.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,6 +34,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
+      {{- with .Values.webserver.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: web-server
           securityContext:
@@ -58,3 +63,4 @@ spec:
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}

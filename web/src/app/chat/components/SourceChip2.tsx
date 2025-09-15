@@ -35,11 +35,7 @@ export const SourceChip2 = ({
 
   return (
     <TooltipProvider>
-      <Tooltip
-        delayDuration={0}
-        open={isTooltipOpen}
-        onOpenChange={setIsTooltipOpen}
-      >
+      <Tooltip open={isTooltipOpen} onOpenChange={setIsTooltipOpen}>
         <TooltipTrigger
           onMouseEnter={() => setIsTooltipOpen(true)}
           onMouseLeave={() => setIsTooltipOpen(false)}

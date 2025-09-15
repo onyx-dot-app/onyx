@@ -282,6 +282,70 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  bitbucket: {
+    description: "Configure Bitbucket connector",
+    subtext:
+      "Configure Bitbucket connector (Cloud only). You can index a workspace, specific projects or repositories.",
+    values: [
+      {
+        type: "text",
+        label: "Workspace",
+        name: "workspace",
+        optional: false,
+        description: `The Bitbucket workspace to index (e.g., "atlassian" from https://bitbucket.org/atlassian/workspace ).`,
+      },
+      {
+        type: "tab",
+        name: "bitbucket_mode",
+        label: "What should be indexed from Bitbucket?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repositories",
+            fields: [
+              {
+                type: "text",
+                label: "Repository Slugs",
+                name: "repositories",
+                optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Project(s)",
+            fields: [
+              {
+                type: "text",
+                label: "Project Key(s)",
+                name: "projects",
+                optional: false,
+                description:
+                  "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)",
+              },
+            ],
+          },
+          {
+            value: "workspace",
+            label: "Workspace",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Workspace",
+                name: "workspace_tab",
+                description:
+                  "This connector will index all repositories in the workspace.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    advanced_values: [],
+  },
   gitbook: {
     description: "Configure GitBook connector",
     values: [
@@ -663,7 +727,7 @@ export const connectorConfigs: Record<
                   "\n    }" +
                   "\n  }" +
                   "\n}" +
-                  "\n\n[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.",
+                  "\n\n[See our docs](https://docs.onyx.app/admin/connectors/official/salesforce) for more details.",
               },
             ],
           },
@@ -1580,6 +1644,12 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+}
+
+export interface BitbucketConfig {
+  workspace: string;
+  repositories?: string;
+  projects?: string;
 }
 
 export interface GoogleDriveConfig {

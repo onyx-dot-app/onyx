@@ -1,3 +1,4 @@
+{{- if gt (int .Values.celery_beat.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,7 +6,7 @@ metadata:
   labels:
     {{- include "onyx-stack.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.celery_beat.replicaCount }}
   selector:
     matchLabels:
       {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
@@ -31,6 +32,10 @@ spec:
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_beat.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: celery-beat
           securityContext:
@@ -82,3 +87,4 @@ spec:
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}

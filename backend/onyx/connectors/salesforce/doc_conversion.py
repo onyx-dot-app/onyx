@@ -10,6 +10,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import SalesforceObject
@@ -169,7 +170,9 @@ def convert_sf_query_result_to_doc(
 
     base_url = f"https://{sf_client.sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(record[MODIFIED_FIELD])
-    extracted_semantic_identifier = record.get(NAME_FIELD, "Unknown Object")
+    extracted_semantic_identifier = record.get(NAME_FIELD) or record.get(
+        ID_FIELD, "Unknown Object"
+    )
 
     sections = [_extract_section(record, f"{base_url}/{record_id}")]
     for child_record_key, child_record in child_records.items():
@@ -204,11 +207,13 @@ def convert_sf_object_to_doc(
 ) -> Document:
     """Would be nice if this function was documented"""
     object_dict = sf_object.data
-    salesforce_id = object_dict["Id"]
+    salesforce_id = object_dict[ID_FIELD]
     onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
     base_url = f"https://{sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(object_dict[MODIFIED_FIELD])
-    extracted_semantic_identifier = object_dict.get(NAME_FIELD, "Unknown Object")
+    extracted_semantic_identifier = object_dict.get(NAME_FIELD) or object_dict.get(
+        ID_FIELD, "Unknown Object"
+    )
 
     sections = [_extract_section(sf_object.data, f"{base_url}/{sf_object.id}")]
     for id in sf_db.get_child_ids(sf_object.id):

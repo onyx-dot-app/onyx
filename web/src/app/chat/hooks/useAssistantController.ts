@@ -41,14 +41,21 @@ export function useAssistantController({
 
   // Current assistant is decided based on this ordering
   // 1. Alternative assistant (assistant selected explicitly by user)
-  // 2. Selected assistant (assistnat default in this chat session)
-  // 3. First pinned assistants (ordered list of pinned assistants)
-  // 4. Available assistants (ordered list of available assistants)
+  // 2. Selected assistant (assistant default in this chat session)
+  // 3. Unified assistant (ID 0) if available
+  // 4. First pinned assistants (ordered list of pinned assistants)
+  // 5. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
-  const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(
-    () => selectedAssistant || pinnedAssistants[0] || availableAssistants[0],
-    [selectedAssistant, pinnedAssistants, availableAssistants]
-  );
+  const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(() => {
+    if (selectedAssistant) return selectedAssistant;
+
+    // Try to use the unified assistant (ID 0) as default
+    const unifiedAssistant = availableAssistants.find((a) => a.id === 0);
+    if (unifiedAssistant) return unifiedAssistant;
+
+    // Fall back to pinned or available assistants
+    return pinnedAssistants[0] || availableAssistants[0];
+  }, [selectedAssistant, pinnedAssistants, availableAssistants]);
 
   const setSelectedAssistantFromId = useCallback(
     (assistantId: number | null | undefined) => {

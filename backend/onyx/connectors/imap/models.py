@@ -35,10 +35,10 @@ class EmailHeaders(BaseModel):
             if not value:
                 return None
 
-            decoded_value, _encoding = email.header.decode_header(value)[0]
-
+            decoded_value, encoding = email.header.decode_header(value)[0]
             if isinstance(decoded_value, bytes):
-                return decoded_value.decode()
+                encoding = encoding or "utf-8"
+                return decoded_value.decode(encoding, errors="replace")
             elif isinstance(decoded_value, str):
                 return decoded_value
             else:

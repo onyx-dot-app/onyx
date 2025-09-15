@@ -199,6 +199,7 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
 
     IMAP = "imap"
+    BITBUCKET = "bitbucket"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -494,7 +495,7 @@ class OnyxCeleryTask:
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
 
-    AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
+    GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
@@ -541,6 +542,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
+    DocumentSource.BITBUCKET: "bitbucket data",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
     DocumentSource.OUTLINE: "outline data",

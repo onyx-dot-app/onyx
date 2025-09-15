@@ -32,10 +32,8 @@ from onyx.db.llm import fetch_existing_doc_sets
 from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
-from onyx.db.models import Prompt
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.db.prompts import get_prompts_by_ids
 from onyx.db.search_settings import get_current_search_settings
 from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
@@ -59,7 +57,6 @@ def prepare_chat_message_request(
     persona_id: int | None,
     # Does the question need to have a persona override
     persona_override_config: PersonaOverrideConfig | None,
-    prompt: Prompt | None,
     message_ts_to_respond_to: str | None,
     retrieval_details: RetrievalDetails | None,
     rerank_settings: RerankingDetails | None,
@@ -83,7 +80,6 @@ def prepare_chat_message_request(
         parent_message_id=None,  # It's a standalone chat session each time
         message=message_text,
         file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
-        prompt_id=prompt.id if prompt else None,
         # Can always override the persona for the single query, if it's a normal persona
         # then it will be treated the same
         persona_override_config=persona_override_config,
@@ -389,21 +385,11 @@ def create_temporary_persona(
     )
 
     if persona_config.prompts:
-        persona.prompts = [
-            Prompt(
-                name=p.name,
-                description=p.description,
-                system_prompt=p.system_prompt,
-                task_prompt=p.task_prompt,
-                include_citations=p.include_citations,
-                datetime_aware=p.datetime_aware,
-            )
-            for p in persona_config.prompts
-        ]
-    elif persona_config.prompt_ids:
-        persona.prompts = get_prompts_by_ids(
-            db_session=db_session, prompt_ids=persona_config.prompt_ids
-        )
+        # Use the first prompt from the override config for embedded prompt fields
+        first_prompt = persona_config.prompts[0]
+        persona.system_prompt = first_prompt.system_prompt
+        persona.task_prompt = first_prompt.task_prompt
+        persona.datetime_aware = first_prompt.datetime_aware
 
     persona.tools = []
     if persona_config.custom_tools_openapi:

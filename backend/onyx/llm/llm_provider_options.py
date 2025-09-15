@@ -92,7 +92,7 @@ BEDROCK_MODEL_NAMES = [
     model
     # bedrock_converse_models are just extensions of the bedrock_models, not sure why
     # litellm has split them into two lists :(
-    for model in litellm.bedrock_models + litellm.bedrock_converse_models
+    for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
     if "/" not in model and "embed" not in model
 ][::-1]
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -226,21 +226,30 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name="AWS_ACCESS_KEY_ID",
                     display_name="AWS Access Key ID",
                     is_required=False,
-                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                    description="If using IAM role or a long-term API key, leave this field blank.",
                 ),
                 CustomConfigKey(
                     name="AWS_SECRET_ACCESS_KEY",
                     display_name="AWS Secret Access Key",
                     is_required=False,
                     is_secret=True,
-                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                    description="If using IAM role or a long-term API key, leave this field blank.",
+                ),
+                CustomConfigKey(
+                    name="AWS_BEARER_TOKEN_BEDROCK",
+                    display_name="AWS Bedrock Long-term API Key",
+                    is_required=False,
+                    is_secret=True,
+                    description=(
+                        "If using IAM role or access key, leave this field blank."
+                    ),
                 ),
             ],
             model_configurations=fetch_model_configurations_for_provider(
                 BEDROCK_PROVIDER_NAME
             ),
             default_model=BEDROCK_DEFAULT_MODEL,
-            default_fast_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
@@ -264,7 +273,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
                     description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/gen_ai_configs/vertex_ai) for all possible values.",
+                    "[Vertex AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) for all possible values.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
@@ -304,6 +313,7 @@ def fetch_model_configurations_for_provider(
     visible_model_names = (
         fetch_visible_model_names_for_provider_as_set(provider_name) or set()
     )
+
     return [
         ModelConfigurationView(
             name=model_name,

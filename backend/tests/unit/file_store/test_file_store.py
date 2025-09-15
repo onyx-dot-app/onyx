@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Session
@@ -23,37 +23,38 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.file_store import S3BackedFileStore
 
 
+class TestDBBase(DeclarativeBase):
+    pass
+
+
+class FileRecord(TestDBBase):
+    __tablename__: str = "file_record"
+
+    # Internal file ID, must be unique across all files
+    file_id: Mapped[str] = mapped_column(String, primary_key=True)
+
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    file_origin: Mapped[FileOrigin] = mapped_column(
+        Enum(FileOrigin, native_enum=False), nullable=False
+    )
+    file_type: Mapped[str] = mapped_column(String, default="text/plain")
+
+    # External storage support (S3, MinIO, Azure Blob, etc.)
+    bucket_name: Mapped[str] = mapped_column(String, nullable=False)
+    object_key: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Timestamps for external storage
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     """Create an in-memory SQLite database for testing"""
-    # Create test-specific base and model that matches the actual FileRecord structure
-    # but uses SQLite-compatible types
-    TestDBBase = declarative_base()
-
-    class FileRecord(TestDBBase):  # type: ignore
-        __tablename__: str = "file_record"
-
-        # Internal file ID, must be unique across all files
-        file_id: Mapped[str] = mapped_column(String, primary_key=True)
-
-        display_name: Mapped[str | None] = mapped_column(String, nullable=True)
-        file_origin: Mapped[FileOrigin] = mapped_column(
-            Enum(FileOrigin, native_enum=False), nullable=False
-        )
-        file_type: Mapped[str] = mapped_column(String, default="text/plain")
-
-        # External storage support (S3, MinIO, Azure Blob, etc.)
-        bucket_name: Mapped[str] = mapped_column(String, nullable=False)
-        object_key: Mapped[str] = mapped_column(String, nullable=False)
-
-        # Timestamps for external storage
-        created_at: Mapped[datetime.datetime] = mapped_column(
-            DateTime(timezone=True), server_default=func.now(), nullable=False
-        )
-        updated_at: Mapped[datetime.datetime] = mapped_column(
-            DateTime(timezone=True), server_default=func.now(), nullable=False
-        )
-
     engine = create_engine("sqlite:///:memory:")
     TestDBBase.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)

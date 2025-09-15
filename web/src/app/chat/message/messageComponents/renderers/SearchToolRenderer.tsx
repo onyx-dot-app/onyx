@@ -148,7 +148,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   }, []);
 
   const status = useMemo(() => {
-    const searchType = isInternetSearch ? "the internet" : "internal documents";
+    const searchType = isInternetSearch ? "the web" : "internal documents";
 
     // If we have documents to show and we're in the searched state, show "Searched"
     if (results.length > 0) {

@@ -96,7 +96,7 @@ _AUTH_ERROR_PERMISSION = "permission"
 WARM_UP_STRINGS = [
     "Onyx is amazing!",
     "Check out our easy deployment guide at",
-    "https://docs.onyx.app/quickstart",
+    "https://docs.onyx.app/deployment/getting_started/quickstart",
 ]
 
 

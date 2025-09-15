@@ -20,6 +20,7 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -42,6 +43,10 @@ def jira_connector(
     )
     connector._jira_client = mock_jira_client
     connector._jira_client.client_info.return_value = jira_base_url
+    connector._jira_client._options = MagicMock()
+    connector._jira_client._options.return_value = {
+        "rest_api_version": JIRA_SERVER_API_VERSION
+    }
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
 

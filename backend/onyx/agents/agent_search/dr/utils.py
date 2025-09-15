@@ -1,11 +1,9 @@
+import copy
 import re
 
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
-from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
@@ -13,14 +11,11 @@ from onyx.agents.agent_search.kb_search.graph_utils import build_document_contex
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
-from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
-from onyx.db.models import ChatMessage
-from onyx.db.models import SearchDoc
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
 )
 
 
@@ -78,7 +73,7 @@ def aggregate_context(
     ):
 
         iteration_tool = iteration_response.tool
-        is_internet = iteration_tool == InternetSearchTool._NAME
+        is_internet = iteration_tool == WebSearchTool._NAME
 
         for cited_doc in iteration_response.cited_documents.values():
             unrolled_inference_sections.append(cited_doc)
@@ -185,11 +180,40 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
     Get the chat history (up to max_messages) as a string.
     """
     # get past max_messages USER, ASSISTANT message pairs
+
     past_messages = chat_history[-max_messages * 2 :]
-    return ("...\n" if len(chat_history) > len(past_messages) else "") + "\n".join(
+    filtered_past_messages = copy.deepcopy(past_messages)
+
+    for past_message_number, past_message in enumerate(past_messages):
+
+        if isinstance(past_message.content, list):
+            removal_indices = []
+            for content_piece_number, content_piece in enumerate(past_message.content):
+                if (
+                    isinstance(content_piece, dict)
+                    and content_piece.get("type") != "text"
+                ):
+                    removal_indices.append(content_piece_number)
+
+            # Only rebuild the content list if there are items to remove
+            if removal_indices:
+                filtered_past_messages[past_message_number].content = [
+                    content_piece
+                    for content_piece_number, content_piece in enumerate(
+                        past_message.content
+                    )
+                    if content_piece_number not in removal_indices
+                ]
+
+        else:
+            continue
+
+    return (
+        "...\n" if len(chat_history) > len(filtered_past_messages) else ""
+    ) + "\n".join(
         ("user" if isinstance(msg, HumanMessage) else "you")
         + f": {str(msg.content).strip()}"
-        for msg in past_messages
+        for msg in filtered_past_messages
     )
 
 
@@ -251,78 +275,3 @@ def convert_inference_sections_to_search_docs(
         for search_doc in search_docs
     ]
     return retrieved_saved_search_docs
-
-
-def update_db_session_with_messages(
-    db_session: Session,
-    chat_message_id: int,
-    chat_session_id: str,
-    is_agentic: bool | None,
-    message: str | None = None,
-    message_type: str | None = None,
-    token_count: int | None = None,
-    rephrased_query: str | None = None,
-    prompt_id: int | None = None,
-    citations: dict[int, int] | None = None,
-    error: str | None = None,
-    alternate_assistant_id: int | None = None,
-    overridden_model: str | None = None,
-    research_type: str | None = None,
-    research_plan: dict[str, str] | None = None,
-    final_documents: list[SearchDoc] | None = None,
-    update_parent_message: bool = True,
-    research_answer_purpose: ResearchAnswerPurpose | None = None,
-) -> None:
-
-    chat_message = (
-        db_session.query(ChatMessage)
-        .filter(
-            ChatMessage.id == chat_message_id,
-            ChatMessage.chat_session_id == chat_session_id,
-        )
-        .first()
-    )
-    if not chat_message:
-        raise ValueError("Chat message with id not found")  # should never happen
-
-    if message:
-        chat_message.message = message
-    if message_type:
-        chat_message.message_type = MessageType(message_type)
-    if token_count:
-        chat_message.token_count = token_count
-    if rephrased_query:
-        chat_message.rephrased_query = rephrased_query
-    if prompt_id:
-        chat_message.prompt_id = prompt_id
-    if citations:
-        # Convert string keys to integers to match database field type
-        chat_message.citations = {int(k): v for k, v in citations.items()}
-    if error:
-        chat_message.error = error
-    if alternate_assistant_id:
-        chat_message.alternate_assistant_id = alternate_assistant_id
-    if overridden_model:
-        chat_message.overridden_model = overridden_model
-    if research_type:
-        chat_message.research_type = ResearchType(research_type)
-    if research_plan:
-        chat_message.research_plan = research_plan
-    if final_documents:
-        chat_message.search_docs = final_documents
-    if is_agentic:
-        chat_message.is_agentic = is_agentic
-
-    if research_answer_purpose:
-        chat_message.research_answer_purpose = research_answer_purpose
-
-    if update_parent_message:
-        parent_chat_message = (
-            db_session.query(ChatMessage)
-            .filter(ChatMessage.id == chat_message.parent_message)
-            .first()
-        )
-        if parent_chat_message:
-            parent_chat_message.latest_child_message = chat_message.id
-
-    return

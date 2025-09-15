@@ -17,7 +17,7 @@ export default function Error() {
           If you&apos;re an admin, please review our{" "}
           <a
             className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-            href="https://docs.onyx.app/introduction?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
+            href="https://docs.onyx.app/?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -30,7 +30,7 @@ export default function Error() {
           Need help? Join our{" "}
           <a
             className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-            href="https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ"
+            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA"
             target="_blank"
             rel="noopener noreferrer"
           >

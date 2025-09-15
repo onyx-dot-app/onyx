@@ -15,6 +15,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { UserSettingsModal } from "@/app/chat/components/modal/UserSettingsModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 
 interface SidebarWrapperProps<T extends object> {
   size?: "sm" | "lg";
@@ -41,7 +42,12 @@ export default function SidebarWrapper<T extends object>({
   }, [sidebarVisible]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
-  const { folders, openedFolders, chatSessions } = useChatContext();
+  const { folders, chatSessions, ccPairs } = useChatContext();
+  const {
+    connectors: federatedConnectors,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+
   const explicitlyUntoggle = () => {
     setShowDocSidebar(false);
 
@@ -114,6 +120,9 @@ export default function SidebarWrapper<T extends object>({
         <UserSettingsModal
           setPopup={setPopup}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => setUserSettingsToggled(false)}
           defaultModel={user?.preferences?.default_model!}
         />

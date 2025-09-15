@@ -1078,7 +1078,7 @@ def _get_socket_client(
     slack_bot_tokens: SlackBotTokens, tenant_id: str, slack_bot_id: int
 ) -> TenantSocketModeClient:
     # For more info on how to set this up, checkout the docs:
-    # https://docs.onyx.app/slack_bot_setup
+    # https://docs.onyx.app/admin/getting_started/slack_bot_setup
 
     # use the retry handlers built into the slack sdk
     connection_error_retry_handler = ConnectionErrorRetryHandler()
