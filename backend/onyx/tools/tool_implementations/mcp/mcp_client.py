@@ -15,6 +15,8 @@ from typing import TypeVar
 from urllib.parse import urlencode
 
 from mcp import ClientSession
+from mcp.client.auth import OAuthClientProvider
+from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
 from mcp.types import CallToolResult
 from mcp.types import InitializeResult
@@ -124,21 +126,26 @@ class MCPMessage(BaseModel):
 #         self.process: Optional[subprocess.Popen] = None
 
 
-def _call_mcp_client_function(
+def _create_mcp_client_function_runner(
     function: Callable[[ClientSession], Awaitable[T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
     **kwargs: Any,
-) -> T:
+) -> Callable[[], Awaitable[T]]:
     auth_headers = connection_headers or {}
     sep = "?" if "?" not in server_url else "&"
     server_url = (
         server_url.rstrip("/") + sep + urlencode({"transportType": transport.value})
     )
 
+    client_func = (
+        streamablehttp_client if transport == MCPTransport.HTTP_STREAM else sse_client
+    )
+
     async def run_client_function() -> T:
-        async with streamablehttp_client(server_url, headers=auth_headers) as (
+        async with client_func(server_url, headers=auth_headers, auth=auth) as (
             read,
             write,
             _,
@@ -146,10 +153,22 @@ def _call_mcp_client_function(
             async with ClientSession(read, write) as session:
                 return await function(session, **kwargs)
 
+    return run_client_function
+
+
+def _call_mcp_client_function_sync(
+    function: Callable[[ClientSession], Awaitable[T]],
+    server_url: str,
+    connection_headers: dict[str, str] | None = None,
+    transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    auth: OAuthClientProvider | None = None,
+    **kwargs: Any,
+) -> T:
+    run_client_function = _create_mcp_client_function_runner(
+        function, server_url, connection_headers, transport, auth, **kwargs
+    )
     try:
         # Run the async function in a new event loop
-        # TODO: We should use asyncio.get_event_loop() instead,
-        # but not sure whether closing the loop is safe
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -164,6 +183,20 @@ def _call_mcp_client_function(
                 logger.error(err)
             raise original_exception
         raise e
+
+
+async def _call_mcp_client_function_async(
+    function: Callable[[ClientSession], Awaitable[T]],
+    server_url: str,
+    connection_headers: dict[str, str] | None = None,
+    transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    auth: OAuthClientProvider | None = None,
+    **kwargs: Any,
+) -> T:
+    run_client_function = _create_mcp_client_function_runner(
+        function, server_url, connection_headers, transport, auth, **kwargs
+    )
+    return await run_client_function()
 
 
 def process_mcp_result(call_tool_result: CallToolResult) -> str:
@@ -193,26 +226,30 @@ def call_mcp_tool(
     arguments: dict[str, Any],
     connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
+    auth: OAuthClientProvider | None = None,
 ) -> str:
     """Call a specific tool on the MCP server"""
-    return _call_mcp_client_function(
+    return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
         MCPTransport(transport),
+        auth,
     )
 
 
-def initialize_mcp_client(
+async def initialize_mcp_client(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
+    auth: OAuthClientProvider | None = None,
 ) -> InitializeResult:
-    return _call_mcp_client_function(
+    return await _call_mcp_client_function_async(
         lambda session: session.initialize(),
         server_url,
         connection_headers,
         MCPTransport(transport),
+        auth,
     )
 
 
@@ -230,15 +267,17 @@ def discover_mcp_tools(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
+    auth: OAuthClientProvider | None = None,
 ) -> list[MCPLibTool]:
     """
     Synchronous wrapper for discovering MCP tools.
     """
-    return _call_mcp_client_function(
+    return _call_mcp_client_function_sync(
         _discover_mcp_tools,
         server_url,
         connection_headers,
         MCPTransport(transport),
+        auth,
     )
 
 
@@ -250,14 +289,16 @@ def discover_mcp_resources_sync(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: str = "streamable-http",
+    auth: OAuthClientProvider | None = None,
 ) -> ListResourcesResult:
     """
     Synchronous wrapper for discovering MCP resources.
     This is for compatibility with the existing codebase.
     """
-    return _call_mcp_client_function(
+    return _call_mcp_client_function_sync(
         _discover_mcp_resources,
         server_url,
         connection_headers,
         MCPTransport(transport),
+        auth,
     )

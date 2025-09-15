@@ -229,7 +229,7 @@ export default function NewMCPToolPage() {
       const currServerId = (await createResponse.json()).server_id;
 
       // Initiate OAuth flow
-      const oauthResponse = await fetch("/api/admin/mcp/oauth/initiate", {
+      const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

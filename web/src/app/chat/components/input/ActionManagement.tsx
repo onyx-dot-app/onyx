@@ -640,7 +640,7 @@ export function ActionToggle({
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
       try {
-        const response = await fetch("/api/mcp/oauth/initiate", {
+        const response = await fetch("/api/mcp/oauth/connect", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

@@ -1,4 +1,6 @@
+from typing import Any
 from typing import List
+from typing import Literal
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
@@ -11,19 +13,28 @@ from pydantic import model_validator
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 
+# This should be updated along with MCPConnectionData
+MCPOAuthKeysType = Literal["client_info", "tokens", "metadata"]
+MCPOAuthKeys: list[MCPOAuthKeysType] = ["client_info", "tokens", "metadata"]
+
 
 class MCPConnectionData(TypedDict):
     """TypedDict to allow use as a type hint for a JSONB column
     in Postgres"""
 
-    refresh_token: NotRequired[str]
-    access_token: NotRequired[str]
     headers: dict[str, str]
     header_substitutions: NotRequired[dict[str, str]]
-    client_id: NotRequired[str]
-    client_secret: NotRequired[str]
-    registration_access_token: NotRequired[str]
-    registration_client_uri: NotRequired[str]
+
+    # For OAuth only
+    # Note: Update MCPOAuthKeys if necessary when modifying these
+    # Unfortunately we can't use the actual models here because basemodels aren't compatible
+    # with SQLAlchemy
+    client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
+    tokens: NotRequired[dict[str, Any]]  # OAuthToken
+    metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+
+    # the actual models are defined in mcp.shared.auth
+    # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 
 
 class MCPAuthTemplate(BaseModel):
@@ -140,7 +151,7 @@ class MCPToolResponse(BaseModel):
     is_authenticated: bool
 
 
-class MCPOAuthInitiateRequest(BaseModel):
+class MCPOAuthConnectRequest(BaseModel):
     name: str = Field(..., description="Name of the MCP tool")
     description: Optional[str] = Field(None, description="Description of the MCP tool")
     server_url: str = Field(..., description="URL of the MCP server")
@@ -152,32 +163,33 @@ class MCPOAuthInitiateRequest(BaseModel):
     )
 
 
-class MCPOAuthInitiateResponse(BaseModel):
+class MCPOAuthConnectResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
     state: str = Field(..., description="OAuth state parameter")
     pending_tool: dict = Field(..., description="Pending tool configuration")
 
 
-class MCPUserOAuthInitiateRequest(BaseModel):
+class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
     include_resource_param: bool = Field(..., description="Include resource parameter")
 
     @model_validator(mode="after")
-    def validate_return_path(self) -> "MCPUserOAuthInitiateRequest":
+    def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
         if not self.return_path.startswith("/"):
             raise ValueError("return_path must start with a slash")
         return self
 
 
-class MCPUserOAuthInitiateResponse(BaseModel):
+class MCPUserOAuthConnectResponse(BaseModel):
+    server_id: int
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
-    state: str = Field(..., description="OAuth state parameter")
-    server_id: int = Field(..., description="Server ID")
-    server_name: str = Field(..., description="Server name")
-    code_verifier: Optional[str] = Field(
-        None, description="PKCE code verifier to be used at callback"
-    )
+    # state: str = Field(..., description="OAuth state parameter")
+    # server_id: int = Field(..., description="Server ID")
+    # server_name: str = Field(..., description="Server name")
+    # code_verifier: Optional[str] = Field(
+    #     None, description="PKCE code verifier to be used at callback"
+    # )
 
 
 class MCPOAuthCallbackRequest(BaseModel):
@@ -194,7 +206,6 @@ class MCPOAuthCallbackResponse(BaseModel):
     message: str
     server_id: int
     server_name: str
-    authenticated: bool
     redirect_url: str
 
 
