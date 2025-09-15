@@ -272,6 +272,27 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
         return buf.getvalue()
 
 
+def _download_via_sdk_with_cap(
+    driveitem: DriveItem, bytes_allowed: int, chunk_size: int = 64 * 1024
+) -> bytes:
+    """Use the Office365 SDK streaming download with a hard byte cap.
+
+    Raises RuntimeError("size_cap_exceeded") if the cap would be exceeded.
+    """
+    buf = io.BytesIO()
+
+    def on_chunk(bytes_read: int) -> None:
+        # bytes_read is total bytes seen so far per SDK contract
+        if bytes_read > bytes_allowed:
+            raise RuntimeError("size_cap_exceeded")
+
+    # modifies the driveitem to change its download behavior
+    driveitem.download_session(buf, chunk_downloaded=on_chunk, chunk_size=chunk_size)
+    # Execute the configured request with retries using existing helper
+    sleep_and_retry(driveitem.context, "download_session")
+    return buf.getvalue()
+
+
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItem,
     drive_name: str,
@@ -322,6 +343,8 @@ def _convert_driveitem_to_document_with_permissions(
     content_bytes: bytes | None = None
     if download_url:
         try:
+            # Use this to test the sdk size cap
+            # raise requests.RequestException("test")
             content_bytes = _download_with_cap(
                 download_url,
                 REQUEST_TIMEOUT_SECONDS,
@@ -343,13 +366,18 @@ def _convert_driveitem_to_document_with_permissions(
 
     # Fallback to SDK content if needed
     if content_bytes is None:
-        content = sleep_and_retry(driveitem.get_content(), "get_content")
-        if content is None or not isinstance(
-            getattr(content, "value", None), (bytes, bytearray)
-        ):
-            logger.warning(f"Could not access content for '{driveitem.name}'")
-            raise ValueError(f"Could not access content for '{driveitem.name}'")
-        content_bytes = bytes(content.value)
+        try:
+            content_bytes = _download_via_sdk_with_cap(
+                driveitem, SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
+            )
+        except RuntimeError as e:
+            if "size_cap_exceeded" in str(e):
+                logger.warning(
+                    f"Skipping '{driveitem.name}' exceeded size cap during SDK streaming."
+                )
+                return None
+            else:
+                raise
 
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]
@@ -370,23 +398,26 @@ def _convert_driveitem_to_document_with_permissions(
         sections.append(image_section)
     else:
         # Note: we don't process Onyx metadata for connectors like Drive & Sharepoint, but could
+        def _store_embedded_image(img_data: bytes, img_name: str) -> None:
+            image_section, _ = store_image_and_create_section(
+                image_data=img_data,
+                file_id=f"{driveitem.id}_img_{len(sections)}",
+                display_name=img_name or f"{driveitem.name} - image {len(sections)}",
+                file_origin=FileOrigin.CONNECTOR,
+            )
+            image_section.link = driveitem.web_url
+            sections.append(image_section)
+
         extraction_result = extract_text_and_images(
-            file=io.BytesIO(content_bytes), file_name=driveitem.name
+            file=io.BytesIO(content_bytes),
+            file_name=driveitem.name,
+            image_callback=_store_embedded_image,
         )
         if extraction_result.text_content:
             sections.append(
                 TextSection(link=driveitem.web_url, text=extraction_result.text_content)
             )
-
-        for idx, (img_data, img_name) in enumerate(extraction_result.embedded_images):
-            image_section, _ = store_image_and_create_section(
-                image_data=img_data,
-                file_id=f"{driveitem.id}_img_{idx}",
-                display_name=img_name or f"{driveitem.name} - image {idx}",
-                file_origin=FileOrigin.CONNECTOR,
-            )
-            image_section.link = driveitem.web_url
-            sections.append(image_section)
+        # Any embedded images were stored via the callback; the returned list may be empty.
 
     if include_permissions and ctx is not None:
         logger.info(f"Getting external access for {driveitem.name}")
@@ -729,6 +760,7 @@ class SharepointConnector(
                     for folder_part in site_descriptor.folder_path.split("/"):
                         root_folder = root_folder.get_by_path(folder_part)
 
+                # TODO: consider ways to avoid materializing the entire list of files in memory
                 query = root_folder.get_files(
                     recursive=True,
                     page_size=1000,
@@ -837,6 +869,7 @@ class SharepointConnector(
                             root_folder = root_folder.get_by_path(folder_part)
 
                     # Get all items recursively
+                    # TODO: consider ways to avoid materializing the entire list of files in memory
                     query = root_folder.get_files(
                         recursive=True,
                         page_size=1000,
@@ -985,6 +1018,8 @@ class SharepointConnector(
         all_pages = pages_data.get("value", [])
 
         # Handle pagination if there are more pages
+        # TODO: This accumulates all pages in memory and can be heavy on large tenants.
+        #       We should process each page incrementally to avoid unbounded growth.
         while "@odata.nextLink" in pages_data:
             next_url = pages_data["@odata.nextLink"]
             response = requests.get(
