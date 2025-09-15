@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+import nltk
+
 from onyx.configs import app_configs as app_configs_module
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -30,6 +32,7 @@ def ensure_full_deployment_setup(
     - Runs setup_onyx (Postgres defaults, Vespa indices, seeded docs)
     - Initializes file store (best-effort)
     - Ensures Vespa indices exist
+    - Installs NLTK stopwords and punkt_tab
     """
     global _SETUP_COMPLETE
     if _SETUP_COMPLETE:
@@ -45,6 +48,9 @@ def ensure_full_deployment_setup(
 
     # Avoid warm-up network calls during setup
     app_configs_module.SKIP_WARM_UP = True
+
+    nltk.download("stopwords", quiet=True)
+    nltk.download("punkt_tab", quiet=True)
 
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
     try:
