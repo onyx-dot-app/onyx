@@ -23,14 +23,7 @@ RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # curl included just for users' convenience
 # zip for Vespa step futher down
 # ca-certificates for HTTPS
-## Use HTTPS Debian mirrors to avoid environments blocking HTTP (port 80)
-RUN set -eux; \
-    if [ -f /etc/apt/sources.list ]; then \
-      sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; \
-    fi; \
-    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-      sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
-    fi
+
 RUN apt-get update && \
     apt-get install -y \
         cmake \
