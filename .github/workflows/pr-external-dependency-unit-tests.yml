@@ -43,7 +43,7 @@ jobs:
   external-dependency-unit-tests:
     needs: discover-test-dirs
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=16cpu-linux-x64, "run-id=${{ github.run_id }}"]
     
     strategy:
       fail-fast: false
