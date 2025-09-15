@@ -37,7 +37,7 @@ export function PagesTab({
   const renderChatSession = useCallback(
     (chat: ChatSession) => {
       return (
-        <div key={chat.id} className="ml-4 bg-transparent -mr-2">
+        <div key={chat.id} className="bg-transparent -mr-2">
           <ChatSessionDisplay
             chatSession={chat}
             isSelected={currentChatId === chat.id}
