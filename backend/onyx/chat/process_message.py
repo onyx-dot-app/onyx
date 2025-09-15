@@ -467,11 +467,26 @@ def stream_chat_message_objects(
         if not search_tool_override_kwargs_for_user_files:
             latest_query_files.extend(in_memory_user_files)
 
+        project_file_ids = []
+        if chat_session.project_id:
+            project_file_ids.extend(
+                [
+                    file.file_id
+                    for file in get_user_files_from_project(
+                        chat_session.project_id, user_id, db_session
+                    )
+                ]
+            )
+
+        # we don't want to attach project files to the user message
         if user_message:
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[
-                    new_file.to_file_descriptor() for new_file in latest_query_files
+                    new_file.to_file_descriptor()
+                    for new_file in latest_query_files
+                    if project_file_ids is not None
+                    and (new_file.file_id not in project_file_ids)
                 ],
                 db_session=db_session,
                 commit=False,
@@ -577,6 +592,7 @@ def stream_chat_message_objects(
             ),
             structured_response_format=new_msg_req.structured_response_format,
         )
+        has_project_files = project_file_ids is not None and len(project_file_ids) > 0
 
         tool_dict = construct_tools(
             persona=persona,
@@ -586,9 +602,17 @@ def stream_chat_message_objects(
             llm=llm,
             fast_llm=fast_llm,
             run_search_setting=(
-                retrieval_options.run_search
-                if retrieval_options
-                else OptionalSearchSetting.AUTO
+                OptionalSearchSetting.NEVER
+                if (
+                    chat_session.project_id
+                    and not has_project_files
+                    and persona.is_default_persona
+                )
+                else (
+                    retrieval_options.run_search
+                    if retrieval_options
+                    else OptionalSearchSetting.AUTO
+                )
             ),
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
@@ -630,16 +654,6 @@ def stream_chat_message_objects(
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
-        project_file_ids = []
-        if chat_session.project_id:
-            project_file_ids.extend(
-                [
-                    file.file_id
-                    for file in get_user_files_from_project(
-                        chat_session.project_id, user_id, db_session
-                    )
-                ]
-            )
 
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             yield UserKnowledgeFilePacket(
@@ -648,7 +662,8 @@ def stream_chat_message_objects(
                         id=str(file.file_id), type=file.file_type, name=file.filename
                     )
                     for file in in_memory_user_files
-                    if file.file_id not in project_file_ids
+                    if project_file_ids is not None
+                    and (file.file_id not in project_file_ids)
                 ]
             )
 

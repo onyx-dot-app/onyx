@@ -71,6 +71,19 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
+import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import FilesList from "@/app/chat/components/files/FilesList";
+import {
+  MultipleFilesIcon,
+  OpenFolderIcon,
+} from "@/components/icons/CustomIcons";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
@@ -162,6 +175,7 @@ export function AssistantEditor({
     useState<MinimalOnyxDocument | null>(null);
   const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [showAllUserFiles, setShowAllUserFiles] = useState(false);
 
   // both `defautIconColor` and `defaultIconShape` are state so that they
   // persist across formik reformatting
@@ -1043,32 +1057,53 @@ export function AssistantEditor({
                                 Click below to add files from My Documents
                               </SubLabel>
                               {values.user_file_ids.length > 0 && (
-                                <div className="flex flex-wrap mb-2 max-w-sm gap-2">
-                                  {values.user_file_ids.map(
-                                    (userFileId: string) => {
+                                <div className="flex gap-3 mb-2">
+                                  {values.user_file_ids
+                                    .slice(0, 3)
+                                    .map((userFileId: string) => {
                                       const rf = recentFiles.find(
                                         (f) => f.id === userFileId
                                       );
-                                      const title =
-                                        rf?.name ||
-                                        `File ${userFileId.slice(0, 8)}`;
+                                      const fileData = rf || {
+                                        id: userFileId,
+                                        name: `File ${userFileId.slice(0, 8)}`,
+                                        status: "completed" as const,
+                                      };
                                       return (
-                                        <SourceChip
-                                          key={userFileId}
-                                          onRemove={() => {
-                                            setFieldValue(
-                                              "user_file_ids",
-                                              values.user_file_ids.filter(
-                                                (id: string) =>
-                                                  id !== userFileId
-                                              )
-                                            );
-                                          }}
-                                          title={title}
-                                          icon={<FileIcon size={16} />}
-                                        />
+                                        <div key={userFileId} className="w-52">
+                                          <FileCard
+                                            file={fileData as ProjectFile}
+                                            removeFile={() => {
+                                              setFieldValue(
+                                                "user_file_ids",
+                                                values.user_file_ids.filter(
+                                                  (id: string) =>
+                                                    id !== userFileId
+                                                )
+                                              );
+                                            }}
+                                          />
+                                        </div>
                                       );
-                                    }
+                                    })}
+                                  {values.user_file_ids.length > 3 && (
+                                    <button
+                                      type="button"
+                                      className="rounded-xl px-3 py-1 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                                      onClick={() => setShowAllUserFiles(true)}
+                                    >
+                                      <div className="flex flex-col overflow-hidden h-12 p-1">
+                                        <div className="flex items-center justify-between gap-2 w-full">
+                                          <span className="text-onyx-medium text-sm truncate flex-1">
+                                            View All
+                                          </span>
+                                          <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                                        </div>
+                                        <span className="text-onyx-muted text-sm">
+                                          {values.user_file_ids.length} files
+                                        </span>
+                                      </div>
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -1809,6 +1844,43 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
+              <Dialog
+                open={showAllUserFiles}
+                onOpenChange={setShowAllUserFiles}
+              >
+                <DialogContent className="w-full max-w-lg">
+                  <DialogHeader>
+                    <OpenFolderIcon size={32} />
+                    <DialogTitle>User Files</DialogTitle>
+                    <DialogDescription>
+                      All files selected for this assistant
+                    </DialogDescription>
+                  </DialogHeader>
+                  <FilesList
+                    recentFiles={values.user_file_ids.map(
+                      (userFileId: string) => {
+                        const rf = recentFiles.find((f) => f.id === userFileId);
+                        return (
+                          rf || {
+                            id: userFileId,
+                            name: `File ${userFileId.slice(0, 8)}`,
+                            status: "completed" as const,
+                          }
+                        );
+                      }
+                    )}
+                    showRemove
+                    onRemove={(file) => {
+                      setFieldValue(
+                        "user_file_ids",
+                        values.user_file_ids.filter(
+                          (id: string) => id !== file.id
+                        )
+                      );
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
             </>
           );
         }}

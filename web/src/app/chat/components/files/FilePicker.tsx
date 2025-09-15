@@ -137,9 +137,10 @@ export default function FilePicker({
                     </Row>
                   </MenubarItem>
                 )}
+                <MenubarSeparator />
               </>
             )}
-            <MenubarSeparator />
+
             <MenubarItem
               onClick={triggerUploadPicker}
               className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
