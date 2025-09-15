@@ -292,12 +292,12 @@ def _convert_driveitem_to_document_with_permissions(
     try:
         item_json = driveitem.to_json()
         mime_type = item_json.get("file", {}).get("mimeType")
-        if mime_type in EXCLUDED_IMAGE_TYPES:
+        if not mime_type or mime_type in EXCLUDED_IMAGE_TYPES:
             # NOTE: this function should be refactored to look like Drive doc_conversion.py pattern
             # for now, this skip must happen before we download the file
             # Similar to Google Drive, we'll just semi-silently skip excluded image types
             logger.debug(
-                f"Skipping excluded image type {mime_type} for {driveitem.name}"
+                f"Skipping malformed or excluded mime type {mime_type} for {driveitem.name}"
             )
             return None
 
