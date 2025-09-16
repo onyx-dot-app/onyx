@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pytest
 import pytz
+import timeago
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
@@ -34,12 +35,15 @@ def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
 def test_build_documents_blocks_formats_naive_timestamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    naive_timestamp = datetime(2024, 1, 1, 12, 0, 0)
+    naive_timestamp: datetime = datetime(2024, 1, 1, 12, 0, 0)
     captured: dict[str, datetime] = {}
 
-    def fake_timeago_format(doc_dt: datetime, _: datetime) -> str:
+    # Save the original timeago.format so we can call it inside the fake
+    original_timeago_format = timeago.format
+
+    def fake_timeago_format(doc_dt: datetime, now: datetime) -> str:
         captured["doc"] = doc_dt
-        return "moments ago"
+        return original_timeago_format(doc_dt, now)
 
     monkeypatch.setattr(
         "onyx.onyxbot.slack.blocks.timeago.format",
@@ -53,9 +57,11 @@ def test_build_documents_blocks_formats_naive_timestamp(
 
     assert len(blocks) >= 2
     section_block = blocks[1].to_dict()
-    expected_text = "<https://example.com|Example Doc>\n_Updated moments ago_\n>"
+    # NOTE: will need to be updated after another year.
+    expected_text = "<https://example.com|Example Doc>\n_Updated 1 year ago_\n>"
     assert section_block["text"]["text"] == expected_text
 
     assert "doc" in captured
-    formatted_timestamp = captured["doc"]
-    assert formatted_timestamp.tzinfo == pytz.utc
+    formatted_timestamp: datetime = captured["doc"]
+    expected_timestamp: datetime = naive_timestamp.replace(tzinfo=pytz.utc)
+    assert formatted_timestamp == expected_timestamp
