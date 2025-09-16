@@ -76,7 +76,12 @@ def upgrade() -> None:
     )
     op.add_column(
         "user_file",
-        sa.Column("needs_project_sync", sa.Boolean(), nullable=False, default=False),
+        sa.Column(
+            "needs_project_sync",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
     )
     op.add_column(
         "user_file",
@@ -437,27 +442,6 @@ def upgrade() -> None:
             ON u.connector_id = dcc.connector_id
            AND u.credential_id = dcc.credential_id
         )
-        -- Delete per-ccpair doc mapping
-        DELETE FROM document_by_connector_credential_pair
-        WHERE id IN (SELECT document_id FROM doc_ids);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id, connector_id, credential_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        ),
-        doc_ids AS (
-          SELECT dcc.id AS document_id
-          FROM document_by_connector_credential_pair dcc
-          JOIN uf_cc_pairs u
-            ON u.connector_id = dcc.connector_id
-           AND u.credential_id = dcc.credential_id
-        )
         -- Delete doc feedback/tags
         DELETE FROM document_retrieval_feedback
         WHERE document_id IN (SELECT document_id FROM doc_ids);
@@ -499,93 +483,13 @@ def upgrade() -> None:
             ON u.connector_id = dcc.connector_id
            AND u.credential_id = dcc.credential_id
         )
-        -- Delete KG tables
-        DELETE FROM kg_entity
-        WHERE document_id IN (SELECT document_id FROM doc_ids);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id, connector_id, credential_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        ),
-        doc_ids AS (
-          SELECT dcc.id AS document_id
-          FROM document_by_connector_credential_pair dcc
-          JOIN uf_cc_pairs u
-            ON u.connector_id = dcc.connector_id
-           AND u.credential_id = dcc.credential_id
-        )
-        DELETE FROM kg_entity_extraction_staging
-        WHERE document_id IN (SELECT document_id FROM doc_ids);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id, connector_id, credential_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        ),
-        doc_ids AS (
-          SELECT dcc.id AS document_id
-          FROM document_by_connector_credential_pair dcc
-          JOIN uf_cc_pairs u
-            ON u.connector_id = dcc.connector_id
-           AND u.credential_id = dcc.credential_id
-        )
-        DELETE FROM kg_relationship
-        WHERE source_document IN (SELECT document_id FROM doc_ids);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id, connector_id, credential_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        ),
-        doc_ids AS (
-          SELECT dcc.id AS document_id
-          FROM document_by_connector_credential_pair dcc
-          JOIN uf_cc_pairs u
-            ON u.connector_id = dcc.connector_id
-           AND u.credential_id = dcc.credential_id
-        )
-        DELETE FROM kg_relationship_extraction_staging
-        WHERE source_document IN (SELECT document_id FROM doc_ids);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id, connector_id, credential_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        ),
-        doc_ids AS (
-          SELECT dcc.id AS document_id
-          FROM document_by_connector_credential_pair dcc
-          JOIN uf_cc_pairs u
-            ON u.connector_id = dcc.connector_id
-           AND u.credential_id = dcc.credential_id
-        )
         -- Delete chunk stats
         DELETE FROM chunk_stats
         WHERE document_id IN (SELECT document_id FROM doc_ids);
         """
         )
     )
+    # Redundant delete removed: deleting by document_id is sufficient
     conn.execute(
         sa.text(
             """
@@ -601,8 +505,9 @@ def upgrade() -> None:
             ON u.connector_id = dcc.connector_id
            AND u.credential_id = dcc.credential_id
         )
-        DELETE FROM chunk_stats
-        WHERE id LIKE ANY (SELECT (document_id || '__%') FROM doc_ids);
+        -- Delete per-ccpair doc mapping
+        DELETE FROM document_by_connector_credential_pair
+        WHERE id IN (SELECT document_id FROM doc_ids);
         """
         )
     )
@@ -651,32 +556,6 @@ def upgrade() -> None:
         )
         DELETE FROM background_error
         WHERE cc_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        )
-        DELETE FROM user_group__connector_credential_pair
-        WHERE cc_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
-        """
-        )
-    )
-    conn.execute(
-        sa.text(
-            """
-        WITH uf_cc_pairs AS (
-          SELECT id AS cc_pair_id
-          FROM connector_credential_pair
-          WHERE is_user_file IS TRUE
-        )
-        DELETE FROM document_set__connector_credential_pair
-        WHERE connector_credential_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
         """
         )
     )
