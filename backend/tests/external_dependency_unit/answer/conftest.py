@@ -1,7 +1,35 @@
+import os
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.orm import Session
+
+from onyx.db.llm import update_default_provider
+from onyx.db.llm import upsert_llm_provider
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+
+
+def ensure_default_llm_provider(db_session: Session) -> None:
+    """Ensure a default LLM provider exists for tests that exercise chat flows."""
+
+    try:
+        llm_provider_request = LLMProviderUpsertRequest(
+            name="test-provider",
+            provider="openai",
+            api_key=os.environ.get("OPENAI_API_KEY", "test"),
+            is_public=True,
+            default_model_name="gpt-4.1",
+            fast_default_model_name="gpt-4.1",
+            groups=[],
+        )
+        provider = upsert_llm_provider(
+            llm_provider_upsert_request=llm_provider_request,
+            db_session=db_session,
+        )
+        update_default_provider(provider.id, db_session)
+    except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues
+        print(f"Note: Could not create LLM provider: {exc}")
 
 
 @pytest.fixture
