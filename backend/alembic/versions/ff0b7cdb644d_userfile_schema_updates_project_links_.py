@@ -174,6 +174,20 @@ def upgrade() -> None:
 
     op.alter_column("persona__user_file", "user_file_id_uuid", nullable=False)
 
+    # Move persona__user_folder relationships to persona__user_file relationships
+    # For each persona-folder link, link the persona to all files currently in that folder
+    conn.execute(
+        sa.text(
+            """
+        INSERT INTO persona__user_file (persona_id, user_file_id, user_file_id_uuid)
+        SELECT puf.persona_id, uf.id, uf.new_id
+        FROM persona__user_folder puf
+        JOIN user_file uf ON uf.folder_id = puf.user_folder_id
+        ON CONFLICT (persona_id, user_file_id) DO NOTHING
+        """
+        )
+    )
+
     # create user_project records for each chat_folder record
     conn.execute(
         text(
@@ -209,6 +223,20 @@ def upgrade() -> None:
         raise Exception(
             f"chat_session.project_id not fully populated ({left_to_fill} rows)"
         )
+
+    # Populate project__user_file from legacy folder relationships
+    # Map each user_file's folder_id (now project id) to its transitional UUID new_id
+    conn.execute(
+        sa.text(
+            """
+        INSERT INTO project__user_file (project_id, user_file_id)
+        SELECT uf.folder_id AS project_id, uf.new_id AS user_file_id
+        FROM user_file uf
+        WHERE uf.folder_id IS NOT NULL
+        ON CONFLICT (project_id, user_file_id) DO NOTHING
+        """
+        )
+    )
 
     # Backfill user_file.status based on latest index_attempt for its cc_pair_id
     # - FAILED -> failed
@@ -374,5 +402,359 @@ def upgrade() -> None:
                 logger.warning(
                     f"Failed to update Vespa document_id for {old_doc_id} -> {new_uuid}: {e}"
                 )
+
+        # Update search_doc.document_id to user_file UUIDs (string)
+        conn.execute(
+            sa.text(
+                """
+            UPDATE search_doc sd
+            SET document_id = uf.new_id::text
+            FROM user_file uf
+            WHERE uf.document_id IS NOT NULL
+              AND sd.document_id = uf.document_id
+                """
+            )
+        )
     except Exception as e:
-        logger.warning(f"Skipping Vespa document_id update step: {e}")
+        logger.warning(f"Skipping Vespa/search_doc updates step: {e}")
+
+    # Remove legacy user-file cc_pairs and all related document rows
+    # 1) Identify user-file cc_pairs and their (connector_id, credential_id)
+    # Intentionally preserve search_doc and its linking tables; we updated search_doc.document_id earlier
+    # so chat replay remains intact. Skip deleting agent__sub_query__search_doc, chat_message__search_doc, search_doc.
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        -- Delete per-ccpair doc mapping
+        DELETE FROM document_by_connector_credential_pair
+        WHERE id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        -- Delete doc feedback/tags
+        DELETE FROM document_retrieval_feedback
+        WHERE document_id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        DELETE FROM document__tag
+        WHERE document_id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        -- Delete KG tables
+        DELETE FROM kg_entity
+        WHERE document_id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        DELETE FROM kg_entity_extraction_staging
+        WHERE document_id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        DELETE FROM kg_relationship
+        WHERE source_document IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        DELETE FROM kg_relationship_extraction_staging
+        WHERE source_document IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        -- Delete chunk stats
+        DELETE FROM chunk_stats
+        WHERE document_id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        DELETE FROM chunk_stats
+        WHERE id LIKE ANY (SELECT (document_id || '__%') FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id, connector_id, credential_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        ),
+        doc_ids AS (
+          SELECT dcc.id AS document_id
+          FROM document_by_connector_credential_pair dcc
+          JOIN uf_cc_pairs u
+            ON u.connector_id = dcc.connector_id
+           AND u.credential_id = dcc.credential_id
+        )
+        -- Finally delete documents
+        DELETE FROM document
+        WHERE id IN (SELECT document_id FROM doc_ids);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        -- Now remove rows that reference cc_pair_id (integer id)
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        )
+        DELETE FROM index_attempt
+        WHERE connector_credential_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        )
+        DELETE FROM background_error
+        WHERE cc_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        )
+        DELETE FROM user_group__connector_credential_pair
+        WHERE cc_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        WITH uf_cc_pairs AS (
+          SELECT id AS cc_pair_id
+          FROM connector_credential_pair
+          WHERE is_user_file IS TRUE
+        )
+        DELETE FROM document_set__connector_credential_pair
+        WHERE connector_credential_pair_id IN (SELECT cc_pair_id FROM uf_cc_pairs);
+        """
+        )
+    )
+    conn.execute(
+        sa.text(
+            """
+        -- Delete the user-file cc_pairs themselves
+        DELETE FROM connector_credential_pair
+        WHERE is_user_file IS TRUE;
+        """
+        )
+    )
+
+    # STEP 3: Cleanup legacy folder-related tables/columns now that data is migrated
+
+    # Rewire persona__user_file to UUID FK (user_file_id_uuid -> user_file.new_id), drop old int, then rename.
+    op.execute(
+        "ALTER TABLE persona__user_file DROP CONSTRAINT IF EXISTS persona__user_file_user_file_id_uuid_fkey"
+    )
+    op.create_foreign_key(
+        "persona__user_file_user_file_id_fkey",
+        "persona__user_file",
+        "user_file",
+        local_cols=["user_file_id_uuid"],
+        remote_cols=["new_id"],
+    )
+    op.drop_column("persona__user_file", "user_file_id")
+    op.alter_column(
+        "persona__user_file",
+        "user_file_id_uuid",
+        new_column_name="user_file_id",
+        existing_type=psql.UUID(as_uuid=True),
+        nullable=False,
+    )
+
+    # Ensure composite primary key on (persona_id, user_file_id)
+    op.execute(
+        "ALTER TABLE persona__user_file DROP CONSTRAINT IF EXISTS persona__user_file_pkey"
+    )
+    op.execute(
+        "ALTER TABLE persona__user_file ADD PRIMARY KEY (persona_id, user_file_id)"
+    )
+
+    # Finalize UUID swap on user_file: new_id -> id (set as PK)
+    op.execute("ALTER TABLE user_file DROP CONSTRAINT IF EXISTS user_file_pkey")
+    # Ensure we don't collide with an existing id column from older states
+    op.execute("ALTER TABLE user_file DROP COLUMN IF EXISTS id")
+    op.alter_column(
+        "user_file",
+        "new_id",
+        new_column_name="id",
+        existing_type=psql.UUID(as_uuid=True),
+        nullable=False,
+    )
+    op.execute("ALTER TABLE user_file ADD PRIMARY KEY (id)")
+    op.execute("ALTER TABLE user_file DROP CONSTRAINT IF EXISTS uq_user_file_new_id")
+
+    # Drop chat_session.folder_id foreign key and column (if exist)
+    op.execute(
+        "ALTER TABLE chat_session DROP CONSTRAINT IF EXISTS chat_session_folder_fk"
+    )
+    op.execute("ALTER TABLE chat_session DROP COLUMN IF EXISTS folder_id")
+
+    # Drop persona__user_folder and chat_folder if exist
+    op.execute("DROP TABLE IF EXISTS persona__user_folder")
+    op.execute("DROP TABLE IF EXISTS chat_folder")
+
+    # Drop user_file.folder_id if exist
+    op.execute("ALTER TABLE user_file DROP COLUMN IF EXISTS folder_id")
+
+    # Drop legacy cc_pair link from user_file if present
+    op.execute(
+        "ALTER TABLE user_file DROP CONSTRAINT IF EXISTS user_file_cc_pair_id_fkey"
+    )
+    op.execute(
+        "ALTER TABLE user_file DROP CONSTRAINT IF EXISTS user_file_cc_pair_id_key"
+    )
+    op.execute("ALTER TABLE user_file DROP COLUMN IF EXISTS cc_pair_id")
+
+    # Drop legacy user_file.document_id now that Vespa/search_doc are updated
+    op.execute("ALTER TABLE user_file DROP COLUMN IF EXISTS document_id")
