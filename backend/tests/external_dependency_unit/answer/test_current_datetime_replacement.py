@@ -76,7 +76,7 @@ def test_stream_chat_current_date_response(
     assert len(content) > 0, "Should stream some assistant content"
 
     # Validate the response contains a properly formatted current datetime string
-    match = re.search(r"[A-Za-z]+ [A-Za-z]+ \d{2}, \d{4} \d{2}:\d{2}", content)
+    match = re.search(r"[A-Za-z]+ [A-Za-z]+ \d{1,2}, \d{4} \d{2}:\d{2}", content)
     assert match, f"Expected a datetime in content, got: {content[:200]}..."
 
     timestamp_str = match.group(0)
