@@ -78,7 +78,6 @@ def test_stream_chat_message_objects_without_web_search(
     )
 
     # Create the chat message request with a query that attempts to force web search
-    # We set allowed_tool_ids to an empty list to disable all tools
     chat_request = CreateChatMessageRequest(
         chat_session_id=chat_session.id,
         parent_message_id=None,
