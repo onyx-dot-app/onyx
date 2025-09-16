@@ -1,4 +1,6 @@
+import re
 from datetime import datetime
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -42,7 +44,7 @@ def test_stream_chat_current_date_response(
     chat_request = CreateChatMessageRequest(
         chat_session_id=chat_session.id,
         parent_message_id=None,
-        message="What is the current date?",
+        message="Please respond only with the current date and time in the format 'Weekday Month DD, YYYY HH:MM'.",
         file_descriptors=[],
         prompt_override=None,
         search_doc_ids=None,
@@ -73,12 +75,35 @@ def test_stream_chat_current_date_response(
     ), "Should yield a message ID"
     assert len(content) > 0, "Should stream some assistant content"
 
-    # Validate answer likely contains current date information
-    now = datetime.now()
-    month_name = now.strftime("%B")
-    year = now.strftime("%Y")
+    # Validate the response contains a properly formatted current datetime string
+    match = re.search(r"[A-Za-z]+ [A-Za-z]+ \d{2}, \d{4} \d{2}:\d{2}", content)
+    assert match, f"Expected a datetime in content, got: {content[:200]}..."
 
-    # Require at least month name and year to appear to avoid overfitting to exact format
+    timestamp_str = match.group(0)
+    timestamp_dt = datetime.strptime(timestamp_str, "%A %B %d, %Y %H:%M")
+    now = datetime.now()
+
+    assert timestamp_dt.strftime("%A") == now.strftime(
+        "%A"
+    ), f"Expected weekday {now.strftime('%A')}, got {timestamp_dt.strftime('%A')}"
+    assert timestamp_dt.strftime("%B") == now.strftime(
+        "%B"
+    ), f"Expected month {now.strftime('%B')}, got {timestamp_dt.strftime('%B')}"
+    assert timestamp_dt.day == now.day and timestamp_dt.year == now.year, (
+        f"Expected day {now.strftime('%d')} and year {now.strftime('%Y')}, "
+        f"got {timestamp_dt.strftime('%d')} {timestamp_dt.strftime('%Y')}"
+    )
+
+    acceptable_hours = {
+        now.hour,
+        (now - timedelta(minutes=5)).hour,
+        (now + timedelta(minutes=5)).hour,
+    }
     assert (
-        month_name in content and year in content
-    ), f"Expected month '{month_name}' and year '{year}' in answer, got: {content[:200]}..."
+        timestamp_dt.hour in acceptable_hours
+    ), f"Expected hour around {now.strftime('%H')}, got '{timestamp_dt.strftime('%H')}'"
+
+    delta_seconds = abs((now - timestamp_dt).total_seconds())
+    assert (
+        delta_seconds < 600
+    ), f"Timestamp {timestamp_str} differs from now by more than 10 minutes ({delta_seconds:.0f}s)"
