@@ -142,6 +142,10 @@ class SharepointAuthMethod(Enum):
     CERTIFICATE = "certificate"
 
 
+class SizeCapExceeded(Exception):
+    """Exception raised when the size cap is exceeded."""
+
+
 def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData | None:
     """Load certificate from .pfx file for MSAL authentication"""
     try:
@@ -240,7 +244,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
-    - Raises `RuntimeError('size_cap_exceeded')` when the cap would be exceeded.
+    - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
     with requests.get(url, stream=True, timeout=timeout) as resp:
@@ -254,7 +258,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
                 logger.warning(
                     f"Content-Length {content_len} exceeds cap {cap}; skipping download."
                 )
-                raise RuntimeError("size_cap_exceeded")
+                raise SizeCapExceeded("pre_download")
 
         buf = io.BytesIO()
         # Stream in 64KB chunks; adjust if needed for slower networks.
@@ -267,7 +271,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
                 logger.warning(
                     f"Streaming download exceeded cap {cap} bytes; aborting early."
                 )
-                raise RuntimeError("size_cap_exceeded")
+                raise SizeCapExceeded("during_download")
 
         return buf.getvalue()
 
@@ -277,14 +281,14 @@ def _download_via_sdk_with_cap(
 ) -> bytes:
     """Use the Office365 SDK streaming download with a hard byte cap.
 
-    Raises RuntimeError("size_cap_exceeded") if the cap would be exceeded.
+    Raises SizeCapExceeded("during_sdk_download") if the cap would be exceeded.
     """
     buf = io.BytesIO()
 
     def on_chunk(bytes_read: int) -> None:
         # bytes_read is total bytes seen so far per SDK contract
         if bytes_read > bytes_allowed:
-            raise RuntimeError("size_cap_exceeded")
+            raise SizeCapExceeded("during_sdk_download")
 
     # modifies the driveitem to change its download behavior
     driveitem.download_session(buf, chunk_downloaded=on_chunk, chunk_size=chunk_size)
@@ -350,14 +354,9 @@ def _convert_driveitem_to_document_with_permissions(
                 REQUEST_TIMEOUT_SECONDS,
                 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             )
-        except RuntimeError as e:
-            if "size_cap_exceeded" in str(e):
-                logger.warning(
-                    f"Skipping '{driveitem.name}' exceeded size cap during streaming."
-                )
-                return None
-            else:
-                raise
+        except SizeCapExceeded as e:
+            logger.warning(f"Skipping '{driveitem.name}' exceeded size cap: {str(e)}")
+            return None
         except requests.RequestException as e:
             status = e.response.status_code if e.response is not None else -1
             logger.warning(
@@ -370,14 +369,11 @@ def _convert_driveitem_to_document_with_permissions(
             content_bytes = _download_via_sdk_with_cap(
                 driveitem, SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
             )
-        except RuntimeError as e:
-            if "size_cap_exceeded" in str(e):
-                logger.warning(
-                    f"Skipping '{driveitem.name}' exceeded size cap during SDK streaming."
-                )
-                return None
-            else:
-                raise
+        except SizeCapExceeded:
+            logger.warning(
+                f"Skipping '{driveitem.name}' exceeded size cap during SDK streaming."
+            )
+            return None
 
     sections: list[TextSection | ImageSection] = []
     file_ext = driveitem.name.split(".")[-1]

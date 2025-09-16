@@ -364,8 +364,8 @@ def docx_to_text_and_images(
         return doc.markdown, list(extract_docx_images(to_bytesio(file)))
     # If a callback is provided, iterate and stream images without accumulating
     try:
-        for img_file_bytes, file_name in extract_docx_images(to_bytesio(file)):
-            image_callback(img_file_bytes, file_name)
+        for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
+            image_callback(img_file_bytes, img_file_name)
     except Exception:
         logger.exception("Failed to stream docx images")
     return doc.markdown, []
