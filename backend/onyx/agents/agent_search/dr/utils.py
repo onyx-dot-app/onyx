@@ -1,5 +1,6 @@
 import copy
 import re
+from datetime import datetime
 
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
@@ -20,6 +21,17 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import (
 
 
 CITATION_PREFIX = "CITE:"
+
+
+def replace_current_datetime_marker(text: str) -> str:
+    """Replace [[CURRENT_DATETIME]] with the current datetime.
+
+    Uses format YYYY-MM-DD HH:MM:SS to match other prompts.
+    """
+    if not text:
+        return text
+    current_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return text.replace("[[CURRENT_DATETIME]]", current_dt)
 
 
 def extract_document_citations(

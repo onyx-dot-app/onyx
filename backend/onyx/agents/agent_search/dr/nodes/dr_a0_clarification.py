@@ -26,6 +26,7 @@ from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
+from onyx.agents.agent_search.dr.utils import replace_current_datetime_marker
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -405,9 +406,12 @@ def clarifier(
         active_source_type_descriptions_str = ""
 
     if graph_config.inputs.persona:
-        assistant_system_prompt = (
+        assistant_system_prompt_raw = (
             graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
-        ) + "\n\n"
+        )
+        assistant_system_prompt = (
+            replace_current_datetime_marker(assistant_system_prompt_raw) + "\n\n"
+        )
         if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
@@ -417,7 +421,9 @@ def clarifier(
             assistant_task_prompt = ""
 
     else:
-        assistant_system_prompt = DEFAULT_DR_SYSTEM_PROMPT + "\n\n"
+        assistant_system_prompt = (
+            replace_current_datetime_marker(DEFAULT_DR_SYSTEM_PROMPT) + "\n\n"
+        )
         assistant_task_prompt = ""
 
     chat_history_string = (
