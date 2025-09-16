@@ -837,7 +837,7 @@ class SlackConnector(
 
             channel_message_ts = checkpoint.channel_completion_map.get(channel_id)
             if channel_message_ts:
-                latest = channel_message_ts
+                oldest = channel_message_ts
 
             logger.debug(
                 f"Getting messages for channel {channel} within range {oldest} - {latest}"
@@ -855,7 +855,7 @@ class SlackConnector(
                 f"{latest=}"
             )
 
-            new_latest = message_batch[-1]["ts"] if message_batch else latest
+            new_latest = message_batch[0]["ts"] if message_batch else latest
 
             num_threads_start = len(seen_thread_ts)
 
