@@ -4,10 +4,17 @@ kind: Ingress
 metadata:
   name: {{ include "onyx-stack.fullname" . }}-ingress-webserver
   annotations:
-    kubernetes.io/ingress.class: nginx
+    {{- if .Values.letsencrypt.enabled -}}
     cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
     kubernetes.io/tls-acme: "true"
+    {{- end }}
+    {{- with .Values.ingress.webserver.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.webserver.host }}
       http:
@@ -22,5 +29,5 @@ spec:
   tls:
     - hosts:
         - {{ .Values.ingress.webserver.host }}
-      secretName: {{ include "onyx-stack.fullname" . }}-ingress-webserver-tls
+      secretName: {{ .Values.ingress.webserver.tlsSecretName | default (printf "%s-ingress-webserver-tls" (include "onyx-stack.fullname" .)) }}
 {{- end }}
