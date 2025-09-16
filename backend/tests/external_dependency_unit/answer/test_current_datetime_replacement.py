@@ -1,6 +1,8 @@
 import os
 from datetime import datetime
 
+from sqlalchemy.orm import Session
+
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
@@ -18,8 +20,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_stream_chat_current_date_response(
-    db_session, full_deployment_setup, mock_external_deps
-):
+    db_session: Session, full_deployment_setup: None, mock_external_deps: None
+) -> None:
     """Smoke test that asking for current date yields a streamed response.
 
     This exercises the full chat path using the default persona, ensuring
