@@ -406,12 +406,9 @@ def clarifier(
         active_source_type_descriptions_str = ""
 
     if graph_config.inputs.persona:
-        assistant_system_prompt_raw = (
+        assistant_system_prompt = PromptTemplate(
             graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
-        )
-        assistant_system_prompt = (
-            PromptTemplate(assistant_system_prompt_raw).build() + "\n\n"
-        )
+        ).build()
         if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
@@ -421,9 +418,7 @@ def clarifier(
             assistant_task_prompt = ""
 
     else:
-        assistant_system_prompt = (
-            PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build() + "\n\n"
-        )
+        assistant_system_prompt = PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build()
         assistant_task_prompt = ""
 
     chat_history_string = (
