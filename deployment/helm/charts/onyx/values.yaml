@@ -704,9 +704,17 @@ minio:
 
 ingress:
   enabled: false
-  className: ""
+  className: "nginx"
   api:
     host: onyx.local
+    # Ingress controller specific section start
+    # Default values are appropriate for NGinx ingress controller. If you use a different ingress controller, you will need to adjust ALL these values.
+    path: /api(/|$)(.*)
+    pathType: ImplementationSpecific
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
+      nginx.ingress.kubernetes.io/use-regex: "true"
+    # Ingress controller specific section end
   webserver:
     host: onyx.local
 
