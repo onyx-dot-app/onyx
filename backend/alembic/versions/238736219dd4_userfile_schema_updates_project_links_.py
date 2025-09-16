@@ -1,8 +1,8 @@
 """userfile_schema_updates_project_links_and_cleanup
 
-Revision ID: ff0b7cdb644d
-Revises: b7ec9b5b505f
-Create Date: 2025-09-16 11:39:18.830018
+Revision ID: 238736219dd4
+Revises: 505c488f6662
+Create Date: 2025-09-16 17:32:43.151946
 
 """
 
@@ -25,8 +25,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # revision identifiers, used by Alembic.
-revision = "ff0b7cdb644d"
-down_revision = "b7ec9b5b505f"
+revision = "238736219dd4"
+down_revision = "505c488f6662"
 branch_labels = None
 depends_on = None
 
@@ -88,6 +88,11 @@ def upgrade() -> None:
         sa.Column("last_project_sync_at", sa.DateTime(timezone=True), nullable=True),
     )
 
+    "===USER_FOLDER==="
+    # make description nullable
+    op.alter_column("user_folder", "description", nullable=True)
+    op.rename_table("user_folder", "user_project")
+
     "===USER_PROJECT==="
     op.add_column(
         "user_project",
@@ -126,11 +131,6 @@ def upgrade() -> None:
     op.create_index(
         "idx_project__user_file_user_file_id", "project__user_file", ["user_file_id"]
     )
-
-    "===USER_FOLDER==="
-    # make description nullable
-    op.alter_column("user_folder", "description", nullable=True)
-    op.rename_table("user_folder", "user_project")
 
     # STEP 2: Data preparation and backfill
     conn = op.get_bind()
