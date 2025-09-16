@@ -26,7 +26,6 @@ from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
-from onyx.agents.agent_search.dr.utils import replace_current_datetime_marker
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -59,6 +58,7 @@ from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
+from onyx.prompts.prompt_template import PromptTemplate
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -410,19 +410,19 @@ def clarifier(
             graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
         )
         assistant_system_prompt = (
-            replace_current_datetime_marker(assistant_system_prompt_raw) + "\n\n"
+            PromptTemplate(assistant_system_prompt_raw).build() + "\n\n"
         )
         if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
-                + (graph_config.inputs.persona.task_prompt)
+                + PromptTemplate(graph_config.inputs.persona.task_prompt).build()
             )
         else:
             assistant_task_prompt = ""
 
     else:
         assistant_system_prompt = (
-            replace_current_datetime_marker(DEFAULT_DR_SYSTEM_PROMPT) + "\n\n"
+            PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build() + "\n\n"
         )
         assistant_task_prompt = ""
 
