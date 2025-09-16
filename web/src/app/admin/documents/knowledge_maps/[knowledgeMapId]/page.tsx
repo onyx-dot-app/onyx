@@ -21,6 +21,7 @@ import { useDocumentSets } from "../../sets/hooks";
 import { use } from "react";
 
 function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 
@@ -61,9 +62,7 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
     return (
       <ErrorCallout
         errorTitle={t(k.KNOWLEDGE_MAP_NOT_FOUND)}
-        errorMsg={`${t(
-          k.KNOWLEDGE_MAP_NOT_FOUND_WITH_ID
-        )} ${knowledgeMapId}`}
+        errorMsg={`${t(k.KNOWLEDGE_MAP_NOT_FOUND_WITH_ID)} ${knowledgeMapId}`}
       />
     );
   }
@@ -97,6 +96,7 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
 export default function Page(props: {
   params: Promise<{ knowledgeMapId: string }>;
 }) {
+  const { t } = useTranslation();
   const params = use(props.params);
   const { knowledgeMapId } = params;
 
@@ -115,9 +115,7 @@ export default function Page(props: {
     return (
       <ErrorCallout
         errorTitle={t(k.INVALID_KNOWLEDGE_MAP_ID)}
-        errorMsg={`${t(
-          k.KNOWLEDGE_MAP_ID_NOT_NUMBER
-        )} "${knowledgeMapId}"`}
+        errorMsg={`${t(k.KNOWLEDGE_MAP_ID_NOT_NUMBER)} "${knowledgeMapId}"`}
       />
     );
   }

@@ -1,7 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
-import React from "react";
+import React, { JSX } from "react";
 import {
   OnyxDocument,
   DocumentRelevance,
@@ -320,6 +320,7 @@ export const AgenticDocumentDisplay = ({
   hide,
   setPopup,
 }: DocumentDisplayProps) => {
+  const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const [presentingDocument, setPresentingDocument] =
     useState<OnyxDocument | null>(null);
@@ -418,7 +419,7 @@ export const AgenticDocumentDisplay = ({
                   <span className="flex gap-x-1 items-center">
                     {" "}
                     <WarningCircle />
-                    {i18n.t(k.MODEL_FAILED_TO_PRODUCE_AN_ANA)}
+                    {t(k.MODEL_FAILED_TO_PRODUCE_AN_ANA)}
                   </span>
                 )}
           </p>
@@ -439,6 +440,7 @@ export function CompactDocumentCard({
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
+  const { t } = useTranslation();
   console.log("document", document);
   return (
     <div
@@ -462,7 +464,7 @@ export function CompactDocumentCard({
         <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
           {!isNaN(new Date(document.updated_at).getTime()) && (
             <span className="text-xs text-text-500">
-              {i18n.t(k.UPDATED)}{" "}
+              {t(k.UPDATED)}{" "}
               {new Date(document.updated_at).toLocaleDateString()}
             </span>
           )}
@@ -479,25 +481,25 @@ export function CompactQuestionCard({
   question: SubQuestionDetail;
   openQuestion: (question: SubQuestionDetail) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       onClick={() => openQuestion(question)}
       className="max-w-[250px] gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
     >
       <div className="text-sm !pb-0 !mb-0 font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
-        {i18n.t(k.QUESTION)}
+        {t(k.QUESTION)}
       </div>
       <div className="text-xs mb-0 text-text-600 line-clamp-2">
         {question.question}
       </div>
       <div className="flex mt-0 pt-0 items-center justify-between w-full">
         <span className="text-xs text-text-500">
-          {question.context_docs?.top_documents.length || 0}{" "}
-          {i18n.t(k.CONTEXT_DOCS)}
+          {question.context_docs?.top_documents.length || 0} {t(k.CONTEXT_DOCS)}
         </span>
         {question.sub_queries && (
           <span className="text-xs text-text-500">
-            {question.sub_queries.length} {i18n.t(k.SUBQUERIES)}
+            {question.sub_queries.length} {t(k.SUBQUERIES)}
           </span>
         )}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+import k from "@/i18n/keys";
 import React, { useState } from "react";
 import { forgotPassword } from "./utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -16,8 +16,10 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { Spinner } from "@/components/Spinner";
 import { redirect } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const ForgotPasswordPage: React.FC = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
 
@@ -30,7 +32,7 @@ const ForgotPasswordPage: React.FC = () => {
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
           <Title className="mb-2 mx-auto font-bold">
-            {i18n.t(k.FORGOT_PASSWORD)}
+            {t(k.FORGOT_PASSWORD)}
           </Title>
         </div>
         {isWorking && <Spinner />}
@@ -48,13 +50,13 @@ const ForgotPasswordPage: React.FC = () => {
               await forgotPassword(values.email);
               setPopup({
                 type: "success",
-                message: i18n.t(k.PASSWORD_RESET_EMAIL_SENT_PLE),
+                message: t(k.PASSWORD_RESET_EMAIL_SENT_PLE),
               });
             } catch (error) {
               const errorMessage =
                 error instanceof Error
                   ? error.message
-                  : i18n.t(k.AN_ERROR_OCCURRED_PLEASE_TRY);
+                  : t(k.AN_ERROR_OCCURRED_PLEASE_TRY);
 
               setPopup({
                 type: "error",
@@ -80,7 +82,7 @@ const ForgotPasswordPage: React.FC = () => {
                   disabled={isSubmitting}
                   className="mx-auto w-full"
                 >
-                  {i18n.t(k.RESET_PASSWORD)}
+                  {t(k.RESET_PASSWORD)}
                 </Button>
               </div>
             </Form>
@@ -89,7 +91,7 @@ const ForgotPasswordPage: React.FC = () => {
         <div className="flex">
           <Text className="mt-4 mx-auto">
             <Link href="/auth/login" className="text-link font-medium">
-              {i18n.t(k.BACK_TO_LOGIN)}
+              {t(k.BACK_TO_LOGIN)}
             </Link>
           </Text>
         </div>

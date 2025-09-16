@@ -1,6 +1,6 @@
 "use client";
 import { useTranslation } from "@/hooks/useTranslation";
-import k from "./../../../../i18n/keys";
+import k from "@/i18n/keys";
 
 import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
@@ -16,6 +16,7 @@ import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/components/ui/createButton";
 
 const Main = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [showForm, setShowForm] = useState(false);
 

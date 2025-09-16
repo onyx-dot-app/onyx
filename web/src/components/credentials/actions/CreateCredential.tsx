@@ -115,14 +115,17 @@ export default function CreateCredential({
     );
 
     try {
-      const response = await submitCredential({
-        credential_json: filteredCredentialValues,
-        admin_public: true,
-        curator_public: is_public,
-        groups: groups,
-        name: name,
-        source: sourceType,
-      });
+      const response = await submitCredential(
+        {
+          credential_json: filteredCredentialValues,
+          admin_public: true,
+          curator_public: is_public,
+          groups: groups,
+          name: name,
+          source: sourceType,
+        },
+        t
+      );
 
       const { message, isSuccess, credential } = response;
 

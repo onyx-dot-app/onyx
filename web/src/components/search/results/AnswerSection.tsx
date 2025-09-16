@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { Quote } from "@/lib/search/interfaces";
 import { ResponseSection, StatusOptions } from "./ResponseSection";
@@ -31,6 +32,7 @@ interface AnswerSectionProps {
 }
 
 export const AnswerSection = (props: AnswerSectionProps) => {
+  const { t } = useTranslation();
   let status = "in-progress" as StatusOptions;
   let header = <></>;
   let body = null;
@@ -46,7 +48,7 @@ export const AnswerSection = (props: AnswerSectionProps) => {
     // the above if statement will hit and the error will not be displayed)
   } else if (props.error) {
     status = "failed";
-    header = <>{i18n.t(k.ERROR_WHILE_BUILDING_ANSWER)}</>;
+    header = <>{t(k.ERROR_WHILE_BUILDING_ANSWER)}</>;
     body = (
       <div className="flex">
         <div className="text-error my-auto ml-1">{props.error}</div>

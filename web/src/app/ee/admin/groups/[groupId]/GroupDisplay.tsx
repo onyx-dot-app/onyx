@@ -62,12 +62,14 @@ const UserRoleDropdown = ({
   onSuccess,
   onError,
   isAdmin,
+  t,
 }: {
   user: User;
   group: UserGroup;
   onSuccess: () => void;
   onError: (message: string) => void;
   isAdmin: boolean;
+  t: (key: string, params?: any) => string;
 }) => {
   const [localRole, setLocalRole] = useState(() => {
     if (user.role === UserRole.CURATOR) {
@@ -239,6 +241,7 @@ export const GroupDisplay = ({
                           onSuccess={onRoleChangeSuccess}
                           onError={onRoleChangeError}
                           isAdmin={isAdmin}
+                          t={t}
                         />
                       </TableCell>
                       <TableCell>

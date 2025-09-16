@@ -1,7 +1,7 @@
 "use client";
+import React from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
-import i18n from "../../../i18n/init";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -374,25 +374,25 @@ interface ToolFormValues {
   passthrough_auth: boolean;
 }
 
-const ToolSchema = Yup.object().shape({
-  definition: Yup.string().required(i18n.t(k.DEFINITION_REQUIRED)),
-  customHeaders: Yup.array()
-    .of(
-      Yup.object().shape({
-        key: Yup.string().required(i18n.t(k.HEADER_KEY_REQUIRED)),
-        value: Yup.string().required(i18n.t(k.HEADER_VALUE_REQUIRED)),
-      })
-    )
-    .default([]),
-  passthrough_auth: Yup.boolean().default(false),
-});
-
 export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   const { t } = useTranslation() as { t: (key: string) => string };
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
+
+  const ToolSchema = Yup.object().shape({
+    definition: Yup.string().required(t(k.DEFINITION_REQUIRED)),
+    customHeaders: Yup.array()
+      .of(
+        Yup.object().shape({
+          key: Yup.string().required(t(k.HEADER_KEY_REQUIRED)),
+          value: Yup.string().required(t(k.HEADER_VALUE_REQUIRED)),
+        })
+      )
+      .default([]),
+    passthrough_auth: Yup.boolean().default(false),
+  });
 
   const prettifiedDefinition = tool?.definition
     ? prettifyDefinition(tool.definition)

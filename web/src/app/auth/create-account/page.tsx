@@ -1,6 +1,6 @@
 "use client";
 import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+import k from "@/i18n/keys";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";

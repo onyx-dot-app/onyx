@@ -1,5 +1,5 @@
-import i18n from "@/i18n/init";
-import k from "../i18n/keys";
+// Removed client i18n import; avoid pulling React context into server bundles
+import k from "@/i18n/keys";
 import { FullPersona, Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
@@ -93,10 +93,7 @@ export async function fetchAssistantEditorInfoSS(
 
   const llmProviders = (await llmProvidersResponse.json()) as LLMProviderView[];
   if (!knowledgeMapsResponse.ok) {
-    return [
-      null,
-      `${i18n.t(k.FAILED_TO_FETCH_DATA)} ${await knowledgeMapsResponse.text()}`,
-    ];
+    return [null, `Failed to fetch data ${await knowledgeMapsResponse.text()}`];
   }
 
   const knowledgeMaps =

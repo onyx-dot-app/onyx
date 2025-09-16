@@ -1,4 +1,3 @@
-import i18n from "@/i18n/init";
 import k from "@/i18n/keys";
 
 export const updateBoost = async (documentId: string, boost: number) => {
@@ -16,7 +15,7 @@ export const updateBoost = async (documentId: string, boost: number) => {
     return null;
   }
   const responseJson = await response.json();
-  return responseJson.message || responseJson.detail || i18n.t(k.UNKNOWN_ERROR);
+  return responseJson.message || responseJson.detail || "Unknown error";
 };
 
 export const updateHiddenStatus = async (

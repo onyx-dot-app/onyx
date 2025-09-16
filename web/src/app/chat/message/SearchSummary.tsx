@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
-import { useEffect, useRef, useState } from "react";
+import { JSX, useEffect, useRef, useState } from "react";
 import { FiBook, FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
 import { FileDescriptor } from "../interfaces";
 import { FileResponse } from "../my-documents/DocumentsContext";

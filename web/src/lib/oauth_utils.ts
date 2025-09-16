@@ -5,8 +5,7 @@ import {
   OAuthPrepareAuthorizationResponse,
   OAuthSlackCallbackResponse,
 } from "./types";
-import i18n from "@/i18n/init";
-import k from "../i18n/keys";
+// Avoid importing client i18n here; these helpers run in server or generic contexts
 
 // server side handler to help initiate the oauth authorization request
 export async function prepareOAuthAuthorizationRequest(
@@ -83,22 +82,16 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `${i18n.t(k.OAUTH_FAILED_TO_PROCESS_SLACK)}: ${
-      response.status
-    }`;
+    let errorDetails = `Failed to process Slack OAuth response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
-      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
+      const responseBody = await response.text();
+      errorDetails += `\nResponse body: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
-          err.message
-        }`;
+        errorDetails += `\nFailed to read response body: ${err.message}`;
       } else {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
-          k.OAUTH_UNKNOWN_ERROR_TYPE
-        )}`;
+        errorDetails += `\nFailed to read response body: Unknown error type`;
       }
     }
 
@@ -130,17 +123,13 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
     let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // ${i18n.t(k.READ_RESPONSE_BODY_AS_TEXT)}
-      errorDetails += `\n${i18n.t(k.RESPONSE_BODY)}: ${responseBody}`;
+      const responseBody = await response.text();
+      errorDetails += `\nResponse body: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\n${i18n.t(k.FAILED_TO_READ_RESPONSE_BODY)}: ${
-          err.message
-        }`;
+        errorDetails += `\nFailed to read response body: ${err.message}`;
       } else {
-        errorDetails += `\n${i18n.t(
-          k.FAILED_TO_READ_RESPONSE_BODY_UNKNOWN_ERROR
-        )}`;
+        errorDetails += `\nFailed to read response body: Unknown error`;
       }
     }
 
@@ -171,22 +160,16 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `${i18n.t(k.OAUTH_FAILED_TO_PROCESS_CONFLUENCE)}: ${
-      response.status
-    }`;
+    let errorDetails = `Failed to process Confluence OAuth response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
-      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
+      const responseBody = await response.text();
+      errorDetails += `\nResponse body: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
-          err.message
-        }`;
+        errorDetails += `\nFailed to read response body: ${err.message}`;
       } else {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
-          k.OAUTH_UNKNOWN_ERROR_TYPE
-        )}`;
+        errorDetails += `\nFailed to read response body: Unknown error type`;
       }
     }
 
@@ -226,22 +209,16 @@ export async function handleOAuthConfluencePrepareFinalization(
   });
 
   if (!response.ok) {
-    let errorDetails = `${i18n.t(
-      k.OAUTH_FAILED_TO_PROCESS_CONFLUENCE_SETUP
-    )}: ${response.status}`;
+    let errorDetails = `Failed to process Confluence setup response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // ${i18n.t(k.OAUTH_READ_BODY_AS_TEXT)}
-      errorDetails += `\n${i18n.t(k.OAUTH_RESPONSE_BODY)}: ${responseBody}`;
+      const responseBody = await response.text();
+      errorDetails += `\nResponse body: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${
-          err.message
-        }`;
+        errorDetails += `\nFailed to read response body: ${err.message}`;
       } else {
-        errorDetails += `\n${i18n.t(k.OAUTH_FAILED_TO_READ_BODY)}: ${i18n.t(
-          k.OAUTH_UNKNOWN_ERROR_TYPE
-        )}`;
+        errorDetails += `\nFailed to read response body: Unknown error type`;
       }
     }
 
@@ -274,22 +251,16 @@ export async function handleOAuthConfluenceFinalize(
   });
 
   if (!response.ok) {
-    let errorDetails = `${i18n.t(
-      k.FAILED_TO_PROCESS_OAUTH_CONFLUENCE_RESPONSE
-    )}: ${response.status}`;
+    let errorDetails = `Failed to process Confluence finalize response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // ${i18n.t(k.READ_RESPONSE_BODY_AS_TEXT)}
-      errorDetails += `\n${i18n.t(k.RESPONSE_BODY)}: ${responseBody}`;
+      const responseBody = await response.text();
+      errorDetails += `\nResponse body: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\n${i18n.t(k.FAILED_TO_READ_RESPONSE_BODY)}: ${
-          err.message
-        }`;
+        errorDetails += `\nFailed to read response body: ${err.message}`;
       } else {
-        errorDetails += `\n${i18n.t(
-          k.FAILED_TO_READ_RESPONSE_BODY_UNKNOWN_ERROR
-        )}`;
+        errorDetails += `\nFailed to read response body: Unknown error`;
       }
     }
 

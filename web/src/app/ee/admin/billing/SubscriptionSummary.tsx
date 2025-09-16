@@ -1,5 +1,5 @@
+"use client";
 import React from "react";
-("use client");
 
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";

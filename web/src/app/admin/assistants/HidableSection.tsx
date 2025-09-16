@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { JSX, useState } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 
 export function SectionHeader({

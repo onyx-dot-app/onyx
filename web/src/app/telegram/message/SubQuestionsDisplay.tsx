@@ -1,6 +1,8 @@
 import i18n from "@/i18n/init";
 import k from "./../../../i18n/keys";
 import React, {
+  JSX,
+  RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -441,7 +443,12 @@ const SubQuestionDisplay: React.FC<{
                         {analysisToggled && (
                           <div
                             ref={analysisRef}
-                            onCopy={(e) => handleCopy(e, analysisRef)}
+                            onCopy={(e) =>
+                              handleCopy(
+                                e,
+                                analysisRef as RefObject<HTMLDivElement>
+                              )
+                            }
                             className="flex flex-wrap gap-2"
                           >
                             {renderedMarkdown}

@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Bubble } from "@/components/Bubble";
@@ -21,13 +22,14 @@ export const AssistantCard = ({
   isSelected: boolean;
   onSelect: (assistant: Persona) => void;
 }) => {
+  const { t } = useTranslation();
   const renderBadgeContent = (tool: { name: string }) => {
     switch (tool.name) {
       case SEARCH_TOOL_ID:
         return (
           <>
             <FiSearch className="h-3 w-3 my-auto" />
-            <span>{i18n.t(k.SEARCH)}</span>
+            <span>{t(k.SEARCH)}</span>
           </>
         );
 
@@ -35,7 +37,7 @@ export const AssistantCard = ({
         return (
           <>
             <FiImage className="h-3 w-3 my-auto" />
-            <span>{i18n.t(k.IMAGE_GEN)}</span>
+            <span>{t(k.IMAGE_GEN)}</span>
           </>
         );
 

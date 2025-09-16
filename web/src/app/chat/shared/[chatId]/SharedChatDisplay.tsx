@@ -28,8 +28,10 @@ import { useRouter } from "next/navigation";
 
 function BackToOnyxButton({
   documentSidebarVisible,
+  t,
 }: {
   documentSidebarVisible: boolean;
+  t: (key: string, params?: any) => string;
 }) {
   const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
@@ -89,7 +91,10 @@ export function SharedChatDisplay({
             {t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
           </Callout>
         </div>
-        <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+        <BackToOnyxButton
+          documentSidebarVisible={documentSidebarVisible}
+          t={t}
+        />
       </div>
     );
   }
@@ -423,7 +428,10 @@ export function SharedChatDisplay({
           </div>
 
           <FixedLogo backgroundToggled={false} />
-          <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+          <BackToOnyxButton
+            documentSidebarVisible={documentSidebarVisible}
+            t={t}
+          />
         </div>
       </div>
     </>

@@ -20,6 +20,7 @@ import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";
 
 function Main() {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -47,7 +48,7 @@ function Main() {
       const response = await fetch(
         `/api/admin/long-term-logs/${category}/download`
       );
-      if (!response.ok) throw new Error(t(k.FAILED_TO_LOAD_LOGS));
+      if (!response.ok) throw new Error(t(k.ERROR));
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

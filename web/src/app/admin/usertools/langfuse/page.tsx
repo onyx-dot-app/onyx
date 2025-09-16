@@ -1,10 +1,10 @@
-import i18n from "@/i18n/init";
-import k from "../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiTool } from "react-icons/fi";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { redirect } from "next/navigation";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 export default async function Page() {
   const isLangfuseEditorEnable =
@@ -20,11 +20,16 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title={i18n.t(k.LANGFUSE_MONITORING_TITLE)}
+        title="Мониторинг Langfuse"
         icon={<FiTool size={32} className="my-auto" />}
       />
 
-      <Text className="mb-8">{i18n.t(k.LANGFUSE_DESCRIPTION)}</Text>
+      <Text className="mb-8">
+        Langfuse - это платформа инженерии LLM с открытым исходным кодом,
+        которая предоставляет функции наблюдаемости, аналитики, оценок,
+        управления промптами и экспериментов, чтобы помочь администраторам
+        отлаживать, анализировать и улучшать работу цифровых помощников.
+      </Text>
 
       <Text className="mb-8">
         <a
@@ -32,7 +37,7 @@ export default async function Page() {
           href="https://langfuse.com/docs"
           target="_blank"
         >
-          {i18n.t(k.LANGFUSE_DOCUMENTATION)}
+          Документация Langfuse
         </a>{" "}
       </Text>
 
@@ -42,7 +47,7 @@ export default async function Page() {
         rel="noopener noreferrer"
       >
         <Button className="mx-auto" color="green" type="button">
-          {i18n.t(k.OPEN_LANGFUSE)}
+          {"Открыть Langfuse"}
         </Button>
       </a>
     </div>

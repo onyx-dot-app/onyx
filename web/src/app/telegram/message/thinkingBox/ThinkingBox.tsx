@@ -2,7 +2,7 @@
 import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, RefObject } from "react";
 import { FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { TbBrain } from "react-icons/tb";
 import ReactMarkdown from "react-markdown";
@@ -293,7 +293,9 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
             <div
               ref={markdownRef}
               className="thinking-box__markdown focus:outline-none cursor-text select-text"
-              onCopy={(e) => handleCopy(e, markdownRef)}
+              onCopy={(e) =>
+                handleCopy(e, markdownRef as RefObject<HTMLDivElement>)
+              }
             >
               <ReactMarkdown
                 className="prose dark:prose-invert max-w-full"

@@ -1,11 +1,10 @@
-import i18n from "@/i18n/init";
-import k from "./../i18n/keys";
+import React, { JSX } from "react";
 export function MetadataBadge({
   icon,
   value,
   flexNone,
 }: {
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
   value: string | JSX.Element;
   flexNone?: boolean;
 }) {
@@ -25,7 +24,7 @@ export function MetadataBadge({
       ${flexNone ? "flex-none" : ""}`}
     >
       {icon &&
-        icon({
+        React.createElement(icon, {
           size: 12,
           className: flexNone ? "flex-none" : "mr-0.5 my-auto",
         })}

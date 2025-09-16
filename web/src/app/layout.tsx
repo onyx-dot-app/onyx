@@ -32,9 +32,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import i18n from "../i18n/init";
-import k from "../i18n/keys";
-import { I18nextProvider } from "react-i18next";
+import { I18nProvider } from "@/components/providers/I18nProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -61,7 +59,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: enterpriseSettings?.application_name || "SmartSearch",
-    description: i18n.t(k.ANSWERS_TO_QUESTIONS_ABOUT_YOUR_DOCUMENTS),
+    description: "Answers to questions about your documents",
     icons: {
       icon: logoLocation,
     },
@@ -132,13 +130,13 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <I18nextProvider i18n={i18n}>
+          <I18nProvider>
             <LanguageProvider>
               <div className="text-text min-h-screen bg-background">
                 <PHProvider>{content}</PHProvider>
               </div>
             </LanguageProvider>
-          </I18nextProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

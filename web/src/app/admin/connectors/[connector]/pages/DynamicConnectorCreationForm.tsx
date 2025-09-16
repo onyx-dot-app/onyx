@@ -1,3 +1,4 @@
+"use client";
 import React, {
   Dispatch,
   FC,
@@ -5,7 +6,6 @@ import React, {
   useEffect,
   useState,
 } from "react";
-"use client";
 
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "@/i18n/keys";

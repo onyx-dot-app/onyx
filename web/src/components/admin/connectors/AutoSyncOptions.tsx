@@ -1,5 +1,4 @@
-import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+"use client";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { ValidAutoSyncSource } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";

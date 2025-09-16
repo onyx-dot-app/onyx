@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -6,7 +7,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
-import React, { useEffect, useState } from "react";
+import React, { JSX, useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { FiFileText } from "react-icons/fi";
@@ -127,6 +128,7 @@ export function SeeMoreBlock({
   toggled,
   fullWidth = false,
 }: SeeMoreBlockProps) {
+  const { t } = useTranslation();
   const iconsToRender = docs.length > 2 ? getUniqueIcons(docs) : [];
 
   return (
@@ -139,7 +141,7 @@ export function SeeMoreBlock({
         {docs.length > 2 && iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
-        {toggled ? i18n.t(k.HIDE_RESULTS) : i18n.t(k.SHOW_ALL1)}
+        {toggled ? t(k.HIDE_RESULTS) : t(k.SHOW_ALL1)}
       </div>
     </button>
   );
@@ -203,6 +205,7 @@ export function FilesSeeMoreBlock({
   toggled: boolean;
   fullWidth?: boolean;
 }) {
+  const { t } = useTranslation();
   const [iconsToRender, setIconsToRender] = useState<JSX.Element[]>([]);
   useEffect(() => {
     setIconsToRender(files.length > 2 ? getUniqueFileIcons(files) : []);
@@ -218,7 +221,7 @@ export function FilesSeeMoreBlock({
         {files.length > 2 && iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
-        {toggled ? i18n.t(k.HIDE_FILES) : i18n.t(k.SHOW_ALL_FILES)}
+        {toggled ? t(k.HIDE_FILES) : t(k.SHOW_ALL_FILES)}
       </div>
     </button>
   );

@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import * as Yup from "yup";
 
@@ -23,6 +24,7 @@ export function CreateStdOAuthCredential({
   sourceType: ValidSources;
   additionalFields: OAuthAdditionalKwargDescription[];
 }) {
+  const { t } = useTranslation();
   const handleSubmit = async (
     values: formType,
     formikHelpers: FormikHelpers<formType>
@@ -78,7 +80,7 @@ export function CreateStdOAuthCredential({
 
             <div className="flex w-full">
               <Button type="submit" className="flex text-sm">
-                {i18n.t(k.CREATE1)}
+                {t(k.CREATE1)}
               </Button>
             </div>
           </CardSection>

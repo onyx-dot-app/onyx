@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { Modal } from "@/components/Modal";

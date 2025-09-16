@@ -1,6 +1,6 @@
 "use client";
 import { useTranslation } from "@/hooks/useTranslation";
-import k from "./../../../../../../i18n/keys";
+import k from "@/i18n/keys";
 import { use } from "react";
 
 import Text from "@/components/ui/text";

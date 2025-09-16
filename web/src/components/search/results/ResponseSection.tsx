@@ -5,7 +5,7 @@ import {
   ChevronLeftIcon,
   TriangleAlertIcon,
 } from "@/components/icons/icons";
-import { useState } from "react";
+import { JSX, useState } from "react";
 
 export type StatusOptions = "in-progress" | "failed" | "warning" | "success";
 

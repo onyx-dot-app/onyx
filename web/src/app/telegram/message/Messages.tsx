@@ -11,6 +11,8 @@ import {
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
+  JSX,
+  RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -276,6 +278,7 @@ export const AIMessage = ({
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
   removePadding?: boolean;
 }) => {
+  const { t } = useTranslation();
   const toolCallGenerating = toolCall && !toolCall.tool_result;
 
   // Check if content contains thinking tokens (complete or partial)
@@ -715,7 +718,12 @@ export const AIMessage = ({
                             <div
                               ref={markdownRef}
                               className="focus:outline-none cursor-text select-text"
-                              onCopy={(e) => handleCopy(e, markdownRef)}
+                              onCopy={(e) =>
+                                handleCopy(
+                                  e,
+                                  markdownRef as RefObject<HTMLDivElement>
+                                )
+                              }
                             >
                               {renderedMarkdown}
                             </div>
@@ -760,6 +768,7 @@ export const AIMessage = ({
                                       ]
                                     );
                                   }}
+                                  t={t}
                                 />
                               </div>
                             )}
@@ -769,7 +778,7 @@ export const AIMessage = ({
                               copyAllFn={() =>
                                 copyAll(
                                   finalContentProcessed as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
@@ -850,6 +859,7 @@ export const AIMessage = ({
                                       ]
                                     );
                                   }}
+                                  t={t}
                                 />
                               </div>
                             )}
@@ -859,7 +869,7 @@ export const AIMessage = ({
                               copyAllFn={() =>
                                 copyAll(
                                   finalContentProcessed as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
@@ -927,12 +937,14 @@ function MessageSwitcher({
   handlePrevious,
   handleNext,
   disableForStreaming,
+  t,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
   disableForStreaming?: boolean;
+  t: (key: string, params?: any) => string;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
@@ -1014,6 +1026,7 @@ export const HumanMessage = ({
   disableSwitchingForStreaming?: boolean;
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isHovered, setIsHovered] = useState(false);
@@ -1262,6 +1275,7 @@ export const HumanMessage = ({
                         otherMessagesCanSwitchTo[currentMessageInd + 1]
                       );
                     }}
+                    t={t}
                   />
                 </div>
               )}

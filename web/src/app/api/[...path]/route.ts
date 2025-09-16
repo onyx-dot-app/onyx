@@ -1,6 +1,6 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "@/i18n/keys";
 
 /* NextJS is annoying and makes use use a separate function for 

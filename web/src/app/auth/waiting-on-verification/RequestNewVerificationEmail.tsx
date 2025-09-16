@@ -5,7 +5,7 @@ import k from "./../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { requestEmailVerification } from "../lib";
 import { Spinner } from "@/components/Spinner";
-import { useState } from "react";
+import { JSX, useState } from "react";
 
 export function RequestNewVerificationEmail({
   children,

@@ -1,9 +1,10 @@
 import { getXDaysAgo } from "@/lib/dateUtils";
-import i18n from "@/i18n/init";
-import k from "../../i18n/keys";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import { DateRangePickerValue } from "@tremor/react";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
+import { JSX } from "react";
 
 function DateSelectorItem({
   children,
@@ -33,10 +34,6 @@ function DateSelectorItem({
   );
 }
 
-export const LAST_30_DAYS = i18n.t(k.LAST_30_DAYS);
-export const LAST_7_DAYS = i18n.t(k.LAST_7_DAYS);
-export const TODAY = i18n.t(k.TODAY);
-
 export function DateRangeSelector({
   value,
   onValueChange,
@@ -44,6 +41,11 @@ export function DateRangeSelector({
   value: DateRangePickerValue | null;
   onValueChange: (value: DateRangePickerValue | null) => void;
 }) {
+  const { t } = useTranslation();
+
+  const LAST_30_DAYS = t(k.LAST_30_DAYS);
+  const LAST_7_DAYS = t(k.LAST_7_DAYS);
+  const TODAY = t(k.TODAY);
   return (
     <div>
       <CustomDropdown
@@ -119,7 +121,7 @@ export function DateRangeSelector({
           {value?.selectValue ? (
             <div className="text-emphasis">{value.selectValue}</div>
           ) : (
-            {i18n.t(k.ALL_TIME)}
+            <div>{t(k.ALL_TIME)}</div>
           )}
           {value?.selectValue ? (
             <div

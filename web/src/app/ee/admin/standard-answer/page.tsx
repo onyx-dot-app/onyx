@@ -1,7 +1,7 @@
 "use client";
 import React, { JSX } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import k from "./../../../../i18n/keys";
+import k from "@/i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ClipboardIcon, EditIcon, TrashIcon } from "@/components/icons/icons";

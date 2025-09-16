@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
@@ -35,6 +36,7 @@ export function AccessTypeGroupSelector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const { t } = useTranslation();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
@@ -80,7 +82,7 @@ export function AccessTypeGroupSelector({
   ]);
 
   if (userGroupsIsLoading) {
-    return <div>{i18n.t(k.LOADING)}</div>;
+    return <div>{t(k.LOADING)}</div>;
   }
   if (!isPaidEnterpriseFeaturesEnabled) {
     return null;
@@ -91,9 +93,8 @@ export function AccessTypeGroupSelector({
       <>
         {userGroups && (
           <div className="mb-1 font-medium text-base">
-            {i18n.t(k.THIS_CONNECTOR_WILL_BE_ASSIGNE)}{" "}
-            <b>{userGroups[0].name}</b>
-            {i18n.t(k._8)}
+            {t(k.THIS_CONNECTOR_WILL_BE_ASSIGNE)} <b>{userGroups[0].name}</b>
+            {t(k._8)}
           </div>
         )}
       </>
@@ -109,7 +110,7 @@ export function AccessTypeGroupSelector({
             <Separator />
             <div className="flex mt-4 gap-x-2 items-center">
               <div className="block font-medium text-base">
-                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS_C)}
+                {t(k.ASSIGN_GROUP_ACCESS_FOR_THIS_C)}
               </div>
             </div>
             {userGroupsIsLoading ? (
@@ -117,9 +118,9 @@ export function AccessTypeGroupSelector({
             ) : (
               <Text className="mb-3">
                 {isAdmin ? (
-                  <>{i18n.t(k.THIS_CONNECTOR_WILL_BE_VISIBLE)}</>
+                  <>{t(k.THIS_CONNECTOR_WILL_BE_VISIBLE)}</>
                 ) : (
-                  <>{i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO)}</>
+                  <>{t(k.CURATORS_MUST_SELECT_ONE_OR_MO)}</>
                 )}
               </Text>
             )}

@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import React, { useEffect, useState } from "react";
 import useSWR from "swr";
@@ -25,6 +26,7 @@ export const Notifications = ({
   refreshNotifications: () => void;
   navigateToDropdown: () => void;
 }) => {
+  const { t } = useTranslation();
   const [showDropdown, setShowDropdown] = useState(false);
   const router = useRouter();
   const { refreshAssistants } = useAssistants();
@@ -163,7 +165,7 @@ export const Notifications = ({
                     )}
                     <div className="flex-grow">
                       <p className="font-semibold text-sm text-text-800">
-                        {i18n.t(k.NEW_ASSISTANT_SHARED)} {persona?.name}
+                        {t(k.NEW_ASSISTANT_SHARED)} {persona?.name}
                       </p>
                       {persona?.description && (
                         <p className="text-xs text-text-600 mt-1">
@@ -174,24 +176,23 @@ export const Notifications = ({
                         <div className="mt-2">
                           {persona.tools.length > 0 && (
                             <p className="text-xs text-text-500">
-                              {i18n.t(k.TOOLS)}{" "}
+                              {t(k.TOOLS)}{" "}
                               {persona.tools
                                 .map((tool) => tool.name)
-                                .join(i18n.t(k._3))}
+                                .join(t(k._3))}
                             </p>
                           )}
                           {persona.document_sets.length > 0 && (
                             <p className="text-xs text-text-500">
-                              {i18n.t(k.DOCUMENT_SETS3)}{" "}
+                              {t(k.DOCUMENT_SETS3)}{" "}
                               {persona.document_sets
                                 .map((set) => set.name)
-                                .join(i18n.t(k._3))}
+                                .join(t(k._3))}
                             </p>
                           )}
                           {persona.llm_model_version_override && (
                             <p className="text-xs text-text-500">
-                              {i18n.t(k.MODEL)}{" "}
-                              {persona.llm_model_version_override}
+                              {t(k.MODEL)} {persona.llm_model_version_override}
                             </p>
                           )}
                         </div>
@@ -205,13 +206,13 @@ export const Notifications = ({
                       }
                       className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
                     >
-                      {i18n.t(k.CHAT1)}
+                      {t(k.CHAT1)}
                     </button>
                     <button
                       onClick={() => dismissNotification(notification.id)}
                       className="px-3 py-1 text-sm font-medium text-text-600 hover:text-text-800 transition duration-150 ease-in-out"
                     >
-                      {i18n.t(k.DISMISS)}
+                      {t(k.DISMISS)}
                     </button>
                   </div>
                 </div>
@@ -224,7 +225,7 @@ export const Notifications = ({
         )
       ) : (
         <div className="px-4 py-3 text-center text-text-600">
-          {i18n.t(k.NO_NEW_NOTIFICATIONS)}
+          {t(k.NO_NEW_NOTIFICATIONS)}
         </div>
       )}
     </div>

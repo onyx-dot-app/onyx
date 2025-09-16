@@ -2,7 +2,7 @@
 
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
-import React, { useState } from "react";
+import React, { JSX, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Popup } from "./Popup";
@@ -12,7 +12,8 @@ import { createCredential } from "@/lib/credential";
 import { CredentialBase, Credential } from "@/lib/connectors/credentials";
 
 export async function submitCredential<T>(
-  credential: CredentialBase<T>
+  credential: CredentialBase<T>,
+  t: (key: string, params?: any) => string
 ): Promise<{
   credential?: Credential<any>;
   message: string;
@@ -68,13 +69,16 @@ export function CredentialForm<T extends Yup.AnyObject>({
         validationSchema={validationSchema}
         onSubmit={(values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
-          submitCredential<T>({
-            credential_json: values,
-            admin_public: true,
-            curator_public: false,
-            groups: [],
-            source: source,
-          }).then(({ message, isSuccess }) => {
+          submitCredential<T>(
+            {
+              credential_json: values,
+              admin_public: true,
+              curator_public: false,
+              groups: [],
+              source: source,
+            },
+            t
+          ).then(({ message, isSuccess }) => {
             setPopup({ message, type: isSuccess ? "success" : "error" });
             formikHelpers.setSubmitting(false);
             setTimeout(() => {

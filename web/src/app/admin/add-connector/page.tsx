@@ -45,7 +45,7 @@ function SourceTile({
 }
 export default function Page() {
   const { t } = useTranslation();
-  const sources = useMemo(() => listSourceMetadata(), []);
+  const sources = useMemo<SourceMetadata[]>(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -83,14 +83,17 @@ export default function Page() {
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      const filteredCategories = Object.entries(categorizedSources).filter(
-        ([_, sources]) => sources.length > 0
-      );
+      const filteredCategories = (
+        Object.entries(categorizedSources) as [
+          SourceCategory,
+          SourceMetadata[]
+        ][]
+      ).filter(([_category, sources]) => sources.length > 0);
       if (
         filteredCategories.length > 0 &&
         filteredCategories[0][1].length > 0
       ) {
-        const firstSource = filteredCategories[0][1][0];
+        const firstSource = (filteredCategories[0][1] as SourceMetadata[])[0];
         if (firstSource) {
           window.open(firstSource.adminUrl, "_self");
         }
@@ -120,7 +123,12 @@ export default function Page() {
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
-      {Object.entries(categorizedSources)
+      {(
+        Object.entries(categorizedSources) as [
+          SourceCategory,
+          SourceMetadata[]
+        ][]
+      )
         .filter(([_, sources]) => sources.length > 0)
         .map(([category, sources], categoryInd) => (
           <div key={category} className="mb-8">

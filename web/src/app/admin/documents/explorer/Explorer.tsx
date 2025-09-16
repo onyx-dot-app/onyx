@@ -74,8 +74,9 @@ const DocumentDisplay = ({
             } else {
               setPopup({
                 type: "error",
-                message: `${t(k.FAILED_TO_UPDATE_DOCUMENT)} ${getErrorMsg(
-                  response
+                message: `${t(k.FAILED_TO_UPDATE_DOCUMENT)} ${await getErrorMsg(
+                  response,
+                  t
                 )}${t(k._26)}`,
               });
             }

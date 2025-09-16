@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import {
   type InvitedUserSnapshot,
@@ -22,6 +23,7 @@ export const InviteUserButton = ({
   setPopup: (spec: PopupSpec) => void;
   mutate: (() => void) | (() => void)[];
 }) => {
+  const { t } = useTranslation();
   const { trigger: inviteTrigger, isMutating: isInviting } = useSWRMutation(
     "/api/manage/admin/users",
     async (url, { arg }: { arg: { emails: string[] } }) => {
@@ -114,12 +116,10 @@ export const InviteUserButton = ({
     <>
       {showInviteModal && (
         <GenericConfirmModal
-          title={`${invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)} ${i18n.t(
-            k.USER
-          )}`}
-          message={`${i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO)} ${
-            invited ? i18n.t(k.UNINVITE1) : i18n.t(k.INVITE1)
-          } ${user.email}${i18n.t(k._10)}`}
+          title={`${invited ? t(k.UNINVITE) : t(k.INVITE)} ${t(k.USER)}`}
+          message={`${t(k.ARE_YOU_SURE_YOU_WANT_TO)} ${
+            invited ? t(k.UNINVITE1) : t(k.INVITE1)
+          } ${user.email}${t(k._10)}`}
           onClose={() => setShowInviteModal(false)}
           onConfirm={handleConfirm}
         />
@@ -131,7 +131,7 @@ export const InviteUserButton = ({
         disabled={isMutating}
         size="sm"
       >
-        {invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)}
+        {invited ? t(k.UNINVITE) : t(k.INVITE)}
       </Button>
     </>
   );

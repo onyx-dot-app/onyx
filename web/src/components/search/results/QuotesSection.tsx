@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { Quote } from "@/lib/search/interfaces";
 import { ResponseSection, StatusOptions } from "./ResponseSection";
@@ -7,6 +8,7 @@ import { useState } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
 
 const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
+  const { t } = useTranslation();
   const [detailIsOpen, setDetailIsOpen] = useState(false);
   const [copyClicked, setCopyClicked] = useState(false);
 
@@ -22,7 +24,7 @@ const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
         <div className="absolute top-0 mt-9 pt-2 z-50">
           <div className="flex flex-shrink-0 rounded-lg break-words hyphens-auto w-96 bg-background border border-border shadow p-3 text-sm leading-relaxed overflow-hidden">
             <div>
-              <b>{i18n.t(k.QUOTE)}</b> <i>{quoteInfo.quote}</i>
+              <b>{t(k.QUOTE)}</b> <i>{quoteInfo.quote}</i>
             </div>
             <div
               className="my-auto pl-3 ml-auto"
@@ -71,11 +73,13 @@ interface QuotesSectionProps {
 }
 
 const QuotesHeader = ({ quotes, isFetching }: QuotesSectionProps) => {
+  const { t } = useTranslation();
+
   if ((!quotes || quotes.length === 0) && isFetching) {
-    return <>{i18n.t(k.EXTRACTING_QUOTES)}</>;
+    return <>{t(k.EXTRACTING_QUOTES)}</>;
   }
 
-  return <>{i18n.t(k.QUOTES1)}</>;
+  return <>{t(k.QUOTES1)}</>;
 };
 
 const QuotesBody = ({ quotes, isFetching }: QuotesSectionProps) => {

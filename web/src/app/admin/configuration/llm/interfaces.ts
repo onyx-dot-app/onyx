@@ -1,3 +1,4 @@
+import React from "react";
 import {
   AnthropicIcon,
   AmazonIcon,
@@ -10,6 +11,7 @@ import {
   DeepseekIcon,
   OpenAISVG,
 } from "@/components/icons/icons";
+import { JSX } from "react";
 
 export interface CustomConfigKey {
   name: string;

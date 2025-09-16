@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import {
   ConfluenceConfig,
@@ -35,6 +36,7 @@ export const ConnectorTitle = ({
   showMetadata = true,
   className = "",
 }: ConnectorTitleProps) => {
+  const { t } = useTranslation();
   const sourceMetadata = getSourceMetadata(connector.source);
 
   let additionalMetadata = new Map<string, string>();
@@ -105,7 +107,7 @@ export const ConnectorTitle = ({
               <div key={key} className="truncate">
                 <i>
                   {key}
-                  {i18n.t(k._2)}
+                  {t(k._2)}
                 </i>{" "}
                 {value}
               </div>

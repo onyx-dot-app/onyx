@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
@@ -27,6 +28,7 @@ const IsVisibleSection = ({
   document: DocumentBoostStatus;
   onUpdate: (response: Response) => void;
 }) => {
+  const { t } = useTranslation();
   return (
     <HoverPopup
       mainContent={
@@ -41,7 +43,7 @@ const IsVisibleSection = ({
             }}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="select-none">{i18n.t(k.HIDDEN)}</div>
+            <div className="select-none">{t(k.HIDDEN)}</div>
             <div className="ml-1 my-auto">
               <CustomCheckbox checked={false} />
             </div>
@@ -57,7 +59,7 @@ const IsVisibleSection = ({
             }}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="my-auto select-none">{i18n.t(k.VISIBLE)}</div>
+            <div className="my-auto select-none">{t(k.VISIBLE)}</div>
             <div className="ml-1 my-auto">
               <CustomCheckbox checked={true} />
             </div>
@@ -68,12 +70,12 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> {i18n.t(k.UNHIDE)}
+              <FiEye className="my-auto mr-1" /> {t(k.UNHIDE)}
             </div>
           ) : (
             <div className="flex">
               <FiEyeOff className="my-auto mr-1" />
-              {i18n.t(k.HIDE)}
+              {t(k.HIDE)}
             </div>
           )}
         </div>
@@ -90,6 +92,7 @@ export const DocumentFeedbackTable = ({
   documents: DocumentBoostStatus[];
   refresh: () => void;
 }) => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const { popup, setPopup } = usePopup();
 
@@ -98,9 +101,9 @@ export const DocumentFeedbackTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.DOCUMENT_NAME)}</TableHead>
-            <TableHead>{i18n.t(k.IS_SEARCHABLE)}</TableHead>
-            <TableHead>{i18n.t(k.SCORE)}</TableHead>
+            <TableHead>{t(k.DOCUMENT_NAME)}</TableHead>
+            <TableHead>{t(k.IS_SEARCHABLE)}</TableHead>
+            <TableHead>{t(k.SCORE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -127,9 +130,9 @@ export const DocumentFeedbackTable = ({
                           refresh();
                         } else {
                           setPopup({
-                            message: `${i18n.t(
+                            message: `${t(
                               k.ERROR_UPDATING_HIDDEN_STATUS
-                            )} ${getErrorMsg(response)}`,
+                            )} ${await getErrorMsg(response, t)}`,
                             type: "error",
                           });
                         }
