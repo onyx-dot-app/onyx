@@ -50,6 +50,19 @@ from onyx.utils.text_processing import decode_escapes
 _MAX_BLURB_LEN = 45
 
 
+def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
+    """Convert document timestamps to a human friendly relative string."""
+    if updated_at is None:
+        return None
+
+    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
+        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
+    else:
+        aware_updated_at = updated_at.astimezone(pytz.utc)
+
+    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
+
+
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
     text = (
         f"Please provide feedback on <{thread_link}|this answer>. "
@@ -268,10 +281,9 @@ def _build_documents_blocks(
             header_line = f"<{d.link}|{doc_sem_id}>\n"
 
         updated_at_line = ""
-        if d.updated_at is not None:
-            updated_at_line = (
-                f"_Updated {timeago.format(d.updated_at, datetime.now(pytz.utc))}_\n"
-            )
+        updated_at_str = _format_doc_updated_at(d.updated_at)
+        if updated_at_str:
+            updated_at_line = f"_Updated {updated_at_str}_\n"
 
         body_text = f">{remove_slack_text_interactions(match_str)}"
 
@@ -332,11 +344,7 @@ def _build_sources_blocks(
         )
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
-        days_ago_str = (
-            timeago.format(d.updated_at, datetime.now(pytz.utc))
-            if d.updated_at
-            else None
-        )
+        days_ago_str = _format_doc_updated_at(d.updated_at)
         final_metadata_str = " | ".join(
             ([owner_str] if owner_str else [])
             + ([days_ago_str] if days_ago_str else [])
