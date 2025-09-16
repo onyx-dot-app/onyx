@@ -11,7 +11,7 @@ spec:
     kind: Deployment
     name: {{ include "onyx-stack.fullname" . }}-celery-worker-docfetching
   minReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.minReplicas | default 1 }}
-  maxReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.maxReplicas | default 10 }}
+  maxReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.maxReplicas | default 20 }}
   pollingInterval: {{ .Values.celery_worker_docfetching.autoscaling.pollingInterval | default 30 }}
   cooldownPeriod: {{ .Values.celery_worker_docfetching.autoscaling.cooldownPeriod | default 300 }}
   idleReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.idleReplicaCount | default 1 }}
