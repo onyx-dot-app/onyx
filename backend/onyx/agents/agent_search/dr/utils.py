@@ -30,8 +30,9 @@ def replace_current_datetime_marker(text: str) -> str:
     """
     if not text:
         return text
-    current_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return text.replace("[[CURRENT_DATETIME]]", current_dt)
+    now = datetime.now()
+    formatted = f"{now.strftime('%A')} {now.strftime('%B %d, %Y %H:%M')}"
+    return text.replace("[[CURRENT_DATETIME]]", formatted)
 
 
 def extract_document_citations(

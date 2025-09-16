@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 
 class PromptTemplate:
@@ -25,7 +26,8 @@ class PromptTemplate:
         missing = self._fields - set(kwargs.keys())
         if missing:
             raise ValueError(f"Missing required fields: {missing}.")
-        return self._replace_fields(kwargs)
+        built = self._replace_fields(kwargs)
+        return self._postprocess(built)
 
     def partial_build(self, **kwargs: str) -> "PromptTemplate":
         """
@@ -41,3 +43,14 @@ class PromptTemplate:
             return field_vals.get(key, match.group(0))
 
         return self._pattern.sub(repl, self._template)
+
+    def _postprocess(self, text: str) -> str:
+        """Apply global replacements such as [[CURRENT_DATETIME]]."""
+        if not text:
+            return text
+        # Replace datetime marker with a readable current datetime for LLMs
+        if "[[CURRENT_DATETIME]]" in text:
+            now = datetime.now()
+            formatted = f"{now.strftime('%A')} {now.strftime('%B %d, %Y %H:%M')}"
+            text = text.replace("[[CURRENT_DATETIME]]", formatted)
+        return text
