@@ -21,7 +21,7 @@ from tests.external_dependency_unit.conftest import create_test_user
 def test_stream_chat_message_objects_without_web_search(
     db_session: Session,
     full_deployment_setup: None,
-    mock_external_deps,
+    mock_external_deps: None,
 ) -> None:
     """
     Test that when web search is requested but not set up, the system handles
@@ -30,7 +30,10 @@ def test_stream_chat_message_objects_without_web_search(
 
     # Mock the model server HTTP calls for embeddings
     def mock_post(
-        url: str, json: dict | None = None, headers: dict | None = None, **kwargs: Any
+        url: str,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
     ) -> MagicMock:
         """Mock requests.post for model server embedding calls"""
         mock_response = MagicMock()

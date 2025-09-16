@@ -1,4 +1,7 @@
 import os
+from collections.abc import Iterator
+from collections.abc import Mapping
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -33,12 +36,15 @@ def ensure_default_llm_provider(db_session: Session) -> None:
 
 
 @pytest.fixture
-def mock_nlp_embeddings_post():
+def mock_nlp_embeddings_post() -> Iterator[None]:
     """Patch model-server embedding HTTP calls used by NLP components."""
 
     def _mock_post(
-        url: str, json: dict | None = None, headers: dict | None = None, **kwargs
-    ):
+        url: str,
+        json: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
+    ) -> MagicMock:
         resp = MagicMock()
         if "encoder/bi-encoder-embed" in url:
             num_texts = len(json.get("texts", [])) if json else 1
@@ -59,7 +65,7 @@ def mock_nlp_embeddings_post():
 
 
 @pytest.fixture
-def mock_gpu_status():
+def mock_gpu_status() -> Iterator[None]:
     """Avoid hitting model server for GPU status checks."""
     with patch(
         "onyx.utils.gpu_utils._get_gpu_status_from_model_server", return_value=False
@@ -68,13 +74,17 @@ def mock_gpu_status():
 
 
 @pytest.fixture
-def mock_vespa_query():
+def mock_vespa_query() -> Iterator[None]:
     """Stub Vespa query to a safe empty response to avoid CI flakiness."""
     with patch("onyx.document_index.vespa.index.query_vespa", return_value=[]):
         yield
 
 
 @pytest.fixture
-def mock_external_deps(mock_nlp_embeddings_post, mock_gpu_status, mock_vespa_query):
+def mock_external_deps(
+    mock_nlp_embeddings_post: None,
+    mock_gpu_status: None,
+    mock_vespa_query: None,
+) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""
     yield
