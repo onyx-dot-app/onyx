@@ -17,8 +17,9 @@ spec:
       {{- end }}
   template:
     metadata:
-      {{- with .Values.celery_worker_user_files_indexing.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.celery_worker_user_files_indexing.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:

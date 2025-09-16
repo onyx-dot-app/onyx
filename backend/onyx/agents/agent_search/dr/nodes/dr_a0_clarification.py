@@ -58,6 +58,7 @@ from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
+from onyx.prompts.prompt_template import PromptTemplate
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -405,19 +406,19 @@ def clarifier(
         active_source_type_descriptions_str = ""
 
     if graph_config.inputs.persona:
-        assistant_system_prompt = (
+        assistant_system_prompt = PromptTemplate(
             graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
-        ) + "\n\n"
+        ).build()
         if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
-                + (graph_config.inputs.persona.task_prompt)
+                + PromptTemplate(graph_config.inputs.persona.task_prompt).build()
             )
         else:
             assistant_task_prompt = ""
 
     else:
-        assistant_system_prompt = DEFAULT_DR_SYSTEM_PROMPT + "\n\n"
+        assistant_system_prompt = PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build()
         assistant_task_prompt = ""
 
     chat_history_string = (

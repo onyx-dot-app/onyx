@@ -88,8 +88,6 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
-            -n 8 \
-            --dist loadfile \
             --durations=8 \
             -o junit_family=xunit2 \
             -xv \

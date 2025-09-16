@@ -15,8 +15,9 @@ spec:
       {{- end }}
   template:
     metadata:
-      {{- with .Values.celery_beat.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.celery_beat.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:

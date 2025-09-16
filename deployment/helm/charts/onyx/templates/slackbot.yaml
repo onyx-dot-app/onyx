@@ -14,8 +14,9 @@ spec:
       {{- end }}
   template:
     metadata:
-      {{- with .Values.slackbot.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.slackbot.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:

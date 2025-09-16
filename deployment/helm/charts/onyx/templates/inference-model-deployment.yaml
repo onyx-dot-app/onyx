@@ -16,6 +16,8 @@ spec:
       {{- end }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- range .Values.inferenceCapability.podLabels }}
         {{ .key }}: {{ .value }}
