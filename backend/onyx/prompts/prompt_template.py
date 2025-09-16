@@ -1,5 +1,6 @@
 import re
-from datetime import datetime
+
+from onyx.prompts.prompt_utils import replace_current_datetime_tag
 
 
 class PromptTemplate:
@@ -48,9 +49,9 @@ class PromptTemplate:
         """Apply global replacements such as [[CURRENT_DATETIME]]."""
         if not text:
             return text
-        # Replace datetime marker with a readable current datetime for LLMs
-        if "[[CURRENT_DATETIME]]" in text:
-            now = datetime.now()
-            formatted = f"{now.strftime('%A')} {now.strftime('%B %d, %Y %H:%M')}"
-            text = text.replace("[[CURRENT_DATETIME]]", formatted)
-        return text
+        # Ensure [[CURRENT_DATETIME]] matches shared prompt formatting
+        return replace_current_datetime_tag(
+            text,
+            full_sentence=True,
+            include_day_of_week=True,
+        )

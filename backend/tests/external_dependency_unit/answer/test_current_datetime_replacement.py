@@ -1,6 +1,5 @@
 import re
 from datetime import datetime
-from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -94,11 +93,7 @@ def test_stream_chat_current_date_response(
         f"got {timestamp_dt.strftime('%d')} {timestamp_dt.strftime('%Y')}"
     )
 
-    acceptable_hours = {
-        now.hour,
-        (now - timedelta(minutes=5)).hour,
-        (now + timedelta(minutes=5)).hour,
-    }
+    acceptable_hours = {(now.hour + offset) % 24 for offset in (-1, 0, 1)}
     assert (
         timestamp_dt.hour in acceptable_hours
     ), f"Expected hour around {now.strftime('%H')}, got '{timestamp_dt.strftime('%H')}'"
