@@ -8,11 +8,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
-import {
-  getSourceDisplayName,
-  getSourceDocLink,
-  getSourceMetadata,
-} from "@/lib/sources";
+import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useRef, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
@@ -63,6 +59,7 @@ import { CreateStdOAuthCredential } from "@/components/credentials/actions/Creat
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
 import { deleteConnector } from "@/lib/connector";
+import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -223,7 +220,6 @@ export default function AddConnector({
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
-  const docsLink = getSourceDocLink(connector);
   if (!credentials || !editableCredentials) {
     return <></>;
   }
@@ -645,20 +641,7 @@ export default function AddConnector({
                   null
                 }
               />
-              {docsLink && (
-                <p className="text-sm mb-4">
-                  Check out
-                  <a
-                    className="text-blue-600 hover:underline"
-                    target="_blank"
-                    href={docsLink}
-                  >
-                    {" "}
-                    our docs{" "}
-                  </a>
-                  for more information on setting up this connector.
-                </p>
-              )}
+              <ConnectorDocsLink sourceType={connector} />
             </CardSection>
           )}
 
