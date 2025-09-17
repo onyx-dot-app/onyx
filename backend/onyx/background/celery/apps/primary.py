@@ -20,6 +20,7 @@ import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
+from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
 from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
@@ -83,11 +84,11 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
-    EXTRA_CONCURRENCY = 4  # small extra fudge factor for connection limits
-
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # type: ignore
-    SqlEngine.init_engine(pool_size=pool_size, max_overflow=EXTRA_CONCURRENCY)
+    SqlEngine.init_engine(
+        pool_size=pool_size, max_overflow=CELERY_WORKER_PRIMARY_POOL_OVERFLOW
+    )
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
