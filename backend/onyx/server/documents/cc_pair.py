@@ -78,7 +78,7 @@ def get_cc_pair_index_attempts(
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
+        cc_pair_id, db_session, user, get_editable=True
     )
     if not cc_pair:
         raise HTTPException(
@@ -112,7 +112,7 @@ def get_cc_pair_full_info(
     tenant_id = get_current_tenant_id()
 
     cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
+        cc_pair_id, db_session, user, get_editable=True
     )
     if not cc_pair:
         raise HTTPException(
