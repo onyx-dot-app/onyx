@@ -67,6 +67,7 @@ def get_embedding_model(
                 show_progress_bar=False,
                 normalize_embeddings=False,
             )
+            logger.info("RoPE pre-warm successful")
         except Exception as e:
             logger.warning(f"RoPE pre-warm skipped/failed: {e}")
 
