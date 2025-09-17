@@ -647,16 +647,16 @@ export default function AddConnector({
               />
               {docsLink && (
                 <p className="text-sm mb-4">
-                  Check our
+                  Check out
                   <a
                     className="text-blue-600 hover:underline"
                     target="_blank"
                     href={docsLink}
                   >
                     {" "}
-                    docs{" "}
+                    our docs{" "}
                   </a>
-                  for information on setting up this connector.
+                  for more information on setting up this connector.
                 </p>
               )}
             </CardSection>
