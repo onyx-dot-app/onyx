@@ -57,45 +57,18 @@ def get_embedding_model(
         Works by calling the underlying HF model directly with dummy IDs/attention.
         """
         try:
-            tfm = st_model[0]
-            hf_model = getattr(tfm, "auto_model", None)
-            tok = getattr(tfm, "tokenizer", None)
-
-            if hf_model is None:
-                dummy_text = "x " * max(1, target_len - 2)
-                st_model.encode(
-                    [dummy_text],
-                    batch_size=1,
-                    convert_to_tensor=True,
-                    show_progress_bar=False,
-                    normalize_embeddings=False,
-                )
-                st_model._rope_prewarmed_to = int(target_len)
-                return
-
-            conf = getattr(hf_model, "config", None)
-            max_pos = getattr(conf, "max_position_embeddings", None)
-            L = min(target_len, max_pos) if max_pos else target_len
-
-            pad_id = getattr(conf, "pad_token_id", None)
-            if pad_id is None and tok is not None:
-                pad_id = tok.pad_token_id
-            if pad_id is None:
-                pad_id = 0
-
-            device = hf_model.device
-            hf_model.eval()
-            with torch.inference_mode():
-                input_ids = torch.full((1, L), pad_id, dtype=torch.long, device=device)
-                attn = torch.ones_like(input_ids)
-                _ = hf_model(input_ids=input_ids, attention_mask=attn)
-
-            st_model._rope_prewarmed_to = int(L)
+            long_text = "x " * (
+                max_context_length * 2
+            )  # ensure > max seq after tokenization
+            _ = model.encode(
+                [long_text],
+                batch_size=1,
+                convert_to_tensor=True,
+                show_progress_bar=False,
+                normalize_embeddings=False,
+            )
         except Exception as e:
-            try:
-                logger.warning(f"RoPE pre-warm skipped/failed: {e}")
-            except Exception:
-                pass
+            logger.warning(f"RoPE pre-warm skipped/failed: {e}")
 
     global _GLOBAL_MODELS_DICT
 
