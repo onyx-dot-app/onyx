@@ -24,7 +24,6 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
-from onyx.llm.llm_provider_options import fetch_available_ollama_models
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
@@ -317,33 +316,6 @@ def get_vision_capable_providers(
 
 
 """Endpoints for all"""
-
-
-@admin_router.get("/ollama/models")
-async def fetch_ollama_models(
-    api_base: str = Query(
-        "http://localhost:11434",
-        description="URL of the Ollama server",
-    ),
-    _: User | None = Depends(current_admin_user),
-) -> list[str]:
-    """
-    Fetch available models from an Ollama server.
-    
-    Args:
-        api_base: Base URL of the Ollama server (e.g., http://localhost:11434)
-        
-    Returns:
-        List of available model names on the Ollama server
-    """
-    try:
-        return fetch_available_ollama_models(api_base=api_base)
-    except Exception as e:
-        logger.error(f"Error fetching Ollama models: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to fetch models from Ollama server at {api_base}: {str(e)}",
-        )
 
 
 @basic_router.get("/provider")

@@ -24,7 +24,6 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-import { FetchOllamaModelsButton } from "./FetchOllamaModelsButton";
 
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
@@ -49,7 +48,6 @@ export function LLMProviderUpdateForm({
 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
@@ -197,7 +195,7 @@ export function LLMProviderUpdateForm({
         } = values;
 
         // For Azure OpenAI, parse target_uri to extract api_base and api_version
-        let finalApiBase = rest.api_base?.trim();
+        let finalApiBase = rest.api_base;
         let finalApiVersion = rest.api_version;
 
         if (llmProviderDescriptor.name === "azure" && target_uri) {
@@ -211,30 +209,16 @@ export function LLMProviderUpdateForm({
           }
         }
 
-        // Normalize api_base: ensure scheme for providers like Ollama
-        if (finalApiBase) {
-          const hasScheme = /^https?:\/\//i.test(finalApiBase);
-          if (!hasScheme) {
-            finalApiBase = `http://${finalApiBase}`;
-          }
-        }
-
         // Create the final payload with proper typing
-        // Persist models from fetched list when available (e.g., Ollama), otherwise use descriptor
-        const modelNamesForSave: string[] =
-          availableModels.length > 0
-            ? availableModels
-            : llmProviderDescriptor.model_configurations.map((m) => m.name);
-
         const finalValues = {
           ...rest,
           api_base: finalApiBase,
           api_version: finalApiVersion,
           api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: modelNamesForSave.map(
-            (name): ModelConfigurationUpsertRequest => ({
-              name,
-              is_visible: visibleModels.includes(name),
+          model_configurations: llmProviderDescriptor.model_configurations.map(
+            (modelConfiguration): ModelConfigurationUpsertRequest => ({
+              name: modelConfiguration.name,
+              is_visible: visibleModels.includes(modelConfiguration.name),
               max_input_tokens: null,
             })
           ),
@@ -432,18 +416,14 @@ export function LLMProviderUpdateForm({
                   name="default_model_name"
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
-                  options={(
-                    availableModels.length > 0
-                      ? availableModels
-                      : llmProviderDescriptor.model_configurations.map(
-                          (m) => m.name
-                        )
-                  ).map((name) => ({
-                    // don't clean up names here to give admins descriptive names / handle duplicates
-                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                    name,
-                    value: name,
-                  }))}
+                  options={llmProviderDescriptor.model_configurations.map(
+                    (modelConfiguration) => ({
+                      // don't clean up names here to give admins descriptive names / handle duplicates
+                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                      name: modelConfiguration.name,
+                      value: modelConfiguration.name,
+                    })
+                  )}
                   maxHeight="max-h-56"
                 />
               ) : (
@@ -453,31 +433,6 @@ export function LLMProviderUpdateForm({
                   label="Default Model"
                   placeholder="E.g. gpt-4"
                 />
-              )}
-
-              {llmProviderDescriptor.name === "ollama" && (
-                <div className="mt-2">
-                  <FetchOllamaModelsButton
-                    apiBase={
-                      // Use the api_base field; if empty, default to localhost
-                      (formikProps.values as any).api_base || "http://localhost:11434"
-                    }
-                    setModels={(models) => {
-                      setAvailableModels(models);
-                      const values: any = formikProps.values;
-                      // Ensure default_model_name is part of the list
-                      if (!models.includes(values.default_model_name)) {
-                        formikProps.setFieldValue(
-                          "default_model_name",
-                          models[0] || ""
-                        );
-                      }
-                      // Update selected_model_names to the fetched models by default
-                      formikProps.setFieldValue("selected_model_names", models);
-                    }}
-                    setPopup={(p) => (setPopup ? setPopup(p) : undefined)}
-                  />
-                </div>
               )}
 
               {llmProviderDescriptor.deployment_name_required && (
@@ -496,18 +451,14 @@ export function LLMProviderUpdateForm({
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
                     label="[Optional] Fast Model"
-                    options={(
-                      availableModels.length > 0
-                        ? availableModels
-                        : llmProviderDescriptor.model_configurations.map(
-                            (m) => m.name
-                          )
-                    ).map((name) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name,
-                      value: name,
-                    }))}
+                    options={llmProviderDescriptor.model_configurations.map(
+                      (modelConfiguration) => ({
+                        // don't clean up names here to give admins descriptive names / handle duplicates
+                        // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                        name: modelConfiguration.name,
+                        value: modelConfiguration.name,
+                      })
+                    )}
                     includeDefault
                     maxHeight="max-h-56"
                   />
@@ -534,23 +485,19 @@ export function LLMProviderUpdateForm({
                       <div className="w-full">
                         <MultiSelectField
                           selectedInitially={
-                            (formikProps.values as any).selected_model_names ?? []
+                            formikProps.values.selected_model_names ?? []
                           }
                           name="selected_model_names"
                           label="Display Models"
                           subtext="Select the models to make available to users. Unselected models will not be available."
-                          options={(
-                            availableModels.length > 0
-                              ? availableModels
-                              : llmProviderDescriptor.model_configurations.map(
-                                  (m) => m.name
-                                )
-                          ).map((name) => ({
-                            value: name,
-                            // don't clean up names here to give admins descriptive names / handle duplicates
-                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                            label: name,
-                          }))}
+                          options={llmProviderDescriptor.model_configurations.map(
+                            (modelConfiguration) => ({
+                              value: modelConfiguration.name,
+                              // don't clean up names here to give admins descriptive names / handle duplicates
+                              // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                              label: modelConfiguration.name,
+                            })
+                          )}
                           onChange={(selected) =>
                             formikProps.setFieldValue(
                               "selected_model_names",

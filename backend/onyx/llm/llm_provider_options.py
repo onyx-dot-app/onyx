@@ -5,8 +5,6 @@ from pydantic import BaseModel
 
 from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
-import requests
-from typing import List, Optional
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -156,40 +154,12 @@ VERTEXAI_VISIBLE_MODEL_NAMES = [
     VERTEXAI_DEFAULT_FAST_MODEL,
 ]
 
-# Ollama Provider Configuration
-OLLAMA_PROVIDER_NAME = "ollama"
-OLLAMA_DEFAULT_MODEL = "gemma3:1b"
-OLLAMA_DEFAULT_FAST_MODEL = "gemma3:1b"
-OLLAMA_MODEL_NAMES = [
-    "llama3",
-    "llama3:8b",
-    "llama3:70b",
-    "mistral",
-    "mixtral",
-    "codellama",
-    "gemma:2b",
-    "gemma:7b",
-    "gemma3:1b",
-    "smollm"
-]
-OLLAMA_VISIBLE_MODEL_NAMES = [
-    "llama3",
-    "llama3:8b",
-    "mistral",
-    "mixtral",
-    "gemma:2b",
-    "gemma:7b",
-    "gemma3:1b",
-    "smollm"
-]
-
 
 _PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
-    OLLAMA_PROVIDER_NAME: OLLAMA_MODEL_NAMES,
 }
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
@@ -197,54 +167,11 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
-    OLLAMA_PROVIDER_NAME: OLLAMA_VISIBLE_MODEL_NAMES,
 }
 
 
-def fetch_available_ollama_models(api_base: Optional[str] = None) -> List[str]:
-    """Fetch available models from Ollama API.
-    
-    Args:
-        api_base: Base URL of the Ollama server. If None, uses default localhost:11434.
-        
-    Returns:
-        List of available model names.
-    """
-    base_url = (api_base or "http://localhost:11434").rstrip('/')
-    try:
-        response = requests.get(f"{base_url}/api/tags", timeout=10)
-        response.raise_for_status()
-        models_data = response.json()
-        return [model["name"] for model in models_data.get("models", [])]
-    except requests.exceptions.RequestException as e:
-        print(f"Error connecting to Ollama API at {base_url}: {e}")
-    except Exception as e:
-        print(f"Unexpected error fetching Ollama models: {e}")
-    # Return default models if API call fails
-    return OLLAMA_MODEL_NAMES
-
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
-    """Fetch all well-known LLM provider configurations."""
     return [
-        # Ollama Provider
-        WellKnownLLMProviderDescriptor(
-            name=OLLAMA_PROVIDER_NAME,
-            display_name="Ollama",
-            api_key_required=False,
-            api_base_required=True,
-            api_version_required=False,
-            # api_base is already a top-level field for providers. Do not also
-            # surface it as a custom_config key to avoid duplicate fields /
-            # validation in the UI.
-            custom_config_keys=[],
-            model_configurations=fetch_model_configurations_for_provider(
-                OLLAMA_PROVIDER_NAME
-            ),
-            default_model=OLLAMA_DEFAULT_MODEL,
-            default_fast_model=OLLAMA_DEFAULT_FAST_MODEL,
-            deployment_name_required=False,
-            single_model_supported=False,
-        ),
         WellKnownLLMProviderDescriptor(
             name=OPENAI_PROVIDER_NAME,
             display_name="OpenAI",
@@ -371,28 +298,9 @@ def fetch_visible_model_names_for_provider_as_set(
 def fetch_model_configurations_for_provider(
     provider_name: str,
 ) -> list[ModelConfigurationView]:
-    # For Ollama, we want to fetch the actual available models
-    if provider_name == OLLAMA_PROVIDER_NAME:
-        try:
-            # Get the actual models from the Ollama server
-            ollama_models = fetch_available_ollama_models()
-            if ollama_models:
-                return [
-                    ModelConfigurationView(
-                        name=model_name,
-                        is_visible=True,  # Make all Ollama models visible
-                        max_input_tokens=4096,  # Default context window
-                        supports_image_input=model_supports_image_input(
-                            model_name=model_name,
-                            model_provider=provider_name,
-                        ),
-                    )
-                    for model_name in ollama_models
-                ]
-        except Exception as e:
-            print(f"Error fetching Ollama models: {e}")
-    
-    # Fallback for other providers
+    # if there are no explicitly listed visible model names,
+    # then we won't mark any of them as "visible". This will get taken
+    # care of by the logic to make default models visible.
     visible_model_names = (
         fetch_visible_model_names_for_provider_as_set(provider_name) or set()
     )

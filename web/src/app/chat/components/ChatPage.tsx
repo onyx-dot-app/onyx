@@ -768,8 +768,7 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-     
-    {showApiKeyModal && (
+      {showApiKeyModal && !shouldShowWelcomeModal && (
         <ApiKeyModal
           hide={() => setShowApiKeyModal(false)}
           setPopup={setPopup}

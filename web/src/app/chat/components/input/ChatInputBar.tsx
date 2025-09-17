@@ -661,7 +661,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 <LLMPopover
                   llmProviders={llmProviders}
                   llmManager={llmManager}
-                  requiresImageGeneration={llmManager.imageFilesPresent}
+                  requiresImageGeneration={true}
                   currentAssistant={selectedAssistant}
                 />
 
