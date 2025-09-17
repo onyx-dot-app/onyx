@@ -43,8 +43,6 @@ def get_embedding_model(
     """
     from sentence_transformers import SentenceTransformer  # type: ignore
     import torch
-    import threading
-    import functools
 
     def _pick_device() -> str:
         if torch.cuda.is_available():
@@ -59,13 +57,11 @@ def get_embedding_model(
         Works by calling the underlying HF model directly with dummy IDs/attention.
         """
         try:
-            # Get underlying HF model + tokenizer from the first transformer module
-            tfm = st_model[0]  # sentence_transformers.models.Transformer
+            tfm = st_model[0]
             hf_model = getattr(tfm, "auto_model", None)
             tok = getattr(tfm, "tokenizer", None)
 
             if hf_model is None:
-                # Fallback: trigger through the ST pipeline (slower, but still builds caches)
                 dummy_text = "x " * max(1, target_len - 2)
                 st_model.encode(
                     [dummy_text],
@@ -77,7 +73,6 @@ def get_embedding_model(
                 st_model._rope_prewarmed_to = int(target_len)
                 return
 
-            # Respect model limits; don't exceed its configured max positions
             conf = getattr(hf_model, "config", None)
             max_pos = getattr(conf, "max_position_embeddings", None)
             L = min(target_len, max_pos) if max_pos else target_len
@@ -97,26 +92,12 @@ def get_embedding_model(
 
             st_model._rope_prewarmed_to = int(L)
         except Exception as e:
-            # Non-fatal: we still have the lock below as a safety net
             try:
                 logger.warning(f"RoPE pre-warm skipped/failed: {e}")
             except Exception:
                 pass
 
-    def _wrap_encode_with_lock(st_model: "SentenceTransformer") -> None:
-        """Serialize encode() to avoid concurrent cache resizes."""
-        lock = threading.Lock()
-        real_encode = st_model.encode
-
-        @functools.wraps(real_encode)
-        def locked_encode(*args, **kwargs):
-            with lock:
-                return real_encode(*args, **kwargs)
-
-        st_model.encode = locked_encode  # type: ignore[attr-defined]
-        st_model._encode_lock = lock  # for debugging/inspection
-
-    global _GLOBAL_MODELS_DICT  # dict[str, SentenceTransformer]
+    global _GLOBAL_MODELS_DICT
 
     if model_name not in _GLOBAL_MODELS_DICT:
         logger.notice(f"Loading {model_name}")
@@ -124,20 +105,15 @@ def get_embedding_model(
         model = SentenceTransformer(
             model_name_or_path=model_name,
             trust_remote_code=True,
-            device=device,  # ensure final device is fixed before pre-warm
+            device=device,
         )
         model.max_seq_length = max_context_length
-
-        # Pre-warm once (so RoPE caches are built and stable) and wrap with a lock
         _prewarm_rope(model, max_context_length)
-        # _wrap_encode_with_lock(model)
-
         _GLOBAL_MODELS_DICT[model_name] = model
     else:
         model = _GLOBAL_MODELS_DICT[model_name]
         if max_context_length != model.max_seq_length:
             model.max_seq_length = max_context_length
-            # If caller raised the context length above previous pre-warm, rebuild once
             prev = getattr(model, "_rope_prewarmed_to", 0)
             if max_context_length > int(prev or 0):
                 _prewarm_rope(model, max_context_length)
