@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any
 
 from onyx.background.celery.tasks.vespa import tasks as vespa_tasks
 
@@ -29,7 +30,7 @@ class _StubRedisDocumentSet:
         self.__class__.reset_called = True
 
 
-def _setup_common_patches(monkeypatch, document_set):
+def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool]:
     calls: dict[str, bool] = {"deleted": False, "synced": False}
 
     monkeypatch.setattr(vespa_tasks, "RedisDocumentSet", _StubRedisDocumentSet)
@@ -40,12 +41,12 @@ def _setup_common_patches(monkeypatch, document_set):
         lambda db_session, document_set_id: document_set,
     )
 
-    def _delete(document_set_row, db_session) -> None:
+    def _delete(document_set_row: Any, db_session: Any) -> None:
         calls["deleted"] = True
 
     monkeypatch.setattr(vespa_tasks, "delete_document_set", _delete)
 
-    def _mark(document_set_id, db_session) -> None:
+    def _mark(document_set_id: Any, db_session: Any) -> None:
         calls["synced"] = True
 
     monkeypatch.setattr(vespa_tasks, "mark_document_set_as_synced", _mark)
@@ -59,7 +60,7 @@ def _setup_common_patches(monkeypatch, document_set):
     return calls
 
 
-def test_monitor_preserves_federated_only_document_set(monkeypatch):
+def test_monitor_preserves_federated_only_document_set(monkeypatch: Any) -> None:
     document_set = SimpleNamespace(
         connector_credential_pairs=[],
         federated_connectors=[object()],
@@ -70,15 +71,15 @@ def test_monitor_preserves_federated_only_document_set(monkeypatch):
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_1",
-        r=SimpleNamespace(scard=lambda key: 0),
-        db_session=SimpleNamespace(),
+        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]
+        db_session=SimpleNamespace(),  # type: ignore[arg-type]
     )
 
     assert calls["synced"] is True
     assert calls["deleted"] is False
 
 
-def test_monitor_deletes_document_set_with_no_connectors(monkeypatch):
+def test_monitor_deletes_document_set_with_no_connectors(monkeypatch: Any) -> None:
     document_set = SimpleNamespace(
         connector_credential_pairs=[],
         federated_connectors=[],
@@ -89,8 +90,8 @@ def test_monitor_deletes_document_set_with_no_connectors(monkeypatch):
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_2",
-        r=SimpleNamespace(scard=lambda key: 0),
-        db_session=SimpleNamespace(),
+        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]
+        db_session=SimpleNamespace(),  # type: ignore[arg-type]
     )
 
     assert calls["deleted"] is True
