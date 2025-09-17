@@ -28,6 +28,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPTransport
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_connection_config
@@ -74,6 +75,7 @@ router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 15  # 15 minutes
 OAUTH_WAIT_SECONDS = 60  # Give the user 1 minute to complete the OAuth flow
+UNUSED_RETURN_PATH = "unused_path"
 
 
 def key_auth_url(user_id: str) -> str:
@@ -122,7 +124,7 @@ class OnyxTokenStorage(TokenStorage):
     async def set_tokens(self, tokens: OAuthToken) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config["tokens"] = tokens.model_dump()
+            config.config["tokens"] = tokens.model_dump(mode="json")
             cfg_headers = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
@@ -147,8 +149,10 @@ class OnyxTokenStorage(TokenStorage):
     async def set_client_info(self, info: OAuthClientInformationFull) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config["client_info"] = info.model_dump()
+            config.config["client_info"] = info.model_dump(mode="json")
             update_connection_config(config.id, db_session, config.config)
+            if self.alt_config_id:
+                update_connection_config(self.alt_config_id, db_session, config.config)
 
 
 def make_oauth_provider(
@@ -159,6 +163,8 @@ def make_oauth_provider(
     admin_config_id: int | None,
 ) -> OAuthClientProvider:
     async def redirect_handler(auth_url: str) -> None:
+        if return_path == UNUSED_RETURN_PATH:
+            raise ValueError("Please Reconnect to the server")
         r = get_redis_client()
         # The SDK generated & embedded 'state' in the auth_url; extract & store it.
         parsed = urlparse(auth_url)
@@ -310,12 +316,15 @@ def _build_headers_from_template(
 def test_mcp_server_credentials(
     server_url: str,
     connection_headers: dict[str, str] | None,
-    transport: str = "streamable-http",
+    auth: OAuthClientProvider | None,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
 ) -> tuple[bool, str]:
     """Test if credentials work by calling the MCP server's tools/list endpoint"""
     try:
         # Attempt to discover tools using the provided credentials
-        tools = discover_mcp_tools(server_url, connection_headers, transport=transport)
+        tools = discover_mcp_tools(
+            server_url, connection_headers, transport=transport, auth=auth
+        )
 
         if (
             tools is not None and len(tools) >= 0
@@ -399,6 +408,7 @@ async def _connect_oauth(
 
     # Step 1: make unauthenticated request and parse returned www authenticate header
     # Ensure we have a trailing slash for the MCP endpoint
+    transport = mcp_server.transport
     probe_url = mcp_server.server_url.rstrip("/") + "/"
     logger.info(f"Probing OAuth server at: {probe_url}")
 
@@ -440,19 +450,72 @@ async def _connect_oauth(
     # the auth_url for us to send to the frontend. The callback handler waits for
     # the auth code to be available in redis; this code gets set by our callback endpoint
     # which is called by the frontend after the user goes through the login flow.
-    asyncio.create_task(initialize_mcp_client(probe_url, auth=oauth_auth))
-
-    # Wait for the first part of the oauth handshake to complete: getting the auth url
-    r = get_redis_client()
-    # Run the blocking blpop operation in a thread pool to avoid blocking the event loop
-    loop = asyncio.get_running_loop()
-    auth_url_raw = await loop.run_in_executor(
-        None, lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS)
+    init_task = asyncio.create_task(
+        initialize_mcp_client(probe_url, transport=transport, auth=oauth_auth)
     )
-    if auth_url_raw is None:
-        raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
-    auth_url = cast(tuple[bytes, bytes], auth_url_raw)
-    oauth_url = auth_url[1].decode()
+
+    # Wait for whichever happens first:
+    # 1) The OAuth redirect URL becomes available in Redis (we should return it)
+    # 2) The initialize task completes (tokens already valid) — return to the provided return_path
+    r = get_redis_client()
+    loop = asyncio.get_running_loop()
+
+    async def wait_auth_url() -> str | None:
+        raw = await loop.run_in_executor(
+            None,
+            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
+        )
+        if raw is None:
+            return None
+        tup = cast(tuple[bytes, bytes], raw)
+        return tup[1].decode()
+
+    auth_task = asyncio.create_task(wait_auth_url())
+
+    done, pending = await asyncio.wait(
+        {auth_task, init_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+
+    # If we got an auth URL first, return it
+    if auth_task in done:
+        oauth_url = await auth_task
+        # If no URL was retrieved within the timeout, treat as error
+        if not oauth_url:
+            # If initialization also finished, treat as already authenticated
+            if init_task.done() and not init_task.cancelled():
+                try:
+                    _ = init_task.exception()
+                except Exception:
+                    pass
+                return MCPUserOAuthConnectResponse(
+                    server_id=int(request.server_id),
+                    oauth_url=request.return_path,
+                )
+            raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+
+        # Cancel the init task if still running
+        for t in pending:
+            t.cancel()
+        logger.info(
+            f"Connected to auth url: {oauth_url} for mcp server: {mcp_server.name}"
+        )
+        return MCPUserOAuthConnectResponse(
+            server_id=int(request.server_id), oauth_url=oauth_url
+        )
+
+    # Otherwise, initialization finished first — no redirect needed; go back to return_path
+    for t in pending:
+        t.cancel()
+    try:
+        _ = init_task.result()
+    except Exception:
+        # If initialize failed and we also didn't get an auth URL, surface an error
+        raise HTTPException(status_code=400, detail="Failed to initialize OAuth client")
+
+    return MCPUserOAuthConnectResponse(
+        server_id=int(request.server_id),
+        oauth_url=request.return_path,
+    )
 
     # client_info = oauth_auth.context.client_info
     # authz_ep = client_info.
@@ -506,13 +569,7 @@ async def _connect_oauth(
 
     # logger.info(f"Generated OAuth URL: {authz_url}")
 
-    logger.info(f"Connected to auth url: {oauth_url} for mcp server: {mcp_server.name}")
-
-    # TODO: can just give back empty 200
-    return MCPUserOAuthConnectResponse(
-        server_id=int(request.server_id),
-        oauth_url=oauth_url,
-    )
+    # Unreachable due to early returns above
 
 
 # TODO: move code over to the async callback above
@@ -738,8 +795,20 @@ def save_user_credentials(
     validation_message = "Credentials saved successfully"
 
     try:
+        auth = None
+        if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
+            auth = make_oauth_provider(
+                mcp_server,
+                email,
+                UNUSED_RETURN_PATH,
+                request.server_id,
+                mcp_server.admin_connection_config_id,
+            )
         is_valid, test_message = test_mcp_server_credentials(
-            mcp_server.server_url, config_data["headers"], transport=request.transport
+            mcp_server.server_url,
+            config_data["headers"],
+            transport=MCPTransport(request.transport),
+            auth=auth,
         )
         validation_tested = True
 
@@ -852,7 +921,10 @@ def _db_mcp_server_to_api_mcp_server(
         if user_authenticated and user_config:
             try:
                 is_valid, _ = test_mcp_server_credentials(
-                    db_server.server_url, user_config.config.get("headers", {})
+                    db_server.server_url,
+                    user_config.config.get("headers", {}),
+                    None,
+                    transport=db_server.transport,
                 )
                 user_authenticated = is_valid
                 if (
@@ -920,6 +992,7 @@ def _db_mcp_server_to_api_mcp_server(
         name=db_server.name,
         description=db_server.description,
         server_url=db_server.server_url,
+        transport=db_server.transport,
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
         is_authenticated=is_authenticated,
@@ -1066,10 +1139,29 @@ def _list_mcp_tools_by_id(
     # can of course put their own credentials in and list the tools.
     connection_config = _get_connection_config(mcp_server, is_admin, user, db)
 
+    if not connection_config and mcp_server.auth_type != MCPAuthenticationType.NONE:
+        raise HTTPException(
+            status_code=401,
+            detail="This MCP server is not configured yet",
+        )
+
+    user_id = str(user.id) if user else ""
     # Discover tools from the MCP server
+    auth = None
+    if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
+        assert connection_config  # for mypy
+        auth = make_oauth_provider(
+            mcp_server,
+            user_id,
+            "unused_path",
+            connection_config.id,
+            mcp_server.admin_connection_config_id,
+        )
     tools = discover_mcp_tools(
         mcp_server.server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
+        transport=mcp_server.transport,
+        auth=auth,
     )
 
     # TODO: Also list resources from the MCP server
@@ -1111,6 +1203,10 @@ def _upsert_mcp_server(
                 "client_info"
             )
             if client_info_raw:
+                from mcp.shared.auth import (
+                    OAuthClientInformationFull,
+                )  # ??? why is this necessary?
+
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
 
         changing_connection_config = (
@@ -1143,6 +1239,7 @@ def _upsert_mcp_server(
             server_url=request.server_url,
             auth_type=request.auth_type,
             auth_performer=request.auth_performer,
+            transport=request.transport,
         )
 
         logger.info(
@@ -1176,6 +1273,7 @@ def _upsert_mcp_server(
             description=request.description,
             server_url=request.server_url,
             auth_type=request.auth_type,
+            transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             auth_performer=request.auth_performer,
             db_session=db_session,
         )
@@ -1233,14 +1331,27 @@ def _upsert_mcp_server(
                 user_config.mcp_server_id = mcp_server.id
             admin_connection_config_id = template_config.id
         elif request.auth_type == MCPAuthenticationType.OAUTH:
-            assert request.oauth_client_id and request.oauth_client_secret
+            # Create initial admin config. If client credentials were provided,
+            # seed client_info so the OAuth provider can skip dynamic
+            # registration; otherwise, the provider will attempt it.
+            cfg: MCPConnectionData = MCPConnectionData(headers={})
+            if request.oauth_client_id:
+                from mcp.shared.auth import OAuthClientInformationFull
+                from pydantic import AnyUrl
+
+                client_info = OAuthClientInformationFull(
+                    client_id=request.oauth_client_id,
+                    client_secret=request.oauth_client_secret,
+                    redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
+                    grant_types=["authorization_code", "refresh_token"],
+                    response_types=["code"],
+                    scope="user",
+                    # default token_endpoint_auth_method is client_secret_post
+                )
+                cfg["client_info"] = client_info.model_dump()
+
             admin_config = create_connection_config(
-                config_data=MCPConnectionData(
-                    # client_id=request.oauth_client_id,
-                    # client_secret=request.oauth_client_secret,
-                    # TODO: actually use the above when dynamic client reg is not available
-                    headers={},  # will be set during oauth connection flow
-                ),
+                config_data=cfg,
                 mcp_server_id=mcp_server.id,
                 user_email="",
                 db_session=db_session,
@@ -1273,14 +1384,26 @@ def _add_tools_to_server(
 ) -> int:
     created_tools = 0
     # First, discover available tools from the server to get full definitions
-    # TODO: make this configurable
-    transport = "streamable-http"
 
     connection_config = _get_connection_config(mcp_server, True, user, db_session)
     headers = connection_config.config.get("headers", {}) if connection_config else {}
 
+    auth = None
+    if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
+        user_id = str(user.id) if user else ""
+        assert connection_config
+        auth = make_oauth_provider(
+            mcp_server,
+            user_id,
+            UNUSED_RETURN_PATH,
+            connection_config.id,
+            mcp_server.admin_connection_config_id,
+        )
     available_tools = discover_mcp_tools(
-        mcp_server.server_url, headers, transport=transport
+        mcp_server.server_url,
+        headers,
+        transport=mcp_server.transport,
+        auth=auth,
     )
     tools_by_name = {tool.name: tool for tool in available_tools}
 

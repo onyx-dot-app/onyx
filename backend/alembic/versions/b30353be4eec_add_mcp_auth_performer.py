@@ -1,19 +1,19 @@
 """add_mcp_auth_performer
 
 Revision ID: b30353be4eec
-Revises: 8818cf73fa1a
+Revises: 505c488f6662
 Create Date: 2025-09-13 14:58:08.413534
 
 """
 
 from alembic import op
 import sqlalchemy as sa
-from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationPerformer, MCPTransport
 
 
 # revision identifiers, used by Alembic.
 revision = "b30353be4eec"
-down_revision = "8818cf73fa1a"
+down_revision = "505c488f6662"
 branch_labels = None
 depends_on = None
 
@@ -29,7 +29,16 @@ def upgrade() -> None:
         ),
     )
 
-    # Backfill values using existing data and inference rules
+    op.add_column(
+        "mcp_server",
+        sa.Column(
+            "transport",
+            sa.Enum(MCPTransport, native_enum=False),
+            nullable=True,
+        ),
+    )
+
+    # # Backfill values using existing data and inference rules
     bind = op.get_bind()
 
     # 1) OAUTH servers are always PER_USER
@@ -88,6 +97,25 @@ def upgrade() -> None:
         nullable=False,
     )
 
+    # Backfill transport for existing rows to STREAMABLE_HTTP, then make non-nullable
+    bind.execute(
+        sa.text(
+            """
+        UPDATE mcp_server
+        SET transport = 'STREAMABLE_HTTP'
+        WHERE transport IS NULL
+        """
+        )
+    )
+
+    op.alter_column(
+        "mcp_server",
+        "transport",
+        existing_type=sa.Enum(MCPTransport, native_enum=False),
+        nullable=False,
+    )
+
 
 def downgrade() -> None:
+    op.drop_column("mcp_server", "transport")
     op.drop_column("mcp_server", "auth_performer")

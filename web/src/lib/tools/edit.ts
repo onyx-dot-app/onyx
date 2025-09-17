@@ -138,6 +138,7 @@ export async function createMCPServer(serverData: {
   name: string;
   description?: string;
   server_url: string;
+  transport: string;
   auth_type: MCPAuthenticationType;
   auth_performer?: MCPAuthenticationPerformer;
   api_token?: string;

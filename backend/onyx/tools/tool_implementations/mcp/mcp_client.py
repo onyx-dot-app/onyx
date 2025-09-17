@@ -24,6 +24,7 @@ from mcp.types import ListResourcesResult
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
+from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -31,14 +32,6 @@ logger = setup_logger()
 T = TypeVar("T", covariant=True)
 
 MCPClientFunction = Callable[[ClientSession], Awaitable[T]]
-
-
-class MCPTransport(str, Enum):
-    """MCP transport types"""
-
-    STDIO = "stdio"
-    SSE = "sse"  # Server-Sent Events (deprecated but still used)
-    HTTP_STREAM = "streamable-http"  # Modern HTTP streaming
 
 
 class MCPMessageType(str, Enum):
@@ -103,7 +96,7 @@ class MCPMessage(BaseModel):
 #     def __init__(
 #         self,
 #         server_url: str,
-#         transport: MCPTransport = MCPTransport.HTTP_STREAM,
+#         transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
 #         auth_token: str | None = None,
 #     ):
 #         self.server_url = server_url
@@ -130,18 +123,30 @@ def _create_mcp_client_function_runner(
     function: Callable[[ClientSession], Awaitable[T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
-    transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
     **kwargs: Any,
 ) -> Callable[[], Awaitable[T]]:
     auth_headers = connection_headers or {}
-    sep = "?" if "?" not in server_url else "&"
-    server_url = (
-        server_url.rstrip("/") + sep + urlencode({"transportType": transport.value})
-    )
+    # Normalize URL to include a trailing slash to avoid 404s on servers
+    # that differentiate between "/path" and "/path/" for the MCP endpoint.
+    normalized_url = server_url.rstrip("/") + "/"
+    # Only append transportType for Streamable HTTP; SSE endpoints typically
+    # do not require or expect this query parameter and may 404 otherwise.
+    if transport == MCPTransport.STREAMABLE_HTTP:
+        sep = "?" if "?" not in normalized_url else "&"
+        server_url = (
+            normalized_url + sep + urlencode({"transportType": "streamable-http"})
+        )
+    else:
+        # For SSE transport, use the base URL without appending /sse/
+        # The MCP library will handle the SSE connection internally
+        server_url = server_url.rstrip("/")
 
     client_func = (
-        streamablehttp_client if transport == MCPTransport.HTTP_STREAM else sse_client
+        streamablehttp_client
+        if transport == MCPTransport.STREAMABLE_HTTP
+        else sse_client
     )
 
     async def run_client_function() -> T:
@@ -160,7 +165,7 @@ def _call_mcp_client_function_sync(
     function: Callable[[ClientSession], Awaitable[T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
-    transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     **kwargs: Any,
 ) -> T:
@@ -189,7 +194,7 @@ async def _call_mcp_client_function_async(
     function: Callable[[ClientSession], Awaitable[T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
-    transport: MCPTransport = MCPTransport.HTTP_STREAM,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     **kwargs: Any,
 ) -> T:
@@ -225,7 +230,7 @@ def call_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
     connection_headers: dict[str, str] | None = None,
-    transport: str = "streamable-http",
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> str:
     """Call a specific tool on the MCP server"""
@@ -233,7 +238,7 @@ def call_mcp_tool(
         _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
-        MCPTransport(transport),
+        transport,
         auth,
     )
 
@@ -241,14 +246,14 @@ def call_mcp_tool(
 async def initialize_mcp_client(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
-    transport: str = "streamable-http",
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> InitializeResult:
     return await _call_mcp_client_function_async(
         lambda session: session.initialize(),
         server_url,
         connection_headers,
-        MCPTransport(transport),
+        transport,
         auth,
     )
 
@@ -266,7 +271,7 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
 def discover_mcp_tools(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
-    transport: str = "streamable-http",
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> list[MCPLibTool]:
     """
@@ -276,7 +281,7 @@ def discover_mcp_tools(
         _discover_mcp_tools,
         server_url,
         connection_headers,
-        MCPTransport(transport),
+        transport,
         auth,
     )
 

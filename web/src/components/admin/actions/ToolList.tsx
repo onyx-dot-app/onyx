@@ -54,55 +54,66 @@ export function ToolList({
     setListingTools(true);
 
     try {
-      // Step 1: Create/update the MCP server with credentials
-      const serverData = {
-        name: values.name,
-        description: values.description,
-        server_url: values.server_url,
-        auth_type: values.auth_type,
-        auth_performer:
-          values.auth_type !== MCPAuthenticationType.NONE
-            ? values.auth_performer
-            : undefined,
-        api_token:
-          values.auth_type === MCPAuthenticationType.API_TOKEN &&
-          values.auth_performer === MCPAuthenticationPerformer.ADMIN
-            ? values.api_token
-            : undefined,
-        auth_template:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER
-            ? values.auth_template
-            : undefined,
-        admin_credentials:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER
-            ? values.user_credentials || {}
-            : undefined,
-        oauth_client_id:
-          values.auth_type === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_id
-            : undefined,
-        oauth_client_secret:
-          values.auth_type === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_secret
-            : undefined,
-        existing_server_id: serverId,
-      };
+      let newServerId = serverId;
 
-      const { data: serverResult, error: serverError } =
-        await createMCPServer(serverData);
+      // For OAuth servers, skip server creation since it's already handled by the OAuth connection
+      if (values.auth_type !== MCPAuthenticationType.OAUTH) {
+        // Step 1: Create/update the MCP server with credentials
+        const serverData = {
+          name: values.name,
+          description: values.description,
+          server_url: values.server_url,
+          auth_type: values.auth_type,
+          auth_performer:
+            values.auth_type !== MCPAuthenticationType.NONE
+              ? values.auth_performer
+              : undefined,
+          api_token:
+            values.auth_type === MCPAuthenticationType.API_TOKEN &&
+            values.auth_performer === MCPAuthenticationPerformer.ADMIN
+              ? values.api_token
+              : undefined,
+          auth_template:
+            values.auth_performer === MCPAuthenticationPerformer.PER_USER
+              ? values.auth_template
+              : undefined,
+          admin_credentials:
+            values.auth_performer === MCPAuthenticationPerformer.PER_USER
+              ? values.user_credentials || {}
+              : undefined,
+          oauth_client_id: undefined,
+          oauth_client_secret: undefined,
+          transport: values.transport,
+          existing_server_id: serverId,
+        };
 
-      if (serverError || !serverResult) {
-        setPopup({
-          message: serverError || "Failed to create server",
-          type: "error",
-        });
-        setListingTools(false);
-        return;
+        const { data: serverResult, error: serverError } =
+          await createMCPServer(serverData);
+
+        if (serverError || !serverResult) {
+          setPopup({
+            message: serverError || "Failed to create server",
+            type: "error",
+          });
+          setListingTools(false);
+          return;
+        }
+
+        // Update serverId for subsequent operations
+        newServerId = serverResult.server_id;
+        setCurrentServerId(newServerId);
+      } else {
+        // For OAuth servers, use the existing serverId
+        if (!serverId) {
+          setPopup({
+            message: "Please reconnect to the OAuth server",
+            type: "error",
+          });
+          setListingTools(false);
+          return;
+        }
+        newServerId = serverId;
       }
-
-      // Update serverId for subsequent operations
-      const newServerId = serverResult.server_id;
-      setCurrentServerId(newServerId);
 
       // List available tools from the saved server
       const promises: Promise<Response>[] = [

@@ -12,6 +12,7 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPTransport
 
 # This should be updated along with MCPConnectionData
 MCPOAuthKeysType = Literal["client_info", "tokens", "metadata"]
@@ -67,6 +68,9 @@ class MCPToolCreateRequest(BaseModel):
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
+    transport: MCPTransport | None = Field(
+        None, description="MCP transport type (streamable-http or sse)"
+    )
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Template configuration for per-user authentication"
     )
@@ -115,15 +119,9 @@ class MCPToolCreateRequest(BaseModel):
                     "admin_credentials is required when auth_performer is 'per_user'"
                 )
 
-        if self.auth_type == MCPAuthenticationType.OAUTH and not self.oauth_client_id:
-            raise ValueError("oauth_client_id is required when auth_type is 'oauth'")
-        if (
-            self.auth_type == MCPAuthenticationType.OAUTH
-            and not self.oauth_client_secret
-        ):
-            raise ValueError(
-                "oauth_client_secret is required when auth_type is 'oauth'"
-            )
+        # OAuth client ID/secret are optional. If provided, they will seed the
+        # OAuth client info; otherwise, the MCP client will attempt dynamic
+        # client registration.
 
         return self
 
@@ -266,6 +264,7 @@ class MCPServer(BaseModel):
     name: str
     description: Optional[str] = None
     server_url: str
+    transport: MCPTransport
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer
     is_authenticated: bool
