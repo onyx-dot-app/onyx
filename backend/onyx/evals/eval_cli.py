@@ -67,7 +67,6 @@ def run_local(
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-    setup_braintrust()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")
