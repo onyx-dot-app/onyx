@@ -42,14 +42,6 @@ def get_embedding_model(
     pre-warms rotary caches once, and wraps encode() with a lock to avoid cache races.
     """
     from sentence_transformers import SentenceTransformer  # type: ignore
-    import torch
-
-    def _pick_device() -> str:
-        if torch.cuda.is_available():
-            return "cuda"
-        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-            return "mps"
-        return "cpu"
 
     def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
         """
@@ -57,10 +49,11 @@ def get_embedding_model(
         Works by calling the underlying HF model directly with dummy IDs/attention.
         """
         try:
-            long_text = "x " * (
-                max_context_length * 2
-            )  # ensure > max seq after tokenization
-            _ = model.encode(
+            # ensure > max seq after tokenization
+            # Ideally we would use the saved tokenizer, but whatever it's ok
+            # we'll make an assumption about tokenization here
+            long_text = "x " * (target_len * 2)
+            _ = st_model.encode(
                 [long_text],
                 batch_size=1,
                 convert_to_tensor=True,
@@ -75,11 +68,9 @@ def get_embedding_model(
 
     if model_name not in _GLOBAL_MODELS_DICT:
         logger.notice(f"Loading {model_name}")
-        device = _pick_device()
         model = SentenceTransformer(
             model_name_or_path=model_name,
             trust_remote_code=True,
-            device=device,
         )
         model.max_seq_length = max_context_length
         _prewarm_rope(model, max_context_length)
