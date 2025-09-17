@@ -43,7 +43,9 @@ def test_build_documents_blocks_formats_naive_timestamp(
 
     def fake_timeago_format(doc_dt: datetime, now: datetime) -> str:
         captured["doc"] = doc_dt
-        return original_timeago_format(doc_dt, now)
+        result = original_timeago_format(doc_dt, now)
+        captured["result"] = result
+        return result
 
     monkeypatch.setattr(
         "onyx.onyxbot.slack.blocks.timeago.format",
@@ -57,8 +59,10 @@ def test_build_documents_blocks_formats_naive_timestamp(
 
     assert len(blocks) >= 2
     section_block = blocks[1].to_dict()
-    # NOTE: will need to be updated after another year.
-    expected_text = "<https://example.com|Example Doc>\n_Updated 1 year ago_\n>"
+    assert "result" in captured
+    expected_text = (
+        "<https://example.com|Example Doc>\n_Updated " f"{captured['result']}_\n>"
+    )
     assert section_block["text"]["text"] == expected_text
 
     assert "doc" in captured
