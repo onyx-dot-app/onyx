@@ -333,7 +333,14 @@ def _build_sources_blocks(
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
         days_ago_str = (
-            timeago.format(d.updated_at, datetime.now(pytz.utc))
+            timeago.format(
+                (
+                    d.updated_at.replace(tzinfo=pytz.UTC)
+                    if d.updated_at and d.updated_at.tzinfo is None
+                    else d.updated_at
+                ),
+                datetime.now(pytz.UTC),
+            )
             if d.updated_at
             else None
         )

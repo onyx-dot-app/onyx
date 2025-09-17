@@ -8,6 +8,7 @@ from onyx.context.search.models import SearchQuery
 from onyx.federated_connectors.models import CredentialField
 from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
+from onyx.onyxbot.slack.models import SlackContext
 
 
 class FederatedConnector(ABC):
@@ -86,6 +87,9 @@ class FederatedConnector(ABC):
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,
+        # Slack-specific parameters
+        slack_event_context: SlackContext | None = None,
+        bot_token: str | None = None,
     ) -> list[InferenceChunk]:
         """
         Perform a federated search using the provided query and entities.
@@ -95,6 +99,8 @@ class FederatedConnector(ABC):
             entities: The entities to search within (validated by validate())
             access_token: The OAuth access token
             limit: Maximum number of results to return
+            slack_event_context: Slack-specific context (only used by Slack bot)
+            bot_token: Slack bot token (only used by Slack bot)
 
         Returns:
             Search results in a standardized format
