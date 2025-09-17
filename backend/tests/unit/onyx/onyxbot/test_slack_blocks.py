@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 import pytz
-import timeago
+import timeago  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
