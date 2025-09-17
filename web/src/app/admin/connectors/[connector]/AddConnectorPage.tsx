@@ -8,7 +8,11 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+} from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useRef, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
@@ -219,6 +223,7 @@ export default function AddConnector({
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
+  const docsLink = getSourceDocLink(connector);
   if (!credentials || !editableCredentials) {
     return <></>;
   }
@@ -640,6 +645,20 @@ export default function AddConnector({
                   null
                 }
               />
+              {docsLink && (
+                <p className="text-sm mb-4">
+                  Check our
+                  <a
+                    className="text-blue-600 hover:underline"
+                    target="_blank"
+                    href={docsLink}
+                  >
+                    {" "}
+                    docs{" "}
+                  </a>
+                  for information on setting up this connector.
+                </p>
+              )}
             </CardSection>
           )}
 
