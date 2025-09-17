@@ -100,6 +100,7 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
+from onyx.utils.memory_logger import log_memory_usage
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -1279,6 +1280,10 @@ def _docprocessing_task(
         f"batch_num={batch_num} "
     )
 
+    log_memory_usage(
+        f"docprocessing_task:start:batch_{batch_num}:attempt_{index_attempt_id}"
+    )
+
     # Get the document batch storage
     storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
 
@@ -1297,7 +1302,16 @@ def _docprocessing_task(
     per_batch_lock: RedisLock | None = None
     try:
         # Retrieve documents from storage
+        log_memory_usage(
+            f"docprocessing_task:before_load_batch_{batch_num}:attempt_{index_attempt_id}"
+        )
         documents = storage.get_batch(batch_num)
+        log_memory_usage(
+            f"docprocessing_task:after_load_batch_{batch_num}:attempt_{index_attempt_id}",
+            documents,
+            f"batch_{batch_num}_documents",
+        )
+
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
@@ -1369,6 +1383,12 @@ def _docprocessing_task(
                 f"Processing {len(documents)} documents through indexing pipeline"
             )
 
+            log_memory_usage(
+                f"docprocessing_task:before_indexing_pipeline:batch_{batch_num}:attempt_{index_attempt_id}",
+                documents,
+                f"batch_{batch_num}_documents_before_pipeline",
+            )
+
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
@@ -1379,6 +1399,12 @@ def _docprocessing_task(
                 tenant_id=tenant_id,
                 document_batch=documents,
                 index_attempt_metadata=index_attempt_metadata,
+            )
+
+            log_memory_usage(
+                f"docprocessing_task:after_indexing_pipeline:batch_{batch_num}:attempt_{index_attempt_id}",
+                index_pipeline_result,
+                f"batch_{batch_num}_pipeline_result",
             )
 
         # Update batch completion and document counts atomically using database coordination
@@ -1458,7 +1484,14 @@ def _docprocessing_task(
             f"elapsed={elapsed_time:.2f}s"
         )
 
+        log_memory_usage(
+            f"docprocessing_task:completed:batch_{batch_num}:attempt_{index_attempt_id}"
+        )
+
     except Exception:
+        log_memory_usage(
+            f"docprocessing_task:exception:batch_{batch_num}:attempt_{index_attempt_id}"
+        )
         task_logger.exception(
             f"Document batch processing failed: "
             f"batch_num={batch_num} "
