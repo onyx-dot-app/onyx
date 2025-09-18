@@ -19,6 +19,7 @@ from zipfile import BadZipFile
 import chardet
 from markitdown import FileConversionException
 from markitdown import MarkItDown
+from markitdown import StreamInfo
 from markitdown import UnsupportedFormatException
 from PIL import Image
 from pypdf import PdfReader
@@ -30,7 +31,11 @@ from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
+from onyx.utils.file_types import PRESENTATION_MIME_TYPE
+from onyx.utils.file_types import SPREADSHEET_MIME_TYPE
+from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
+from onyx.utils.memory_logger import log_memory_usage
 
 logger = setup_logger()
 
@@ -79,6 +84,15 @@ IMAGE_MEDIA_TYPES = [
     "image/jpeg",
     "image/webp",
 ]
+
+_MARKITDOWN_CONVERTER: MarkItDown | None = None
+
+
+def get_markitdown_converter() -> MarkItDown:
+    global _MARKITDOWN_CONVERTER
+    if _MARKITDOWN_CONVERTER is None:
+        _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
+    return _MARKITDOWN_CONVERTER
 
 
 class OnyxExtensionType(IntFlag):
@@ -338,9 +352,31 @@ def docx_to_text_and_images(
     of avoiding materializing the list of images in memory.
     The images list returned is empty in this case.
     """
-    md = MarkItDown(enable_plugins=False)
+    log_memory_usage(
+        "docx_to_text_and_images:before_md_create",
+        file,
+        "file",
+    )
+    md = get_markitdown_converter()
+    log_memory_usage(
+        "docx_to_text_and_images:after_md_create",
+        md,
+        "md",
+    )
     try:
-        doc = md.convert(to_bytesio(file))
+        log_memory_usage(
+            "docx_to_text_and_images:before_md_convert",
+            file,
+            "file",
+        )
+        doc = md.convert(
+            to_bytesio(file), stream_info=StreamInfo(mimetype=WORD_PROCESSING_MIME_TYPE)
+        )
+        log_memory_usage(
+            "docx_to_text_and_images:after_md_convert",
+            doc,
+            "doc",
+        )
     except (
         BadZipFile,
         ValueError,
@@ -372,9 +408,12 @@ def docx_to_text_and_images(
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
-    md = MarkItDown(enable_plugins=False)
+    md = get_markitdown_converter()
+    stream_info = StreamInfo(
+        mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
+    )
     try:
-        presentation = md.convert(to_bytesio(file))
+        presentation = md.convert(to_bytesio(file), stream_info=stream_info)
     except (
         BadZipFile,
         ValueError,
@@ -388,9 +427,12 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    md = MarkItDown(enable_plugins=False)
+    md = get_markitdown_converter()
+    stream_info = StreamInfo(
+        mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
+    )
     try:
-        workbook = md.convert(to_bytesio(file))
+        workbook = md.convert(to_bytesio(file), stream_info=stream_info)
     except (
         BadZipFile,
         ValueError,
@@ -531,6 +573,35 @@ def extract_text_and_images(
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
     """
+    res = _extract_text_and_images(
+        file, file_name, pdf_pass, content_type, image_callback
+    )
+    # Clean up any temporary objects and force garbage collection
+    import gc
+
+    log_memory_usage(
+        "extract_text_and_images:before_gc_collect",
+        gc,
+        "gc",
+    )
+    unreachable = gc.collect()
+    logger.info(f"Unreachable objects: {unreachable}")
+    log_memory_usage(
+        "extract_text_and_images:after_gc_collect",
+        gc,
+        "gc",
+    )
+
+    return res
+
+
+def _extract_text_and_images(
+    file: IO[Any],
+    file_name: str,
+    pdf_pass: str | None = None,
+    content_type: str | None = None,
+    image_callback: Callable[[bytes, str], None] | None = None,
+) -> ExtractionResult:
     file.seek(0)
 
     if get_unstructured_api_key():
@@ -559,8 +630,23 @@ def extract_text_and_images(
 
         # docx example for embedded images
         if extension == ".docx":
+            log_memory_usage(
+                "extract_text_and_images:before_docx_to_text_and_images",
+                file,
+                "file",
+            )
             text_content, images = docx_to_text_and_images(
                 file, file_name, image_callback=image_callback
+            )
+            log_memory_usage(
+                "extract_text_and_images:after_docx_to_text_and_images",
+                text_content,
+                "text_content",
+            )
+            log_memory_usage(
+                "extract_text_and_images:after_docx_to_text_and_images",
+                images,
+                "images",
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
