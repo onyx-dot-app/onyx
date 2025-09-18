@@ -119,6 +119,11 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
             if chat_file_type != ChatFileType.IMAGE
             else chat_file_type
         )
+
+        # if we have plaintext for image (which happens when image extraction is enabled), we use PLAIN_TEXT type
+        if file_io is not None:
+            plaintext_chat_file_type = ChatFileType.PLAIN_TEXT
+
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
             content=file_io.read(),

@@ -68,7 +68,7 @@ export default function CreateProjectModal({
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full focus-visible:border focus-visible:border-neutral-200 focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
+            removeFocusRing
           />
         </div>
         <div className="flex justify-end gap-3 pt-2 w-full">

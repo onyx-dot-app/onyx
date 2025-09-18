@@ -111,8 +111,11 @@ function CollapsibleFolder({
           <button
             type="button"
             onClick={() => {
-              setOpen(true);
-              onToggle?.(true);
+              setOpen((v) => {
+                const next = !v;
+                onToggle?.(next);
+                return next;
+              });
               onNameClick?.();
             }}
             className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
@@ -290,7 +293,7 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
               ))
             ) : (
               <div className="text-xs text-neutral-500 px-2 py-1">
-                This project doesn’t have any chats.
+                This project doesn’t have any chat sessions yet.
               </div>
             )}
           </CollapsibleFolder>

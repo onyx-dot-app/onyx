@@ -65,7 +65,7 @@ export default function FilePicker({
       />
       <Menubar className="bg-transparent dark:bg-transparent p-0 border-0">
         <MenubarMenu>
-          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 py-1.5 px-0 h-8">
+          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text py-1.5 px-0 h-8">
             {showTriggerLabel ? (
               <div
                 className={cn(
@@ -111,7 +111,7 @@ export default function FilePicker({
                         ? onPickRecent(f)
                         : console.log("Picked recent", f)
                     }
-                    className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
+                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
                   >
                     <Row>
                       {String(f.status).toLowerCase() === "processing" ? (
@@ -128,7 +128,7 @@ export default function FilePicker({
                 {recentFiles.length > 3 && (
                   <MenubarItem
                     onClick={() => setShowRecentFiles(true)}
-                    className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 font-normal"
+                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 font-normal"
                   >
                     <Row>
                       <span className="truncate font-light">
@@ -143,7 +143,7 @@ export default function FilePicker({
 
             <MenubarItem
               onClick={triggerUploadPicker}
-              className="hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
+              className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
             >
               <Row>
                 <Paperclip size={16} />
