@@ -1,3 +1,5 @@
+from typing import Any
+
 import braintrust
 from braintrust_langchain import set_global_handler
 from braintrust_langchain.callbacks import BraintrustCallbackHandler
@@ -6,13 +8,13 @@ from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
 
 
-def _truncate_str(s: str, head=800, tail=200):
+def _truncate_str(s: str, head=800, tail=200) -> str:
     if len(s) <= head + tail:
         return s
     return f"{s[:head]}…[TRUNCATED {len(s) - head - tail} chars]…{s[-tail:]}"
 
 
-def _mask(data):
+def _mask(data: Any) -> Any:
     data_str = str(data)
 
     if len(data_str) > 10_000:

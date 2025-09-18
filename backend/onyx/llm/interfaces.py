@@ -51,7 +51,7 @@ def log_prompt(prompt: LanguageModelInput) -> None:
                         ]
                     )
                 else:
-                    pass
+                    log_msg = ""
                 logger.debug(f"Message {ind}:\n{log_msg}")
             else:
                 logger.debug(f"Message {ind}:\n{msg.content}")
