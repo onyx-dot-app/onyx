@@ -4,7 +4,6 @@ from typing import Literal
 
 from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
-from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
@@ -34,29 +33,32 @@ class LLMConfig(BaseModel):
 
 
 def log_prompt(prompt: LanguageModelInput) -> None:
-    if isinstance(prompt, list):
-        for ind, msg in enumerate(prompt):
-            if isinstance(msg, AIMessageChunk):
-                if msg.content:
-                    log_msg = msg.content
-                elif msg.tool_call_chunks:
-                    log_msg = "Tool Calls: " + str(
-                        [
-                            {
-                                key: value
-                                for key, value in tool_call.items()
-                                if key != "index"
-                            }
-                            for tool_call in msg.tool_call_chunks
-                        ]
-                    )
-                else:
-                    log_msg = ""
-                logger.debug(f"Message {ind}:\n{log_msg}")
-            else:
-                logger.debug(f"Message {ind}:\n{msg.content}")
+    # if isinstance(prompt, list):
+    #     for ind, msg in enumerate(prompt):
+    #         if isinstance(msg, AIMessageChunk):
+    #             if msg.content:
+    #                 log_msg = msg.content
+    #             elif msg.tool_call_chunks:
+    #                 # log_msg = "Tool Calls: " + str(
+    #                 #     [
+    #                 #         {
+    #                 #             key: value
+    #                 #             for key, value in tool_call.items()
+    #                 #             if key != "index"
+    #                 #         }
+    #                 #         for tool_call in msg.tool_call_chunks
+    #                 #     ]
+    #                 # )
+    #                 pass
+    #             else:
+    #                 pass
+    #             # logger.debug(f"Message {ind}:\n{log_msg}")
+    #         else:
+    #             # logger.debug(f"Message {ind}:\n{msg.content}")
+    #             pass
     if isinstance(prompt, str):
-        logger.debug(f"Prompt:\n{prompt}")
+        # logger.debug(f"Prompt:\n{prompt}")
+        pass
 
 
 class LLM(abc.ABC):

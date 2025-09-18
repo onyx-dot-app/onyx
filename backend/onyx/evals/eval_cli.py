@@ -5,6 +5,7 @@ CLI for running evaluations with local configurations.
 
 import argparse
 import json
+import logging
 import os
 from typing import Any
 
@@ -120,6 +121,7 @@ def run_remote(
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Run evaluations with local configurations"
