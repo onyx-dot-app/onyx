@@ -1053,9 +1053,7 @@ export function AssistantEditor({
                         {values.knowledge_source === "user_files" &&
                           !existingPersona?.is_default_persona && (
                             <div className="text-sm flex flex-col items-start">
-                              <SubLabel>
-                                Click below to add files from My Documents
-                              </SubLabel>
+                              <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
                                 <div className="flex gap-3 mb-2">
                                   {values.user_file_ids

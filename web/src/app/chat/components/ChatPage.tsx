@@ -1173,23 +1173,14 @@ export function ChatPage({
                                 : "mb-8"
                             }`}
                           >
-                            {showCenteredInput && (
+                            {currentProjectId == null && showCenteredInput && (
                               <WelcomeMessage assistant={liveAssistant} />
                             )}
                             <div
                               className={showCenteredHero ? "row-start-2" : ""}
                             >
-                              {currentProjectId !== null && (
-                                <div
-                                  className={`transition-all duration-700 ease-out ${
-                                    projectPanelVisible
-                                      ? "opacity-100 translate-y-0"
-                                      : "opacity-0 translate-y-6 pointer-events-none"
-                                  }`}
-                                >
-                                  <ProjectContextPanel />
-                                </div>
-                              )}
+                              {currentProjectId !== null &&
+                                projectPanelVisible && <ProjectContextPanel />}
                               <ChatInputBar
                                 deepResearchEnabled={deepResearchEnabled}
                                 toggleDeepResearch={toggleDeepResearch}
