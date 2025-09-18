@@ -1071,7 +1071,16 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         default: "articles",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "number",
+        label: "API Calls per Minute",
+        name: "calls_per_minute",
+        optional: true,
+        description:
+          "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/",
+      },
+    ],
   },
   linear: {
     description: "Configure Linear connector",
@@ -1770,7 +1779,10 @@ export interface XenforoConfig {
   base_url: string;
 }
 
-export interface ZendeskConfig {}
+export interface ZendeskConfig {
+  content_type?: "articles" | "tickets";
+  calls_per_minute?: number;
+}
 
 export interface DropboxConfig {}
 
