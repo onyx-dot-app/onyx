@@ -67,6 +67,7 @@ from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
 from onyx.server.features.mcp.models import MCPUserOAuthConnectResponse
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
+from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -445,14 +446,28 @@ async def _connect_oauth(
         mcp_server.admin_connection_config_id,
     )
 
+    # resp = await initialize_mcp_client(probe_url, transport=transport, auth=oauth_auth)
+    # print(resp)
+
     # start the oauth handshake in the background
     # the background task will block on the callback handler after setting
     # the auth_url for us to send to the frontend. The callback handler waits for
     # the auth code to be available in redis; this code gets set by our callback endpoint
     # which is called by the frontend after the user goes through the login flow.
-    init_task = asyncio.create_task(
-        initialize_mcp_client(probe_url, transport=transport, auth=oauth_auth)
-    )
+    from mcp.types import InitializeResult
+
+    async def tmp_func() -> InitializeResult:
+        try:
+            x = await initialize_mcp_client(
+                probe_url, transport=transport, auth=oauth_auth
+            )
+            logger.info(f"OAuth initialization completed successfully: {x}")
+            return x
+        except Exception as e:
+            logger.error(f"OAuth initialization failed: {e}")
+            raise
+
+    init_task = asyncio.create_task(tmp_func())
 
     # Wait for whichever happens first:
     # 1) The OAuth redirect URL becomes available in Redis (we should return it)
@@ -463,7 +478,9 @@ async def _connect_oauth(
     async def wait_auth_url() -> str | None:
         raw = await loop.run_in_executor(
             None,
-            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
+            lambda: r.blpop(
+                [key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS * 10
+            ),
         )
         if raw is None:
             return None
@@ -484,13 +501,19 @@ async def _connect_oauth(
             # If initialization also finished, treat as already authenticated
             if init_task.done() and not init_task.cancelled():
                 try:
-                    _ = init_task.exception()
-                except Exception:
-                    pass
-                return MCPUserOAuthConnectResponse(
-                    server_id=int(request.server_id),
-                    oauth_url=request.return_path,
-                )
+                    init_result = init_task.result()
+                    logger.info(
+                        f"OAuth initialization completed during timeout: {init_result}"
+                    )
+                    return MCPUserOAuthConnectResponse(
+                        server_id=int(request.server_id),
+                        oauth_url=request.return_path,
+                    )
+                except Exception as e:
+                    logger.error(f"OAuth initialization failed during timeout: {e}")
+                    raise HTTPException(
+                        status_code=400, detail=f"OAuth initialization failed: {str(e)}"
+                    )
             raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
 
         # Cancel the init task if still running
@@ -507,10 +530,18 @@ async def _connect_oauth(
     for t in pending:
         t.cancel()
     try:
-        _ = init_task.result()
-    except Exception:
+        init_result = init_task.result()
+        logger.info(f"OAuth initialization completed without redirect: {init_result}")
+    except Exception as e:
+        if isinstance(e, ExceptionGroup):
+            saved_e = log_exception_group(e)
+        else:
+            saved_e = e
+        logger.error(f"OAuth initialization failed: {saved_e}")
         # If initialize failed and we also didn't get an auth URL, surface an error
-        raise HTTPException(status_code=400, detail="Failed to initialize OAuth client")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to initialize OAuth client: {str(saved_e)}"
+        )
 
     return MCPUserOAuthConnectResponse(
         server_id=int(request.server_id),

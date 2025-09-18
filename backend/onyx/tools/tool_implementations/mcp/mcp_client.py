@@ -130,18 +130,20 @@ def _create_mcp_client_function_runner(
     auth_headers = connection_headers or {}
     # Normalize URL to include a trailing slash to avoid 404s on servers
     # that differentiate between "/path" and "/path/" for the MCP endpoint.
-    normalized_url = server_url.rstrip("/") + "/"
+    normalized_url = server_url.rstrip("/")
     # Only append transportType for Streamable HTTP; SSE endpoints typically
     # do not require or expect this query parameter and may 404 otherwise.
-    if transport == MCPTransport.STREAMABLE_HTTP:
-        sep = "?" if "?" not in normalized_url else "&"
-        server_url = (
-            normalized_url + sep + urlencode({"transportType": "streamable-http"})
-        )
-    else:
-        # For SSE transport, use the base URL without appending /sse/
-        # The MCP library will handle the SSE connection internally
-        server_url = server_url.rstrip("/")
+    # if transport == MCPTransport.STREAMABLE_HTTP:
+    sep = "?" if "?" not in normalized_url else "&"
+    server_url = (
+        normalized_url
+        + sep
+        + urlencode({"transportType": transport.value.lower().replace("_", "-")})
+    )
+    # else:
+    #     # For SSE transport, use the base URL without appending /sse/
+    #     # The MCP library will handle the SSE connection internally
+    #     server_url = server_url.rstrip("/")
 
     client_func = (
         streamablehttp_client
@@ -150,15 +152,35 @@ def _create_mcp_client_function_runner(
     )
 
     async def run_client_function() -> T:
-        async with client_func(server_url, headers=auth_headers, auth=auth) as (
-            read,
-            write,
-            _,
-        ):
+        async with client_func(
+            server_url, headers=auth_headers, auth=auth
+        ) as client_tuple:
+            if len(client_tuple) == 3:
+                read, write, _ = client_tuple
+            elif len(client_tuple) == 2:
+                assert isinstance(client_tuple, tuple)  # mypy
+                read, write = client_tuple
+            else:
+                raise ValueError(
+                    f"Unexpected number of client tuple elements: {len(client_tuple)}"
+                )
             async with ClientSession(read, write) as session:
                 return await function(session, **kwargs)
 
     return run_client_function
+
+
+def log_exception_group(e: ExceptionGroup) -> Exception | None:
+    logger.error(e)
+    saved_e = None
+    for err in e.exceptions:
+        if isinstance(err, ExceptionGroup):
+            saved_e = log_exception_group(err) or saved_e
+        else:
+            logger.error(err)
+            saved_e = err
+
+    return saved_e
 
 
 def _call_mcp_client_function_sync(
@@ -184,8 +206,9 @@ def _call_mcp_client_function_sync(
         logger.error(f"Failed to call MCP client function: {e}")
         if isinstance(e, ExceptionGroup):
             original_exception = e
-            for err in e.exceptions:
-                logger.error(err)
+            saved_e = log_exception_group(e)
+            if saved_e:
+                raise saved_e
             raise original_exception
         raise e
 
