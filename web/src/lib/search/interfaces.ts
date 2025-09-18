@@ -139,6 +139,7 @@ export interface SourceMetadata {
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;
+  uniqueKey?: string;
   // For federated connectors, this stores the base source type for the icon
   baseSourceType?: ValidSources;
 }
