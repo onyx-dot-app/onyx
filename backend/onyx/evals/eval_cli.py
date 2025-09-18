@@ -19,7 +19,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
-from onyx.evals.providers.braintrust_tracing import setup_braintrust
+from onyx.evals.tracing import setup_braintrust
 
 
 def setup_session_factory() -> None:
