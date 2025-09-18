@@ -32,7 +32,7 @@ class EvalConfigurationOptions(BaseModel):
     llm: LLMOverride = LLMOverride(
         model_provider="Default",
         model_version="gpt-4.1",
-        temperature=0.5,
+        temperature=0.0,
     )
     search_permissions_email: str
     dataset_name: str

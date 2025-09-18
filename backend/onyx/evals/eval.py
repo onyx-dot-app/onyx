@@ -72,7 +72,6 @@ def _get_answer(
                 else None
             )
             research_type = ResearchType(eval_input.get("research_type", "THOUGHTFUL"))
-            print(eval_input)
             request = prepare_chat_message_request(
                 message_text=eval_input["message"],
                 user=user,
