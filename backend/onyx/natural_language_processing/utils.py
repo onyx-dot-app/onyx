@@ -5,7 +5,6 @@ from copy import copy
 
 from tokenizers import Encoding  # type: ignore
 from tokenizers import Tokenizer  # type: ignore
-from transformers import logging as transformer_logging  # type:ignore
 
 from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
@@ -16,10 +15,8 @@ from shared_configs.enums import EmbeddingProvider
 TRIM_SEP_PAT = "\n... {n} tokens removed...\n"
 
 logger = setup_logger()
-transformer_logging.set_verbosity_error()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 
 
 class BaseTokenizer(ABC):
