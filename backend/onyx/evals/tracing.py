@@ -16,7 +16,7 @@ def _mask(data):
     data_str = str(data)
 
     if len(data_str) > 10_000:
-        return f"{data_str[:10_000]}…[TRUNCATED {len(data_str) - 10_000} chars]…"
+        return f"{data_str[:10_000]}…[TRUNCATED {len(data_str)} to 10,000 chars]…"
     if isinstance(data, str):
         return _truncate_str(data)
     if isinstance(data, list):
