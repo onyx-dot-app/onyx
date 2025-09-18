@@ -63,14 +63,14 @@ export function PagesTab({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="my-auto group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
+                  className="p-1.5 group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer hover:bg-accent-background-hovered rounded-md"
                   onClick={() => {
                     toggleChatSessionSearchModal?.();
                   }}
                 >
                   <Search
                     className="flex-none text-text-mobile-sidebar"
-                    size={20}
+                    size={18}
                   />
                 </button>
               </TooltipTrigger>

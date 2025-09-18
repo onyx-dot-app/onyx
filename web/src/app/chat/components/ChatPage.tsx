@@ -6,7 +6,11 @@ import { ChatSession, ChatSessionSharedStatus, Message } from "../interfaces";
 import Cookies from "js-cookie";
 import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { personaIncludesRetrieval, useScrollonStream } from "../services/lib";
+import {
+  personaIncludesRetrieval,
+  useScrollonStream,
+  getAvailableContextTokens,
+} from "../services/lib";
 import {
   useCallback,
   useContext,
@@ -87,7 +91,10 @@ import { MessagesDisplay } from "./MessagesDisplay";
 import { WelcomeMessage } from "./WelcomeMessage";
 import ProjectContextPanel from "./projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { getProjectTokenCount } from "@/app/chat/projects/projectsService";
+import {
+  getProjectTokenCount,
+  getMaxSelectedDocumentTokens,
+} from "@/app/chat/projects/projectsService";
 
 import ProjectChatSessionList from "./projects/ProjectChatSessionList";
 
@@ -517,29 +524,26 @@ export function ChatPage({
       setSelectedAssistantFromId,
     });
 
-  const {
-    onMessageSelection,
-    currentSessionFileTokenCount,
-    availableContextTokens,
-  } = useChatSessionController({
-    existingChatSessionId,
-    searchParams,
-    filterManager,
-    firstMessage,
-    setSelectedAssistantFromId,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    textAreaRef,
-    scrollInitialized,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    hasPerformedInitialScroll,
-    clientScrollToBottom,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, currentSessionFileTokenCount } =
+    useChatSessionController({
+      existingChatSessionId,
+      searchParams,
+      filterManager,
+      firstMessage,
+      setSelectedAssistantFromId,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      textAreaRef,
+      scrollInitialized,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      hasPerformedInitialScroll,
+      clientScrollToBottom,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
@@ -788,6 +792,39 @@ export function ChatPage({
       cancelled = true;
     };
   }, [existingChatSessionId, currentProjectId, currentProjectDetails?.files]);
+
+  // Available context tokens source of truth:
+  // - If a chat session exists, fetch from session API (dynamic per session/model)
+  // - If no session, derive from the default/current persona's max document tokens
+  const [availableContextTokens, setAvailableContextTokens] =
+    useState<number>(128_000);
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      try {
+        if (existingChatSessionId) {
+          const available = await getAvailableContextTokens(
+            existingChatSessionId
+          );
+          if (!cancelled) setAvailableContextTokens(available ?? 0);
+        } else {
+          const personaId = (selectedAssistant || liveAssistant)?.id;
+          if (personaId !== undefined && personaId !== null) {
+            const maxTokens = await getMaxSelectedDocumentTokens(personaId);
+            if (!cancelled) setAvailableContextTokens(maxTokens ?? 128_000);
+          } else if (!cancelled) {
+            setAvailableContextTokens(128_000);
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setAvailableContextTokens(128_000);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
   // handle error case where no assistants are available
   if (noAssistants) {
@@ -1180,7 +1217,14 @@ export function ChatPage({
                               className={showCenteredHero ? "row-start-2" : ""}
                             >
                               {currentProjectId !== null &&
-                                projectPanelVisible && <ProjectContextPanel />}
+                                projectPanelVisible && (
+                                  <ProjectContextPanel
+                                    projectTokenCount={projectContextTokenCount}
+                                    availableContextTokens={
+                                      availableContextTokens
+                                    }
+                                  />
+                                )}
                               <ChatInputBar
                                 deepResearchEnabled={deepResearchEnabled}
                                 toggleDeepResearch={toggleDeepResearch}

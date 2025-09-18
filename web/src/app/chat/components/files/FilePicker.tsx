@@ -160,7 +160,14 @@ export default function FilePicker({
       </Menubar>
 
       <Dialog open={showRecentFiles} onOpenChange={setShowRecentFiles}>
-        <DialogContent className="w-full max-w-lg">
+        <DialogContent
+          className="w-full max-w-lg focus:outline-none focus-visible:outline-none"
+          tabIndex={-1}
+          onOpenAutoFocus={(e) => {
+            // Prevent auto-focus which can interfere with input
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <Files size={32} />
             <DialogTitle>Recent Files</DialogTitle>

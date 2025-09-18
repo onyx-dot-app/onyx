@@ -18,6 +18,12 @@ import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import type { ChatSession } from "@/app/chat/interfaces";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 interface ProjectsProps {
   onOpenProject?: (projectId: string) => void;
@@ -231,19 +237,25 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
   } | null>(null);
   return (
     <div className="flex flex-col">
-      <div className=" flex justify-between px-4 ">
+      <div className="group flex justify-between px-4 ">
         <p className="my-auto font-normal text-sm leading-normal text-text-500/80 dark:text-[#D4D4D4]">
           Projects
         </p>
-        <button
-          type="button"
-          aria-label="Create project"
-          onClick={() => setIsCreateProjectOpen(true)}
-          className="p-2 rounded hover:bg-accent-background-hovered cursor-pointer"
-          title="New project"
-        >
-          <FolderPlus size={20} />
-        </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Create project"
+                onClick={() => setIsCreateProjectOpen(true)}
+                className="p-1.5 group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer hover:bg-accent-background-hovered rounded-md"
+              >
+                <FolderPlus size={18} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Create Project</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <div className="px-2 gap-y-1 flex flex-col text-text-history-sidebar-button items-center">
