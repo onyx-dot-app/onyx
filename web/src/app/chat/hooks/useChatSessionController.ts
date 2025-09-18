@@ -83,8 +83,6 @@ export function useChatSessionController({
 }: UseChatSessionControllerProps) {
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
-  const [availableContextTokens, setAvailableContextTokens] =
-    useState<number>(0);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -256,20 +254,6 @@ export function useChatSessionController({
         setCurrentSessionFileTokenCount(0);
       }
 
-      // Fetch available context tokens for this chat session
-      try {
-        if (chatSession.chat_session_id) {
-          const available = await getAvailableContextTokens(
-            chatSession.chat_session_id
-          );
-          setAvailableContextTokens(available);
-        } else {
-          setAvailableContextTokens(0);
-        }
-      } catch (e) {
-        setAvailableContextTokens(0);
-      }
-
       // If this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
@@ -361,7 +345,6 @@ export function useChatSessionController({
 
   return {
     currentSessionFileTokenCount,
-    availableContextTokens,
     onMessageSelection,
   };
 }

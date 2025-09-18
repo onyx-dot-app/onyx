@@ -203,8 +203,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 
   const { llmProviders, inputPrompts } = useChatContext();
   const [showPrompts, setShowPrompts] = useState(false);
-  const [showStickyBanner, setShowStickyBanner] = useState(false);
-  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
   const hidePrompts = () => {
     setTimeout(() => {
@@ -212,11 +210,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     }, 50);
     setTabbingIconIndex(0);
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowStickyBanner(true), 50);
-    return () => clearTimeout(timer);
-  }, []);
 
   const updateInputPrompt = (prompt: InputPrompt) => {
     hidePrompts();
@@ -272,7 +265,8 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     [inputPrompts, startFilterSlash]
   );
 
-  useEffect(() => {
+  // Determine if we should hide processing state based on context limits
+  const hideProcessingState = useMemo(() => {
     if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
       const currentFilesTokenTotal = currentMessageFiles.reduce(
         (acc, file) => acc + (file.token_count || 0),
@@ -280,18 +274,12 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       );
       const totalTokens =
         (currentSessionFileTokenCount || 0) + currentFilesTokenTotal;
-      if (totalTokens < availableContextTokens) {
-        setBannerMessage(
-          "Since your file is within the context limit, you don’t need to wait for processing, messages sent early still give the best answer."
-        );
-      } else {
-        setBannerMessage(
-          "Since your total file context exceeds the maximum length, you need to wait until the file processing completes to get the better answer."
-        );
-      }
-    } else {
-      setBannerMessage(null);
+      console.log("totalTokens", totalTokens);
+      console.log("availableContextTokens", availableContextTokens);
+      // Hide processing state when files are within context limits
+      return totalTokens < availableContextTokens;
     }
+    return false;
   }, [
     currentMessageFiles,
     currentSessionFileTokenCount,
@@ -336,9 +324,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
 
   return (
     <div id="onyx-chat-input">
-      <div
-        className={`flex  justify-center mx-auto ${bannerMessage ? "mt-4" : ""}`}
-      >
+      <div className="flex justify-center mx-auto">
         <div
           className="
             max-w-full
@@ -348,8 +334,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
             mx-auto
           "
         >
-          {/* Sticky background banner will be positioned relative to the card wrapper below */}
-
           {showPrompts && user?.preferences?.shortcut_enabled && (
             <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
               <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
@@ -394,37 +378,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
           />
           <div className="w-full h-[10px]"></div>
           <div className="relative">
-            {bannerMessage && (
-              <>
-                <div
-                  className={`
-                    absolute
-                    inset-x-0
-                    -top-8
-                    h-16
-                    rounded-xl
-                    border
-                    shadow-sm
-                    z-0
-                    transition-all
-                    duration-300
-                    ease-out
-                    ${showStickyBanner ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}
-                    bg-amber-50 dark:bg-yellow-800/30
-                    border-amber-300 dark:border-yellow-700
-                    flex
-                    items-start
-                    pt-2
-                    justify-center
-                  `}
-                >
-                  <span className="text-xs text-neutral-800 dark:text-neutral-100 text-center">
-                    {bannerMessage}
-                  </span>
-                </div>
-              </>
-            )}
-
             <div
               className="
                 opacity-100
@@ -443,7 +396,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 [&:has(textarea:focus)]::ring-1
                 [&:has(textarea:focus)]::ring-black
               "
-              // Ensure this sits above the sticky background banner
               style={{ position: "relative", zIndex: 10 }}
             >
               {currentMessageFiles.length > 0 && (
@@ -454,6 +406,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                         key={file.id}
                         file={file}
                         removeFile={handleRemoveMessageFile}
+                        hideProcessingState={hideProcessingState}
                       />
                     ))}
                   </div>
@@ -491,29 +444,29 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 px-5
                 py-5
               `}
-              autoFocus
-              style={{ scrollbarWidth: "thin" }}
-              role="textarea"
-              aria-multiline
-              placeholder={
-                placeholder ||
-                (selectedAssistant.id === 0
-                  ? `How can ${settings?.enterpriseSettings?.application_name || "Onyx"} help you today`
-                  : `How can ${selectedAssistant.name} help you today`)
-              }
-              value={message}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !showPrompts &&
-                  !event.shiftKey &&
-                  !(event.nativeEvent as any).isComposing
-                ) {
-                  event.preventDefault();
-                  if (message) {
-                    onSubmit();
-                  }
+                autoFocus
+                style={{ scrollbarWidth: "thin" }}
+                role="textarea"
+                aria-multiline
+                placeholder={
+                  placeholder ||
+                  (selectedAssistant.id === 0
+                    ? `How can ${settings?.enterpriseSettings?.application_name || "Onyx"} help you today`
+                    : `How can ${selectedAssistant.name} help you today`)
                 }
+                value={message}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !showPrompts &&
+                    !event.shiftKey &&
+                    !(event.nativeEvent as any).isComposing
+                  ) {
+                    event.preventDefault();
+                    if (message) {
+                      onSubmit();
+                    }
+                  }
                 }}
                 suppressContentEditableWarning={true}
               />
@@ -686,7 +639,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                       if (chatState == "streaming") {
                         stopGenerating();
                       } else if (message) {
-                        setBannerMessage(null);
                         onSubmit();
                       }
                     }}

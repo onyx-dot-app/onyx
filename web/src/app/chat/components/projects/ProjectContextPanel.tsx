@@ -39,9 +39,11 @@ import {
 export function FileCard({
   file,
   removeFile,
+  hideProcessingState = false,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
+  hideProcessingState?: boolean;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -52,13 +54,17 @@ export function FileCard({
     return name.slice(lastDotIndex + 1).toUpperCase();
   }, [file.name]);
 
-  const isProcessing =
+  const isActuallyProcessing =
     String(file.status).toLowerCase() === "processing" ||
     String(file.status).toLowerCase() === "uploading";
 
+  // When hideProcessingState is true, we treat processing files as completed for display purposes
+  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
+
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isProcessing) return;
+    // Allow removal if hideProcessingState is true (within context limits) or if not actually processing
+    if (isActuallyProcessing && !hideProcessingState) return;
     removeFile(file.id);
   };
 
@@ -80,10 +86,10 @@ export function FileCard({
       )}
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-transparent">
         {isProcessing ? (
-          <Loader2 className="h-5 w-5 text-onyx-medium animate-spin" />
+          <Loader2 className="h-5 w-5 text-onyx-muted animate-spin" />
         ) : (
           <div className="bg-accent-background p-2 rounded-lg shadow-sm">
-            <DocumentIcon className="h-5 w-5 text-onyx-medium" />
+            <DocumentIcon className="h-5 w-5 text-onyx-muted" />
           </div>
         )}
       </div>
@@ -103,7 +109,13 @@ export function FileCard({
   );
 }
 
-export default function ProjectContextPanel() {
+export default function ProjectContextPanel({
+  projectTokenCount = 0,
+  availableContextTokens = 128_000,
+}: {
+  projectTokenCount?: number;
+  availableContextTokens?: number;
+}) {
   const [isInstrOpen, setIsInstrOpen] = useState(false);
   const [showProjectFiles, setShowProjectFiles] = useState(false);
   const [instructionText, setInstructionText] = useState("");
@@ -315,6 +327,13 @@ export default function ProjectContextPanel() {
                 </button>
               )}
             </div>
+            {projectTokenCount > availableContextTokens && (
+              <p className="text-onyx-muted text-base">
+                This project exceeds the model's context limits. Sessions will
+                automatically search for relevant files first before generating
+                response.
+              </p>
+            )}
           </>
         ) : (
           <p className="text-onyx-muted text-base">No files yet.</p>
@@ -357,13 +376,24 @@ export default function ProjectContextPanel() {
         </DialogContent>
       </Dialog>
       <Dialog open={showProjectFiles} onOpenChange={setShowProjectFiles}>
-        <DialogContent className="w-full max-w-lg">
+        <DialogContent
+          className="w-full max-w-lg focus:outline-none focus-visible:outline-none"
+          tabIndex={-1}
+          onOpenAutoFocus={(e) => {
+            // Prevent auto-focus which can interfere with input
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
-            <OpenFolderIcon size={32} />
+            <MultipleFilesIcon className="h-8 w-8 text-onyx-ultra-strong" />
             <DialogTitle>Project files</DialogTitle>
+            <DialogDescription>
+              Sessions in this project can access the files here.
+            </DialogDescription>
           </DialogHeader>
           <FilesList
             recentFiles={(currentProjectDetails?.files || []) as any}
+            handleUploadChange={handleUploadChange}
             showRemove
             onRemove={async (file) => {
               if (!currentProjectId) return;

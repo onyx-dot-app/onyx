@@ -58,7 +58,7 @@ export default function CreateProjectModal({
             to easily start new conversations on the same topic.
           </DialogDescription>
         </DialogHeader>
-        <div className="bg-background-100 dark:bg-transparent -mx-6 px-6 py-6 space-y-2">
+        <div className="bg-background-100 dark:bg-transparent -mx-6 px-6 py-4 space-y-2">
           <Label htmlFor="project-name">Project Name</Label>
           <Input
             id="project-name"
