@@ -1696,7 +1696,7 @@ class SharepointConnector(
 
                 try:
                     log_memory_usage(
-                        f"_load_from_checkpoint:before_convert_driveitem:{driveitem.id}"
+                        f"_load_from_checkpoint:before_convert_driveitem:{driveitem.id}:{driveitem.name}"
                     )
                     doc = _convert_driveitem_to_document_with_permissions(
                         driveitem,
@@ -1706,7 +1706,7 @@ class SharepointConnector(
                         include_permissions=include_permissions,
                     )
                     log_memory_usage(
-                        f"_load_from_checkpoint:after_convert_driveitem:{driveitem.id}",
+                        f"_load_from_checkpoint:after_convert_driveitem:{driveitem.id}:{driveitem.name}",
                         doc,
                         "converted_doc",
                     )

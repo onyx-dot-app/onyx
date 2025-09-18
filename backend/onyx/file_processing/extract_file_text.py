@@ -223,6 +223,11 @@ def read_text_file(
     """
     metadata = {}
     file_content_raw = ""
+    log_memory_usage(
+        f"read_text_file:before_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
+        file,
+        "file",
+    )
     for ind, line in enumerate(file):
         # decode
         try:
@@ -243,6 +248,16 @@ def read_text_file(
 
         file_content_raw += line
 
+    log_memory_usage(
+        f"read_text_file:after_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
+        file_content_raw,
+        "file_content_raw",
+    )
+    log_memory_usage(
+        f"read_text_file:after_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
+        metadata,
+        "metadata",
+    )
     return file_content_raw, metadata
 
 
@@ -604,6 +619,11 @@ def _extract_text_and_images(
 ) -> ExtractionResult:
     file.seek(0)
 
+    log_memory_usage(
+        f"extract_text_and_images:before_unstructured:{file_name}:{content_type}",
+        file,
+        "file",
+    )
     if get_unstructured_api_key():
         try:
             text_content = unstructured_to_text(file, file_name)
@@ -627,7 +647,11 @@ def _extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
-
+        log_memory_usage(
+            f"extract_text_and_images:before_unstructured:{file_name}:{content_type}:{extension}",
+            file,
+            "file",
+        )
         # docx example for embedded images
         if extension == ".docx":
             log_memory_usage(
@@ -655,11 +679,31 @@ def _extract_text_and_images(
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
+            log_memory_usage(
+                "extract_text_and_images:before_read_pdf_file",
+                file,
+                "file",
+            )
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
                 extract_images=get_image_extraction_and_analysis_enabled(),
                 image_callback=image_callback,
+            )
+            log_memory_usage(
+                "extract_text_and_images:after_read_pdf_file",
+                text_content,
+                "text_content",
+            )
+            log_memory_usage(
+                "extract_text_and_images:after_read_pdf_file",
+                pdf_metadata,
+                "pdf_metadata",
+            )
+            log_memory_usage(
+                "extract_text_and_images:after_read_pdf_file",
+                images,
+                "images",
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
