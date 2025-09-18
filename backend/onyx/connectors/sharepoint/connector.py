@@ -314,7 +314,7 @@ def _convert_driveitem_to_document_with_permissions(
     include_permissions: bool = False,
 ) -> Document | None:
     log_memory_usage(
-        "_convert_driveitem_to_document_with_permissions:start",
+        f"_convert_driveitem_to_document_with_permissions:start:{drive_name}:{driveitem.name}:{driveitem.resource_url}",
         driveitem.id,
         "driveitem_id",
     )
