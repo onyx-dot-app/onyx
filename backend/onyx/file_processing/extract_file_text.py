@@ -1,3 +1,4 @@
+import gc
 import io
 import json
 import os
@@ -17,6 +18,7 @@ from typing import NamedTuple
 from zipfile import BadZipFile
 
 import chardet
+import openpyxl
 from markitdown import FileConversionException
 from markitdown import MarkItDown
 from markitdown import StreamInfo
@@ -32,10 +34,8 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.file_types import PRESENTATION_MIME_TYPE
-from onyx.utils.file_types import SPREADSHEET_MIME_TYPE
 from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
-from onyx.utils.memory_logger import log_memory_usage
 
 logger = setup_logger()
 
@@ -86,6 +86,11 @@ IMAGE_MEDIA_TYPES = [
 ]
 
 _MARKITDOWN_CONVERTER: MarkItDown | None = None
+
+KNOWN_OPENPYXL_BUGS = [
+    "Value must be either numerical or a string containing a wildcard",
+    "File contains no valid workbook part",
+]
 
 
 def get_markitdown_converter() -> MarkItDown:
@@ -223,11 +228,6 @@ def read_text_file(
     """
     metadata = {}
     file_content_raw = ""
-    log_memory_usage(
-        f"read_text_file:before_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
-        file,
-        "file",
-    )
     for ind, line in enumerate(file):
         # decode
         try:
@@ -248,16 +248,6 @@ def read_text_file(
 
         file_content_raw += line
 
-    log_memory_usage(
-        f"read_text_file:after_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
-        file_content_raw,
-        "file_content_raw",
-    )
-    log_memory_usage(
-        f"read_text_file:after_read_text_file:{encoding}:{errors}:{ignore_onyx_metadata}",
-        metadata,
-        "metadata",
-    )
     return file_content_raw, metadata
 
 
@@ -367,30 +357,10 @@ def docx_to_text_and_images(
     of avoiding materializing the list of images in memory.
     The images list returned is empty in this case.
     """
-    log_memory_usage(
-        "docx_to_text_and_images:before_md_create",
-        file,
-        "file",
-    )
     md = get_markitdown_converter()
-    log_memory_usage(
-        "docx_to_text_and_images:after_md_create",
-        md,
-        "md",
-    )
     try:
-        log_memory_usage(
-            "docx_to_text_and_images:before_md_convert",
-            file,
-            "file",
-        )
         doc = md.convert(
             to_bytesio(file), stream_info=StreamInfo(mimetype=WORD_PROCESSING_MIME_TYPE)
-        )
-        log_memory_usage(
-            "docx_to_text_and_images:after_md_convert",
-            doc,
-            "doc",
         )
     except (
         BadZipFile,
@@ -442,26 +412,69 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    md = get_markitdown_converter()
-    stream_info = StreamInfo(
-        mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
-    )
+    # TODO: switch back to this approach in a few months when markitdown
+    # fixes their handling of excel files
+
+    # md = get_markitdown_converter()
+    # stream_info = StreamInfo(
+    #     mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
+    # )
+    # try:
+    #     workbook = md.convert(to_bytesio(file), stream_info=stream_info)
+    # except (
+    #     BadZipFile,
+    #     ValueError,
+    #     FileConversionException,
+    #     UnsupportedFormatException,
+    # ) as e:
+    #     error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+    #     if file_name.startswith("~"):
+    #         logger.debug(error_str + " (this is expected for files with ~)")
+    #     else:
+    #         logger.warning(error_str)
+    #     return ""
+    # return workbook.markdown
     try:
-        workbook = md.convert(to_bytesio(file), stream_info=stream_info)
-    except (
-        BadZipFile,
-        ValueError,
-        FileConversionException,
-        UnsupportedFormatException,
-    ) as e:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
         return ""
+    except Exception as e:
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
+            logger.error(
+                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            )
+            return ""
+        raise e
 
-    return workbook.markdown
+    text_content = []
+    for sheet in workbook.worksheets:
+        rows = []
+        num_empty_consecutive_rows = 0
+        for row in sheet.iter_rows(min_row=1, values_only=True):
+            row_str = ",".join(str(cell or "") for cell in row)
+
+            # Only add the row if there are any values in the cells
+            if len(row_str) >= len(row):
+                rows.append(row_str)
+                num_empty_consecutive_rows = 0
+            else:
+                num_empty_consecutive_rows += 1
+
+            if num_empty_consecutive_rows > 100:
+                # handle massive excel sheets with mostly empty cells
+                logger.warning(
+                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
+                    " skipping rest of file"
+                )
+                break
+        sheet_str = "\n".join(rows)
+        text_content.append(sheet_str)
+    return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -592,20 +605,8 @@ def extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
     # Clean up any temporary objects and force garbage collection
-    import gc
-
-    log_memory_usage(
-        "extract_text_and_images:before_gc_collect",
-        gc,
-        "gc",
-    )
     unreachable = gc.collect()
     logger.info(f"Unreachable objects: {unreachable}")
-    log_memory_usage(
-        "extract_text_and_images:after_gc_collect",
-        gc,
-        "gc",
-    )
 
     return res
 
@@ -619,11 +620,6 @@ def _extract_text_and_images(
 ) -> ExtractionResult:
     file.seek(0)
 
-    log_memory_usage(
-        f"extract_text_and_images:before_unstructured:{file_name}:{content_type}",
-        file,
-        "file",
-    )
     if get_unstructured_api_key():
         try:
             text_content = unstructured_to_text(file, file_name)
@@ -647,30 +643,10 @@ def _extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
-        log_memory_usage(
-            f"extract_text_and_images:before_unstructured:{file_name}:{content_type}:{extension}",
-            file,
-            "file",
-        )
         # docx example for embedded images
         if extension == ".docx":
-            log_memory_usage(
-                "extract_text_and_images:before_docx_to_text_and_images",
-                file,
-                "file",
-            )
             text_content, images = docx_to_text_and_images(
                 file, file_name, image_callback=image_callback
-            )
-            log_memory_usage(
-                "extract_text_and_images:after_docx_to_text_and_images",
-                text_content,
-                "text_content",
-            )
-            log_memory_usage(
-                "extract_text_and_images:after_docx_to_text_and_images",
-                images,
-                "images",
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
@@ -679,31 +655,11 @@ def _extract_text_and_images(
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
-            log_memory_usage(
-                "extract_text_and_images:before_read_pdf_file",
-                file,
-                "file",
-            )
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
                 extract_images=get_image_extraction_and_analysis_enabled(),
                 image_callback=image_callback,
-            )
-            log_memory_usage(
-                "extract_text_and_images:after_read_pdf_file",
-                text_content,
-                "text_content",
-            )
-            log_memory_usage(
-                "extract_text_and_images:after_read_pdf_file",
-                pdf_metadata,
-                "pdf_metadata",
-            )
-            log_memory_usage(
-                "extract_text_and_images:after_read_pdf_file",
-                images,
-                "images",
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata

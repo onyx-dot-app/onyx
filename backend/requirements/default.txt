@@ -51,6 +51,7 @@ nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
 openai==1.99.5
+openpyxl==3.1.5
 passlib==1.7.4
 playwright==1.41.2
 psutil==5.9.5
