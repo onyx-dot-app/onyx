@@ -90,9 +90,6 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
-import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
-import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
-
 import {
   IMAGE_GENERATION_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -173,7 +170,6 @@ export function AssistantEditor({
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showAllUserFiles, setShowAllUserFiles] = useState(false);
 
@@ -1109,6 +1105,12 @@ export function AssistantEditor({
                                 showTriggerLabel
                                 triggerLabel="Add User  Files"
                                 recentFiles={recentFiles}
+                                onFileClick={(file: ProjectFile) => {
+                                  setPresentingDocument({
+                                    document_id: `project_file__${file.file_id}`,
+                                    semantic_identifier: file.name,
+                                  });
+                                }}
                                 onPickRecent={(file: ProjectFile) => {
                                   if (!values.user_file_ids.includes(file.id)) {
                                     setFieldValue("user_file_ids", [

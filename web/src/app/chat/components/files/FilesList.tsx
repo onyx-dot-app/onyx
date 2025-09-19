@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Search, Loader2, Trash2 } from "lucide-react";
+import { Search, Loader2, Trash2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "../../projects/ProjectsContext";
 import { formatRelativeTime } from "../projects/project_utils";
@@ -21,6 +21,7 @@ interface FilesListProps {
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   showRemove?: boolean;
   onRemove?: (file: ProjectFile) => void;
+  onFileClick?: (file: ProjectFile) => void;
 }
 
 // Using the same visual pattern as FileCard: spinner when processing, otherwise a
@@ -41,6 +42,7 @@ export default function FilesList({
   handleUploadChange,
   showRemove,
   onRemove,
+  onFileClick,
 }: FilesListProps) {
   const [search, setSearch] = useState("");
   const [minHeight, setMinHeight] = useState<string>("320px");
@@ -176,7 +178,11 @@ export default function FilesList({
                   "flex items-center justify-between gap-3 text-left rounded-md px-2 py-2 group border border-transparent",
                   "hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 hover:border-border-dark dark:hover:border-border-light"
                 )}
-                onClick={() => onPickRecent && onPickRecent(f)}
+                onClick={() => {
+                  if (onPickRecent) {
+                    onPickRecent(f);
+                  }
+                }}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-transparent">
@@ -227,6 +233,21 @@ export default function FilesList({
                       {formatRelativeTime(f.last_accessed_at)}
                     </div>
                   )}
+                  {onFileClick &&
+                    String(f.status).toLowerCase() !== "processing" && (
+                      <button
+                        title="View file"
+                        aria-label="View file"
+                        className="p-0 bg-transparent border-0 outline-none cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onFileClick && onFileClick(f);
+                        }}
+                      >
+                        <Eye className="h-4 w-4 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200" />
+                      </button>
+                    )}
                   {showRemove &&
                     String(f.status).toLowerCase() !== "processing" && (
                       <button

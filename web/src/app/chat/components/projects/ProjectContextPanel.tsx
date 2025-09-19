@@ -29,6 +29,7 @@ import type {
 import { UserFileStatus } from "../../projects/projectsService";
 import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import {
   MultipleFilesIcon,
   OpenFolderIcon,
@@ -40,10 +41,12 @@ export function FileCard({
   file,
   removeFile,
   hideProcessingState = false,
+  onFileClick,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
   hideProcessingState?: boolean;
+  onFileClick?: (file: ProjectFile) => void;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -72,7 +75,16 @@ export function FileCard({
     <div
       className={`relative group flex items-center gap-3 border border-border rounded-xl ${
         isProcessing ? "bg-accent-background" : "bg-background-background"
-      } px-3 py-1 shadow-sm h-14 w-52`}
+      } px-3 py-1 shadow-sm h-14 w-52 ${
+        onFileClick && !isProcessing
+          ? "cursor-pointer hover:bg-accent-background"
+          : ""
+      }`}
+      onClick={() => {
+        if (onFileClick && !isProcessing) {
+          onFileClick(file);
+        }
+      }}
     >
       {!isProcessing && (
         <button
@@ -112,15 +124,32 @@ export function FileCard({
 export default function ProjectContextPanel({
   projectTokenCount = 0,
   availableContextTokens = 128_000,
+  setPresentingDocument,
 }: {
   projectTokenCount?: number;
   availableContextTokens?: number;
+  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
 }) {
   const [isInstrOpen, setIsInstrOpen] = useState(false);
   const [showProjectFiles, setShowProjectFiles] = useState(false);
   const [instructionText, setInstructionText] = useState("");
   const { popup, setPopup } = usePopup();
   const [tempProjectFiles, setTempProjectFiles] = useState<ProjectFile[]>([]);
+
+  // Convert ProjectFile to MinimalOnyxDocument format for viewing
+  const handleFileClick = useCallback(
+    (file: ProjectFile) => {
+      if (!setPresentingDocument) return;
+
+      const documentForViewer: MinimalOnyxDocument = {
+        document_id: `project_file__${file.file_id}`,
+        semantic_identifier: file.name,
+      };
+
+      setPresentingDocument(documentForViewer);
+    },
+    [setPresentingDocument]
+  );
   const {
     upsertInstructions,
     currentProjectDetails,
@@ -247,6 +276,7 @@ export default function ProjectContextPanel({
             showTriggerLabel
             triggerLabel="Add Files"
             recentFiles={recentFiles}
+            onFileClick={handleFileClick}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
@@ -304,6 +334,7 @@ export default function ProjectContextPanel({
                           if (!currentProjectId) return;
                           await unlinkFileFromProject(currentProjectId, fileId);
                         }}
+                        onFileClick={handleFileClick}
                       />
                     </div>
                   ));
@@ -399,6 +430,7 @@ export default function ProjectContextPanel({
               if (!currentProjectId) return;
               await unlinkFileFromProject(currentProjectId, file.id);
             }}
+            onFileClick={handleFileClick}
           />
         </DialogContent>
       </Dialog>

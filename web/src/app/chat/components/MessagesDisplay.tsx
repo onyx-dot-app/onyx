@@ -18,6 +18,7 @@ interface MessagesDisplayProps {
   llmManager: { currentLlm: LlmDescriptor | null };
   deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
+  projectFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   setCurrentFeedback: (feedback: [FeedbackType, number] | null) => void;
   onSubmit: (args: {
@@ -58,6 +59,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   llmManager,
   deepResearchEnabled,
   currentMessageFiles,
+  projectFiles,
   setPresentingDocument,
   setCurrentFeedback,
   onSubmit,
@@ -204,6 +206,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
                 onMessageSelection={onMessageSelection}
+                projectFiles={projectFiles}
               />
             </div>
           );

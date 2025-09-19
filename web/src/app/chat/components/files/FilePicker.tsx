@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/menubar";
 import { FileUploadIcon } from "@/components/icons/icons";
 import { Files } from "@phosphor-icons/react";
-import { FileIcon, Paperclip, Loader2 } from "lucide-react";
+import { FileIcon, Paperclip, Loader2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatInputOption } from "../input/ChatInputOption";
 import FilesList from "./FilesList";
@@ -25,6 +25,7 @@ import { ProjectFile } from "../../projects/projectsService";
 type FilePickerProps = {
   className?: string;
   onPickRecent?: (file: ProjectFile) => void;
+  onFileClick?: (file: ProjectFile) => void;
   recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   showTriggerLabel?: boolean;
@@ -41,6 +42,7 @@ const Row = ({ children }: { children: React.ReactNode }) => (
 export default function FilePicker({
   className,
   onPickRecent,
+  onFileClick,
   recentFiles,
   handleUploadChange,
   showTriggerLabel = false,
@@ -111,18 +113,35 @@ export default function FilePicker({
                         ? onPickRecent(f)
                         : console.log("Picked recent", f)
                     }
-                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
+                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 group"
                   >
-                    <Row>
-                      {String(f.status).toLowerCase() === "processing" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileIcon className="h-4 w-4" />
-                      )}
-                      <span className="truncate max-w-[160px]" title={f.name}>
-                        {f.name}
-                      </span>
-                    </Row>
+                    <div className="flex items-center justify-between w-full">
+                      <Row>
+                        {String(f.status).toLowerCase() === "processing" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileIcon className="h-4 w-4" />
+                        )}
+                        <span className="truncate max-w-[160px]" title={f.name}>
+                          {f.name}
+                        </span>
+                      </Row>
+                      {onFileClick &&
+                        String(f.status).toLowerCase() !== "processing" && (
+                          <button
+                            title="View file"
+                            aria-label="View file"
+                            className="p-0 bg-transparent border-0 outline-none cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 ml-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              onFileClick && onFileClick(f);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200" />
+                          </button>
+                        )}
+                    </div>
                   </MenubarItem>
                 ))}
                 {recentFiles.length > 3 && (
@@ -175,6 +194,7 @@ export default function FilePicker({
           <FilesList
             recentFiles={recentFiles}
             onPickRecent={onPickRecent}
+            onFileClick={onFileClick}
             handleUploadChange={handleUploadChange}
           />
         </DialogContent>

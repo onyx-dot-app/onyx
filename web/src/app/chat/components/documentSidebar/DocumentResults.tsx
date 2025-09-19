@@ -1,7 +1,6 @@
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { ChatFileType } from "@/app/chat/interfaces";
 import {
   Dispatch,
   ForwardedRef,
@@ -16,6 +15,31 @@ import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
+import type { ProjectFile } from "@/app/chat/projects/projectsService";
+
+// Build an OnyxDocument from basic file info
+const buildOnyxDocumentFromFile = (
+  id: string,
+  name?: string | null,
+  appendProjectPrefix?: boolean
+): OnyxDocument => {
+  const document_id = appendProjectPrefix ? `project_file__${id}` : id;
+  return {
+    document_id,
+    semantic_identifier: name || id,
+    link: "",
+    source_type: "file" as any,
+    blurb: "",
+    boost: 0,
+    hidden: false,
+    score: 1,
+    chunk_ind: 0,
+    match_highlights: [],
+    metadata: {},
+    updated_at: null,
+    is_internet: false,
+  } as any;
+};
 
 interface DocumentResultsProps {
   closeSidebar: () => void;
@@ -29,6 +53,7 @@ interface DocumentResultsProps {
   isSharedChat?: boolean;
   modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
+  projectFiles?: ProjectFile[];
 }
 
 const DocumentResultsComponent = (
@@ -44,6 +69,7 @@ const DocumentResultsComponent = (
     isSharedChat,
     isOpen,
     setPresentingDocument,
+    projectFiles = [],
   }: DocumentResultsProps,
   ref: ForwardedRef<HTMLDivElement>
 ) => {
@@ -80,7 +106,7 @@ const DocumentResultsComponent = (
     : null;
 
   const humanFileDescriptors = humanMessage?.files.filter(
-    (file) => file.type == ChatFileType.USER_KNOWLEDGE
+    (file) => file.user_file_id !== null
   );
   const selectedDocumentIds =
     selectedDocuments?.map((document) => document.document_id) || [];
@@ -102,6 +128,15 @@ const DocumentResultsComponent = (
       doc.document_id === undefined ||
       !citedDocumentIds.has(doc.document_id)
   );
+
+  const hasDocs = dedupedDocuments.length > 0;
+  const hasCited = citedDocuments.length > 0;
+  const hasOther = otherDocuments.length > 0;
+  const hasHumanFiles = (humanFileDescriptors?.length || 0) > 0;
+  const hasProjectFiles = (projectFiles?.length || 0) > 0;
+  const showCloseInUserFiles = !hasCited && !hasOther && hasHumanFiles;
+  const showCloseInProjectFiles =
+    !hasCited && !hasOther && !hasHumanFiles && hasProjectFiles;
 
   return (
     <>
@@ -127,10 +162,11 @@ const DocumentResultsComponent = (
         >
           <div className="flex flex-col h-full">
             <div className="overflow-y-auto h-fit mb-8 pb-8 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
-              {dedupedDocuments.length > 0 ? (
+              {/* Documents Sections */}
+              {hasDocs && (
                 <>
                   {/* Cited Documents Section */}
-                  {citedDocuments.length > 0 && (
+                  {hasCited && (
                     <div className="mt-4">
                       <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
                         <h3 className="text-base font-semibold text-text-700">
@@ -175,7 +211,7 @@ const DocumentResultsComponent = (
                   )}
 
                   {/* Other Documents Section */}
-                  {otherDocuments.length > 0 && (
+                  {hasOther && (
                     <div className="mt-4">
                       <>
                         <div className="px-4 pb-3 pt-2 border-b border-border">
@@ -215,7 +251,90 @@ const DocumentResultsComponent = (
                     </div>
                   )}
                 </>
-              ) : null}
+              )}
+
+              {/* Human Files Section */}
+              {humanFileDescriptors && humanFileDescriptors.length > 0 && (
+                <div className="mt-4">
+                  <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
+                    <h3 className="text-base font-semibold text-text-700">
+                      User Files
+                    </h3>
+                    {showCloseInUserFiles && (
+                      <button
+                        aria-label="Close sidebar"
+                        title="Close"
+                        className="my-auto p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                        onClick={closeSidebar}
+                      >
+                        <XIcon size={16} />
+                      </button>
+                    )}
+                  </div>
+                  {humanFileDescriptors.map((f) => (
+                    <div key={f.id} className={`desktop:px-2 w-full mb-2`}>
+                      <ChatDocumentDisplay
+                        setPresentingDocument={setPresentingDocument}
+                        closeSidebar={closeSidebar}
+                        modal={modal}
+                        document={buildOnyxDocumentFromFile(
+                          f.id,
+                          f.name,
+                          false
+                        )}
+                        isSelected={false}
+                        handleSelect={() => {}}
+                        hideSelection={true}
+                        tokenLimitReached={false}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Project Files Section */}
+              {projectFiles && projectFiles.length > 0 && (
+                <div className="mt-4">
+                  <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
+                    <h3 className="text-base font-semibold text-text-700">
+                      Project Files
+                    </h3>
+                    {showCloseInProjectFiles && (
+                      <button
+                        aria-label="Close sidebar"
+                        title="Close"
+                        className="my-auto p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                        onClick={closeSidebar}
+                      >
+                        <XIcon size={16} />
+                      </button>
+                    )}
+                  </div>
+                  {projectFiles.slice(0, 20).map((f) => (
+                    <div key={f.id} className={`desktop:px-2 w-full mb-2`}>
+                      <ChatDocumentDisplay
+                        setPresentingDocument={setPresentingDocument}
+                        closeSidebar={closeSidebar}
+                        modal={modal}
+                        document={buildOnyxDocumentFromFile(
+                          f.file_id,
+                          f.name,
+                          true
+                        )}
+                        isSelected={false}
+                        handleSelect={() => {}}
+                        hideSelection={true}
+                        tokenLimitReached={false}
+                      />
+                    </div>
+                  ))}
+                  {projectFiles.length > 20 && (
+                    <div className="text-text-500 px-4 py-2 text-xs">
+                      +{projectFiles.length - 20} more
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

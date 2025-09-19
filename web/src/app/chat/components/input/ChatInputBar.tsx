@@ -21,7 +21,7 @@ import {
   SendIcon,
   StopGeneratingIcon,
 } from "@/components/icons/icons";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
@@ -114,6 +114,7 @@ interface ChatInputBarProps {
   filterManager: FilterManager;
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
+  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   placeholder?: string;
 }
@@ -141,6 +142,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   deepResearchEnabled,
   toggleDeepResearch,
   placeholder,
+  setPresentingDocument,
 }: ChatInputBarProps) {
   const { user } = useUser();
 
@@ -153,6 +155,21 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       (file) => file.status === UserFileStatus.PROCESSING
     );
   }, [currentMessageFiles]);
+
+  // Convert ProjectFile to MinimalOnyxDocument format for viewing
+  const handleFileClick = useCallback(
+    (file: ProjectFile) => {
+      if (!setPresentingDocument) return;
+
+      const documentForViewer: MinimalOnyxDocument = {
+        document_id: `project_file__${file.file_id}`,
+        semantic_identifier: file.name,
+      };
+
+      setPresentingDocument(documentForViewer);
+    },
+    [setPresentingDocument]
+  );
 
   const handleUploadChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -407,6 +424,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                         file={file}
                         removeFile={handleRemoveMessageFile}
                         hideProcessingState={hideProcessingState}
+                        onFileClick={handleFileClick}
                       />
                     ))}
                   </div>
@@ -564,6 +582,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
               <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
                 <div className="space-x-1 flex px-4 items-center">
                   <FilePicker
+                    onFileClick={handleFileClick}
                     onPickRecent={(file: ProjectFile) => {
                       // Check if file with same ID already exists
                       if (

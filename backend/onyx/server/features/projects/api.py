@@ -505,6 +505,44 @@ def get_chat_session_project_token_count(
     return TokenCountResponse(total_tokens=int(total_tokens))
 
 
+@router.get("/session/{chat_session_id}/files")
+def get_chat_session_project_files(
+    chat_session_id: str,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    """Return user files for the project linked to the given chat session.
+
+    If the chat session has no project, returns an empty list.
+    Only returns files owned by the current user and not FAILED.
+    """
+    user_id = user.id if user is not None else None
+
+    chat_session = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user_id)
+        .one_or_none()
+    )
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    if chat_session.project_id is None:
+        return []
+
+    user_files = (
+        db_session.query(UserFile)
+        .filter(
+            UserFile.projects.any(id=chat_session.project_id),
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.FAILED,
+        )
+        .order_by(UserFile.created_at.desc())
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
+
+
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
 def get_project_token_count(
     project_id: int,
