@@ -56,6 +56,8 @@ def create_project(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
+    if name == "":
+        raise HTTPException(status_code=400, detail="Project name cannot be empty")
     user_id = user.id if user is not None else None
     project = UserProject(name=name, user_id=user_id)
     db_session.add(project)
