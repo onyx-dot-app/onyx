@@ -16,13 +16,9 @@ def _truncate_str(s: str) -> str:
     return f"{s[:head]}…{s[-tail:]}[TRUNCATED {len(s)} chars to {MASKING_LENGTH}]"
 
 
-def _should_mask(data: Any) -> bool:
-    return len(str(data)) > MASKING_LENGTH
-
-
 def _mask(data: Any) -> Any:
     """Mask data if it exceeds the maximum length threshold."""
-    if not _should_mask(data):
+    if not len(str(data)) <= MASKING_LENGTH:
         return data
     return _truncate_str(str(data))
 
