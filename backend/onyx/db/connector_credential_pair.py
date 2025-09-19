@@ -95,6 +95,7 @@ def _add_user_filters(
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
+        where_clause |= ConnectorCredentialPair.creator_id == user.id
 
     return stmt.where(where_clause)
 
