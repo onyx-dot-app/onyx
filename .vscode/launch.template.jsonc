@@ -111,7 +111,7 @@
         "cwd": "${workspaceFolder}/backend",
         "envFile": "${workspaceFolder}/.vscode/.env",
         "env": {
-          "LOG_DANSWER_MODEL_INTERACTIONS": "True",
+          "LOG_ONYX_MODEL_INTERACTIONS": "True",
           "LOG_LEVEL": "DEBUG",
           "PYTHONUNBUFFERED": "1"
         },
@@ -122,7 +122,7 @@
         "consoleTitle": "API Server Console"
       },
       // For the listener to access the Slack API,
-      // DANSWER_BOT_SLACK_APP_TOKEN & DANSWER_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
+      // ONYX_BOT_SLACK_APP_TOKEN & ONYX_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
       {
         "name": "Slack Bot",
         "consoleName": "Slack Bot",
@@ -418,7 +418,7 @@
         "cwd": "${workspaceFolder}/backend",
         "envFile": "${workspaceFolder}/.vscode/.env",
         "env": {
-          "LOG_DANSWER_MODEL_INTERACTIONS": "True",
+          "LOG_ONYX_MODEL_INTERACTIONS": "True",
           "LOG_LEVEL": "DEBUG",
           "PYTHONUNBUFFERED": "1",
           "PYTHONPATH": "."

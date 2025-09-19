@@ -14,11 +14,11 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
+from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
@@ -70,10 +70,10 @@ def handle_regular_answer(
     channel: str,
     logger: OnyxLoggingAdapter,
     feedback_reminder_id: str | None,
-    num_retries: int = DANSWER_BOT_NUM_RETRIES,
+    num_retries: int = ONYX_BOT_NUM_RETRIES,
     thread_context_percent: float = MAX_THREAD_CONTEXT_PERCENTAGE,
-    should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
-    disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
+    should_respond_with_error_msgs: bool = ONYX_BOT_DISPLAY_ERROR_MSGS,
+    disable_docs_only_answer: bool = ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
 ) -> bool:
     channel_conf = slack_channel_config.channel_config
 
@@ -341,7 +341,7 @@ def handle_regular_answer(
     if not answer.answer and disable_docs_only_answer:
         logger.notice(
             "Unable to find answer - not responding since the "
-            "`DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
+            "`ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
         return True
 

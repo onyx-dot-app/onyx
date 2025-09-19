@@ -21,15 +21,15 @@ from slack_sdk.socket_mode import SocketModeClient
 from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import ID_SEPARATOR
 from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_VISIBILITY
-from onyx.configs.onyxbot_configs import DANSWER_BOT_MAX_QPM
-from onyx.configs.onyxbot_configs import DANSWER_BOT_MAX_WAIT_TIME
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
+from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
+from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
+from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
+from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
 from onyx.configs.onyxbot_configs import (
-    DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
 )
 from onyx.configs.onyxbot_configs import (
-    DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
+    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
 )
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -54,8 +54,8 @@ slack_token_user_ids: dict[str, str | None] = {}
 slack_token_bot_ids: dict[str, str | None] = {}
 slack_token_lock = threading.Lock()
 
-_DANSWER_BOT_MESSAGE_COUNT: int = 0
-_DANSWER_BOT_COUNT_START_TIME: float = time.time()
+_ONYX_BOT_MESSAGE_COUNT: int = 0
+_ONYX_BOT_COUNT_START_TIME: float = time.time()
 
 
 def get_onyx_bot_auth_ids(
@@ -123,22 +123,22 @@ def check_message_limit() -> bool:
     High traffic at the end of one period and start of another could cause
     the limit to be exceeded.
     """
-    if DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD == 0:
+    if ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD == 0:
         return True
-    global _DANSWER_BOT_MESSAGE_COUNT
-    global _DANSWER_BOT_COUNT_START_TIME
-    time_since_start = time.time() - _DANSWER_BOT_COUNT_START_TIME
-    if time_since_start > DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS:
-        _DANSWER_BOT_MESSAGE_COUNT = 0
-        _DANSWER_BOT_COUNT_START_TIME = time.time()
-    if (_DANSWER_BOT_MESSAGE_COUNT + 1) > DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
+    global _ONYX_BOT_MESSAGE_COUNT
+    global _ONYX_BOT_COUNT_START_TIME
+    time_since_start = time.time() - _ONYX_BOT_COUNT_START_TIME
+    if time_since_start > ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS:
+        _ONYX_BOT_MESSAGE_COUNT = 0
+        _ONYX_BOT_COUNT_START_TIME = time.time()
+    if (_ONYX_BOT_MESSAGE_COUNT + 1) > ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
         logger.error(
-            f"OnyxBot has reached the message limit {DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
-            f" for the time period {DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
+            f"OnyxBot has reached the message limit {ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
+            f" for the time period {ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
             " These limits are configurable in backend/onyx/configs/onyxbot_configs.py"
         )
         return False
-    _DANSWER_BOT_MESSAGE_COUNT += 1
+    _ONYX_BOT_MESSAGE_COUNT += 1
     return True
 
 
@@ -242,7 +242,7 @@ def _build_error_block(error_message: str) -> Block:
 
 
 @retry(
-    tries=DANSWER_BOT_NUM_RETRIES,
+    tries=ONYX_BOT_NUM_RETRIES,
     delay=0.25,
     backoff=2,
     logger=cast(logging.Logger, logger),
@@ -679,8 +679,8 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
 
 class SlackRateLimiter:
     def __init__(self) -> None:
-        self.max_qpm: int | None = DANSWER_BOT_MAX_QPM
-        self.max_wait_time = DANSWER_BOT_MAX_WAIT_TIME
+        self.max_qpm: int | None = ONYX_BOT_MAX_QPM
+        self.max_wait_time = ONYX_BOT_MAX_WAIT_TIME
         self.active_question = 0
         self.last_reset_time = time.time()
         self.waiting_questions: list[int] = []
@@ -740,7 +740,7 @@ class SlackRateLimiter:
 
 def get_feedback_visibility() -> FeedbackVisibility:
     try:
-        return FeedbackVisibility(DANSWER_BOT_FEEDBACK_VISIBILITY.lower())
+        return FeedbackVisibility(ONYX_BOT_FEEDBACK_VISIBILITY.lower())
     except ValueError:
         return FeedbackVisibility.PRIVATE
 

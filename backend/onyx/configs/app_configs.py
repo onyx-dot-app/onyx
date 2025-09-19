@@ -666,8 +666,8 @@ LOG_ALL_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ALL_MODEL_INTERACTIONS", "").lower() == "true"
 )
 # Logs Onyx only model interactions like prompts, responses, messages etc.
-LOG_DANSWER_MODEL_INTERACTIONS = (
-    os.environ.get("LOG_DANSWER_MODEL_INTERACTIONS", "").lower() == "true"
+LOG_ONYX_MODEL_INTERACTIONS = (
+    os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 LOG_INDIVIDUAL_MODEL_TOKENS = (
     os.environ.get("LOG_INDIVIDUAL_MODEL_TOKENS", "").lower() == "true"
