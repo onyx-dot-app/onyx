@@ -18,7 +18,7 @@ def _truncate_str(s: str) -> str:
 
 def _mask(data: Any) -> Any:
     """Mask data if it exceeds the maximum length threshold."""
-    if not len(str(data)) <= MASKING_LENGTH:
+    if len(str(data)) <= MASKING_LENGTH:
         return data
     return _truncate_str(str(data))
 
