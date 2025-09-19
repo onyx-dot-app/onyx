@@ -26,6 +26,7 @@ import { getAvailableContextTokens } from "../services/lib";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
+import { getProjectFilesForSession } from "../projects/projectsService";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -83,6 +84,7 @@ export function useChatSessionController({
 }: UseChatSessionControllerProps) {
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -254,6 +256,20 @@ export function useChatSessionController({
         setCurrentSessionFileTokenCount(0);
       }
 
+      // Fetch project files for this chat session (if any)
+      try {
+        if (chatSession.chat_session_id) {
+          const files = await getProjectFilesForSession(
+            chatSession.chat_session_id
+          );
+          setProjectFiles(files || []);
+        } else {
+          setProjectFiles([]);
+        }
+      } catch (e) {
+        setProjectFiles([]);
+      }
+
       // If this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
@@ -346,5 +362,6 @@ export function useChatSessionController({
   return {
     currentSessionFileTokenCount,
     onMessageSelection,
+    projectFiles,
   };
 }

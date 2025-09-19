@@ -524,7 +524,7 @@ export function ChatPage({
       setSelectedAssistantFromId,
     });
 
-  const { onMessageSelection, currentSessionFileTokenCount } =
+  const { onMessageSelection, currentSessionFileTokenCount, projectFiles } =
     useChatSessionController({
       existingChatSessionId,
       searchParams,
@@ -906,6 +906,7 @@ export function ChatPage({
               maxTokens={maxTokens}
               initialWidth={400}
               isOpen={true}
+              projectFiles={projectFiles}
             />
           </Modal>
         </div>
@@ -1059,6 +1060,7 @@ export function ChatPage({
               maxTokens={maxTokens}
               initialWidth={400}
               isOpen={documentSidebarVisible && !settings?.isMobile}
+              projectFiles={projectFiles}
             />
           </div>
 
@@ -1159,6 +1161,7 @@ export function ChatPage({
                             llmManager={llmManager}
                             deepResearchEnabled={deepResearchEnabled}
                             currentMessageFiles={currentMessageFiles}
+                            projectFiles={projectFiles}
                             setPresentingDocument={setPresentingDocument}
                             setCurrentFeedback={setCurrentFeedback}
                             onSubmit={onSubmit}
@@ -1223,6 +1226,9 @@ export function ChatPage({
                                     availableContextTokens={
                                       availableContextTokens
                                     }
+                                    setPresentingDocument={
+                                      setPresentingDocument
+                                    }
                                   />
                                 )}
                               <ChatInputBar
@@ -1253,6 +1259,7 @@ export function ChatPage({
                                   handleMessageSpecificFileUpload
                                 }
                                 textAreaRef={textAreaRef}
+                                setPresentingDocument={setPresentingDocument}
                               />
                             </div>
 

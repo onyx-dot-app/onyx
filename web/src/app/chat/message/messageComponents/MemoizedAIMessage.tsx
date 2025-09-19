@@ -15,6 +15,7 @@ interface BaseMemoizedAIMessageProps {
   nodeId: number;
   otherMessagesCanSwitchTo: number[];
   onMessageSelection: (messageId: number) => void;
+  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -48,7 +49,10 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
   nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
-}: InternalMemoizedAIMessageProps) {
+  projectFiles,
+}: InternalMemoizedAIMessageProps & {
+  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
+}) {
   return (
     <AIMessage
       rawPackets={rawPackets}
@@ -56,7 +60,7 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
         handleFeedback,
         assistant,
         docs,
-        userFiles: [],
+        userFiles: projectFiles || [],
         citations,
         setPresentingDocument,
         regenerate,
@@ -83,7 +87,10 @@ export const MemoizedAIMessage = ({
   parentMessage,
   otherMessagesCanSwitchTo,
   onMessageSelection,
-}: MemoizedAIMessageProps) => {
+  projectFiles,
+}: MemoizedAIMessageProps & {
+  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
+}) => {
   const regenerate = useMemo(() => {
     if (messageId === undefined) {
       return undefined;
@@ -125,6 +132,7 @@ export const MemoizedAIMessage = ({
       nodeId={nodeId}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
+      projectFiles={projectFiles}
     />
   );
 };
