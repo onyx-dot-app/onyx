@@ -10,7 +10,7 @@ SKIP_WARM_UP=True
 
 # Always keep these on for Dev
 # Logs all model prompts to stdout
-LOG_DANSWER_MODEL_INTERACTIONS=True
+LOG_ONYX_MODEL_INTERACTIONS=True
 # More verbose logging
 LOG_LEVEL=debug
 
@@ -39,8 +39,8 @@ FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
 # For Danswer Slack Bot, overrides the UI values so no need to set this up via UI every time
 # Only needed if using DanswerBot
-#DANSWER_BOT_SLACK_APP_TOKEN=<REPLACE THIS>
-#DANSWER_BOT_SLACK_BOT_TOKEN=<REPLACE THIS>
+#ONYX_BOT_SLACK_APP_TOKEN=<REPLACE THIS>
+#ONYX_BOT_SLACK_BOT_TOKEN=<REPLACE THIS>
 
 
 # Python stuff

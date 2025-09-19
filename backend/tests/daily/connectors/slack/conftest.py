@@ -37,7 +37,7 @@ def slack_connector(
 @pytest.fixture
 def slack_credentials_provider() -> OnyxStaticCredentialsProvider:
     CI_ENV_VAR = "SLACK_BOT_TOKEN"
-    LOCAL_ENV_VAR = "DANSWER_BOT_SLACK_BOT_TOKEN"
+    LOCAL_ENV_VAR = "ONYX_BOT_SLACK_BOT_TOKEN"
 
     slack_bot_token = os.environ.get(CI_ENV_VAR, os.environ.get(LOCAL_ENV_VAR))
     if not slack_bot_token:
