@@ -8,7 +8,7 @@ from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
 
 
-def _truncate_str(s: str, head=800, tail=200) -> str:
+def _truncate_str(s: str, head: int = 800, tail: int = 200) -> str:
     if len(s) <= head + tail:
         return s
     return f"{s[:head]}…{s[-tail:]}[TRUNCATED {len(s)} chars to 10,000]"
