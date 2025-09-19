@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+import React from "react";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
@@ -25,6 +26,7 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
   onClose,
   setPopup,
 }) => {
+  const { t } = useTranslation();
   const [selectedCCPairIds, setSelectedCCPairIds] = useState<number[]>([]);
 
   // Filter out ccPairs that are already in the user group and are not private
@@ -40,17 +42,17 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
   return (
     <Modal
       className="max-w-3xl"
-      title="Добавить новый коннектор"
+      title={t(k.ADD_NEW_CONNECTOR)}
       onOutsideClick={() => onClose()}
     >
       <div className="px-6 pt-4">
         <ConnectorMultiSelect
           name="connectors"
-          label="Выбрать коннекторы"
+          label={t(k.SELECT_CONNECTORS)}
           connectors={availableCCPairs}
           selectedIds={selectedCCPairIds}
           onChange={setSelectedCCPairIds}
-          placeholder="Поиск коннекторов для добавления..."
+          placeholder={t(k.SEARCH_CONNECTORS_TO_ADD)}
           showError={false}
         />
 
@@ -73,7 +75,7 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
             });
             if (response.ok) {
               setPopup({
-                message: i18n.t(k.SUCCESSFULLY_ADDED_CONNECTORS),
+                message: t(k.SUCCESSFULLY_ADDED_CONNECTORS),
                 type: "success",
               });
               onClose();
@@ -81,16 +83,14 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: `${i18n.t(
-                  k.FAILED_TO_ADD_CONNECTORS_TO_GR
-                )} ${errorMsg}`,
+                message: `${t(k.FAILED_TO_ADD_CONNECTORS_TO_GR)} ${errorMsg}`,
                 type: "error",
               });
               onClose();
             }
           }}
         >
-          {i18n.t(k.ADD_CONNECTORS)}
+          {t(k.ADD_CONNECTORS)}
         </Button>
       </div>
     </Modal>

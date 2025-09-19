@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { deleteCustomTool } from "@/lib/tools/edit";
 import { useRouter } from "next/navigation";
 
 export function DeleteToolButton({ toolId }: { toolId: number }) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -19,12 +20,12 @@ export function DeleteToolButton({ toolId }: { toolId: number }) {
         if (response.data) {
           router.push(`/admin/tools?u=${Date.now()}`);
         } else {
-          alert(`${i18n.t(k.FAILED_TO_DELETE_TOOL)} ${response.error}`);
+          alert(`${t(k.FAILED_TO_DELETE_TOOL)} ${response.error}`);
         }
       }}
       icon={FiTrash}
     >
-      {i18n.t(k.DELETE)}
+      {t(k.DELETE)}
     </Button>
   );
 }

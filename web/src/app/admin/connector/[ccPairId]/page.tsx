@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { BackButton } from "@/components/BackButton";
@@ -19,7 +19,7 @@ import { ValidSources } from "@/lib/types";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use, useMemo } from "react";
 import useSWR, { mutate } from "swr";
 import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
 import { DeletionButton } from "./DeletionButton";
@@ -47,28 +47,39 @@ import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 
-// synchronize these validations with the SQLAlchemy connector class until we have a
-// centralized schema for both frontend and backend
-const RefreshFrequencySchema = Yup.object().shape({
-  propertyValue: Yup.number()
-    .typeError("Значение свойства должно быть допустимым числом")
-    .integer("Значение свойства должно быть целым числом")
-    .min(60, "Значение свойства должно быть больше или равно 60")
-    .required("Значение свойства обязательно"),
-});
-
-const PruneFrequencySchema = Yup.object().shape({
-  propertyValue: Yup.number()
-    .typeError("Значение свойства должно быть допустимым числом")
-    .integer("Значение свойства должно быть целым числом")
-    .min(86400, "Значение свойства должно быть больше или равно 86400")
-    .required("Значение свойства обязательно"),
-});
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
+  const { t } = useTranslation();
   const router = useRouter();
+
+  // synchronize these validations with the SQLAlchemy connector class until we have a
+  // centralized schema for both frontend and backend
+  const RefreshFrequencySchema = useMemo(
+    () =>
+      Yup.object().shape({
+        propertyValue: Yup.number()
+          .typeError(t(k.PROPERTY_VALUE_MUST_BE_VALID_NUMBER))
+          .integer(t(k.PROPERTY_VALUE_MUST_BE_INTEGER))
+          .min(60, t(k.PROPERTY_VALUE_MUST_BE_GREATER_THAN_60))
+          .required(t(k.PROPERTY_VALUE_REQUIRED)),
+      }),
+    [t]
+  );
+
+  const PruneFrequencySchema = useMemo(
+    () =>
+      Yup.object().shape({
+        propertyValue: Yup.number()
+          .typeError(t(k.PROPERTY_VALUE_MUST_BE_VALID_NUMBER))
+          .integer(t(k.PROPERTY_VALUE_MUST_BE_INTEGER))
+          .min(86400, t(k.PROPERTY_VALUE_MUST_BE_GREATER_THAN_86400))
+          .required(t(k.PROPERTY_VALUE_REQUIRED)),
+      }),
+    [t]
+  );
+
   const {
     data: ccPair,
     isLoading: isLoadingCCPair,
@@ -169,12 +180,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Имя коннектора успешно обновлено",
+        message: t(k.CONNECTOR_NAME_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: `Не удалось обновить имя коннектора`,
+        message: t(k.FAILED_TO_UPDATE_CONNECTOR_NAME),
         type: "error",
       });
     }
@@ -196,7 +207,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedRefreshFreq)) {
       setPopup({
-        message: "Неверная частота обновления: должна быть целым числом",
+        message: t(k.INVALID_REFRESH_FREQUENCY),
         type: "error",
       });
       return;
@@ -213,12 +224,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Частота обновления коннектора успешно обновлена",
+        message: t(k.CONNECTOR_REFRESH_FREQUENCY_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить частоту обновления коннектора",
+        message: t(k.FAILED_TO_UPDATE_REFRESH_FREQUENCY),
         type: "error",
       });
     }
@@ -232,7 +243,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedFreq)) {
       setPopup({
-        message: "Неверная частота обрезки: должна быть целым числом",
+        message: t(k.INVALID_PRUNING_FREQUENCY),
         type: "error",
       });
       return;
@@ -249,12 +260,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Частота обрезки коннектора успешно обновлена",
+        message: t(k.CONNECTOR_PRUNING_FREQUENCY_UPDATED_SUCCESS),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить частоту обрезки коннектора",
+        message: t(k.FAILED_TO_UPDATE_PRUNING_FREQUENCY),
         type: "error",
       });
     }
@@ -267,11 +278,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
     return (
       <ErrorCallout
-        errorTitle={`${i18n.t(k.FAILED_TO_FETCH_INFO_ON_CONNEC)} ${ccPairId}`}
+        errorTitle={`${t(k.FAILED_TO_FETCH_INFO_ON_CONNEC)} ${ccPairId}`}
         errorMsg={
           ccPairError?.info?.detail ||
           ccPairError?.toString() ||
-          "Неизвестная ошибка"
+          t(k.UNKNOWN_ERROR)
         }
       />
     );
@@ -296,8 +307,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingRefreshFrequency && (
         <EditPropertyModal
-          propertyTitle="Частота обновления"
-          propertyDetails="Как часто должен обновляться коннектор (в секундах)"
+          propertyTitle={t(k.REFRESH_FREQUENCY_TITLE)}
+          propertyDetails={t(k.REFRESH_FREQUENCY_DETAILS)}
           propertyName="refresh_frequency"
           propertyValue={String(refreshFreq)}
           validationSchema={RefreshFrequencySchema}
@@ -308,8 +319,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingPruningFrequency && (
         <EditPropertyModal
-          propertyTitle="Частота обрезки"
-          propertyDetails="Как часто следует обрезать коннектор (в секундах)"
+          propertyTitle={t(k.PRUNING_FREQUENCY_TITLE)}
+          propertyDetails={t(k.PRUNING_FREQUENCY_DETAILS)}
           propertyName="pruning_frequency"
           propertyValue={String(pruneFreq)}
           validationSchema={PruneFrequencySchema}
@@ -386,20 +397,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
       />
 
       <div className="text-sm mt-1">
-        {i18n.t(k.CREATOR)}{" "}
-        <b className="text-emphasis">{ccPair.creator_email ?? "Неизвестный"}</b>
+        {t(k.CREATOR)}{" "}
+        <b className="text-emphasis">
+          {ccPair.creator_email ?? t(k.UNKNOWN_USER)}
+        </b>
       </div>
       <div className="text-sm mt-1">
-        {i18n.t(k.TOTAL_DOCUMENTS_INDEXED)}{" "}
+        {t(k.TOTAL_DOCUMENTS_INDEXED)}{" "}
         <b className="text-emphasis">{ccPair.num_docs_indexed}</b>
       </div>
       {!ccPair.is_editable_for_current_user && (
         <div className="text-sm mt-2 text-text-500 italic">
           {ccPair.access_type === "public"
-            ? i18n.t(k.PUBLIC_CONNECTORS_ARE_NOT_EDIT)
+            ? t(k.PUBLIC_CONNECTORS_ARE_NOT_EDIT)
             : ccPair.access_type === "sync"
-            ? i18n.t(k.SYNC_CONNECTORS_ARE_NOT_EDITAB)
-            : i18n.t(k.THIS_CONNECTOR_BELONGS_TO_GROU)}
+            ? t(k.SYNC_CONNECTORS_ARE_NOT_EDITAB)
+            : t(k.THIS_CONNECTOR_BELONGS_TO_GROU)}
         </div>
       )}
 
@@ -418,7 +431,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <>
             <Separator />
 
-            <Title className="mb-2">{i18n.t(k.CREDENTIALS1)}</Title>
+            <Title className="mb-2">{t(k.CREDENTIALS1)}</Title>
 
             <CredentialSection
               ccPair={ccPair}
@@ -430,8 +443,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
         <div className="mt-2">
-          <Callout type="warning" title="Неверное состояние коннектора">
-            {i18n.t(k.THIS_CONNECTOR_IS_IN_AN_INVALI)}
+          <Callout type="warning" title={t(k.INVALID_CONNECTOR_STATE)}>
+            {t(k.THIS_CONNECTOR_IS_IN_AN_INVALI)}
           </Callout>
         </div>
       )}
@@ -454,29 +467,29 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       <div className="mt-6">
         <div className="flex">
-          <Title>{i18n.t(k.INDEXING_ATTEMPTS)}</Title>
+          <Title>{t(k.INDEXING_ATTEMPTS)}</Title>
         </div>
         {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
           <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2">
             <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
             <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
-              {i18n.t(k.SOME_DOCUMENTS_FAILED_TO_INDEX)}
+              {t(k.SOME_DOCUMENTS_FAILED_TO_INDEX)}
             </AlertTitle>
             <AlertDescription className="text-yellow-900 dark:text-yellow-300">
               {isResolvingErrors ? (
                 <span>
                   <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
-                    {i18n.t(k.RESOLVING_FAILURES)}
+                    {t(k.RESOLVING_FAILURES)}
                   </span>
                 </span>
               ) : (
                 <>
-                  {i18n.t(k.WE_RAN_INTO_SOME_ISSUES_WHILE)}{" "}
+                  {t(k.WE_RAN_INTO_SOME_ISSUES_WHILE)}{" "}
                   <b
                     className="text-link cursor-pointer dark:text-blue-300"
                     onClick={() => setShowIndexAttemptErrors(true)}
                   >
-                    {i18n.t(k.VIEW_DETAILS)}
+                    {t(k.VIEW_DETAILS)}
                   </b>
                 </>
               )}

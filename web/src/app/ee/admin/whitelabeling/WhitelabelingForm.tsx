@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
 export function WhitelabelingForm() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [selectedLogotype, setSelectedLogotype] = useState<File | null>(null);
@@ -77,7 +78,7 @@ export function WhitelabelingForm() {
           auto_scroll: Yup.boolean().nullable(),
           application_name: Yup.string()
             .trim()
-            .min(1, "Название приложения не может быть пустым")
+            .min(1, t(k.APP_NAME_CANNOT_BE_EMPTY))
             .nullable(),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),
@@ -106,7 +107,7 @@ export function WhitelabelingForm() {
             );
             if (!response.ok) {
               const errorMsg = (await response.json()).detail;
-              alert(`${i18n.t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
+              alert(`${t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
               formikHelpers.setSubmitting(false);
               return;
             }
@@ -127,7 +128,7 @@ export function WhitelabelingForm() {
             );
             if (!response.ok) {
               const errorMsg = (await response.json()).detail;
-              alert(`${i18n.t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
+              alert(`${t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
               formikHelpers.setSubmitting(false);
               return;
             }
@@ -140,18 +141,18 @@ export function WhitelabelingForm() {
         {({ isSubmitting, values, setValues }) => (
           <Form>
             <TextFormField
-              label="Название приложения"
+              label={t(k.APP_NAME_LABEL)}
               name="application_name"
-              subtext={`${i18n.t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
-              placeholder="Пользовательское имя, которое заменит 'SmartSearch'"
+              subtext={`${t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
+              placeholder={t(k.APP_NAME_PLACEHOLDER)}
               disabled={isSubmitting}
             />
 
-            <Label className="mt-4">{i18n.t(k.CUSTOM_LOGO)}</Label>
+            <Label className="mt-4">{t(k.CUSTOM_LOGO)}</Label>
 
             {values.use_custom_logo ? (
               <div className="mt-3">
-                <SubLabel>{i18n.t(k.CURRENT_CUSTOM_LOGO)}</SubLabel>
+                <SubLabel>{t(k.CURRENT_CUSTOM_LOGO)}</SubLabel>
                 <img
                   src={"/api/enterprise-settings/logo?u=" + Date.now()}
                   alt="logo"
@@ -173,13 +174,13 @@ export function WhitelabelingForm() {
                     setValues(valuesWithoutLogo);
                   }}
                 >
-                  {i18n.t(k.DELETE)}
+                  {t(k.DELETE)}
                 </Button>
 
-                <SubLabel>{i18n.t(k.OVERRIDE_THE_CURRENT_CUSTOM_LO)}</SubLabel>
+                <SubLabel>{t(k.OVERRIDE_THE_CURRENT_CUSTOM_LO)}</SubLabel>
               </div>
             ) : (
-              <SubLabel>{i18n.t(k.SPECIFY_YOUR_OWN_LOGO_TO_REPLA)}</SubLabel>
+              <SubLabel>{t(k.SPECIFY_YOUR_OWN_LOGO_TO_REPLA)}</SubLabel>
             )}
 
             <ImageUpload
@@ -197,28 +198,28 @@ export function WhitelabelingForm() {
             {showAdvancedOptions && (
               <div className="w-full flex flex-col gap-y-4">
                 <Text>
-                  {i18n.t(k.READ)}{" "}
+                  {t(k.READ)}{" "}
                   <Link
                     href={"https://docs.onyx.app/enterprise_edition/theming"}
                     className="text-link cursor-pointer"
                   >
-                    {i18n.t(k.THE_DOCS)}
+                    {t(k.THE_DOCS)}
                   </Link>{" "}
-                  {i18n.t(k.TO_SEE_WHITELABELING_EXAMPLES)}
+                  {t(k.TO_SEE_WHITELABELING_EXAMPLES)}
                 </Text>
 
                 <TextFormField
                   label="Chat Header Content"
                   name="custom_header_content"
-                  subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W)}`}
-                  placeholder="Содержание вашего заголовка..."
+                  subtext={`${t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W)}`}
+                  placeholder={t(k.HEADER_CONTENT_PLACEHOLDER)}
                   disabled={isSubmitting}
                 />
 
                 <BooleanFormField
                   name="two_lines_for_chat_header"
-                  label="Две строки для заголовка чата?"
-                  subtext="Если включено, заголовок чата будет отображаться на двух строках вместо одной."
+                  label={t(k.TWO_LINE_HEADER_LABEL)}
+                  subtext={t(k.TWO_LINE_HEADER_SUBTEXT)}
                 />
 
                 <Separator />
@@ -226,21 +227,21 @@ export function WhitelabelingForm() {
                 <TextFormField
                   label={
                     values.enable_consent_screen
-                      ? i18n.t(k.CONSENT_SCREEN_HEADER)
-                      : i18n.t(k.POPUP_HEADER)
+                      ? t(k.CONSENT_SCREEN_HEADER)
+                      : t(k.POPUP_HEADER)
                   }
                   name="custom_popup_header"
                   subtext={
                     values.enable_consent_screen
-                      ? `${i18n.t(k.THE_TITLE_FOR_THE_CONSENT_SCRE)}`
-                      : `${i18n.t(k.THE_TITLE_FOR_THE_POPUP_THAT_W)} ${
-                          values.application_name || i18n.t(k.ONYX)
-                        }${i18n.t(k._18)}`
+                      ? `${t(k.THE_TITLE_FOR_THE_CONSENT_SCRE)}`
+                      : `${t(k.THE_TITLE_FOR_THE_POPUP_THAT_W)} ${
+                          values.application_name || t(k.ONYX)
+                        }${t(k._18)}`
                   }
                   placeholder={
                     values.enable_consent_screen
-                      ? i18n.t(k.CONSENT_SCREEN_HEADER)
-                      : i18n.t(k.INITIAL_POPUP_HEADER)
+                      ? t(k.CONSENT_SCREEN_HEADER)
+                      : t(k.INITIAL_POPUP_HEADER)
                   }
                   disabled={isSubmitting}
                 />
@@ -248,19 +249,19 @@ export function WhitelabelingForm() {
                 <TextFormField
                   label={
                     values.enable_consent_screen
-                      ? i18n.t(k.CONSENT_SCREEN_CONTENT)
-                      : i18n.t(k.POPUP_CONTENT)
+                      ? t(k.CONSENT_SCREEN_CONTENT)
+                      : t(k.POPUP_CONTENT)
                   }
                   name="custom_popup_content"
                   subtext={
                     values.enable_consent_screen
-                      ? `${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W1)}`
-                      : `${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W2)}`
+                      ? `${t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W1)}`
+                      : `${t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W2)}`
                   }
                   placeholder={
                     values.enable_consent_screen
-                      ? i18n.t(k.YOUR_CONSENT_SCREEN_CONTENT)
-                      : i18n.t(k.YOUR_POPUP_CONTENT)
+                      ? t(k.YOUR_CONSENT_SCREEN_CONTENT)
+                      : t(k.YOUR_POPUP_CONTENT)
                   }
                   isTextArea
                   disabled={isSubmitting}
@@ -268,26 +269,26 @@ export function WhitelabelingForm() {
 
                 <BooleanFormField
                   name="enable_consent_screen"
-                  label="Включить экран согласия"
-                  subtext="Если включено, первоначальное всплывающее окно будет преобразовано в экран согласия. Пользователи должны будут согласиться с условиями перед доступом к приложению при первом входе в систему."
+                  label={t(k.ENABLE_CONSENT_SCREEN_LABEL)}
+                  subtext={t(k.ENABLE_CONSENT_SCREEN_SUBTEXT)}
                   disabled={isSubmitting}
                 />
 
                 <TextFormField
-                  label="Текст нижнего колонтитула чата"
+                  label={t(k.CHAT_FOOTER_TEXT_LABEL)}
                   name="custom_lower_disclaimer_content"
-                  subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W3)}`}
-                  placeholder="Содержимое вашего отказа от ответственности..."
+                  subtext={`${t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W3)}`}
+                  placeholder={t(k.DISCLAIMER_CONTENT_PLACEHOLDER)}
                   isTextArea
                   disabled={isSubmitting}
                 />
 
                 <div>
-                  <Label>{i18n.t(k.CHAT_FOOTER_LOGOTYPE)}</Label>
+                  <Label>{t(k.CHAT_FOOTER_LOGOTYPE)}</Label>
 
                   {values.use_custom_logotype ? (
                     <div className="mt-3">
-                      <SubLabel>{i18n.t(k.CURRENT_CUSTOM_LOGOTYPE)}</SubLabel>
+                      <SubLabel>{t(k.CURRENT_CUSTOM_LOGOTYPE)}</SubLabel>
                       <img
                         src={
                           "/api/enterprise-settings/logotype?u=" + Date.now()
@@ -311,17 +312,13 @@ export function WhitelabelingForm() {
                           setValues(valuesWithoutLogotype);
                         }}
                       >
-                        {i18n.t(k.DELETE)}
+                        {t(k.DELETE)}
                       </Button>
 
-                      <SubLabel>
-                        {i18n.t(k.OVERRIDE_YOUR_UPLOADED_CUSTOM)}
-                      </SubLabel>
+                      <SubLabel>{t(k.OVERRIDE_YOUR_UPLOADED_CUSTOM)}</SubLabel>
                     </div>
                   ) : (
-                    <SubLabel>
-                      {i18n.t(k.ADD_A_CUSTOM_LOGOTYPE_BY_UPLOA)}
-                    </SubLabel>
+                    <SubLabel>{t(k.ADD_A_CUSTOM_LOGOTYPE_BY_UPLOA)}</SubLabel>
                   )}
                   <ImageUpload
                     selectedFile={selectedLogotype}
@@ -332,7 +329,7 @@ export function WhitelabelingForm() {
             )}
 
             <Button type="submit" className="mt-4">
-              {i18n.t(k.UPDATE)}
+              {t(k.UPDATE)}
             </Button>
           </Form>
         )}

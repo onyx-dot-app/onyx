@@ -1,4 +1,6 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
+// Removed client i18n import; avoid pulling React context into server bundles
+import k from "@/i18n/keys";
 
 interface ShareAssistantRequest {
   userIds: string[];
@@ -22,7 +24,7 @@ async function updateAssistantSharedStatus(
     return null;
   }
 
-  const errorMessage = (await response.json()).detail || "Неизвестная ошибка";
+  const errorMessage = (await response.json()).detail || "Unknown error";
   return errorMessage;
 }
 

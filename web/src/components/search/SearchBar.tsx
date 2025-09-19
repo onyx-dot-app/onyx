@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import React, { KeyboardEvent, ChangeEvent, useContext } from "react";
 
@@ -42,6 +42,7 @@ export const AnimatedToggle = ({
   handleToggle: () => void;
   direction?: "bottom" | "top";
 }) => {
+  const { t } = useTranslation();
   const commandSymbol = KeyboardSymbol();
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -69,29 +70,29 @@ export const AnimatedToggle = ({
                 `}
                 ></div>
               </div>
-              <p className="ml-2 text-sm">{i18n.t(k.PRO)}</p>
+              <p className="ml-2 text-sm">{t(k.PRO)}</p>
             </div>
           </div>
         </TooltipTrigger>
         <TooltipContent side={direction} backgroundColor="bg-background-200">
           <div className="bg-white my-auto p-6 rounded-lg max-w-sm">
             <h2 className="text-xl text-text-800 font-bold mb-2">
-              {i18n.t(k.AGENTIC_SEARCH)}
+              {t(k.AGENTIC_SEARCH)}
             </h2>
             <p className="text-text-700 text-sm mb-4">
-              {i18n.t(k.OUR_MOST_POWERFUL_SEARCH_HAVE)}
+              {t(k.OUR_MOST_POWERFUL_SEARCH_HAVE)}
             </p>
             <Separator />
             <h2 className="text-xl text-text-800 font-bold mb-2">
-              {i18n.t(k.FAST_SEARCH)}
+              {t(k.FAST_SEARCH)}
             </h2>
             <p className="text-text-700 text-sm mb-4">
-              {i18n.t(k.GET_QUALITY_RESULTS_IMMEDIATEL)}
+              {t(k.GET_QUALITY_RESULTS_IMMEDIATEL)}
             </p>
             <p className="mt-2 flex text-xs">
-              {i18n.t(k.SHORTCUT)}
+              {t(k.SHORTCUT)}
               {commandSymbol}
-              {i18n.t(k._40)}
+              {t(k._40)}
             </p>
           </div>
         </TooltipContent>
@@ -117,6 +118,7 @@ export const FullSearchBar = ({
   finalAvailableSources,
   tags,
 }: FullSearchBarProps) => {
+  const { t } = useTranslation();
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const target = event.target;
     setQuery(target.value);
@@ -185,7 +187,7 @@ export const FullSearchBar = ({
         style={{ scrollbarWidth: "thin" }}
         role="textarea"
         aria-multiline
-        placeholder="Поиск чего-либо..."
+        placeholder={t(k.SEARCH_ANYTHING_PLACEHOLDER)}
         value={query}
         onChange={handleChange}
         onKeyDown={(event) => {}}
@@ -249,6 +251,7 @@ interface SearchBarProps {
 }
 
 export const SearchBar = ({ query, setQuery, onSearch }: SearchBarProps) => {
+  const { t } = useTranslation();
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const target = event.target;
     setQuery(target.value);
@@ -279,7 +282,7 @@ export const SearchBar = ({ query, setQuery, onSearch }: SearchBarProps) => {
           className="flex-grow ml-2 h-6 placeholder:text-text-chatbar-subtle outline-none placeholder-default overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Поиск..."
+          placeholder={t(k.SEARCH_PLACEHOLDER)}
           value={query}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

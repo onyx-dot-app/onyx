@@ -1,5 +1,5 @@
 import i18n from "@/i18n/init";
-import k from "./../../../../../i18n/keys";
+import k from "@/i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
@@ -16,7 +16,7 @@ async function Page() {
   if (!standardAnswerCategoriesResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
+        errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
         errorMsg={`${i18n.t(
           k.FAILED_TO_FETCH_STANDARD_ANSWE
         )} ${await standardAnswerCategoriesResponse.text()}`}
@@ -30,7 +30,7 @@ async function Page() {
     <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
-        title="Новый стандартный ответ"
+        title={i18n.t(k.NEW_STANDARD_ANSWER)}
         icon={<ClipboardIcon size={32} />}
       />
 

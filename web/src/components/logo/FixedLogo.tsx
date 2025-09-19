@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import React, { memo } from "react";
@@ -25,11 +25,12 @@ export const LogoComponent = memo(function LogoComponent({
   show?: boolean;
   isAdmin?: boolean;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
     <div
-      onClick={isAdmin ? () => router.push(i18n.t(k.CHAT)) : () => {}}
+      onClick={isAdmin ? () => router.push(t(k.CHAT)) : () => {}}
       className={`max-w-[200px]
         ${!show && "mobile:hidden"}
        flex text-text-900 items-center gap-x-1`}

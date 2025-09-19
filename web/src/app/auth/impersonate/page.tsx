@@ -1,6 +1,6 @@
 "use client";
-import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useUser } from "@/components/user/UserProvider";
@@ -15,6 +15,7 @@ const ImpersonateSchema = Yup.object().shape({
 });
 
 export default function ImpersonatePage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, isCloudSuperuser } = useUser();
   const { popup, setPopup } = usePopup();
@@ -69,11 +70,11 @@ export default function ImpersonatePage() {
 
       <div className="flex flex-col w-full justify-center">
         <h2 className="text-center text-xl text-strong font-bold mb-8">
-          {i18n.t(k.IMPERSONATE_USER)}
+          {t(k.IMPERSONATE_USER)}
         </h2>
 
         <Formik
-          initialValues={{ email: i18n.t(k._1), apiKey: i18n.t(k._1) }}
+          initialValues={{ email: t(k._1), apiKey: t(k._1) }}
           validationSchema={ImpersonateSchema}
           onSubmit={handleImpersonate}
         >
@@ -83,7 +84,7 @@ export default function ImpersonatePage() {
                 <Field
                   type="email"
                   name="email"
-                  placeholder="Введите Email"
+                  placeholder={t(k.ENTER_EMAIL_PLACEHOLDER)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
 
@@ -100,7 +101,7 @@ export default function ImpersonatePage() {
                 <Field
                   type="password"
                   name="apiKey"
-                  placeholder="Введите API Key"
+                  placeholder={t(k.ENTER_API_KEY_PLACEHOLDER)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
 
@@ -117,14 +118,14 @@ export default function ImpersonatePage() {
                 type="submit"
                 className="w-full py-3 bg-agent text-white rounded-lg hover:bg-accent/90 transition-colors"
               >
-                {i18n.t(k.IMPERSONATE_USER)}
+                {t(k.IMPERSONATE_USER)}
               </button>
             </Form>
           )}
         </Formik>
 
         <div className="text-sm text-text-500 mt-4 text-center px-4 rounded-md">
-          {i18n.t(k.NOTE_THIS_FEATURE_IS_ONLY_AVA)}
+          {t(k.NOTE_THIS_FEATURE_IS_ONLY_AVA)}
         </div>
       </div>
     </AuthFlowContainer>

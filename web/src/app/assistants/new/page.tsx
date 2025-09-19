@@ -6,6 +6,8 @@ import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorI
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LargeBackButton } from "../LargeBackButton";
 import { BackButton } from "@/components/BackButton";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 export default async function Page() {
   const [values, error] = await fetchAssistantEditorInfoSS();
@@ -14,7 +16,10 @@ export default async function Page() {
   if (!values) {
     body = (
       <div className="px-32">
-        <ErrorCallout errorTitle="Что-то пошло не так :(" errorMsg={error} />
+        <ErrorCallout
+          errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
+          errorMsg={error}
+        />
       </div>
     );
   } else {

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
@@ -50,6 +50,7 @@ export function ClientLayout({
   enableEnterprise: boolean;
   enableCloud: boolean;
 }) {
+  const { t } = useTranslation();
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
   const pathname = usePathname();
@@ -95,15 +96,15 @@ export function ClientLayout({
         {settings?.settings.application_status ===
           ApplicationStatus.PAYMENT_REMINDER && (
           <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
-            <strong className="font-bold">{i18n.t(k.WARNING2)}</strong>{" "}
-            {i18n.t(k.YOUR_TRIAL_ENDS_IN)}
+            <strong className="font-bold">{t(k.WARNING2)}</strong>{" "}
+            {t(k.YOUR_TRIAL_ENDS_IN)}
             <div className="mt-2">
               <Link href="/admin/billing">
                 <Button
                   variant="default"
                   className="bg-amber-600 hover:bg-amber-700 text-white"
                 >
-                  {i18n.t(k.UPDATE_BILLING_INFORMATION)}
+                  {t(k.UPDATE_BILLING_INFORMATION)}
                 </Button>
               </Link>
             </div>
@@ -114,7 +115,7 @@ export function ClientLayout({
           <AdminSidebar
             collections={[
               {
-                name: i18n.t(k.CONNECTORS),
+                name: t(k.CONNECTORS),
                 items: [
                   {
                     name: (
@@ -124,13 +125,11 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1">
-                          {i18n.t(k.EXISTING_CONNECTORS)}
-                        </div>
+                        <div className="ml-1">{t(k.EXISTING_CONNECTORS)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_INDEXING_STATUS),
+                    link: t(k.ADMIN_INDEXING_STATUS),
                   },
                   {
                     name: (
@@ -140,16 +139,16 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1.5">{i18n.t(k.ADD_CONNECTOR)}</div>
+                        <div className="ml-1.5">{t(k.ADD_CONNECTOR)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_ADD_CONNECTOR),
+                    link: t(k.ADMIN_ADD_CONNECTOR),
                   },
                 ],
               },
               {
-                name: i18n.t(k.DOCUMENT_MANAGEMENT),
+                name: t(k.DOCUMENT_MANAGEMENT),
                 items: [
                   {
                     name: (
@@ -159,11 +158,11 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1">{i18n.t(k.DOCUMENT_SETS)}</div>
+                        <div className="ml-1">{t(k.DOCUMENT_SETS)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_DOCUMENTS_SETS1),
+                    link: t(k.ADMIN_DOCUMENTS_SETS1),
                   },
                   {
                     name: (
@@ -173,11 +172,11 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1">{i18n.t(k.EXPLORER)}</div>
+                        <div className="ml-1">{t(k.EXPLORER)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_DOCUMENTS_EXPLORER),
+                    link: t(k.ADMIN_DOCUMENTS_EXPLORER),
                   },
                   {
                     name: (
@@ -187,18 +186,18 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1">{i18n.t(k.FEEDBACK)}</div>
+                        <div className="ml-1">{t(k.FEEDBACK)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_DOCUMENTS_FEEDBACK),
+                    link: t(k.ADMIN_DOCUMENTS_FEEDBACK),
                   },
                   {
                     name: (
                       <div className="flex">
                         <KnowledgeMapIcon className="text-text-700" size={18} />
 
-                        <div className="ml-1">Карта знаний</div>
+                        <div className="ml-1">{t(k.KNOWLEDGE_MAP)}</div>
                       </div>
                     ),
 
@@ -207,7 +206,7 @@ export function ClientLayout({
                 ],
               },
               {
-                name: i18n.t(k.CUSTOM_ASSISTANTS),
+                name: t(k.CUSTOM_ASSISTANTS),
                 items: [
                   {
                     name: (
@@ -217,11 +216,11 @@ export function ClientLayout({
                           size={18}
                         />
 
-                        <div className="ml-1">{i18n.t(k.ASSISTANTS1)}</div>
+                        <div className="ml-1">{t(k.ASSISTANTS1)}</div>
                       </div>
                     ),
 
-                    link: i18n.t(k.ADMIN_ASSISTANTS),
+                    link: t(k.ADMIN_ASSISTANTS),
                   },
                   ...(!isCurator
                     ? [
@@ -229,11 +228,11 @@ export function ClientLayout({
                         //   name: (
                         //     <div className="flex">
                         //       <SlackIconSkeleton className="text-text-700" />
-                        //       <div className="ml-1">{i18n.t(k.SLACK_BOTS)}</div>
+                        //       <div className="ml-1">{t(k.SLACK_BOTS)}</div>
                         //     </div>
                         //   ),
 
-                        //   link: i18n.t(k.ADMIN_BOTS1),
+                        //   link: t(k.ADMIN_BOTS1),
                         // },
                         {
                           name: (
@@ -243,11 +242,11 @@ export function ClientLayout({
                                 size={18}
                               />
 
-                              <div className="ml-1">{i18n.t(k.ACTIONS)}</div>
+                              <div className="ml-1">{t(k.ACTIONS)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_ACTIONS),
+                          link: t(k.ADMIN_ACTIONS),
                         },
                       ]
                     : []),
@@ -262,12 +261,12 @@ export function ClientLayout({
                               />
 
                               <div className="ml-1">
-                                {i18n.t(k.STANDARD_ANSWERS)}
+                                {t(k.STANDARD_ANSWERS)}
                               </div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_STANDARD_ANSWER),
+                          link: t(k.ADMIN_STANDARD_ANSWER),
                         },
                       ]
                     : []),
@@ -276,7 +275,7 @@ export function ClientLayout({
               ...(isCurator
                 ? [
                     {
-                      name: i18n.t(k.USER_MANAGEMENT),
+                      name: t(k.USER_MANAGEMENT),
                       items: [
                         {
                           name: (
@@ -286,11 +285,11 @@ export function ClientLayout({
                                 size={18}
                               />
 
-                              <div className="ml-1">{i18n.t(k.GROUPS)}</div>
+                              <div className="ml-1">{t(k.GROUPS)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_GROUPS1),
+                          link: t(k.ADMIN_GROUPS1),
                         },
                       ],
                     },
@@ -299,7 +298,7 @@ export function ClientLayout({
               ...(!isCurator
                 ? [
                     {
-                      name: i18n.t(k.CONFIGURATION),
+                      name: t(k.CONFIGURATION),
                       items: [
                         {
                           name: (
@@ -309,41 +308,39 @@ export function ClientLayout({
                                 size={18}
                               />
 
-                              <div className="ml-1">{i18n.t(k.LLM)}</div>
+                              <div className="ml-1">{t(k.LLM)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_CONFIGURATION_LLM),
+                          link: t(k.ADMIN_CONFIGURATION_LLM),
                         },
                         {
                           error: settings?.settings.needs_reindexing,
                           name: (
                             <div className="flex">
                               <SearchIcon className="text-text-700" />
-                              <div className="ml-1">
-                                {i18n.t(k.SEARCH_SETTINGS)}
-                              </div>
+                              <div className="ml-1">{t(k.SEARCH_SETTINGS)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_CONFIGURATION_SEARCH),
+                          link: t(k.ADMIN_CONFIGURATION_SEARCH),
                         },
                         {
                           name: (
                             <div className="flex">
                               <DocumentIcon2 className="text-text-700" />
                               <div className="ml-1">
-                                {i18n.t(k.DOCUMENT_PROCESSING)}
+                                {t(k.DOCUMENT_PROCESSING)}
                               </div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_CONFIGURATION_DOCUMENT),
+                          link: t(k.ADMIN_CONFIGURATION_DOCUMENT),
                         },
                       ],
                     },
                     {
-                      name: i18n.t(k.USER_MANAGEMENT),
+                      name: t(k.USER_MANAGEMENT),
                       items: [
                         {
                           name: (
@@ -353,11 +350,11 @@ export function ClientLayout({
                                 size={18}
                               />
 
-                              <div className="ml-1">{i18n.t(k.USERS)}</div>
+                              <div className="ml-1">{t(k.USERS)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_USERS),
+                          link: t(k.ADMIN_USERS),
                         },
                         ...(enableEnterprise
                           ? [
@@ -369,13 +366,11 @@ export function ClientLayout({
                                       size={18}
                                     />
 
-                                    <div className="ml-1">
-                                      {i18n.t(k.GROUPS)}
-                                    </div>
+                                    <div className="ml-1">{t(k.GROUPS)}</div>
                                   </div>
                                 ),
 
-                                link: i18n.t(k.ADMIN_GROUPS1),
+                                link: t(k.ADMIN_GROUPS1),
                               },
                             ]
                           : []),
@@ -387,11 +382,11 @@ export function ClientLayout({
                                 size={18}
                               />
 
-                              <div className="ml-1">{i18n.t(k.API_KEYS)}</div>
+                              <div className="ml-1">{t(k.API_KEYS)}</div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_API_KEY),
+                          link: t(k.ADMIN_API_KEY),
                         },
                         {
                           name: (
@@ -402,19 +397,19 @@ export function ClientLayout({
                               />
 
                               <div className="ml-1">
-                                {i18n.t(k.TOKEN_RATE_LIMITS)}
+                                {t(k.TOKEN_RATE_LIMITS)}
                               </div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_TOKEN_RATE_LIMITS),
+                          link: t(k.ADMIN_TOKEN_RATE_LIMITS),
                         },
                       ],
                     },
                     ...(enableEnterprise
                       ? [
                           {
-                            name: i18n.t(k.PERFORMANCE),
+                            name: t(k.PERFORMANCE),
                             items: [
                               {
                                 name: (
@@ -425,15 +420,15 @@ export function ClientLayout({
                                     />
 
                                     <div className="ml-1">
-                                      {i18n.t(k.USAGE_STATISTICS)}
+                                      {t(k.USAGE_STATISTICS)}
                                     </div>
                                   </div>
                                 ),
 
-                                link: i18n.t(k.ADMIN_PERFORMANCE_USAGE),
+                                link: t(k.ADMIN_PERFORMANCE_USAGE),
                               },
                               ...(settings?.settings.query_history_type !==
-                              i18n.t(k.DISABLED1)
+                              t(k.DISABLED1)
                                 ? [
                                     {
                                       name: (
@@ -444,14 +439,12 @@ export function ClientLayout({
                                           />
 
                                           <div className="ml-1">
-                                            {i18n.t(k.QUERY_HISTORY)}
+                                            {t(k.QUERY_HISTORY)}
                                           </div>
                                         </div>
                                       ),
 
-                                      link: i18n.t(
-                                        k.ADMIN_PERFORMANCE_QUERY_HISTO
-                                      ),
+                                      link: t(k.ADMIN_PERFORMANCE_QUERY_HISTO),
                                     },
                                   ]
                                 : []),
@@ -464,19 +457,19 @@ export function ClientLayout({
                                     />
 
                                     <div className="ml-1">
-                                      {i18n.t(k.CUSTOM_ANALYTICS)}
+                                      {t(k.CUSTOM_ANALYTICS)}
                                     </div>
                                   </div>
                                 ),
 
-                                link: i18n.t(k.ADMIN_PERFORMANCE_CUSTOM_ANAL),
+                                link: t(k.ADMIN_PERFORMANCE_CUSTOM_ANAL),
                               },
                             ],
                           },
                         ]
                       : []),
                     {
-                      name: i18n.t(k.SETTINGS),
+                      name: t(k.SETTINGS),
                       items: [
                         {
                           name: (
@@ -487,12 +480,12 @@ export function ClientLayout({
                               />
 
                               <div className="ml-1">
-                                {i18n.t(k.WORKSPACE_SETTINGS)}
+                                {t(k.WORKSPACE_SETTINGS)}
                               </div>
                             </div>
                           ),
 
-                          link: i18n.t(k.ADMIN_SETTINGS),
+                          link: t(k.ADMIN_SETTINGS),
                         },
                         ...(enableEnterprise
                           ? [
@@ -505,12 +498,12 @@ export function ClientLayout({
                                     />
 
                                     <div className="ml-1">
-                                      {i18n.t(k.WHITELABELING)}
+                                      {t(k.WHITELABELING)}
                                     </div>
                                   </div>
                                 ),
 
-                                link: i18n.t(k.ADMIN_WHITELABELING),
+                                link: t(k.ADMIN_WHITELABELING),
                               },
                             ]
                           : []),
@@ -524,26 +517,24 @@ export function ClientLayout({
                                       size={18}
                                     />
 
-                                    <div className="ml-1">
-                                      {i18n.t(k.BILLING)}
-                                    </div>
+                                    <div className="ml-1">{t(k.BILLING)}</div>
                                   </div>
                                 ),
 
-                                link: i18n.t(k.ADMIN_BILLING),
+                                link: t(k.ADMIN_BILLING),
                               },
                             ]
                           : []),
                       ],
                     },
                     {
-                      name: "Инструменты пользователя",
+                      name: t(k.USER_TOOLS),
                       items: [
                         {
                           name: (
                             <div className="flex">
                               <FiSettings size={18} />
-                              <div className="ml-1">Редактор Langflow</div>
+                              <div className="ml-1">{t(k.LANGFLOW_EDITOR)}</div>
                             </div>
                           ),
                           link: "/admin/usertools/langflow",
@@ -552,7 +543,9 @@ export function ClientLayout({
                           name: (
                             <div className="flex">
                               <FiSettings size={18} />
-                              <div className="ml-1">Мониторинг Langfuse</div>
+                              <div className="ml-1">
+                                {t(k.LANGFUSE_MONITORING)}
+                              </div>
                             </div>
                           ),
                           link: "/admin/usertools/langfuse",

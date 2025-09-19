@@ -1,3 +1,4 @@
+"use client";
 import React, {
   Dispatch,
   FC,
@@ -5,6 +6,9 @@ import React, {
   useEffect,
   useState,
 } from "react";
+
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import CredentialSubText from "@/components/credentials/CredentialFields";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -29,6 +33,7 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
   connector,
   currentCredential,
 }) => {
+  const { t } = useTranslation();
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -56,9 +61,9 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       )}
 
       <TextFormField
-        subtext="Описательное имя для коннектора."
+        subtext={t(k.CONNECTOR_NAME_DESCRIPTIVE)}
         type={"text"}
-        label={"Название коннектора"}
+        label={t(k.CONNECTOR_NAME_LABEL)}
         name={"name"}
       />
 

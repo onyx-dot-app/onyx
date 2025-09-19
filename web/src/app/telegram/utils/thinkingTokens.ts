@@ -2,6 +2,8 @@
  * Utility functions to handle thinking tokens in AI messages
  */
 
+import { JSX } from "react";
+
 /**
  * Check if a message contains complete thinking tokens
  */

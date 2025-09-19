@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { Form, Formik } from "formik";
@@ -36,6 +36,7 @@ export const DocumentSetCreationForm = ({
   setPopup,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const { t } = useTranslation();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
@@ -62,11 +63,11 @@ export const DocumentSetCreationForm = ({
           groups: existingDocumentSet?.groups ?? [],
         }}
         validationSchema={Yup.object().shape({
-          name: Yup.string().required("Пожалуйста, введите имя для набора"),
+          name: Yup.string().required(t(k.PLEASE_ENTER_NAME_FOR_SET)),
           description: Yup.string().optional(),
           cc_pair_ids: Yup.array()
             .of(Yup.number().required())
-            .required("Пожалуйста, выберите хотя бы один коннектор"),
+            .required(t(k.PLEASE_SELECT_AT_LEAST_ONE_CONNECTOR)),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -90,8 +91,8 @@ export const DocumentSetCreationForm = ({
           if (response.ok) {
             setPopup({
               message: isUpdate
-                ? i18n.t(k.SUCCESSFULLY_UPDATED_DOCUMENT)
-                : i18n.t(k.SUCCESSFULLY_CREATED_DOCUMENT),
+                ? t(k.SUCCESSFULLY_UPDATED_DOCUMENT)
+                : t(k.SUCCESSFULLY_CREATED_DOCUMENT),
 
               type: "success",
             });
@@ -100,8 +101,8 @@ export const DocumentSetCreationForm = ({
             const errorMsg = await response.text();
             setPopup({
               message: isUpdate
-                ? `${i18n.t(k.ERROR_UPDATING_DOCUMENT_SET)} ${errorMsg}`
-                : `${i18n.t(k.ERROR_CREATING_DOCUMENT_SET)} ${errorMsg}`,
+                ? `${t(k.ERROR_UPDATING_DOCUMENT_SET)} ${errorMsg}`
+                : `${t(k.ERROR_CREATING_DOCUMENT_SET)} ${errorMsg}`,
               type: "error",
             });
           }
@@ -149,16 +150,16 @@ export const DocumentSetCreationForm = ({
               <div className="space-y-4 w-full">
                 <TextFormField
                   name="name"
-                  label="Имя:"
-                  placeholder="Имя для набора документов"
+                  label={t(k.NAME_LABEL)}
+                  placeholder={t(k.NAME_PLACEHOLDER)}
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
 
                 <TextFormField
                   name="description"
-                  label="Описание:"
-                  placeholder="Опишите, что представляет собой набор документов"
+                  label={t(k.DESCRIPTION_LABEL)}
+                  placeholder={t(k.DESCRIPTION_PLACEHOLDER)}
                   autoCompleteDisabled={true}
                   optional={true}
                 />
@@ -178,41 +179,41 @@ export const DocumentSetCreationForm = ({
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
-                      label={`${i18n.t(k.CONNECTORS_AVAILABLE_TO)} ${
+                      label={`${t(k.CONNECTORS_AVAILABLE_TO_GROUP)} ${
                         userGroups && userGroups.length > 1
-                          ? i18n.t(k.THE_SELECTED_GROUP)
-                          : i18n.t(k.THE_GROUP_YOU_CURATE)
+                          ? t(k.THE_SELECTED_GROUP)
+                          : t(k.THE_GROUP_YOU_CURATE)
                       }`}
                       connectors={visibleCcPairs}
                       selectedIds={props.values.cc_pair_ids}
                       onChange={(selectedIds) => {
-                        props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
+                        props.setFieldValue(t(k.CC_PAIR_IDS), selectedIds);
                       }}
-                      placeholder="Поиск коннекторов..."
+                      placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
                     />
 
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
-                      title={`${i18n.t(k.CONNECTORS_NOT_AVAILABLE_TO_TH)} ${
+                      title={`${t(k.CONNECTORS_NOT_AVAILABLE_TO_GROUP)} ${
                         userGroups && userGroups.length > 1
-                          ? `${i18n.t(k.GROUP)}${
-                              props.values.groups.length > 1 ? i18n.t(k.S) : ""
-                            } ${i18n.t(k.YOU_HAVE_SELECTED1)}`
-                          : i18n.t(k.GROUP_YOU_CURATE)
+                          ? `${t(k.GROUP)}${
+                              props.values.groups.length > 1 ? t(k.S) : ""
+                            } ${t(k.YOU_HAVE_SELECTED1)}`
+                          : t(k.GROUP_YOU_CURATE)
                       }`}
-                      description="Будут доступны только те коннекторы, которые напрямую назначены группе, в которую вы пытаетесь добавить набор документов."
+                      description={t(k.CONNECTORS_NOT_AVAILABLE_DESCRIPTION)}
                     />
                   </>
                 ) : (
                   <ConnectorMultiSelect
                     name="cc_pair_ids"
-                    label="Выберите коннекторы"
+                    label={t(k.SELECT_CONNECTORS_LABEL)}
                     connectors={visibleCcPairs}
                     selectedIds={props.values.cc_pair_ids}
                     onChange={(selectedIds) => {
-                      props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
+                      props.setFieldValue(t(k.CC_PAIR_IDS), selectedIds);
                     }}
-                    placeholder="Поиск коннекторов..."
+                    placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
                   />
                 )}
               </div>
@@ -225,8 +226,8 @@ export const DocumentSetCreationForm = ({
                   className="w-56 mx-auto py-1.5 h-auto text-sm"
                 >
                   {isUpdate
-                    ? i18n.t(k.UPDATE_DOCUMENT_SET)
-                    : i18n.t(k.CREATE_DOCUMENT_SET1)}
+                    ? t(k.UPDATE_DOCUMENT_SET)
+                    : t(k.CREATE_DOCUMENT_SET1)}
                 </Button>
               </div>
             </Form>

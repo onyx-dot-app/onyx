@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,7 @@ const EditCredential = ({
     onSuccess: () => void
   ) => Promise<void>;
 }) => {
+  const { t } = useTranslation();
   const validationSchema = createEditingValidationSchema(
     credential.credential_json
   );
@@ -52,7 +55,7 @@ const EditCredential = ({
 
   return (
     <div className="flex flex-col gap-y-6">
-      <Text>{i18n.t(k.ENSURE_THAT_YOU_UPDATE_TO_A_CR)}</Text>
+      <Text>{t(k.ENSURE_THAT_YOU_UPDATE_TO_A_CR)}</Text>
 
       <Formik
         initialValues={initialValues}
@@ -65,7 +68,7 @@ const EditCredential = ({
               includeRevert
               name="name"
               placeholder={credential.name || ""}
-              label="Имя (необязательно):"
+              label={t(k.NAME_OPTIONAL)}
             />
 
             {Object.entries(credential.credential_json).map(([key, value]) => (
@@ -87,7 +90,7 @@ const EditCredential = ({
               <Button type="button" onClick={() => resetForm()}>
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaTrash />
-                  <p>{i18n.t(k.RESET_CHANGES)}</p>
+                  <p>{t(k.RESET_CHANGES)}</p>
                 </div>
               </Button>
               <Button
@@ -97,7 +100,7 @@ const EditCredential = ({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaNewspaper />
-                  <p>{i18n.t(k.UPDATE)}</p>
+                  <p>{t(k.UPDATE)}</p>
                 </div>
               </Button>
             </div>

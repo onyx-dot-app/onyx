@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+import React from "react";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -13,11 +15,12 @@ interface ResetPasswordModalProps {
   setPopup: (spec: PopupSpec) => void;
 }
 
-const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
+export default function ResetPasswordModal({
   user,
   onClose,
   setPopup,
-}) => {
+}: ResetPasswordModalProps) {
+  const { t } = useTranslation();
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -25,28 +28,32 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const handleResetPassword = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/password/reset_password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ user_email: user.email }),
-      });
+      const response = await fetch(
+        `/api/manage/admin/users/${user.id}/reset-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
-        setNewPassword(data.new_password);
-        setPopup({ message: "Password reset successfully", type: "success" });
-      } else {
-        const errorData = await response.json();
+        setNewPassword(data.password);
         setPopup({
-          message: errorData.detail || "Failed to reset password",
+          message: t(k.PASSWORD_RESET_SUCCESSFULLY_R),
+          type: "success",
+        });
+      } else {
+        setPopup({
+          message: t(k.FAILED_TO_CHANGE_PASSWORD),
           type: "error",
         });
       }
     } catch (error) {
       setPopup({
-        message: "An error occurred while resetting the password",
+        message: t(k.FAILED_TO_CHANGE_PASSWORD),
         type: "error",
       });
     } finally {
@@ -59,54 +66,63 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       navigator.clipboard.writeText(newPassword);
       setPopup({ message: "Password copied to clipboard", type: "success" });
       setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+      setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
   return (
     <Modal onOutsideClick={onClose} width="rounded-lg w-full max-w-md">
-      <div className="p- text-neutral-900 dark:text-neutral-100">
-        <h2 className="text-2xl font-bold mb-4">{i18n.t(k.RESET_PASSWORD)}</h2>
+      <div className="p-6 text-neutral-900 dark:text-neutral-100">
+        <h2 className="text-2xl font-bold mb-4">{t(k.RESET_PASSWORD)}</h2>
         <p className="mb-4">
-          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_RESET)} {user.email}
-          {i18n.t(k._10)}
+          {t(k.ARE_YOU_SURE_YOU_WANT_TO_RESET)} {user.email}
+          {t(k._10)}
         </p>
         {newPassword ? (
           <div className="mb-4">
-            <p className="font-semibold">{i18n.t(k.NEW_PASSWORD)}</p>
-            <div className="flex items-center bg-neutral-200 dark:bg-neutral-700 p-2 rounded">
-              <p data-testid="new-password" className="flex-grow">
+            <p className="font-semibold">{t(k.NEW_PASSWORD)}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded border font-mono text-sm">
                 {newPassword}
-              </p>
+              </div>
               <Button
                 onClick={handleCopyPassword}
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="ml-2"
+                className="flex items-center gap-2"
               >
                 {isCopied ? (
-                  <Check className="w-4 h-4" />
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied
+                  </>
                 ) : (
-                  <Copy className="w-4 h-4" />
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </>
                 )}
               </Button>
             </div>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
-              {i18n.t(k.PLEASE_SECURELY_COMMUNICATE_TH)}
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              {t(k.PLEASE_SECURELY_COMMUNICATE_TH)}
             </p>
           </div>
         ) : (
           <Button
             onClick={handleResetPassword}
             disabled={isLoading}
-            className="w-full bg-neutral-700 hover:bg-neutral-600 dark:bg-neutral-200 dark:hover:bg-neutral-300 dark:text-neutral-900"
+            className="w-full"
           >
             {isLoading ? (
-              i18n.t(k.RESETTING)
+              <>
+                <RefreshCcw className="w-4 h-4 mr-2 animate-spin" />
+                {t(k.RESETTING)}
+              </>
             ) : (
               <>
                 <RefreshCcw className="w-4 h-4 mr-2" />
-                {i18n.t(k.RESET_PASSWORD)}
+                {t(k.RESET_PASSWORD)}
               </>
             )}
           </Button>
@@ -114,6 +130,4 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       </div>
     </Modal>
   );
-};
-
-export default ResetPasswordModal;
+}

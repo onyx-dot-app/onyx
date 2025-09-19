@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
@@ -51,6 +53,7 @@ export default function LLMPopover({
   onSelect,
   currentModelName,
 }: LLMPopoverProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
 
@@ -147,18 +150,18 @@ export default function LLMPopover({
               name={getDisplayNameForModel(
                 llmManager?.currentLlm.modelName ||
                   defaultModelDisplayName ||
-                  i18n.t(k.MODELS)
+                  t(k.MODELS)
               )}
               Icon={getProviderIcon(
                 llmManager?.currentLlm.provider ||
                   defaultProvider?.provider ||
-                  i18n.t(k.ANTHROPIC),
+                  t(k.ANTHROPIC),
 
                 llmManager?.currentLlm.modelName ||
                   defaultProvider?.default_model_name ||
-                  i18n.t(k.CLAUDE_SONNET)
+                  t(k.CLAUDE_SONNET)
               )}
-              tooltipContent="Модели переключателей"
+              tooltipContent={t(k.TOGGLE_MODELS_TOOLTIP)}
             />
           </button>
         ),
@@ -200,7 +203,7 @@ export default function LLMPopover({
                     if (currentAssistant?.llm_model_version_override === name) {
                       return (
                         <span className="flex-none ml-auto text-xs">
-                          {i18n.t(k.ASSISTANT3)}
+                          {t(k.ASSISTANT3)}
                         </span>
                       );
                     }
@@ -214,7 +217,7 @@ export default function LLMPopover({
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="text-xs">
-                              {i18n.t(k.THIS_LLM_IS_NOT_VISION_CAPABLE)}
+                              {t(k.THIS_LLM_IS_NOT_VISION_CAPABLE)}
                             </p>
                           </TooltipContent>
                         </Tooltip>
@@ -240,7 +243,7 @@ export default function LLMPopover({
               />
 
               <div className="flex justify-between text-xs text-text-500 mt-2">
-                <span>{i18n.t(k.TEMPERATURE_CREATIVITY)}</span>
+                <span>{t(k.TEMPERATURE_CREATIVITY)}</span>
                 <span>{localTemperature.toFixed(1)}</span>
               </div>
             </div>

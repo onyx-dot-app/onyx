@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -10,6 +12,7 @@ export function BillingAlerts({
 }: {
   billingInformation: BillingInformation;
 }) {
+  const { t } = useTranslation();
   const isTrialing = billingInformation.status === BillingStatus.TRIALING;
   const isCancelled = billingInformation.cancel_at_period_end;
   const isExpired =
@@ -19,30 +22,28 @@ export function BillingAlerts({
   const messages: string[] = [];
 
   if (isExpired) {
-    messages.push(
-      "Ваша подписка истекла. Пожалуйста, подпишитесь повторно, чтобы продолжить пользоваться сервисом."
-    );
+    messages.push(t(k.SUBSCRIPTION_EXPIRED_MESSAGE));
   }
   if (isCancelled && !isExpired) {
     messages.push(
-      `Ваша подписка будет отменена ${new Date(
-        billingInformation.current_period_end
-      ).toLocaleDateString()}. Вы можете подписаться повторно до этой даты, чтобы не прерываться.`
+      t(k.SUBSCRIPTION_CANCELLED_MESSAGE_DETAILED, {
+        date: new Date(
+          billingInformation.current_period_end
+        ).toLocaleDateString(),
+      })
     );
   }
   if (isTrialing) {
     messages.push(
-      `В настоящее время у вас пробный период. Ваш пробный период заканчивается ${
-        billingInformation.trial_end
+      t(k.TRIAL_PERIOD_MESSAGE_DETAILED, {
+        date: billingInformation.trial_end
           ? new Date(billingInformation.trial_end).toLocaleDateString()
-          : "N/A"
-      }.`
+          : "N/A",
+      })
     );
   }
   if (noPaymentMethod) {
-    messages.push(
-      "В настоящее время у вас нет зарегистрированного способа оплаты. Пожалуйста, добавьте его, чтобы избежать перерыва в обслуживании."
-    );
+    messages.push(t(k.NO_PAYMENT_METHOD_MESSAGE_DETAILED));
   }
 
   const variant = isExpired || noPaymentMethod ? "destructive" : "default";
@@ -59,8 +60,8 @@ export function BillingAlerts({
         )}
         <span>
           {variant === "destructive"
-            ? i18n.t(k.IMPORTANT_SUBSCRIPTION_NOTICE)
-            : i18n.t(k.SUBSCRIPTION_NOTICE)}
+            ? t(k.IMPORTANT_SUBSCRIPTION_NOTICE)
+            : t(k.SUBSCRIPTION_NOTICE)}
         </span>
       </AlertTitle>
       <AlertDescription>

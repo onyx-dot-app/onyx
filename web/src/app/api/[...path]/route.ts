@@ -1,5 +1,7 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
+import i18n from "@/i18n/init-server";
+import k from "@/i18n/keys";
 
 /* NextJS is annoying and makes use use a separate function for 
 each request type >:( */
@@ -69,8 +71,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
   ) {
     return NextResponse.json(
       {
-        message:
-          "Этот API доступен только в режиме разработки. В производстве этим должно заниматься что-то другое (например, nginx).",
+        message: i18n.t(k.API_ONLY_AVAILABLE_IN_DEV),
       },
       { status: 404 }
     );
@@ -123,7 +124,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
         error:
           error instanceof Error
             ? error.message
-            : "Произошла неизвестная ошибка",
+            : i18n.t(k.UNKNOWN_ERROR_OCCURRED),
       },
       { status: 500 }
     );

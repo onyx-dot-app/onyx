@@ -1,10 +1,13 @@
+"use client";
 import * as Yup from "yup";
 import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
-import i18n from "@/i18n/init";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "../../i18n/keys";
+import i18n from "../../i18n/init";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -229,16 +232,14 @@ export const connectorConfigs: Record<
                 label: i18n.t(k.PAGE_ID),
                 name: "page_id",
                 default: "",
-                description:
-                  "Конкретный идентификатор страницы для индексации (например, `131368`)",
+                description: i18n.t(k.SPECIFIC_PAGE_ID_FOR_INDEXING),
               },
               {
                 type: "checkbox",
-                query: "Следует ли индексировать страницы рекурсивно?",
-                label: "Индексировать рекурсивно",
+                query: i18n.t(k.SHOULD_INDEX_PAGES_RECURSIVELY),
+                label: i18n.t(k.INDEX_RECURSIVELY),
                 name: "index_recursively",
-                description:
-                  "Если этот параметр установлен, мы будем индексировать страницу, указанную идентификатором страницы, а также все ее дочерние страницы.",
+                description: i18n.t(k.INDEX_PAGE_AND_CHILDREN_DESCRIPTION),
                 optional: false,
                 default: true,
               },
@@ -246,16 +247,15 @@ export const connectorConfigs: Record<
           },
           {
             value: "cql",
-            label: "CQL-запрос",
+            label: i18n.t(k.CQL_QUERY),
             fields: [
               {
                 type: "text",
-                query: "Введите CQL-запрос (необязательно):",
-                label: "CQL-запрос",
+                query: i18n.t(k.ENTER_CQL_QUERY_OPTIONAL),
+                label: i18n.t(k.CQL_QUERY_LABEL),
                 name: "cql_query",
                 default: "",
-                description:
-                  "ВАЖНО: В настоящее время мы поддерживаем только запросы CQL, возвращающие объекты типа «страница». Это означает, что все запросы CQL должны содержать «type=page» в качестве единственного фильтра типа. Также важно, чтобы не использовались фильтры для «lastModified», так как это вызовет проблемы с нашей логикой опроса коннектора. Мы по-прежнему будем получать все вложения и комментарии для страниц, возвращаемых запросом CQL. Любые фильтры «lastmodified» будут перезаписаны. Подробнее см. на странице https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/.",
+                description: i18n.t(k.CQL_QUERY_IMPORTANT_NOTE),
               },
             ],
           },
@@ -266,84 +266,78 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira: {
-    description: "Настроить коннектор Jira",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_JIRA_CONNECTOR),
+    subtext: i18n.t(k.JIRA_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта Jira:",
-        label: "URL-адрес проекта Jira",
+        query: i18n.t(k.ENTER_JIRA_PROJECT_URL),
+        label: i18n.t(k.JIRA_PROJECT_URL_LABEL),
         name: "jira_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   redmine: {
-    description: "Настроить коннектор Redmine",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_REDMINE_CONNECTOR),
+    subtext: i18n.t(k.REDMINE_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта Redmine:",
-        label: "Название redmine",
+        query: i18n.t(k.ENTER_REDMINE_PROJECT_URL),
+        label: i18n.t(k.REDMINE_NAME_LABEL),
         name: "redmine_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   bitrix: {
-    description: "Настроить bitrix коннектор",
-    subtext: `Укажите любую ссылку на страницу Jira ниже и нажмите «Индексировать», чтобы индексировать. На основе предоставленной ссылки мы проиндексируем ВЕСЬ ПРОЕКТ, а не только указанную страницу. Например, если ввести https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 и нажать кнопку «Индексировать», будет проиндексирован весь проект DAN Jira.`,
+    description: i18n.t(k.CONFIGURE_BITRIX_CONNECTOR),
+    subtext: i18n.t(k.BITRIX_CONNECTOR_DESCRIPTION),
     values: [
       {
         type: "text",
-        query: "Введите URL-адрес проекта bitrix:",
-        label: "bitrix название",
+        query: i18n.t(k.ENTER_BITRIX_PROJECT_URL),
+        label: i18n.t(k.BITRIX_NAME_LABEL),
         name: "bitrix_project_url",
         optional: false,
       },
       {
         type: "list",
-        query:
-          "Введите адреса электронной почты для добавления в черный список комментариев:",
-        label: "Черный список камментариев",
+        query: i18n.t(k.ENTER_EMAIL_ADDRESSES_FOR_COMMENT_BLACKLIST),
+        label: i18n.t(k.COMMENT_BLACKLIST_LABEL),
         name: "comment_email_blacklist",
-        description:
-          "Это обычно полезно для игнорирования определенных ботов. Добавьте адреса электронной почты пользователей, комментарии которых НЕ должны индексироваться.",
+        description: i18n.t(k.COMMENT_BLACKLIST_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   file: {
-    description: "Конфигурация файлового коннектора",
+    description: i18n.t(k.FILE_CONNECTOR_CONFIGURATION),
     values: [
       {
         type: "file",
-        query: "Введите местоположение файлов:",
-        label: "Расположение файлов",
+        query: i18n.t(k.ENTER_FILE_LOCATION),
+        label: i18n.t(k.FILE_LOCATION_LABEL),
         name: "file_locations",
         optional: false,
       },
@@ -351,85 +345,84 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   notion: {
-    description: "Настроить коннектор Notion",
+    description: i18n.t(k.CONFIGURE_NOTION_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите идентификатор корневой страницы",
-        label: "Корневой Page ID",
+        query: i18n.t(k.ENTER_ROOT_PAGE_ID),
+        label: i18n.t(k.ROOT_PAGE_ID_LABEL),
         name: "root_page_id",
         optional: true,
-        description:
-          "Если указано, будет индексировать только указанную страницу + все ее дочерние страницы. Если оставить пустым, будут индексироваться все страницы, к которым интеграции был предоставлен доступ.",
+        description: i18n.t(k.ROOT_PAGE_ID_DESCRIPTION),
       },
     ],
     advanced_values: [],
   },
   github: {
-    description: "Настроить коннектор GitHub",
+    description: i18n.t(k.CONFIGURE_GITHUB_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите владельца репозитория:",
-        label: "Владелец репозитория",
+        query: i18n.t(k.ENTER_REPO_OWNER_QUERY),
+        label: i18n.t(k.REPO_OWNER_LABEL),
         name: "repo_owner",
         optional: false,
       },
       {
         type: "text",
-        query: "Введите название репозитория:",
-        label: "Название репозитория",
+        query: i18n.t(k.ENTER_REPO_NAME_QUERY),
+        label: i18n.t(k.REPO_NAME_LABEL),
         name: "repo_name",
         optional: false,
       },
       {
         type: "checkbox",
-        query: "Включить pull requests?",
-        label: "Включить pull requests?",
-        description: "Индекс pull requests из этого репозитория",
+        query: i18n.t(k.ENABLE_PULL_REQUESTS_QUERY),
+        label: i18n.t(k.ENABLE_PULL_REQUESTS_LABEL),
+        description: i18n.t(k.INDEX_PULL_REQUESTS_DESCRIPTION),
         name: "include_prs",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Включить issues?",
-        label: "Включить Issues",
+        query: i18n.t(k.ENABLE_ISSUES_QUERY),
+        label: i18n.t(k.ENABLE_ISSUES_LABEL),
         name: "include_issues",
-        description: "Индексировать issues из этого репозитория",
+        description: i18n.t(k.INDEX_ISSUES_DESCRIPTION),
         optional: true,
       },
     ],
     advanced_values: [],
   },
   gitlab: {
-    description: "Настроить коннектор GitLab",
+    description: i18n.t(k.CONFIGURE_GITLAB_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите владельца проекта:",
-        label: "Владелец проекта",
+        query: i18n.t(k.ENTER_PROJECT_OWNER_QUERY),
+        label: i18n.t(k.PROJECT_OWNER_LABEL),
         name: "project_owner",
         optional: false,
       },
       {
         type: "text",
-        query: "Введите название проекта:",
-        label: "Название проекта",
+        query: i18n.t(k.ENTER_PROJECT_NAME_QUERY),
+        label: i18n.t(k.PROJECT_NAME_LABEL),
         name: "project_name",
         optional: false,
       },
       {
         type: "checkbox",
-        query: "Включить merge requests?",
-        label: "Включить MRs",
+        query: i18n.t(k.ENABLE_MERGE_REQUESTS_QUERY),
+        label: i18n.t(k.ENABLE_MRS_LABEL),
         name: "include_mrs",
         default: true,
         hidden: true,
       },
       {
         type: "checkbox",
-        query: "Включить issues?",
-        label: "Включить Issues",
+        query: i18n.t(k.ENABLE_ISSUES_QUERY),
+        label: i18n.t(k.ENABLE_ISSUES_LABEL),
         name: "include_issues",
         optional: true,
         hidden: true,
@@ -438,46 +431,44 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   gmail: {
-    description: "Настроить коннектор Gmail",
+    description: i18n.t(k.CONFIGURE_GMAIL_CONNECTOR),
     values: [],
     advanced_values: [],
   },
   sharepoint: {
-    description: "Настроить коннектор SharePoint",
+    description: i18n.t(k.CONFIGURE_SHAREPOINT_CONNECTOR),
     values: [
       {
         type: "list",
-        query: "Введите сайты SharePoint:",
-        label: "Сайты",
+        query: i18n.t(k.ENTER_SHAREPOINT_SITES),
+        label: i18n.t(k.SITES_LABEL),
         name: "sites",
         optional: true,
-        description: `• Если сайты не указаны, будут проиндексированы все сайты в вашей организации (требуется разрешение Sites.Read.All).
-        • Указание, например, «https://onyxai.sharepoint.com/sites/support» приведет к индексации только документов на этом сайте.
-        • Указание, например, «https://onyxai.sharepoint.com/sites/support/subfolder» приведет к индексации только документов на этой папке.`,
+        description: i18n.t(k.SHAREPOINT_SITES_DESCRIPTION),
       },
     ],
     advanced_values: [],
   },
   minio: {
-    description: "Настроить коннектор S3",
+    description: i18n.t(k.CONFIGURE_S3_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите название сегмента:",
-        label: "Название сегмента",
+        query: i18n.t(k.ENTER_BUCKET_NAME),
+        label: i18n.t(k.BUCKET_NAME_LABEL),
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Введите префикс:",
-        label: "Префикс",
+        query: i18n.t(k.ENTER_PREFIX),
+        label: i18n.t(k.PREFIX_LABEL),
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Тип сегмента",
+        label: i18n.t(k.BUCKET_TYPE_LABEL),
         name: "bucket_type",
         optional: false,
         default: "minio",
@@ -488,89 +479,87 @@ export const connectorConfigs: Record<
     overrideDefaultFreq: 60 * 60 * 24,
   },
   wikipedia: {
-    description: "Настроить коннектор Википедии",
+    description: i18n.t(k.CONFIGURE_WIKIPEDIA_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите код языка:",
-        label: "Код языка",
+        query: i18n.t(k.ENTER_LANGUAGE_CODE),
+        label: i18n.t(k.LANGUAGE_CODE_LABEL),
         name: "language_code",
         optional: false,
-        description: "Введите код языка Википедии (например, «en», «es»)",
+        description: i18n.t(k.LANGUAGE_CODE_DESCRIPTION),
       },
       {
         type: "list",
-        query: "Введите категории для включения:",
-        label: "Категории для индексации",
+        query: i18n.t(k.ENTER_CATEGORIES_TO_INCLUDE),
+        label: i18n.t(k.CATEGORIES_FOR_INDEXING_LABEL),
         name: "categories",
-        description:
-          "Укажите 0 или более названий категорий для индексации. Для большинства сайтов Википедии это страницы с названием в форме «Категория: XYZ», которые являются списками других страниц/категорий. Укажите только название категории, а не ее URL.",
+        description: i18n.t(k.CATEGORIES_DESCRIPTION),
         optional: true,
       },
       {
         type: "list",
-        query: "Введите страницы для включения:",
-        label: "Страницы",
+        query: i18n.t(k.ENTER_PAGES_TO_INCLUDE),
+        label: i18n.t(k.PAGES_LABEL),
         name: "pages",
         optional: true,
-        description: "Укажите 0 или более названий страниц для индексации.",
+        description: i18n.t(k.PAGES_DESCRIPTION),
       },
       {
         type: "number",
-        query: "Введите глубину рекурсии:",
-        label: "Глубина рекурсии",
+        query: i18n.t(k.ENTER_RECURSION_DEPTH),
+        label: i18n.t(k.RECURSION_DEPTH_LABEL),
         name: "recurse_depth",
-        description:
-          "При индексации категорий, имеющих подкатегории, это определит, как можно индексировать уровни. Укажите 0, чтобы индексировать только саму категорию (т. е. без рекурсии). Укажите -1 для неограниченной глубины рекурсии. Обратите внимание, что в некоторых редких случаях категория может содержать себя в своих зависимостях, что приведет к бесконечному циклу. Используйте -1, только если вы уверены, что этого не произойдет.",
+        description: i18n.t(k.RECURSION_DEPTH_DESCRIPTION),
         optional: false,
       },
     ],
     advanced_values: [],
   },
   yandex: {
-    description: "Настроить коннектор Yandex Mail",
+    description: i18n.t(k.CONFIGURE_YANDEX_MAIL_CONNECTOR),
     values: [],
     advanced_values: [],
   },
   mailru: {
-    description: "Настроить коннектор Mailru",
+    description: i18n.t(k.CONFIGURE_MAILRU_CONNECTOR),
     values: [],
     advanced_values: [],
   },
   postgresql: {
-    description: "Настроить коннектор SharePoint",
+    description: i18n.t(k.CONFIGURE_POSTGRESQL_CONNECTOR),
     values: [
       {
         type: "text",
-        query: "Введите схему:",
-        label: "Схема",
+        query: i18n.t(k.ENTER_SCHEMA),
+        label: i18n.t(k.SCHEMA_LABEL),
         name: "schema",
         optional: true,
       },
       {
         type: "text",
-        query: "Введите таблицу:",
-        label: "Таблица",
+        query: i18n.t(k.ENTER_TABLE),
+        label: i18n.t(k.TABLE_LABEL),
         name: "table_name",
       },
       {
         type: "text",
-        query: "Введите столбцы:",
-        label: "Столбцы с текстом",
+        query: i18n.t(k.ENTER_COLUMNS_TEXT),
+        label: i18n.t(k.TEXT_COLUMNS_LABEL),
         name: "conten_columns",
         optional: true,
       },
       {
         type: "text",
-        query: "Введите столбцы:",
-        label: "Столбцы метаданных",
+        query: i18n.t(k.ENTER_COLUMNS_METADATA),
+        label: i18n.t(k.METADATA_COLUMNS_LABEL),
         name: "metadata_columns",
         optional: true,
       },
       {
         type: "text",
-        query: "Введите запрос:",
-        label: "SQL-запрос",
+        query: i18n.t(k.ENTER_SQL_QUERY),
+        label: i18n.t(k.SQL_QUERY_LABEL),
         name: "query",
         optional: true,
       },
@@ -618,8 +607,8 @@ export function createConnectorValidationSchema(
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
-    access_type: Yup.string().required("Требуется тип доступа"),
-    name: Yup.string().required("Требуется имя коннектора"),
+    access_type: Yup.string().required(i18n.t(k.ACCESS_TYPE_REQUIRED)),
+    name: Yup.string().required(i18n.t(k.CONNECTOR_NAME_REQUIRED)),
     ...[...configuration.values, ...configuration.advanced_values].reduce(
       (acc, field) => {
         let schema: any =
@@ -634,7 +623,9 @@ export function createConnectorValidationSchema(
             : Yup.string();
 
         if (!field.optional) {
-          schema = schema.required(`Требуется ${field.label}`);
+          schema = schema.required(
+            `${i18n.t(k.FIELD_REQUIRED)} ${field.label}`
+          );
         }
 
         acc[field.name] = schema;
@@ -644,13 +635,10 @@ export function createConnectorValidationSchema(
     ),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      0,
-      "Частота обрезки должна быть неотрицательной"
-    ),
+    pruneFreq: Yup.number().min(0, i18n.t(k.CHUNK_SIZE_MUST_BE_NON_NEGATIVE)),
     refreshFreq: Yup.number().min(
       0,
-      "Частота обновления должна быть неотрицательной"
+      i18n.t(k.REFRESH_FREQUENCY_MUST_BE_NON_NEGATIVE)
     ),
   });
 

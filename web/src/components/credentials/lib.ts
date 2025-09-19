@@ -1,3 +1,4 @@
+import k from "../../i18n/keys";
 import * as Yup from "yup";
 
 import { dictionaryType, formType } from "./types";
@@ -6,7 +7,10 @@ import {
   getDisplayNameForCredentialKey,
 } from "@/lib/connectors/credentials";
 
-export function createValidationSchema(json_values: Record<string, any>) {
+export function createValidationSchema(
+  json_values: Record<string, any>,
+  t: (key: string) => string
+) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
 
   for (const key in json_values) {
@@ -37,9 +41,9 @@ export function createValidationSchema(json_values: Record<string, any>) {
       schemaFields[key] = Yup.string()
         .trim()
         // This ensures user cannot enter an empty string:
-        .min(1, `${displayName} не может быть пустым.`)
+        .min(1, `${displayName} ${t(k.CANNOT_BE_EMPTY)}.`)
         // The required message is shown if the field is missing
-        .required(`Пожалуйста введите ${displayName}`);
+        .required(`${t(k.PLEASE_ENTER)} ${displayName}`);
     }
   }
 

@@ -4,6 +4,7 @@ import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import {
   ReactNode,
+  RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -67,7 +68,7 @@ export default function SidebarWrapper<T extends object>({
   const settings = useContext(SettingsContext);
   useSidebarVisibility({
     sidebarVisible,
-    sidebarElementRef,
+    sidebarElementRef: sidebarElementRef as RefObject<HTMLElement>,
     showDocSidebar,
     setShowDocSidebar,
     mobile: settings?.isMobile,

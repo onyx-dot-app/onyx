@@ -2,6 +2,8 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { ZoomInIcon } from "@/components/icons/icons";
 import { Explorer } from "./Explorer";
 import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 const Page = async (props: {
   searchParams: Promise<{ [key: string]: string }>;
@@ -13,7 +15,7 @@ const Page = async (props: {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ZoomInIcon size={32} />}
-        title="Проводник по документам"
+        title={i18n.t(k.DOCUMENT_EXPLORER_TITLE)}
       />
 
       <Explorer

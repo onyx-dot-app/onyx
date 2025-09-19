@@ -1,6 +1,8 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import BillingInformationPage from "./BillingInformationPage";
 import { MdOutlineCreditCard } from "react-icons/md";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 export interface BillingInformation {
   stripe_subscription_id: string;
@@ -20,7 +22,7 @@ export default function page() {
   return (
     <div className="container max-w-4xl">
       <AdminPageTitle
-        title="Платежная информация"
+        title={i18n.t(k.BILLING_INFORMATION)}
         icon={<MdOutlineCreditCard size={32} className="my-auto" />}
       />
 

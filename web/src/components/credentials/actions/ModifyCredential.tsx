@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -33,6 +34,7 @@ const CredentialSelectionTable = ({
   onDeleteCredential: (credential: Credential<any>) => void;
   onEditCredential?: (credential: Credential<any>) => void;
 }) => {
+  const { t } = useTranslation();
   const [selectedCredentialId, setSelectedCredentialId] = useState<
     number | null
   >(null);
@@ -67,16 +69,16 @@ const CredentialSelectionTable = ({
           <tr className="bg-neutral-100 dark:bg-neutral-900">
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400"></th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              {i18n.t(k.ID)}
+              {t(k.ID)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              {i18n.t(k.NAME)}
+              {t(k.NAME)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              {i18n.t(k.CREATED)}
+              {t(k.CREATED)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              {i18n.t(k.LAST_UPDATED)}
+              {t(k.LAST_UPDATED)}
             </th>
             <th />
           </tr>
@@ -105,7 +107,7 @@ const CredentialSelectionTable = ({
                         className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
                       />
                     ) : (
-                      <Badge>{i18n.t(k.SELECTED)}</Badge>
+                      <Badge>{t(k.SELECTED)}</Badge>
                     )}
                   </td>
                   <td className="p-2">{credential.id}</td>
@@ -146,7 +148,7 @@ const CredentialSelectionTable = ({
       </table>
 
       {allCredentials.length == 0 && (
-        <p className="mt-4"> {i18n.t(k.NO_CREDENTIALS_EXIST_FOR_THIS)}</p>
+        <p className="mt-4"> {t(k.NO_CREDENTIALS_EXIST_FOR_THIS)}</p>
       )}
     </div>
   );
@@ -178,6 +180,7 @@ export default function ModifyCredential({
   onDeleteCredential: (credential: Credential<any | null>) => void;
   onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedCredential, setSelectedCredential] =
     useState<Credential<any> | null>(null);
   const [confirmDeletionCredential, setConfirmDeletionCredential] =
@@ -196,7 +199,7 @@ export default function ModifyCredential({
         >
           <>
             <p className="text-lg mb-2">
-              {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET6)}
+              {t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET6)}
             </p>
             <div className="mt-6 flex gap-x-2 justify-end">
               <Button
@@ -205,13 +208,13 @@ export default function ModifyCredential({
                   setConfirmDeletionCredential(null);
                 }}
               >
-                {i18n.t(k.CONFIRM)}
+                {t(k.CONFIRM)}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => setConfirmDeletionCredential(null)}
               >
-                {i18n.t(k.CANCEL)}
+                {t(k.CANCEL)}
               </Button>
             </div>
           </>
@@ -219,7 +222,7 @@ export default function ModifyCredential({
       )}
 
       <div className="mb-0">
-        <Text className="mb-4">{i18n.t(k.SELECT_A_CREDENTIAL_AS_NEEDED)}</Text>
+        <Text className="mb-4">{t(k.SELECT_A_CREDENTIAL_AS_NEEDED)}</Text>
 
         <CredentialSelectionTable
           onDeleteCredential={async (credential: Credential<any | null>) => {
@@ -258,7 +261,7 @@ export default function ModifyCredential({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <NewChatIcon className="text-white" />
-                  <p>{i18n.t(k.CREATE1)}</p>
+                  <p>{t(k.CREATE1)}</p>
                 </div>
               </Button>
             ) : (
@@ -284,7 +287,7 @@ export default function ModifyCredential({
             >
               <div className="flex gap-x-2 items-center w-full border-none">
                 <SwapIcon className="text-white" />
-                <p>{i18n.t(k.SELECT)}</p>
+                <p>{t(k.SELECT)}</p>
               </div>
             </Button>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 import { Separator } from "@/components/ui/separator";
 import { IconProps, XIcon } from "./icons/icons";
-import { useRef } from "react";
+import { JSX, useRef } from "react";
 import { isEventWithinRef } from "@/lib/contains";
 import ReactDOM from "react-dom";
 import { useEffect, useState } from "react";

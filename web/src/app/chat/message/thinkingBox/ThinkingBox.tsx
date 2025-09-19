@@ -1,8 +1,8 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, RefObject } from "react";
 import { FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { TbBrain } from "react-icons/tb";
 import ReactMarkdown from "react-markdown";
@@ -31,6 +31,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   isComplete = false,
   isStreaming = false,
 }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -275,7 +276,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
         <div className="thinking-box__header" onClick={handleToggleExpand}>
           <div className="thinking-box__title">
             <span className="thinking-box__title-text">
-              {isThinkingActive ? i18n.t(k.THINKING) : i18n.t(k.THOUGHT_FOR)}
+              {isThinkingActive ? t(k.THINKING) : t(k.THOUGHT_FOR)}
             </span>
             <span className="thinking-box__timer">{elapsedTime}</span>
           </div>
@@ -293,7 +294,9 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
             <div
               ref={markdownRef}
               className="thinking-box__markdown focus:outline-none cursor-text select-text"
-              onCopy={(e) => handleCopy(e, markdownRef)}
+              onCopy={(e) =>
+                handleCopy(e, markdownRef as RefObject<HTMLDivElement>)
+              }
             >
               <ReactMarkdown
                 className="prose dark:prose-invert max-w-full"

@@ -1,6 +1,5 @@
-import i18n from "@/i18n/init";
-import k from "./../i18n/keys";
-import { useState } from "react";
+import React from "react";
+import { JSX, useState } from "react";
 
 interface HoverPopupProps {
   mainContent: string | JSX.Element;

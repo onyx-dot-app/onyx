@@ -1,3 +1,5 @@
+import { JSX } from "react";
+
 interface Props {
   children: JSX.Element | string;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;

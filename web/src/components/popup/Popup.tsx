@@ -5,6 +5,8 @@ import React, {
   useEffect,
   ReactNode,
   useContext,
+  JSX,
+  RefObject,
 } from "react";
 import { SettingsContext } from "../settings/SettingsProvider";
 
@@ -140,7 +142,7 @@ const Popup: React.FC<PopupProps> = ({
           }`}
           style={getPopupStyle()}
         >
-          {content(closePopup, contentRef)}
+          {content(closePopup, contentRef as RefObject<HTMLDivElement>)}
         </div>
       )}
     </div>

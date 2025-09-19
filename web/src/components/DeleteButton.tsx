@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 import { FiTrash } from "react-icons/fi";
 
@@ -9,6 +10,8 @@ export function DeleteButton({
   onClick?: (event: React.MouseEvent<HTMLElement>) => void | Promise<void>;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       className={`
@@ -28,7 +31,7 @@ export function DeleteButton({
       onClick={onClick}
     >
       <FiTrash className="mr-1 my-auto" />
-      {i18n.t(k.DELETE)}
+      {t(k.DELETE)}
     </div>
   );
 }

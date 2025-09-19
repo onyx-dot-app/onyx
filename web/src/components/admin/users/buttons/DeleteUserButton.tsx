@@ -1,5 +1,4 @@
-import i18n from "@/i18n/init";
-import k from "./../../../../i18n/keys";
+// Removed unused i18n import
 import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";

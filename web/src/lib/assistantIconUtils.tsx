@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+// Removed client i18n import; avoid pulling React context into server bundles
 import k from "./../i18n/keys";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import {
@@ -60,8 +60,9 @@ export function generateRandomIconShape(): GridShape {
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12
-          } Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
+          y + 12
+        } Z `;
       }
     }
   }
@@ -110,8 +111,9 @@ export function createSVG(
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12
-          } Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
+          y + 12
+        } Z `;
       }
     }
   }
@@ -176,7 +178,7 @@ export const constructMiniFiedPersona = (
     groups: [],
     user_file_ids: [],
     user_folder_ids: [],
-    knowledge_maps: []
+    knowledge_maps: [],
   };
 };
 

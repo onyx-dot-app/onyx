@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import Text from "@/components/ui/text";
@@ -22,31 +22,37 @@ import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
-function PersonaTypeDisplay({ persona }: { persona: Persona }) {
+function PersonaTypeDisplay({
+  persona,
+  t,
+}: {
+  persona: Persona;
+  t: (key: string, options?: any) => string;
+}) {
   if (persona.builtin_persona) {
-    return <Text>{i18n.t(k.BUILT_IN2)}</Text>;
+    return <Text>{t(k.BUILT_IN2)}</Text>;
   }
 
   if (persona.is_default_persona) {
-    return <Text>{i18n.t(k.DEFAULT2)}</Text>;
+    return <Text>{t(k.DEFAULT2)}</Text>;
   }
 
   if (persona.is_public) {
-    return <Text>{i18n.t(k.PUBLIC)}</Text>;
+    return <Text>{t(k.PUBLIC)}</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
-    return <Text>{i18n.t(k.SHARED)}</Text>;
+    return <Text>{t(k.SHARED)}</Text>;
   }
 
   return (
     <Text>
-      {i18n.t(k.PERSONAL)}{" "}
+      {t(k.PERSONAL)}{" "}
       {persona.owner && (
         <>
-          {i18n.t(k._4)}
+          {t(k._4)}
           {persona.owner.email}
-          {i18n.t(k._5)}
+          {t(k._5)}
         </>
       )}
     </Text>
@@ -54,6 +60,7 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
 }
 
 export function PersonasTable() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const { refreshUser, isAdmin } = useUser();
@@ -107,7 +114,7 @@ export function PersonasTable() {
     if (!response.ok) {
       setPopup({
         type: "error",
-        message: `Не удалось обновить порядок персон -${await response.text()}`,
+        message: t(k.FAILED_TO_UPDATE_PERSONA_ORDER),
       });
       setFinalPersonas(assistants);
       await refreshAssistants();
@@ -137,7 +144,7 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Не удалось удалить персону -${await response.text()}`,
+          message: t(k.FAILED_TO_DELETE_PERSONA),
         });
       }
     }
@@ -165,7 +172,7 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Не удалось обновить персону -${await response.text()}`,
+          message: t(k.FAILED_TO_UPDATE_PERSONA),
         });
       }
     }
@@ -192,20 +199,20 @@ export function PersonasTable() {
           onSubmit={handleToggleDefault}
           actionText={
             personaToToggleDefault.is_default_persona
-              ? i18n.t(k.REMOVE_THE_FEATURED_STATUS_OF)
-              : i18n.t(k.SET_AS_FEATURED)
+              ? t(k.REMOVE_THE_FEATURED_STATUS_OF)
+              : t(k.SET_AS_FEATURED)
           }
           actionButtonText={
             personaToToggleDefault.is_default_persona
-              ? i18n.t(k.REMOVE_FEATURED)
-              : i18n.t(k.SET_AS_FEATURED1)
+              ? t(k.REMOVE_FEATURED)
+              : t(k.SET_AS_FEATURED1)
           }
           additionalDetails={
             personaToToggleDefault.is_default_persona
-              ? `${i18n.t(k.REMOVING)}${personaToToggleDefault.name}${i18n.t(
+              ? `${t(k.REMOVING)}${personaToToggleDefault.name}${t(
                   k.AS_A_FEATURED_ASSISTANT_WILL
                 )}`
-              : `${i18n.t(k.SETTING)}${personaToToggleDefault.name}${i18n.t(
+              : `${t(k.SETTING)}${personaToToggleDefault.name}${t(
                   k.AS_A_FEATURED_ASSISTANT_WILL1
                 )}`
           }
@@ -214,12 +221,12 @@ export function PersonasTable() {
 
       <DraggableTable
         headers={[
-          "Имя",
-          "Описание",
-          "Тип",
-          "Избранный помощник",
-          "Видимость",
-          "Удалить",
+          t(k.NAME),
+          t(k.DESCRIPTION),
+          t(k.ACCESS_TYPE),
+          t(k.FAVORITE_ASSISTANT),
+          t(k.VISIBLE),
+          t(k.DELETE),
         ]}
         isAdmin={isAdmin}
         rows={finalPersonas.map((persona) => {
@@ -233,9 +240,9 @@ export function PersonasTable() {
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
                       router.push(
-                        `${i18n.t(k.ASSISTANTS_EDIT)}${persona.id}${i18n.t(
+                        `${t(k.ASSISTANTS_EDIT)}${persona.id}${t(
                           k.U
-                        )}${Date.now()}${i18n.t(k.ADMIN_TRUE)}`
+                        )}${Date.now()}${t(k.ADMIN_TRUE)}`
                       )
                     }
                   />
@@ -250,7 +257,7 @@ export function PersonasTable() {
               >
                 {persona.description}
               </p>,
-              <PersonaTypeDisplay key={persona.id} persona={persona} />,
+              <PersonaTypeDisplay key={persona.id} persona={persona} t={t} />,
               <div
                 key="is_default_persona"
                 onClick={() => {
@@ -266,9 +273,9 @@ export function PersonasTable() {
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
-                    <div className="text-error">{i18n.t(k.NOT_FEATURED)}</div>
+                    <div className="text-error">{t(k.NOT_FEATURED)}</div>
                   ) : (
-                    i18n.t(k.FEATURED)
+                    t(k.FEATURED)
                   )}
                 </div>
                 <div className="ml-1 my-auto">
@@ -288,7 +295,7 @@ export function PersonasTable() {
                     } else {
                       setPopup({
                         type: "error",
-                        message: `${i18n.t(
+                        message: `${t(
                           k.FAILED_TO_UPDATE_PERSONA
                         )} ${await response.text()}`,
                       });
@@ -303,9 +310,9 @@ export function PersonasTable() {
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (
-                    <div className="text-error">{i18n.t(k.HIDDEN)}</div>
+                    <div className="text-error">{t(k.HIDDEN)}</div>
                   ) : (
-                    i18n.t(k.VISIBLE)
+                    t(k.VISIBLE)
                   )}
                 </div>
                 <div className="ml-1 my-auto">
@@ -322,7 +329,7 @@ export function PersonasTable() {
                       <TrashIcon />
                     </div>
                   ) : (
-                    i18n.t(k._)
+                    t(k._)
                   )}
                 </div>
               </div>,

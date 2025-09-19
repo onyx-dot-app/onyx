@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -62,12 +62,14 @@ const UserRoleDropdown = ({
   onSuccess,
   onError,
   isAdmin,
+  t,
 }: {
   user: User;
   group: UserGroup;
   onSuccess: () => void;
   onError: (message: string) => void;
   isAdmin: boolean;
+  t: (key: string, params?: any) => string;
 }) => {
   const [localRole, setLocalRole] = useState(() => {
     if (user.role === UserRole.CURATOR) {
@@ -99,9 +101,7 @@ const UserRoleDropdown = ({
           user.role = value;
         } else {
           const errorData = await response.json();
-          throw new Error(
-            errorData.detail || "Не удалось обновить роль пользователя."
-          );
+          throw new Error(errorData.detail || t(k.FAILED_TO_UPDATE_USER_ROLE));
         }
       } catch (error: any) {
         onError(error.message);
@@ -129,16 +129,16 @@ const UserRoleDropdown = ({
       {/* Confirmation modal - only shown when users try to demote themselves */}
       {showDemoteConfirm && pendingRoleChange && (
         <GenericConfirmModal
-          title="Удалить себя как куратора этой группы?"
-          message="Вы уверены, что хотите изменить свою роль на базовую? Это лишит вас возможности курировать эту группу."
-          confirmText="Да, установить для меня базовую"
+          title={t(k.REMOVE_SELF_AS_CURATOR_TITLE)}
+          message={t(k.REMOVE_SELF_AS_CURATOR_MESSAGE)}
+          confirmText={t(k.CONFIRM_SET_BASIC_ROLE)}
           onClose={() => {
-            // Отменить изменение роли, если пользователь закроет модальное окно
+            // {t(k.CANCEL_ROLE_CHANGE)}
             setShowDemoteConfirm(false);
             setPendingRoleChange(null);
           }}
           onConfirm={() => {
-            // Применить изменение роли, если пользователь подтвердит
+            // {t(k.APPLY_ROLE_CHANGE)}
             setShowDemoteConfirm(false);
             applyRoleChange(pendingRoleChange);
             setPendingRoleChange(null);
@@ -154,13 +154,11 @@ const UserRoleDropdown = ({
             disabled={isSettingRole}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Выберите роль" />
+              <SelectValue placeholder={t(k.SELECT_ROLE_PLACEHOLDER)} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={UserRole.BASIC}>{i18n.t(k.BASIC1)}</SelectItem>
-              <SelectItem value={UserRole.CURATOR}>
-                {i18n.t(k.CURATOR)}
-              </SelectItem>
+              <SelectItem value={UserRole.BASIC}>{t(k.BASIC1)}</SelectItem>
+              <SelectItem value={UserRole.CURATOR}>{t(k.CURATOR)}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -177,6 +175,7 @@ export const GroupDisplay = ({
   userGroup,
   refreshUserGroup,
 }: GroupDisplayProps) => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [addMemberFormVisible, setAddMemberFormVisible] = useState(false);
   const [addConnectorFormVisible, setAddConnectorFormVisible] = useState(false);
@@ -188,20 +187,23 @@ export const GroupDisplay = ({
     setPopup({ message, type });
   };
   const onRoleChangeSuccess = () =>
-    handlePopup("Роль пользователя успешно обновлена!", "success");
+    handlePopup(t(k.USER_ROLE_UPDATED_SUCCESS), "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
+    handlePopup(
+      `${t(k.FAILED_TO_UPDATE_USER_ROLE_ERROR)} ${errorMsg}`,
+      "error"
+    );
   return (
     <div>
       {popup}
 
       <div className="text-sm mb-3 flex">
-        <Text className="mr-1">{i18n.t(k.STATUS2)}</Text>{" "}
+        <Text className="mr-1">{t(k.STATUS2)}</Text>{" "}
         {userGroup.is_up_to_date ? (
-          <div className="text-success font-bold">{i18n.t(k.UP_TO_DATE2)}</div>
+          <div className="text-success font-bold">{t(k.UP_TO_DATE2)}</div>
         ) : (
           <div className="text-accent font-bold">
-            <LoadingAnimation text="Синхронизация" />
+            <LoadingAnimation text={t(k.SYNCHRONIZATION)} />
           </div>
         )}
       </div>
@@ -209,7 +211,7 @@ export const GroupDisplay = ({
       <Separator />
 
       <div className="flex w-full">
-        <h2 className="text-xl font-bold">{i18n.t(k.USERS)}</h2>
+        <h2 className="text-xl font-bold">{t(k.USERS)}</h2>
       </div>
 
       <div className="mt-2">
@@ -218,10 +220,10 @@ export const GroupDisplay = ({
             <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
-                  <TableHead>{i18n.t(k.EMAIL)}</TableHead>
-                  <TableHead>{i18n.t(k.ROLE)}</TableHead>
+                  <TableHead>{t(k.EMAIL)}</TableHead>
+                  <TableHead>{t(k.ROLE)}</TableHead>
                   <TableHead className="flex w-full">
-                    <div className="ml-auto">{i18n.t(k.REMOVE_USER)}</div>
+                    <div className="ml-auto">{t(k.REMOVE_USER)}</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -239,6 +241,7 @@ export const GroupDisplay = ({
                           onSuccess={onRoleChangeSuccess}
                           onError={onRoleChangeError}
                           isAdmin={isAdmin}
+                          t={t}
                         />
                       </TableCell>
                       <TableCell>
@@ -268,7 +271,7 @@ export const GroupDisplay = ({
                                   );
                                   if (response.ok) {
                                     setPopup({
-                                      message: i18n.t(
+                                      message: t(
                                         k.SUCCESSFULLY_REMOVED_USER_FROM
                                       ),
 
@@ -280,7 +283,7 @@ export const GroupDisplay = ({
                                       responseJson.detail ||
                                       responseJson.message;
                                     setPopup({
-                                      message: `${i18n.t(
+                                      message: `${t(
                                         k.ERROR_REMOVING_USER_FROM_GROUP
                                       )} ${errorMsg}`,
                                       type: "error",
@@ -300,7 +303,7 @@ export const GroupDisplay = ({
             </Table>
           </>
         ) : (
-          <div className="text-sm">{i18n.t(k.NO_USERS_IN_THIS_GROUP)}</div>
+          <div className="text-sm">{t(k.NO_USERS_IN_THIS_GROUP)}</div>
         )}
       </div>
 
@@ -317,12 +320,12 @@ export const GroupDisplay = ({
                 }
               }}
             >
-              {i18n.t(k.ADD_USERS)}
+              {t(k.ADD_USERS)}
             </Button>
           </TooltipTrigger>
           {!userGroup.is_up_to_date && (
             <TooltipContent>
-              <p>{i18n.t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
+              <p>{t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
             </TooltipContent>
           )}
         </Tooltip>
@@ -341,16 +344,16 @@ export const GroupDisplay = ({
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8">{i18n.t(k.CONNECTORS)}</h2>
+      <h2 className="text-xl font-bold mt-8">{t(k.CONNECTORS)}</h2>
       <div className="mt-2">
         {userGroup.cc_pairs.length > 0 ? (
           <>
             <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
-                  <TableHead>{i18n.t(k.CONNECTOR)}</TableHead>
+                  <TableHead>{t(k.CONNECTOR)}</TableHead>
                   <TableHead className="flex w-full">
-                    <div className="ml-auto">{i18n.t(k.REMOVE_CONNECTOR)}</div>
+                    <div className="ml-auto">{t(k.REMOVE_CONNECTOR)}</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -386,7 +389,7 @@ export const GroupDisplay = ({
                                 );
                                 if (response.ok) {
                                   setPopup({
-                                    message: i18n.t(
+                                    message: t(
                                       k.SUCCESSFULLY_REMOVED_CONNECTOR
                                     ),
 
@@ -397,7 +400,7 @@ export const GroupDisplay = ({
                                   const errorMsg =
                                     responseJson.detail || responseJson.message;
                                   setPopup({
-                                    message: `${i18n.t(
+                                    message: `${t(
                                       k.ERROR_REMOVING_CONNECTOR_FROM
                                     )} ${errorMsg}`,
                                     type: "error",
@@ -416,7 +419,7 @@ export const GroupDisplay = ({
             </Table>
           </>
         ) : (
-          <div className="text-sm">{i18n.t(k.NO_CONNECTORS_IN_THIS_GROUP)}</div>
+          <div className="text-sm">{t(k.NO_CONNECTORS_IN_THIS_GROUP)}</div>
         )}
       </div>
 
@@ -433,12 +436,12 @@ export const GroupDisplay = ({
                 }
               }}
             >
-              {i18n.t(k.ADD_CONNECTORS)}
+              {t(k.ADD_CONNECTORS)}
             </Button>
           </TooltipTrigger>
           {!userGroup.is_up_to_date && (
             <TooltipContent>
-              <p>{i18n.t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
+              <p>{t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
             </TooltipContent>
           )}
         </Tooltip>
@@ -458,7 +461,7 @@ export const GroupDisplay = ({
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">{i18n.t(k.DOCUMENT_SETS)}</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">{t(k.DOCUMENT_SETS)}</h2>
 
       <div>
         {userGroup.document_sets.length > 0 ? (
@@ -476,14 +479,14 @@ export const GroupDisplay = ({
           </div>
         ) : (
           <>
-            <Text>{i18n.t(k.NO_DOCUMENT_SETS_IN_THIS_GROUP)}</Text>
+            <Text>{t(k.NO_DOCUMENT_SETS_IN_THIS_GROUP)}</Text>
           </>
         )}
       </div>
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">{i18n.t(k.ASSISTANTS1)}</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">{t(k.ASSISTANTS1)}</h2>
 
       <div>
         {userGroup.document_sets.length > 0 ? (
@@ -501,16 +504,14 @@ export const GroupDisplay = ({
           </div>
         ) : (
           <>
-            <Text>{i18n.t(k.NO_ASSISTANTS_IN_THIS_GROUP)}</Text>
+            <Text>{t(k.NO_ASSISTANTS_IN_THIS_GROUP)}</Text>
           </>
         )}
       </div>
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">
-        {i18n.t(k.TOKEN_RATE_LIMITS)}
-      </h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">{t(k.TOKEN_RATE_LIMITS)}</h2>
 
       <AddTokenRateLimitForm
         isOpen={addRateLimitFormVisible}
@@ -532,7 +533,7 @@ export const GroupDisplay = ({
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}
         >
-          {i18n.t(k.CREATE_A_TOKEN_RATE_LIMIT)}
+          {t(k.CREATE_A_TOKEN_RATE_LIMIT)}
         </Button>
       )}
     </div>

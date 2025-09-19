@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +14,7 @@ const SlideOverModal = ({
   onOpenChange: (isOpen: boolean) => void;
   anchor: React.RefObject<HTMLDivElement>;
 }) => {
+  const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -62,7 +63,7 @@ const SlideOverModal = ({
                     className="rounded-md bg-white text-neutral-400 hover:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     onClick={() => onOpenChange(false)}
                   >
-                    <span className="sr-only">{i18n.t(k.CLOSE_PANEL)}</span>
+                    <span className="sr-only">{t(k.CLOSE_PANEL)}</span>
                     <svg
                       className="h-6 w-6"
                       fill="none"

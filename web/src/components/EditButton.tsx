@@ -1,10 +1,11 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 
 import { FiEdit2 } from "react-icons/fi";
 
 export function EditButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`
@@ -21,7 +22,7 @@ export function EditButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
     >
       <FiEdit2 className="mr-1 my-auto" />
-      {i18n.t(k.EDIT)}
+      {t(k.EDIT)}
     </div>
   );
 }

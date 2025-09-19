@@ -28,10 +28,11 @@ import { Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { DocumentsProvider } from "./chat/my-documents/DocumentsContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import "../i18n/init";
+import { I18nProvider } from "@/components/providers/I18nProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -58,7 +59,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: enterpriseSettings?.application_name || "SmartSearch",
-    description: "Ответы на вопросы по вашим документам",
+    description: "Answers to questions about your documents",
     icons: {
       icon: logoLocation,
     },
@@ -129,9 +130,13 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="text-text min-h-screen bg-background">
-            <PHProvider>{content}</PHProvider>
-          </div>
+          <I18nProvider>
+            <LanguageProvider>
+              <div className="text-text min-h-screen bg-background">
+                <PHProvider>{content}</PHProvider>
+              </div>
+            </LanguageProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

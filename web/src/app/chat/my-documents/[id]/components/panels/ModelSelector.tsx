@@ -1,4 +1,5 @@
-import React from "react";
+import i18n from "@/i18n/init";
+import k from "./../../../../../../i18n/keys";
 import { LLMModelDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   Select,
@@ -28,7 +29,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   >
     <SelectTrigger className="w-full">
-      <SelectValue placeholder="Выберите модель" />
+      <SelectValue placeholder={i18n.t(k.SELECT_MODEL_PLACEHOLDER)} />
     </SelectTrigger>
     <SelectContent>
       {models.map((model) => (

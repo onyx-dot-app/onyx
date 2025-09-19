@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import React from "react";
@@ -27,6 +27,7 @@ export function CompletedWelcomeFlowDummyComponent() {
 }
 
 export function WelcomeModal({ user }: { user: User | null }) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const [providerOptions, setProviderOptions] = useState<
@@ -64,16 +65,12 @@ export function WelcomeModal({ user }: { user: User | null }) {
           setWelcomeFlowComplete();
           router.refresh();
         }}
-        title={"Добро пожаловать в SmartSearch!"}
+        title={t(k.WELCOME_TO_SMARTSEARCH_TITLE)}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >
         <div>
-          <Text className="mb-4">
-            {i18n.t(k.ONYX_BRINGS_ALL_YOUR_COMPANY_S)}
-          </Text>
-          <Text className="mb-4">
-            {i18n.t(k.TO_GET_STARTED_WE_NEED_TO_SET)}
-          </Text>
+          <Text className="mb-4">{t(k.ONYX_BRINGS_ALL_YOUR_COMPANY_S)}</Text>
+          <Text className="mb-4">{t(k.TO_GET_STARTED_WE_NEED_TO_SET)}</Text>
 
           <div className="max-h-[900px] overflow-y-scroll">
             <ApiKeyForm

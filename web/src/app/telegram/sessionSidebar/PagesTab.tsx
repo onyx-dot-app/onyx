@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { ChatSession } from "../interfaces";
 import {
@@ -118,6 +120,7 @@ export function PagesTab({
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
 }) {
+  const { t } = useTranslation();
   const { setPopup, popup } = usePopup();
   const router = useRouter();
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -130,14 +133,16 @@ export function PagesTab({
       try {
         await updateFolderName(folderId, newName);
         setPopup({
-          message: "Папка успешно обновлена",
+          message: t(k.FOLDER_UPDATED_SUCCESS),
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Не удалось обновить папку:", error);
+        console.error(t(k.FAILED_TO_UPDATE_FOLDER), error);
         setPopup({
-          message: `Не удалось обновить папку: ${(error as Error).message}`,
+          message: `${t(k.FAILED_TO_UPDATE_FOLDER)} ${
+            (error as Error).message
+          }`,
           type: "error",
         });
       }
@@ -147,23 +152,19 @@ export function PagesTab({
 
   const handleDeleteFolder = useCallback(
     (folderId: number) => {
-      if (
-        confirm(
-          "Вы уверены, что хотите удалить эту папку? Это действие нельзя отменить."
-        )
-      ) {
+      if (confirm(t(k.CONFIRM_DELETE_FOLDER))) {
         deleteFolder(folderId)
           .then(() => {
             router.refresh();
             setPopup({
-              message: "Папка успешно удалена",
+              message: t(k.FOLDER_DELETED_SUCCESS),
               type: "success",
             });
           })
           .catch((error: Error) => {
-            console.error("Не удалось удалить папку:", error);
+            console.error(t(k.FAILED_TO_DELETE_FOLDER), error);
             setPopup({
-              message: `Не удалось удалить папку: ${error.message}`,
+              message: `${t(k.FAILED_TO_DELETE_FOLDER)} ${error.message}`,
               type: "error",
             });
           });
@@ -189,16 +190,16 @@ export function PagesTab({
           await refreshFolders();
           router.refresh();
           setPopup({
-            message: "Папка создана успешно",
+            message: t(k.FOLDER_CREATED_SUCCESS),
             type: "success",
           });
         } catch (error) {
-          console.error("Не удалось создать папку:", error);
+          console.error(t(k.FAILED_TO_CREATE_FOLDER_ERROR), error);
           setPopup({
             message:
               error instanceof Error
                 ? error.message
-                : "Не удалось создать папку",
+                : t(k.FAILED_TO_CREATE_FOLDER_MESSAGE),
             type: "error",
           });
         }
@@ -227,14 +228,14 @@ export function PagesTab({
         await addChatToFolder(folderId, chatSessionId);
         router.refresh();
         setPopup({
-          message: "Чат успешно добавлен в папку",
+          message: t(k.CHAT_ADDED_TO_FOLDER_SUCCESS),
           type: "success",
         });
       } catch (error: unknown) {
-        console.error("Не удалось добавить чат в папку:", error);
+        console.error(t(k.FAILED_TO_ADD_CHAT_TO_FOLDER_ERROR), error);
         setPopup({
-          message: `Не удалось добавить чат в папку: ${
-            error instanceof Error ? error.message : "Неизвестная ошибка"
+          message: `${t(k.FAILED_TO_ADD_CHAT_TO_FOLDER_MESSAGE)} ${
+            error instanceof Error ? error.message : t(k.UNKNOWN_ERROR_MESSAGE)
           }`,
 
           type: "error",
@@ -325,7 +326,7 @@ export function PagesTab({
       {popup}
       <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
         <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
-          <p>{i18n.t(k.CHATS)}</p>
+          <p>{t(k.CHATS)}</p>
 
           <TooltipProvider delayDuration={1000}>
             <Tooltip>
@@ -342,7 +343,7 @@ export function PagesTab({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>{i18n.t(k.SEARCH_CHATS)}</TooltipContent>
+              <TooltipContent>{t(k.SEARCH_CHATS)}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -351,7 +352,7 @@ export function PagesTab({
             className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
           >
             <FiPlus size={12} className="flex-none" />
-            {i18n.t(k.CREATE_GROUP)}
+            {t(k.CREATE_GROUP)}
           </button>
         </div>
       </div>
@@ -362,13 +363,13 @@ export function PagesTab({
             <Caret size={16} className="flex-none mr-1" />
             <input
               onKeyDown={(e) => {
-                if (e.key === i18n.t(k.ENTER)) {
+                if (e.key === t(k.ENTER)) {
                   handleNewFolderSubmit(e);
                 }
               }}
               ref={newFolderInputRef}
               type="text"
-              placeholder="Введите название группы"
+              placeholder={t(k.ENTER_GROUP_NAME_PLACEHOLDER)}
               className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
             />
 
@@ -469,7 +470,7 @@ export function PagesTab({
 
         {isHistoryEmpty && (!folders || folders.length === 0) && (
           <p className="text-sm max-w-full mt-2 w-[250px]">
-            {i18n.t(k.TRY_SENDING_A_MESSAGE_YOUR_CH)}
+            {t(k.TRY_SENDING_A_MESSAGE_YOUR_CH)}
           </p>
         )}
       </div>

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -53,6 +53,7 @@ const EditRow = ({
   documentSet: DocumentSet;
   isEditable: boolean;
 }) => {
+  const { t } = useTranslation();
   const router = useRouter();
 
   if (!isEditable) {
@@ -88,7 +89,7 @@ const EditRow = ({
             <TooltipContent width="max-w-sm">
               <div className="flex break-words break-keep whitespace-pre-wrap items-start">
                 <InfoIcon className="mr-2 mt-0.5" />
-                {i18n.t(k.CANNOT_UPDATE_WHILE_SYNCING_W)}
+                {t(k.CANNOT_UPDATE_WHILE_SYNCING_W)}
               </div>
             </TooltipContent>
           )}
@@ -113,6 +114,7 @@ const DocumentSetTable = ({
   refreshEditable,
   setPopup,
 }: DocumentFeedbackTableProps) => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
 
   // sort by name for consistent ordering
@@ -135,15 +137,15 @@ const DocumentSetTable = ({
 
   return (
     <div>
-      <Title>{i18n.t(k.EXISTING_DOCUMENT_SETS)}</Title>
+      <Title>{t(k.EXISTING_DOCUMENT_SETS)}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.NAME)}</TableHead>
-            <TableHead>{i18n.t(k.CONNECTORS)}</TableHead>
-            <TableHead>{i18n.t(k.STATUS)}</TableHead>
-            <TableHead>{i18n.t(k.PUBLIC)}</TableHead>
-            <TableHead>{i18n.t(k.DELETE)}</TableHead>
+            <TableHead>{t(k.NAME)}</TableHead>
+            <TableHead>{t(k.CONNECTORS)}</TableHead>
+            <TableHead>{t(k.STATUS)}</TableHead>
+            <TableHead>{t(k.PUBLIC)}</TableHead>
+            <TableHead>{t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -192,15 +194,15 @@ const DocumentSetTable = ({
                   <TableCell>
                     {documentSet.is_up_to_date ? (
                       <Badge variant="success" icon={FiCheckCircle}>
-                        {i18n.t(k.UP_TO_DATE)}
+                        {t(k.UP_TO_DATE)}
                       </Badge>
                     ) : documentSet.cc_pair_descriptors.length > 0 ? (
                       <Badge variant="in_progress" icon={FiClock}>
-                        {i18n.t(k.SYNCING)}
+                        {t(k.SYNCING)}
                       </Badge>
                     ) : (
                       <Badge variant="destructive" icon={FiAlertTriangle}>
-                        {i18n.t(k.DELETING)}
+                        {t(k.DELETING)}
                       </Badge>
                     )}
                   </TableCell>
@@ -210,14 +212,14 @@ const DocumentSetTable = ({
                         variant={isEditable ? "success" : "default"}
                         icon={FiUnlock}
                       >
-                        {i18n.t(k.PUBLIC)}
+                        {t(k.PUBLIC)}
                       </Badge>
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
                         icon={FiLock}
                       >
-                        {i18n.t(k.PRIVATE1)}
+                        {t(k.PRIVATE1)}
                       </Badge>
                     )}
                   </TableCell>
@@ -230,15 +232,15 @@ const DocumentSetTable = ({
                           );
                           if (response.ok) {
                             setPopup({
-                              message: `${i18n.t(k.DOCUMENT_SET)}${
+                              message: `${t(k.DOCUMENT_SET)}${
                                 documentSet.name
-                              }${i18n.t(k.SCHEDULED_FOR_DELETION)}`,
+                              }${t(k.SCHEDULED_FOR_DELETION)}`,
                               type: "success",
                             });
                           } else {
                             const errorMsg = (await response.json()).detail;
                             setPopup({
-                              message: `${i18n.t(
+                              message: `${t(
                                 k.FAILED_TO_SCHEDULE_DOCUMENT_SE
                               )} ${errorMsg}`,
                               type: "error",
@@ -249,7 +251,7 @@ const DocumentSetTable = ({
                         }}
                       />
                     ) : (
-                      i18n.t(k._)
+                      t(k._)
                     )}
                   </TableCell>
                 </TableRow>
@@ -272,6 +274,7 @@ const DocumentSetTable = ({
 };
 
 const Main = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const {
     data: documentSets,
@@ -294,7 +297,7 @@ const Main = () => {
   if (documentSetsError || !documentSets) {
     return (
       <div>
-        {i18n.t(k.ERROR1)} {documentSetsError}
+        {t(k.ERROR1)} {documentSetsError}
       </div>
     );
   }
@@ -302,7 +305,7 @@ const Main = () => {
   if (editableDocumentSetsError || !editableDocumentSets) {
     return (
       <div>
-        {i18n.t(k.ERROR1)} {editableDocumentSetsError}
+        {t(k.ERROR1)} {editableDocumentSetsError}
       </div>
     );
   }
@@ -311,8 +314,7 @@ const Main = () => {
     <div className="mb-8">
       {popup}
       <Text className="mb-3">
-        <b>{i18n.t(k.DOCUMENT_SETS)}</b>{" "}
-        {i18n.t(k.ALLOW_YOU_TO_GROUP_LOGICALLY_C)}
+        <b>{t(k.DOCUMENT_SETS)}</b> {t(k.ALLOW_YOU_TO_GROUP_LOGICALLY_C)}
       </Text>
 
       <div className="mb-3"></div>
@@ -320,7 +322,7 @@ const Main = () => {
       <div className="flex mb-6">
         <CreateButton
           href="/admin/documents/sets/new"
-          text="Новый набор документов"
+          text={t(k.NEW_DOCUMENT_SET_BUTTON)}
         />
 
         {/* <Link href="/admin/documents/sets/new">
@@ -345,11 +347,12 @@ const Main = () => {
 };
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
       <AdminPageTitle
         icon={<BookmarkIcon size={32} />}
-        title="Наборы документов"
+        title={t(k.DOCUMENT_SETS_TITLE)}
       />
 
       <Main />

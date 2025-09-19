@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 import React, { useState, useEffect } from "react";
 import "./loading.css";
@@ -13,6 +14,7 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   text,
   size,
 }) => {
+  const { t } = useTranslation();
   const [dots, setDots] = useState("...");
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   return (
     <div className="loading-animation flex">
       <div className={"mx-auto flex" + size ? ` ${size}` : ""}>
-        {text === undefined ? i18n.t(k.THINKING) : text}
+        {text === undefined ? t(k.THINKING) : text}
         <span className="dots">{dots}</span>
       </div>
     </div>

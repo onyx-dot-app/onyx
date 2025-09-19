@@ -1,7 +1,7 @@
 import i18n from "@/i18n/init";
 import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
-import React from "react";
+import React, { JSX } from "react";
 import { FiBookmark, FiTag, FiX } from "react-icons/fi";
 import { FilterManager } from "@/lib/hooks";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";

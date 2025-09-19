@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { ErrorMessage, Field, useField } from "formik";
 
@@ -9,6 +10,7 @@ import {
   SubLabel,
   ToolTipDetails,
 } from "../admin/connectors/Field";
+import { JSX } from "react";
 
 // Specifically for text
 export function AdminTextField({
@@ -58,6 +60,7 @@ export function AdminTextField({
   small?: boolean;
   optional?: boolean;
 }) {
+  const { t } = useTranslation();
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
@@ -73,7 +76,7 @@ export function AdminTextField({
           >
             {label}
             {optional && (
-              <span className="text-text-500 ml-1">{i18n.t(k.OPTIONAL)}</span>
+              <span className="text-text-500 ml-1">{t(k.OPTIONAL)}</span>
             )}
           </label>
         )}

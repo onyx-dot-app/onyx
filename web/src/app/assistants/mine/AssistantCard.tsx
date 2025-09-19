@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -60,6 +62,7 @@ const AssistantCard: React.FC<{
   pinned: boolean;
   closeModal: () => void;
 }> = ({ persona, pinned, closeModal }) => {
+  const { t } = useTranslation();
   const { user, toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const { refreshAssistants, pinnedAssistants } = useAssistants();
@@ -86,12 +89,12 @@ const AssistantCard: React.FC<{
       setActivePopover(null);
       setIsDeleteConfirmation(false);
       setPopup({
-        message: `${persona.name} был успешно удален.`,
+        message: `${persona.name} ${t(k.ASSISTANT_DELETED_SUCCESS)}`,
         type: "success",
       });
     } else {
       setPopup({
-        message: `Не удалось удалить помощника - ${await response.text()}`,
+        message: `${t(k.FAILED_TO_DELETE_ASSISTANT)} ${await response.text()}`,
         type: "error",
       });
     }
@@ -169,9 +172,9 @@ const AssistantCard: React.FC<{
                   ))}
                   {persona.labels.length > 2 && (
                     <AssistantBadge
-                      text={`${i18n.t(k._9)}${
-                        persona.labels.length - 2
-                      } ${i18n.t(k.MORE)}`}
+                      text={`${t(k._9)}${persona.labels.length - 2} ${t(
+                        k.MORE
+                      )}`}
                     />
                   )}
                 </>
@@ -205,7 +208,7 @@ const AssistantCard: React.FC<{
                           disabled={!isOwnedByUser}
                         >
                           <FiEdit size={12} className="inline mr-2" />
-                          {i18n.t(k.EDIT)}
+                          {t(k.EDIT)}
                         </button>
                         {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
                           <button
@@ -213,9 +216,7 @@ const AssistantCard: React.FC<{
                               isOwnedByUser
                                 ? () => {
                                     router.push(
-                                      `${i18n.t(k.ASSISTANTS_STATS)}${
-                                        persona.id
-                                      }`
+                                      `${t(k.ASSISTANTS_STATS)}${persona.id}`
                                     );
                                     closePopover();
                                   }
@@ -228,7 +229,7 @@ const AssistantCard: React.FC<{
                             }`}
                           >
                             <FiBarChart size={12} className="inline mr-2" />
-                            {i18n.t(k.STATS)}
+                            {t(k.STATS)}
                           </button>
                         )}
                         <button
@@ -241,15 +242,15 @@ const AssistantCard: React.FC<{
                           disabled={!isOwnedByUser}
                         >
                           <FiTrash size={12} className="inline mr-2" />
-                          {i18n.t(k.DELETE)}
+                          {t(k.DELETE)}
                         </button>
                       </div>
                     ) : (
                       <div className="w-full">
                         <p className="text-sm mb-3">
-                          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET)}{" "}
+                          {t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET)}{" "}
                           <b>{persona.name}</b>
-                          {i18n.t(k._10)}
+                          {t(k._10)}
                         </p>
                         <div className="flex justify-center gap-2">
                           <Button
@@ -257,14 +258,14 @@ const AssistantCard: React.FC<{
                             size="sm"
                             onClick={cancelDelete}
                           >
-                            {i18n.t(k.CANCEL)}
+                            {t(k.CANCEL)}
                           </Button>
                           <Button
                             variant="destructive"
                             size="sm"
                             onClick={confirmDelete}
                           >
-                            {i18n.t(k.DELETE)}
+                            {t(k.DELETE)}
                           </Button>
                         </div>
                       </div>
@@ -285,33 +286,33 @@ const AssistantCard: React.FC<{
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
                     <span className="truncate">
-                      {i18n.t(k.BY)} {persona.owner?.email || i18n.t(k.ONYX)}
+                      {t(k.BY)} {persona.owner?.email || t(k.ONYX)}
                     </span>
 
-                    <span className="mx-2">{i18n.t(k._11)}</span>
+                    <span className="mx-2">{t(k._11)}</span>
                   </>
                 ) : null}
                 <span className="flex-none truncate">
                   {persona.tools.length > 0 ? (
                     <>
                       {persona.tools.length}
-                      {i18n.t(k.ACTION)}
-                      {persona.tools.length !== 1 ? i18n.t(k.S) : ""}
+                      {t(k.ACTION)}
+                      {persona.tools.length !== 1 ? t(k.S) : ""}
                     </>
                   ) : (
-                    i18n.t(k.NO_ACTIONS)
+                    t(k.NO_ACTIONS)
                   )}
                 </span>
-                <span className="mx-2">{i18n.t(k._11)}</span>
+                <span className="mx-2">{t(k._11)}</span>
                 {persona.is_public ? (
                   <div>
                     <FiUnlock size={12} className="inline mr-1" />
-                    {i18n.t(k.PUBLIC)}
+                    {t(k.PUBLIC)}
                   </div>
                 ) : (
                   <div>
                     <FiLock size={12} className="inline mr-1" />
-                    {i18n.t(k.PRIVATE1)}
+                    {t(k.PRIVATE1)}
                   </div>
                 )}
               </p>
@@ -329,11 +330,11 @@ const AssistantCard: React.FC<{
                     className="hover:bg-neutral-100 dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] hover:text-neutral-900 dark:hover:text-neutral-100 px-2 py-1 gap-x-1 rounded border border-neutral-400 dark:border-neutral-600 flex items-center"
                   >
                     <PencilIcon size={12} className="flex-none" />
-                    <span className="text-xs">{i18n.t(k.START_CHAT)}</span>
+                    <span className="text-xs">{t(k.START_CHAT)}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {i18n.t(k.START_A_NEW_CHAT_WITH_THIS_ASS)}
+                  {t(k.START_A_NEW_CHAT_WITH_THIS_ASS)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -353,18 +354,18 @@ const AssistantCard: React.FC<{
                     <PinnedIcon size={12} />
                     {!pinned ? (
                       <p className="w-full left-0 group-hover:text-neutral-900 dark:group-hover:text-neutral-100 w-full text-center transform text-xs">
-                        {i18n.t(k.PIN)}
+                        {t(k.PIN)}
                       </p>
                     ) : (
                       <p className="text-xs group-hover:text-neutral-900 dark:group-hover:text-neutral-100">
-                        {i18n.t(k.UNPIN)}
+                        {t(k.UNPIN)}
                       </p>
                     )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {pinned ? i18n.t(k.REMOVE_FROM) : i18n.t(k.ADD_TO)}{" "}
-                  {i18n.t(k.YOUR_PINNED_LIST)}
+                  {pinned ? t(k.REMOVE_FROM) : t(k.ADD_TO)}{" "}
+                  {t(k.YOUR_PINNED_LIST)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

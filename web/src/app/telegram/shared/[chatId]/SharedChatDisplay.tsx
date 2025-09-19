@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import Prism from "prismjs";
 
@@ -28,8 +28,10 @@ import { useRouter } from "next/navigation";
 
 function BackToOnyxButton({
   documentSidebarVisible,
+  t,
 }: {
   documentSidebarVisible: boolean;
+  t: (key: string, params?: any) => string;
 }) {
   const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
@@ -38,7 +40,7 @@ function BackToOnyxButton({
     <div className="absolute bottom-0 bg-background w-full flex border-t border-border py-4">
       <div className="mx-auto">
         <Button onClick={() => router.push("/chat")}>
-          {i18n.t(k.BACK_TO)}{" "}
+          {t(k.BACK_TO)}{" "}
           {enterpriseSettings?.application_name || "SmartSearch Chat"}
         </Button>
       </div>
@@ -64,6 +66,7 @@ export function SharedChatDisplay({
   chatSession: BackendChatSession | null;
   persona: Persona;
 }) {
+  const { t } = useTranslation();
   const settings = useContext(SettingsContext);
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
@@ -84,11 +87,14 @@ export function SharedChatDisplay({
     return (
       <div className="min-h-full w-full">
         <div className="mx-auto w-fit pt-8">
-          <Callout type="danger" title="Общий чат не найден">
-            {i18n.t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
+          <Callout type="danger" title={t(k.SHARED_CHAT_NOT_FOUND)}>
+            {t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
           </Callout>
         </div>
-        <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+        <BackToOnyxButton
+          documentSidebarVisible={documentSidebarVisible}
+          t={t}
+        />
       </div>
     );
   }
@@ -208,7 +214,7 @@ export function SharedChatDisplay({
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description || `${i18n.t(k.UNNAMED_CHAT)}`}
+                      {chatSession.description || `${t(k.UNNAMED_CHAT)}`}
                     </h1>
                     <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}
@@ -422,7 +428,10 @@ export function SharedChatDisplay({
           </div>
 
           <FixedLogo backgroundToggled={false} />
-          <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+          <BackToOnyxButton
+            documentSidebarVisible={documentSidebarVisible}
+            t={t}
+          />
         </div>
       </div>
     </>

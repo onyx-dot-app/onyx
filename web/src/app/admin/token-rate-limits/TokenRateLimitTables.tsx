@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import {
@@ -37,6 +37,7 @@ export const TokenRateLimitTable = ({
   hideHeading,
   isAdmin,
 }: TokenRateLimitTableArgs) => {
+  const { t } = useTranslation();
   const shouldRenderGroupName = () =>
     tokenRateLimits.length > 0 && tokenRateLimits[0].group_name !== undefined;
 
@@ -71,7 +72,7 @@ export const TokenRateLimitTable = ({
           <Text className="my-2">{description}</Text>
         )}
         <Text className={`${!hideHeading && "my-8"}`}>
-          {i18n.t(k.NO_TOKEN_RATE_LIMITS_SET)}
+          {t(k.NO_TOKEN_RATE_LIMITS_SET)}
         </Text>
       </div>
     );
@@ -90,13 +91,13 @@ export const TokenRateLimitTable = ({
       >
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.ENABLED)}</TableHead>
+            <TableHead>{t(k.ENABLED)}</TableHead>
             {shouldRenderGroupName() && (
-              <TableHead>{i18n.t(k.GROUP_NAME)}</TableHead>
+              <TableHead>{t(k.GROUP_NAME)}</TableHead>
             )}
-            <TableHead>{i18n.t(k.TIME_WINDOW_HOURS)}</TableHead>
-            <TableHead>{i18n.t(k.TOKEN_BUDGET_THOUSANDS)}</TableHead>
-            {isAdmin && <TableHead>{i18n.t(k.DELETE)}</TableHead>}
+            <TableHead>{t(k.TIME_WINDOW_HOURS)}</TableHead>
+            <TableHead>{t(k.TOKEN_BUDGET_THOUSANDS)}</TableHead>
+            {isAdmin && <TableHead>{t(k.DELETE)}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -130,8 +131,8 @@ export const TokenRateLimitTable = ({
 
                         <p className="ml-2">
                           {tokenRateLimit.enabled
-                            ? i18n.t(k.ENABLED)
-                            : i18n.t(k.DISABLED)}
+                            ? t(k.ENABLED)
+                            : t(k.DISABLED)}
                         </p>
                       </div>
                     </div>
@@ -145,10 +146,10 @@ export const TokenRateLimitTable = ({
                 <TableCell>
                   {tokenRateLimit.period_hours +
                     " hour" +
-                    (tokenRateLimit.period_hours > 1 ? i18n.t(k.S) : "")}
+                    (tokenRateLimit.period_hours > 1 ? t(k.S) : "")}
                 </TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " тысяч токенов"}
+                  {tokenRateLimit.token_budget + t(k.THOUSAND_TOKENS)}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>
@@ -183,6 +184,7 @@ export const GenericTokenRateLimitTable = ({
   responseMapper?: (data: any) => TokenRateLimitDisplay[];
   isAdmin?: boolean;
 }) => {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
     fetchUrl,
     errorHandlingFetcher
@@ -193,7 +195,7 @@ export const GenericTokenRateLimitTable = ({
   }
 
   if (!isLoading && error) {
-    return <Text>{i18n.t(k.FAILED_TO_LOAD_TOKEN_RATE_LIMI)}</Text>;
+    return <Text>{t(k.FAILED_TO_LOAD_TOKEN_RATE_LIMI)}</Text>;
   }
 
   let processedData = data;

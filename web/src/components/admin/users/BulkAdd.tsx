@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
@@ -32,46 +32,50 @@ const AddUserFormRenderer = ({
   errors,
   isSubmitting,
   handleSubmit,
-}: FormikProps<FormValues>) => (
-  <Form className="w-full" onSubmit={handleSubmit}>
-    <Field
-      id="emails"
-      name="emails"
-      as="textarea"
-      className="w-full p-4"
-      onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleSubmit();
-        }
-      }}
-    />
+}: FormikProps<FormValues>) => {
+  const { t } = useTranslation();
 
-    {touched.emails && errors.emails && (
-      <div className="text-error text-sm">{errors.emails}</div>
-    )}
-    <Button
-      className="mx-auto"
-      variant="submit"
-      size="sm"
-      type="submit"
-      disabled={isSubmitting}
-    >
-      {i18n.t(k.ADD)}
-    </Button>
-  </Form>
-);
+  return (
+    <Form className="w-full" onSubmit={handleSubmit}>
+      <Field
+        id="emails"
+        name="emails"
+        as="textarea"
+        className="w-full p-4"
+        onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+      />
+
+      {touched.emails && errors.emails && (
+        <div className="text-error text-sm">{errors.emails}</div>
+      )}
+      <Button
+        className="mx-auto"
+        variant="submit"
+        size="sm"
+        type="submit"
+        disabled={isSubmitting}
+      >
+        {t(k.ADD)}
+      </Button>
+    </Form>
+  );
+};
 
 const AddUserForm = withFormik<FormProps, FormValues>({
   mapPropsToValues: (props) => {
     return {
-      emails: i18n.t(k._1),
+      emails: "",
     };
   },
   validate: (values: FormValues): FormikErrors<FormValues> => {
     const emails = values.emails.trim().split(WHITESPACE_SPLIT);
     if (!emails.some(Boolean)) {
-      return { emails: i18n.t(k.REQUIRED) };
+      return { emails: "Required" };
     }
     for (let email of emails) {
       if (!email.match(EMAIL_REGEX)) {

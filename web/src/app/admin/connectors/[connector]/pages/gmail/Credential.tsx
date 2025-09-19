@@ -1,4 +1,7 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
+import i18n from "./../../../../../../i18n/init";
 import k from "./../../../../../../i18n/keys";
 import { Button } from "@/components/ui/button";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -45,6 +48,7 @@ const GmailCredentialUpload = ({
   setPopup: (popupSpec: PopupSpec | null) => void;
   onSuccess?: () => void;
 }) => {
+  const { t } = useTranslation();
   const { mutate } = useSWRConfig();
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | undefined>();
@@ -72,13 +76,11 @@ const GmailCredentialUpload = ({
         } else if (appCredentialJson.type === "service_account") {
           credentialFileType = "service_account";
         } else {
-          throw new Error(
-            "Неизвестный тип учетных данных, ожидалось одно из 'OAuth Web application' или 'Service Account'"
-          );
+          throw new Error(t(k.UNKNOWN_CREDENTIAL_TYPE));
         }
       } catch (e) {
         setPopup({
-          message: `Предоставлен неверный файл - ${e}`,
+          message: t(k.INVALID_FILE_PROVIDED, { error: e }),
           type: "error",
         });
         setIsUploading(false);
@@ -98,7 +100,7 @@ const GmailCredentialUpload = ({
         );
         if (response.ok) {
           setPopup({
-            message: i18n.t(k.SUCCESSFULLY_UPLOADED_APP_CRED),
+            message: t(k.SUCCESSFULLY_UPLOADED_APP_CRED),
             type: "success",
           });
           mutate("/api/manage/admin/connector/gmail/app-credential");
@@ -108,7 +110,9 @@ const GmailCredentialUpload = ({
         } else {
           const errorMsg = await response.text();
           setPopup({
-            message: `Не удалось загрузить учетные данные приложения - ${errorMsg}`,
+            message: t(k.FAILED_TO_UPLOAD_APP_CREDENTIALS, {
+              error: errorMsg,
+            }),
             type: "error",
           });
         }
@@ -127,7 +131,7 @@ const GmailCredentialUpload = ({
         );
         if (response.ok) {
           setPopup({
-            message: i18n.t(k.SUCCESSFULLY_UPLOADED_SERVICE),
+            message: t(k.SUCCESSFULLY_UPLOADED_SERVICE),
             type: "success",
           });
           mutate("/api/manage/admin/connector/gmail/service-account-key");
@@ -137,7 +141,9 @@ const GmailCredentialUpload = ({
         } else {
           const errorMsg = await response.text();
           setPopup({
-            message: `Не удалось загрузить ключ учетной записи службы - ${errorMsg}`,
+            message: t(k.FAILED_TO_UPLOAD_SERVICE_KEY, {
+              error: errorMsg,
+            }),
             type: "error",
           });
         }
@@ -181,7 +187,7 @@ const GmailCredentialUpload = ({
         handleFileUpload(file);
       } else {
         setPopup({
-          message: i18n.t(k.PLEASE_UPLOAD_A_JSON_FILE),
+          message: t(k.PLEASE_UPLOAD_A_JSON_FILE),
           type: "error",
         });
       }
@@ -214,14 +220,14 @@ const GmailCredentialUpload = ({
               )}
               <span className="text-sm text-text-500">
                 {isUploading
-                  ? `${i18n.t(k.UPLOADING1)} ${truncateString(
-                      fileName || i18n.t(k.FILE),
+                  ? `${t(k.UPLOADING1)} ${truncateString(
+                      fileName || t(k.FILE),
                       50
-                    )}${i18n.t(k._13)}`
+                    )}${t(k._13)}`
                   : isDragging
-                  ? i18n.t(k.DROP_JSON_FILE_HERE)
+                  ? t(k.DROP_JSON_FILE_HERE)
                   : truncateString(
-                      fileName || i18n.t(k.SELECT_OR_DRAG_JSON_CREDENTIAL),
+                      fileName || t(k.SELECT_OR_DRAG_JSON_CREDENTIAL),
                       50
                     )}
               </span>
@@ -263,6 +269,7 @@ export const GmailJsonUploadSection = ({
   onSuccess,
   existingAuthCredential,
 }: GmailJsonUploadSectionProps) => {
+  const { t } = useTranslation();
   const { mutate } = useSWRConfig();
   const router = useRouter();
   const [localServiceAccountData, setLocalServiceAccountData] = useState(
@@ -290,7 +297,7 @@ export const GmailJsonUploadSection = ({
       <div>
         <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded">
           <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-          <p className="text-sm">{i18n.t(k.CURATORS_ARE_UNABLE_TO_SET_UP1)}</p>
+          <p className="text-sm">{t(k.CURATORS_ARE_UNABLE_TO_SET_UP1)}</p>
         </div>
       </div>
     );
@@ -298,7 +305,7 @@ export const GmailJsonUploadSection = ({
 
   return (
     <div>
-      <p className="text-sm mb-3">{i18n.t(k.TO_CONNECT_YOUR_GMAIL_CREATE)}</p>
+      <p className="text-sm mb-3">{t(k.TO_CONNECT_YOUR_GMAIL_CREATE)}</p>
       <div className="mb-4">
         <a
           className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm"
@@ -307,7 +314,7 @@ export const GmailJsonUploadSection = ({
           rel="noreferrer"
         >
           <FiLink className="h-3 w-3" />
-          {i18n.t(k.VIEW_DETAILED_SETUP_INSTRUCTIO)}
+          {t(k.VIEW_DETAILED_SETUP_INSTRUCTIO)}
         </a>
       </div>
 
@@ -370,10 +377,10 @@ export const GmailJsonUploadSection = ({
                     );
 
                     setPopup({
-                      message: `${i18n.t(k.SUCCESSFULLY_DELETED)} ${
+                      message: `${t(k.SUCCESSFULLY_DELETED)} ${
                         localServiceAccountData
-                          ? i18n.t(k.SERVICE_ACCOUNT_KEY)
-                          : i18n.t(k.APP_CREDENTIALS)
+                          ? t(k.SERVICE_ACCOUNT_KEY)
+                          : t(k.APP_CREDENTIALS)
                       }`,
 
                       type: "success",
@@ -388,7 +395,7 @@ export const GmailJsonUploadSection = ({
                   } else {
                     const errorMsg = await response.text();
                     setPopup({
-                      message: `${i18n.t(
+                      message: `${t(
                         k.FAILED_TO_DELETE_CREDENTIALS
                       )} ${errorMsg}`,
                       type: "error",
@@ -396,7 +403,7 @@ export const GmailJsonUploadSection = ({
                   }
                 }}
               >
-                {i18n.t(k.DELETE_CREDENTIALS)}
+                {t(k.DELETE_CREDENTIALS)}
               </Button>
             </div>
           )}
@@ -433,9 +440,7 @@ async function handleRevokeAccess(
   refreshCredentials: () => void
 ) {
   if (connectorExists) {
-    const message =
-      "Невозможно отозвать учетные данные Gmail, пока с ними связан какой-либо коннектор. " +
-      "Пожалуйста, удалите все связанные коннекторы, затем повторите попытку.";
+    const message = i18n.t(k.CANNOT_REVOKE_GMAIL_CREDENTIALS);
     setPopup({
       message: message,
       type: "error",
@@ -462,6 +467,7 @@ export const GmailAuthSection = ({
   connectorExists,
   user,
 }: GmailCredentialSectionProps) => {
+  const { t } = useTranslation();
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [localServiceAccountData, setLocalServiceAccountData] = useState(
@@ -500,10 +506,10 @@ export const GmailAuthSection = ({
             <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <span className="font-medium block">
-                {i18n.t(k.AUTHENTICATION_COMPLETE)}
+                {t(k.AUTHENTICATION_COMPLETE)}
               </span>
               <p className="text-sm mt-1 text-text-500 dark:text-text-400 break-words">
-                {i18n.t(k.YOUR_GMAIL_CREDENTIALS_HAVE_BE)}
+                {t(k.YOUR_GMAIL_CREDENTIALS_HAVE_BE)}
               </p>
             </div>
           </div>
@@ -519,7 +525,7 @@ export const GmailAuthSection = ({
               );
             }}
           >
-            {i18n.t(k.REVOKE_ACCESS)}
+            {t(k.REVOKE_ACCESS)}
           </Button>
         </div>
       </div>
@@ -533,11 +539,11 @@ export const GmailAuthSection = ({
   ) {
     return (
       <div>
-        <SectionHeader>{i18n.t(k.GMAIL_AUTHENTICATION)}</SectionHeader>
+        <SectionHeader>{t(k.GMAIL_AUTHENTICATION)}</SectionHeader>
         <div className="mt-4">
           <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded">
             <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-            <p className="text-sm">{i18n.t(k.PLEASE_COMPLETE_STEP_BY_UPLO)}</p>
+            <p className="text-sm">{t(k.PLEASE_COMPLETE_STEP_BY_UPLO)}</p>
           </div>
         </div>
       </div>
@@ -554,8 +560,8 @@ export const GmailAuthSection = ({
             }}
             validationSchema={Yup.object().shape({
               google_primary_admin: Yup.string()
-                .email("Должен быть действительный адрес электронной почты")
-                .required("Обязательно"),
+                .email(t(k.VALID_EMAIL_REQUIRED))
+                .required(t(k.REQUIRED_FIELD)),
             })}
             onSubmit={async (values, formikHelpers) => {
               formikHelpers.setSubmitting(true);
@@ -575,14 +581,14 @@ export const GmailAuthSection = ({
 
                 if (response.ok) {
                   setPopup({
-                    message: i18n.t(k.SUCCESSFULLY_CREATED_SERVICE_A),
+                    message: t(k.SUCCESSFULLY_CREATED_SERVICE_A),
                     type: "success",
                   });
                   refreshCredentials();
                 } else {
                   const errorMsg = await response.text();
                   setPopup({
-                    message: `${i18n.t(
+                    message: `${t(
                       k.FAILED_TO_CREATE_SERVICE_ACCOU
                     )} ${errorMsg}`,
                     type: "error",
@@ -590,9 +596,7 @@ export const GmailAuthSection = ({
                 }
               } catch (error) {
                 setPopup({
-                  message: `${i18n.t(
-                    k.FAILED_TO_CREATE_SERVICE_ACCOU
-                  )} ${error}`,
+                  message: `${t(k.FAILED_TO_CREATE_SERVICE_ACCOU)} ${error}`,
                   type: "error",
                 });
               } finally {
@@ -604,15 +608,13 @@ export const GmailAuthSection = ({
               <Form>
                 <TextFormField
                   name="google_primary_admin"
-                  label="Основной адрес электронной почты администратора:"
-                  subtext="Введите адрес электронной почты администратора/владельца организации Google, которой принадлежат учетные записи Gmail, которые вы хотите индексировать."
+                  label={t(k.PRIMARY_ADMIN_EMAIL_LABEL)}
+                  subtext={t(k.PRIMARY_ADMIN_EMAIL_SUBTEXT)}
                 />
 
                 <div className="flex">
                   <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting
-                      ? i18n.t(k.CREATING)
-                      : i18n.t(k.CREATE_CREDENTIAL)}
+                    {isSubmitting ? t(k.CREATING) : t(k.CREATE_CREDENTIAL)}
                   </Button>
                 </div>
               </Form>
@@ -627,7 +629,7 @@ export const GmailAuthSection = ({
     return (
       <div>
         <div className="bg-background-50/30 dark:bg-background-900/20 rounded mb-4">
-          <p className="text-sm">{i18n.t(k.NEXT_YOU_NEED_TO_AUTHENTICATE1)}</p>
+          <p className="text-sm">{t(k.NEXT_YOU_NEED_TO_AUTHENTICATE1)}</p>
         </div>
         <Button
           disabled={isAuthenticating}
@@ -635,7 +637,7 @@ export const GmailAuthSection = ({
             setIsAuthenticating(true);
             try {
               Cookies.set(GMAIL_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: i18n.t(k._6),
+                path: t(k._6),
               });
               const [authUrl, errorMsg] = await setupGmailOAuth({
                 isAdmin: true,
@@ -652,7 +654,7 @@ export const GmailAuthSection = ({
               }
             } catch (error) {
               setPopup({
-                message: `${i18n.t(k.FAILED_TO_AUTHENTICATE_WITH_GM)} ${error}`,
+                message: `${t(k.FAILED_TO_AUTHENTICATE_WITH_GM)} ${error}`,
                 type: "error",
               });
               setIsAuthenticating(false);
@@ -660,8 +662,8 @@ export const GmailAuthSection = ({
           }}
         >
           {isAuthenticating
-            ? i18n.t(k.AUTHENTICATING)
-            : i18n.t(k.AUTHENTICATE_WITH_GMAIL)}
+            ? t(k.AUTHENTICATING)
+            : t(k.AUTHENTICATE_WITH_GMAIL)}
         </Button>
       </div>
     );

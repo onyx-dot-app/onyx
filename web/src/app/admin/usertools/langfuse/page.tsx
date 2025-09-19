@@ -3,6 +3,8 @@ import { FiTool } from "react-icons/fi";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { redirect } from "next/navigation";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 export default async function Page() {
   const isLangfuseEditorEnable =

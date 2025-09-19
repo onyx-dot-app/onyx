@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -38,10 +39,11 @@ const PendingUsersTable = ({
   isLoading,
   q,
 }: Props) => {
+  const { t } = useTranslation();
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
   const [userToApprove, setUserToApprove] = useState<string | null>(null);
 
-  if (!users.length) return <p>{i18n.t(k.USERS_THAT_HAVE_REQUESTED_TO_J)}</p>;
+  if (!users.length) return <p>{t(k.USERS_THAT_HAVE_REQUESTED_TO_J)}</p>;
 
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
 
@@ -98,7 +100,7 @@ const PendingUsersTable = ({
           onSubmit={() => handleAcceptRequest(userToApprove)}
           actionButtonText="Approve"
           actionText="approve the join request of"
-          additionalDetails={`${userToApprove} ${i18n.t(
+          additionalDetails={`${userToApprove} ${t(
             k.HAS_REQUESTED_TO_JOIN_THE_TEAM
           )}`}
           variant="action"
@@ -109,9 +111,9 @@ const PendingUsersTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
+            <TableHead>{t(k.EMAIL)}</TableHead>
             <TableHead>
-              <div className="flex justify-end">{i18n.t(k.ACTIONS)}</div>
+              <div className="flex justify-end">{t(k.ACTIONS)}</div>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -128,7 +130,7 @@ const PendingUsersTable = ({
                       onClick={() => setUserToApprove(user.email)}
                     >
                       <CheckIcon className="h-4 w-4" />
-                      {i18n.t(k.ACCEPT_JOIN_REQUEST)}
+                      {t(k.ACCEPT_JOIN_REQUEST)}
                     </Button>
                   </div>
                 </TableCell>
@@ -137,9 +139,7 @@ const PendingUsersTable = ({
           ) : (
             <TableRow>
               <TableCell colSpan={2} className="h-24 text-center">
-                {`${i18n.t(k.NO_PENDING_USERS_FOUND_MATCHIN)}${q}${i18n.t(
-                  k._17
-                )}`}
+                {`${t(k.NO_PENDING_USERS_FOUND_MATCHIN)}${q}${t(k._17)}`}
               </TableCell>
             </TableRow>
           )}

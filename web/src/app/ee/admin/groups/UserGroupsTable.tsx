@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import {
@@ -43,6 +43,7 @@ export const UserGroupsTable = ({
   setPopup,
   refresh,
 }: UserGroupsTableProps) => {
+  const { t } = useTranslation();
   const router = useRouter();
 
   // sort by name for consistent ordering
@@ -61,11 +62,11 @@ export const UserGroupsTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.NAME)}</TableHead>
-            <TableHead>{i18n.t(k.CONNECTORS)}</TableHead>
-            <TableHead>{i18n.t(k.USERS)}</TableHead>
-            <TableHead>{i18n.t(k.STATUS)}</TableHead>
-            <TableHead>{i18n.t(k.DELETE)}</TableHead>
+            <TableHead>{t(k.NAME)}</TableHead>
+            <TableHead>{t(k.CONNECTORS)}</TableHead>
+            <TableHead>{t(k.USERS)}</TableHead>
+            <TableHead>{t(k.STATUS)}</TableHead>
+            <TableHead>{t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -109,7 +110,7 @@ export const UserGroupsTable = ({
                         })}
                       </div>
                     ) : (
-                      i18n.t(k._)
+                      t(k._)
                     )}
                   </TableCell>
                   <TableCell>
@@ -134,25 +135,23 @@ export const UserGroupsTable = ({
                                 );
                               })}
                             <div>
-                              {i18n.t(k._9)}{" "}
+                              {t(k._9)}{" "}
                               {userGroup.users.length - MAX_USERS_TO_DISPLAY}{" "}
-                              {i18n.t(k.MORE)}
+                              {t(k.MORE)}
                             </div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      i18n.t(k._)
+                      t(k._)
                     )}
                   </TableCell>
                   <TableCell>
                     {userGroup.is_up_to_date ? (
-                      <div className="text-success">
-                        {i18n.t(k.UP_TO_DATE1)}
-                      </div>
+                      <div className="text-success">{t(k.UP_TO_DATE1)}</div>
                     ) : (
                       <div className="w-10">
-                        <LoadingAnimation text="Синхронизация" />
+                        <LoadingAnimation text={t(k.SYNCHRONIZATION)} />
                       </div>
                     )}
                   </TableCell>
@@ -163,15 +162,15 @@ export const UserGroupsTable = ({
                         const response = await deleteUserGroup(userGroup.id);
                         if (response.ok) {
                           setPopup({
-                            message: `${i18n.t(k.USER_GROUP1)}${
-                              userGroup.name
-                            }${i18n.t(k.DELETED)}`,
+                            message: `${t(k.USER_GROUP1)}${userGroup.name}${t(
+                              k.DELETED
+                            )}`,
                             type: "success",
                           });
                         } else {
                           const errorMsg = (await response.json()).detail;
                           setPopup({
-                            message: `${i18n.t(
+                            message: `${t(
                               k.FAILED_TO_DELETE_USER_GROUP
                             )} ${errorMsg}`,
                             type: "error",
@@ -194,23 +193,23 @@ export const UserGroupsTable = ({
       <BasicTable
         columns={[
           {
-            header: i18n.t(k.NAME),
+            header: t(k.NAME),
             key: "name",
           },
           {
-            header: i18n.t(k.CONNECTORS),
+            header: t(k.CONNECTORS),
             key: "ccPairs",
           },
           {
-            header: i18n.t(k.USERS),
+            header: t(k.USERS),
             key: "users",
           },
           {
-            header: i18n.t(k.STATUS),
+            header: t(k.STATUS),
             key: "status",
           },
           {
-            header: i18n.t(k.DELETE),
+            header: t(k.DELETE),
             key: "delete",
           },
         ]}
@@ -258,9 +257,9 @@ export const UserGroupsTable = ({
                           );
                         })}
                       <div className="text-text-300">
-                        {i18n.t(k._9)}{" "}
+                        {t(k._9)}{" "}
                         {userGroup.users.length - MAX_USERS_TO_DISPLAY}{" "}
-                        {i18n.t(k.MORE)}
+                        {t(k.MORE)}
                       </div>
                     </div>
                   )}
@@ -268,10 +267,10 @@ export const UserGroupsTable = ({
               ),
 
               status: userGroup.is_up_to_date ? (
-                <div className="text-emerald-600">{i18n.t(k.UP_TO_DATE1)}</div>
+                <div className="text-emerald-600">{t(k.UP_TO_DATE1)}</div>
               ) : (
                 <div className="text-text-300 w-10">
-                  <LoadingAnimation text="Синхронизация" />
+                  <LoadingAnimation text={t(k.SYNCHRONIZATION)} />
                 </div>
               ),
 
@@ -283,15 +282,15 @@ export const UserGroupsTable = ({
                     const response = await deleteUserGroup(userGroup.id);
                     if (response.ok) {
                       setPopup({
-                        message: `${i18n.t(k.USER_GROUP1)}${
-                          userGroup.name
-                        }${i18n.t(k.DELETED)}`,
+                        message: `${t(k.USER_GROUP1)}${userGroup.name}${t(
+                          k.DELETED
+                        )}`,
                         type: "success",
                       });
                     } else {
                       const errorMsg = (await response.json()).detail;
                       setPopup({
-                        message: `${i18n.t(
+                        message: `${t(
                           k.FAILED_TO_DELETE_USER_GROUP
                         )} ${errorMsg}`,
                         type: "error",

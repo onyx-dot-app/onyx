@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import React from "react";
 import { Modal } from "@/components/Modal";
@@ -16,26 +18,31 @@ export function DeleteCredentialsModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal
       width="max-w-3xl"
-      title={`${i18n.t(k.DELETE)} ${modelProvider.provider_type} ${i18n.t(
+      title={`${t(k.DELETE)} ${modelProvider.provider_type} ${t(
         k.CREDENTIALS
       )}`}
       onOutsideClick={onCancel}
     >
       <div className="mb-4">
         <Text className="text-lg mb-2">
-          {i18n.t(k.YOU_RE_ABOUT_TO_DELETE_YOUR)} {modelProvider.provider_type}{" "}
-          {i18n.t(k.CREDENTIALS_ARE_YOU_SURE)}
+          {t(k.YOU_RE_ABOUT_TO_DELETE_YOUR)} {modelProvider.provider_type}{" "}
+          {t(k.CREDENTIALS_ARE_YOU_SURE)}
         </Text>
-        <Callout type="danger" title="Точка невозврата" className="mt-4" />
+        <Callout
+          type="danger"
+          title={t(k.POINT_OF_NO_RETURN)}
+          className="mt-4"
+        />
         <div className="flex mt-8 justify-between">
           <Button variant="secondary" onClick={onCancel}>
-            {i18n.t(k.KEEP_CREDENTIALS)}
+            {t(k.KEEP_CREDENTIALS)}
           </Button>
           <Button variant="destructive" onClick={onConfirm}>
-            {i18n.t(k.DELETE_CREDENTIALS)}
+            {t(k.DELETE_CREDENTIALS)}
           </Button>
         </div>
       </div>

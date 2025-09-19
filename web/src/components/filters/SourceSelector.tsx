@@ -1,6 +1,7 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
-import React from "react";
+import React, { JSX } from "react";
 import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { InfoIcon, defaultTailwindCSS } from "@/components/icons/icons";
@@ -68,6 +69,7 @@ export function SourceSelector({
   filtersUntoggled,
   tagsOnLeft,
 }: SourceSelectorProps) {
+  const { t } = useTranslation();
   const handleSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
       if (
@@ -110,7 +112,7 @@ export function SourceSelector({
       } duration-1000 flex ease-out transition-all transform origin-top-right`}
     >
       <button onClick={() => toggleFilters()} className="flex text-text-darker">
-        <h2 className="font-bold my-auto">{i18n.t(k.FILTERS)}</h2>
+        <h2 className="font-bold my-auto">{t(k.FILTERS)}</h2>
         <FiFilter className="my-auto ml-2" size="16" />
       </button>
       {!filtersUntoggled && (
@@ -120,7 +122,7 @@ export function SourceSelector({
             <PopoverTrigger asChild>
               <div className="cursor-pointer">
                 <div className="flex justify-between items-center">
-                  <SectionTitle>{i18n.t(k.TIME_RANGE)}</SectionTitle>
+                  <SectionTitle>{t(k.TIME_RANGE)}</SectionTitle>
                   {true && (
                     <button
                       onClick={(e) => {
@@ -129,7 +131,7 @@ export function SourceSelector({
                       }}
                       className="text-sm text-text-500 hover:text-text-700"
                     >
-                      {i18n.t(k.CLEAR)}
+                      {t(k.CLEAR)}
                     </button>
                   )}
                 </div>
@@ -171,7 +173,7 @@ export function SourceSelector({
           {availableTags.length > 0 && (
             <>
               <div className="mt-4 mb-2">
-                <SectionTitle>{i18n.t(k.TAGS)}</SectionTitle>
+                <SectionTitle>{t(k.TAGS)}</SectionTitle>
               </div>
               <TagFilter
                 tags={availableTags}
@@ -185,7 +187,7 @@ export function SourceSelector({
             <div className="mt-4">
               <div className="flex w-full gap-x-2 items-center">
                 <div className="font-bold text-xs mt-2 flex items-center gap-x-2">
-                  <p>{i18n.t(k.SOURCES)}</p>
+                  <p>{t(k.SOURCES)}</p>
                   <input
                     type="checkbox"
                     checked={allSourcesSelected}
@@ -230,7 +232,7 @@ export function SourceSelector({
           {availableDocumentSets.length > 0 && (
             <>
               <div className="mt-4">
-                <SectionTitle>{i18n.t(k.KNOWLEDGE_SETS)}</SectionTitle>
+                <SectionTitle>{t(k.KNOWLEDGE_SETS)}</SectionTitle>
               </div>
               <div className="px-1">
                 {availableDocumentSets.map((documentSet) => (
@@ -255,7 +257,7 @@ export function SourceSelector({
                         popupContent={
                           <div className="text-sm w-64">
                             <div className="flex font-medium">
-                              {i18n.t(k.DESCRIPTION)}
+                              {t(k.DESCRIPTION)}
                             </div>
                             <div className="mt-1">
                               {documentSet.description}
@@ -309,6 +311,7 @@ export function HorizontalFilters({
   availableDocumentSets,
   existingSources,
 }: SourceSelectorProps) {
+  const { t } = useTranslation();
   const handleSourceSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
       const prevSourceNames = prev.map((source) => source.internalName);
@@ -366,7 +369,7 @@ export function HorizontalFilters({
               <FiMap size={16} />
             </div>
           }
-          defaultDisplay="Все источники"
+          defaultDisplay={t(k.ALL_SOURCES)}
         />
 
         {availableDocumentSets.length > 0 && (
@@ -392,7 +395,7 @@ export function HorizontalFilters({
                 <FiBook size={16} />
               </div>
             }
-            defaultDisplay="Все наборы документов"
+            defaultDisplay={t(k.ALL_DOCUMENT_SETS)}
           />
         )}
       </div>
@@ -449,6 +452,7 @@ export function HorizontalSourceSelector({
   existingSources,
   availableTags,
 }: SourceSelectorProps) {
+  const { t } = useTranslation();
   const handleSourceSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
       if (prev.map((s) => s.internalName).includes(source.internalName)) {
@@ -524,9 +528,7 @@ export function HorizontalSourceSelector({
           >
             <CalendarIcon className="h-4 w-4" />
 
-            {timeRange?.from
-              ? getTimeAgoString(timeRange.from)
-              : i18n.t(k.SINCE)}
+            {timeRange?.from ? getTimeAgoString(timeRange.from) : t(k.SINCE)}
           </div>
         </PopoverTrigger>
         <PopoverContent
@@ -608,17 +610,17 @@ export function HorizontalSourceSelector({
         <FilterDropdown
           backgroundColor="bg-background-search-filter"
           options={availableTags.map((tag) => ({
-            key: `${tag.tag_key}${i18n.t(k._12)}${tag.tag_value}`,
+            key: `${tag.tag_key}${t(k._12)}${tag.tag_value}`,
             display: (
               <span className="text-sm">
                 {tag.tag_key}
-                <b>{i18n.t(k._12)}</b>
+                <b>{t(k._12)}</b>
                 {tag.tag_value}
               </span>
             ),
           }))}
           selected={selectedTags.map(
-            (tag) => `${tag.tag_key}${i18n.t(k._12)}${tag.tag_value}`
+            (tag) => `${tag.tag_key}${t(k._12)}${tag.tag_value}`
           )}
           handleSelect={(option) => {
             const [tag_key, tag_value] = option.key.split("=");

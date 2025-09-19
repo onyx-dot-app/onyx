@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 import {
   Tooltip,
@@ -23,6 +24,7 @@ export function TokenDisplay({
   tokenPercentage,
   selectedModel,
 }: TokenDisplayProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center">
       <TooltipProvider>
@@ -42,16 +44,16 @@ export function TokenDisplay({
                 ></div>
               </div>
               <div className="text-xs text-neutral-600 dark:text-neutral-300 font-medium whitespace-nowrap">
-                {totalTokens.toLocaleString()} {i18n.t(k._6)}{" "}
-                {maxTokens.toLocaleString()} {i18n.t(k.LLM_TOKENS1)}
+                {totalTokens.toLocaleString()} {t(k._6)}{" "}
+                {maxTokens.toLocaleString()} {t(k.LLM_TOKENS1)}
               </div>
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-sm">
             <p className="text-xs max-w-xs">
-              {i18n.t(k.MAXIMUM_TOKENS_FOR_DEFAULT_MOD)}{" "}
+              {t(k.MAXIMUM_TOKENS_FOR_DEFAULT_MOD)}{" "}
               {getDisplayNameForModel(selectedModel.modelName)}
-              {i18n.t(k.IF_EXCEEDED_C)}
+              {t(k.IF_EXCEEDED_C)}
             </p>
           </TooltipContent>
         </Tooltip>

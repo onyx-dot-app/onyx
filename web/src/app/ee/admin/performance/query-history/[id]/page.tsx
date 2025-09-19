@@ -1,6 +1,6 @@
 "use client";
-import i18n from "@/i18n/init";
-import k from "./../../../../../../i18n/keys";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 import { use } from "react";
 
 import Text from "@/components/ui/text";
@@ -18,15 +18,16 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import CardSection from "@/components/admin/CardSection";
 
 function MessageDisplay({ message }: { message: MessageSnapshot }) {
+  const { t } = useTranslation();
   return (
     <div>
       <p className="text-xs font-bold mb-1">
-        {message.message_type === "user" ? i18n.t(k.USER) : i18n.t(k.AI)}
+        {message.message_type === "user" ? t(k.USER) : t(k.AI)}
       </p>
       <Text>{message.message}</Text>
       {message.documents.length > 0 && (
         <div className="flex flex-col gap-y-2 mt-2">
-          <p className="font-bold text-xs">{i18n.t(k.REFERENCE_DOCUMENTS)}</p>
+          <p className="font-bold text-xs">{t(k.REFERENCE_DOCUMENTS)}</p>
           {message.documents.slice(0, 5).map((document) => {
             return (
               <Text className="flex" key={document.document_id}>
@@ -55,7 +56,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
       )}
       {message.feedback_type && (
         <div className="mt-2">
-          <p className="font-bold text-xs">{i18n.t(k.FEEDBACK)}</p>
+          <p className="font-bold text-xs">{t(k.FEEDBACK)}</p>
           {message.feedback_text && <Text>{message.feedback_text}</Text>}
           <div className="mt-1">
             <FeedbackBadge feedback={message.feedback_type} />
@@ -68,6 +69,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
 }
 
 export default function QueryPage(props: { params: Promise<{ id: string }> }) {
+  const { t } = useTranslation();
   const params = use(props.params);
   const {
     data: chatSessionSnapshot,
@@ -85,8 +87,8 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
   if (!chatSessionSnapshot || error) {
     return (
       <ErrorCallout
-        errorTitle="Что-то пошло не так :("
-        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_CHAT_SESSION)} ${error}`}
+        errorTitle={t(k.SOMETHING_WENT_WRONG)}
+        errorMsg={`${t(k.FAILED_TO_FETCH_CHAT_SESSION)} ${error}`}
       />
     );
   }
@@ -96,13 +98,13 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
       <BackButton />
 
       <CardSection className="mt-4">
-        <Title>{i18n.t(k.CHAT_SESSION_DETAILS)}</Title>
+        <Title>{t(k.CHAT_SESSION_DETAILS)}</Title>
 
         <Text className="flex flex-wrap whitespace-normal mt-1 text-xs">
           {chatSessionSnapshot.user_email &&
-            `${chatSessionSnapshot.user_email}${i18n.t(k._3)} `}
+            `${chatSessionSnapshot.user_email}${t(k._3)} `}
           {timestampToReadableDate(chatSessionSnapshot.time_created)}
-          {i18n.t(k._3)} {chatSessionSnapshot.flow_type}
+          {t(k._3)} {chatSessionSnapshot.flow_type}
         </Text>
 
         <Separator />

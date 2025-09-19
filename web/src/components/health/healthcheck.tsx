@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
@@ -14,6 +14,7 @@ import { Button } from "../ui/button";
 import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 export const HealthCheckBanner = () => {
+  const { t } = useTranslation();
   const router = useRouter();
   const { error } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
@@ -188,12 +189,12 @@ export const HealthCheckBanner = () => {
       <Modal
         width="w-1/3"
         className="overflow-y-hidden flex flex-col"
-        title="Вы вышли из системы"
+        title={t(k.YOU_HAVE_LOGGED_OUT_TITLE)}
       >
         <div className="flex flex-col gap-y-4">
-          <p className="text-sm">{i18n.t(k.YOUR_SESSION_HAS_EXPIRED_PLEA)}</p>
+          <p className="text-sm">{t(k.YOUR_SESSION_HAS_EXPIRED_PLEA)}</p>
           <div className="flex flex-row gap-x-2 justify-end mt-4">
-            <Button onClick={handleLogin}>{i18n.t(k.LOG_IN)}</Button>
+            <Button onClick={handleLogin}>{t(k.LOG_IN)}</Button>
           </div>
         </div>
       </Modal>
@@ -212,11 +213,9 @@ export const HealthCheckBanner = () => {
   } else {
     return (
       <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-text-200">
-        <p className="font-bold pb-1">
-          {i18n.t(k.THE_BACKEND_IS_CURRENTLY_UNAVA)}
-        </p>
+        <p className="font-bold pb-1">{t(k.THE_BACKEND_IS_CURRENTLY_UNAVA)}</p>
 
-        <p className="px-1">{i18n.t(k.IF_THIS_IS_YOUR_INITIAL_SETUP)}</p>
+        <p className="px-1">{t(k.IF_THIS_IS_YOUR_INITIAL_SETUP)}</p>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import {
   ArrayHelpers,
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback, useEffect } from "react";
+import React, { JSX, useState, useCallback, useEffect } from "react";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -152,33 +152,36 @@ const FieldLabel = ({
   label: string;
   removeLabel?: boolean;
   vertical?: boolean;
-}) => (
-  <>
-    <div
-      className={`flex ${
-        vertical ? "flex-col" : "flex-row"
-      } gap-x-2 items-start`}
-    >
-      <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={false}>{label}</Label>}
-        {optional ? <span>{i18n.t(k.OPTIONAL)} </span> : ""}
-        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+}) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div
+        className={`flex ${
+          vertical ? "flex-col" : "flex-row"
+        } gap-x-2 items-start`}
+      >
+        <div className="flex gap-x-2 items-center">
+          {!removeLabel && <Label small={false}>{label}</Label>}
+          {optional ? <span>{t(k.OPTIONAL)} </span> : ""}
+          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+        </div>
+        {error ? (
+          <ManualErrorMessage>{error}</ManualErrorMessage>
+        ) : (
+          !hideError && (
+            <ErrorMessage
+              name={name}
+              component="div"
+              className="text-error my-auto text-sm"
+            />
+          )
+        )}
       </div>
-      {error ? (
-        <ManualErrorMessage>{error}</ManualErrorMessage>
-      ) : (
-        !hideError && (
-          <ErrorMessage
-            name={name}
-            component="div"
-            className="text-error my-auto text-sm"
-          />
-        )
-      )}
-    </div>
-    {subtext && <SubLabel>{subtext}</SubLabel>}
-  </>
-);
+      {subtext && <SubLabel>{subtext}</SubLabel>}
+    </>
+  );
+};
 
 export function TextFormField({
   name,
@@ -237,6 +240,7 @@ export function TextFormField({
   vertical?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
@@ -348,7 +352,7 @@ export function TextFormField({
             href="/auth/forgot-password"
             className="absolute right-3 top-1/2 mt-[3px] transform -translate-y-1/2 text-xs text-blue-500 cursor-pointer"
           >
-            {i18n.t(k.FORGOT_PASSWORD1)}
+            {t(k.FORGOT_PASSWORD1)}
           </Link>
         )}
       </div>
@@ -476,9 +480,11 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Введите здесь свою скидку...",
+  placeholder,
 }: MarkdownPreviewProps) => {
+  const { t } = useTranslation();
   const [field] = useField(name);
+  const defaultPlaceholder = placeholder || t(k.ENTER_DISCOUNT_PLACEHOLDER);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const togglePreview = () => {
@@ -493,7 +499,7 @@ export const MarkdownFormField = ({
           <div className="flex items-center space-x-2">
             <FaMarkdown className="text-text-500" />
             <span className="text-sm font-semibold text-text-600">
-              {i18n.t(k.MARKDOWN)}
+              {t(k.MARKDOWN)}
             </span>
           </div>
           <button
@@ -501,7 +507,7 @@ export const MarkdownFormField = ({
             onClick={togglePreview}
             className="text-sm font-semibold text-text-600 hover:text-text-800 focus:outline-none"
           >
-            {isPreviewOpen ? i18n.t(k.WRITE) : i18n.t(k.PREVIEW)}
+            {isPreviewOpen ? t(k.WRITE) : t(k.PREVIEW)}
           </button>
         </div>
         {isPreviewOpen ? (
@@ -519,7 +525,7 @@ export const MarkdownFormField = ({
             <textarea
               {...field}
               rows={2}
-              placeholder={placeholder}
+              placeholder={defaultPlaceholder}
               className={`w-full p-2 border border-border rounded-md border-background-300`}
             />
           </div>
@@ -565,6 +571,7 @@ export const BooleanFormField = ({
   disabledTooltip,
   onChange,
 }: BooleanFormFieldProps) => {
+  const { t } = useTranslation();
   const { setFieldValue } = useFormikContext<any>();
 
   const handleChange = useCallback(
@@ -607,7 +614,7 @@ export const BooleanFormField = ({
           <div>
             <div className="flex items-center gap-x-2">
               <Label small={small}>{`${label}${
-                optional ? i18n.t(k.OPTIONAL2) : ""
+                optional ? t(k.OPTIONAL2) : ""
               }`}</Label>
               {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
             </div>
@@ -647,6 +654,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
   minFields = 0,
   placeholder = "",
 }: TextArrayFieldProps<T>) {
+  const { t } = useTranslation();
   return (
     <div className="mb-4">
       <div className="flex gap-x-2 items-center">
@@ -712,7 +720,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               type="button"
               icon={FiPlus}
             >
-              {i18n.t(k.ADD_NEW)}
+              {t(k.ADD_NEW)}
             </Button>
           </div>
         )}
@@ -771,6 +779,7 @@ export function SelectorFormField({
   small = false,
   disabled = false,
 }: SelectorFormFieldProps) {
+  const { t } = useTranslation();
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -824,7 +833,7 @@ export function SelectorFormField({
           disabled={disabled}
         >
           <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Выбрать...">
+            <SelectValue placeholder={t(k.SELECT_PLACEHOLDER)}>
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
           </SelectTrigger>
@@ -840,7 +849,7 @@ export function SelectorFormField({
               container={container}
             >
               {options.length === 0 ? (
-                <SelectItem value="default">{i18n.t(k.SELECT1)}</SelectItem>
+                <SelectItem value="default">{t(k.SELECT1)}</SelectItem>
               ) : (
                 options.map((option) => (
                   <SelectItem
@@ -859,7 +868,7 @@ export function SelectorFormField({
                   value={"__none__"}
                   onSelect={() => setFieldValue(name, null)}
                 >
-                  {i18n.t(k.NONE)}
+                  {t(k.NONE)}
                 </SelectItem>
               )}
             </SelectContent>

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import React, {
   ReactNode,
@@ -7,6 +9,7 @@ import React, {
   useRef,
   createContext,
   useContext,
+  JSX,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -66,6 +69,7 @@ export const CustomTooltip = ({
   disabled?: boolean;
   className?: string;
 }) => {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -176,7 +180,7 @@ export const CustomTooltip = ({
                   : {}
               }
             >
-              {i18n.t(k.LLL)}
+              {t(k.LLL)}
               {content}
             </div>
           </div>,

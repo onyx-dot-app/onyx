@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import React, { useMemo, useState, useTransition } from "react";
@@ -56,6 +56,7 @@ const SkeletonLoader = () => (
 );
 
 export default function MyDocuments() {
+  const { t } = useTranslation();
   const {
     folders,
     currentFolder,
@@ -329,20 +330,20 @@ export default function MyDocuments() {
     <div className="min-h-full pt-20 w-full min-w-0 flex-1 mx-auto  w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14">
       <header className="flex w-full items-center justify-between gap-4 -translate-y-px">
         <h1 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
-          {i18n.t(k.MY_DOCUMENTS)}
+          {t(k.MY_DOCUMENTS)}
         </h1>
         <div className="flex items-center gap-2">
           <CreateEntityModal
-            title="Новая папка"
+            title={t(k.NEW_FOLDER)}
             entityName=""
             open={isCreateFolderOpen}
-            placeholder="Папка без названия"
+            placeholder={t(k.UNTITLED_FOLDER)}
             setOpen={setIsCreateFolderOpen}
             onSubmit={handleCreateFolder}
             trigger={
               <Button className="inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap pl-2 pr-3 gap-1">
                 <Plus className="h-5 w-5" />
-                {i18n.t(k.NEW_FOLDER)}
+                {t(k.NEW_FOLDER)}
               </Button>
             }
             hideLabel
@@ -372,7 +373,7 @@ export default function MyDocuments() {
             </div>
             <input
               type="text"
-              placeholder="Поиск документов..."
+              placeholder={t(k.SEARCH_DOCUMENTS_PLACEHOLDER)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -394,7 +395,7 @@ export default function MyDocuments() {
               className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
-              {i18n.t(k.CHAT_WITH_MY_DOCUMENTS)}
+              {t(k.CHAT_WITH_MY_DOCUMENTS)}
             </Button>
             <TokenDisplay
               totalTokens={totalTokens}
@@ -417,7 +418,7 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[40%] flex items-center cursor-pointer transition-colors"
                 >
-                  {i18n.t(k.NAME)} {renderSortIndicator(SortType.Alphabetical)}
+                  {t(k.NAME)} {renderSortIndicator(SortType.Alphabetical)}
                   {renderHoverIndicator(SortType.Alphabetical)}
                 </button>
                 <button
@@ -426,7 +427,7 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
-                  {i18n.t(k.LAST_MODIFIED)}{" "}
+                  {t(k.LAST_MODIFIED)}{" "}
                   {renderSortIndicator(SortType.TimeCreated)}
                   {renderHoverIndicator(SortType.TimeCreated)}
                 </button>
@@ -436,7 +437,7 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
-                  {i18n.t(k.LLM_TOKENS)} {renderSortIndicator(SortType.Tokens)}
+                  {t(k.LLM_TOKENS)} {renderSortIndicator(SortType.Tokens)}
                   {renderHoverIndicator(SortType.Tokens)}
                 </button>
               </div>
@@ -471,7 +472,7 @@ export default function MyDocuments() {
               />
 
               <p className="text-text-500 dark:text-neutral-400 text-lg font-normal">
-                {i18n.t(k.NO_ITEMS_FOUND)}
+                {t(k.NO_ITEMS_FOUND)}
               </p>
             </div>
           )}
