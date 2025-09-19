@@ -163,7 +163,9 @@ export default function NewMCPToolPage() {
           transport: server.transport,
           auth_type: server.auth_type,
           auth_performer:
-            server.auth_performer || MCPAuthenticationPerformer.ADMIN,
+            server.auth_type === MCPAuthenticationType.OAUTH
+              ? MCPAuthenticationPerformer.PER_USER
+              : server.auth_performer || MCPAuthenticationPerformer.ADMIN,
           api_token: server.admin_credentials?.api_key || "",
           auth_template,
           user_credentials: server.user_credentials || {},
@@ -201,7 +203,8 @@ export default function NewMCPToolPage() {
           server_url: values.server_url,
           transport: values.transport,
           auth_type: values.auth_type,
-          auth_performer: values.auth_performer,
+          // OAuth currently only supports per-user auth
+          auth_performer: MCPAuthenticationPerformer.PER_USER,
           oauth_client_id: values.oauth_client_id,
           oauth_client_secret: values.oauth_client_secret,
           existing_server_id: serverId ? parseInt(serverId) : undefined,
@@ -214,6 +217,8 @@ export default function NewMCPToolPage() {
       }
 
       const currServerId = (await createResponse.json()).server_id;
+      // Update the URL immediately so subsequent interactions use the server id.
+      router.replace(`/admin/actions/edit-mcp?server_id=${currServerId}`);
 
       // Initiate OAuth flow
       const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
@@ -359,9 +364,16 @@ export default function NewMCPToolPage() {
                           <Label htmlFor="auth_type">Authentication Type</Label>
                           <Select
                             value={values.auth_type}
-                            onValueChange={(value) =>
-                              setFieldValue("auth_type", value)
-                            }
+                            onValueChange={(value) => {
+                              setFieldValue("auth_type", value);
+                              // For OAuth, we only support per-user auth. Force performer accordingly.
+                              if (value === MCPAuthenticationType.OAUTH) {
+                                setFieldValue(
+                                  "auth_performer",
+                                  MCPAuthenticationPerformer.PER_USER
+                                );
+                              }
+                            }}
                           >
                             <SelectTrigger className="mt-1">
                               <SelectValue placeholder="Select authentication type" />
@@ -387,41 +399,42 @@ export default function NewMCPToolPage() {
                           )}
                         </div>
 
-                        {values.auth_type !== MCPAuthenticationType.NONE && (
-                          <div>
-                            <Label htmlFor="auth_performer">
-                              Who performs authentication?
-                            </Label>
-                            <Select
-                              value={values.auth_performer}
-                              onValueChange={(value) =>
-                                setFieldValue("auth_performer", value)
-                              }
-                            >
-                              <SelectTrigger className="mt-1">
-                                <SelectValue placeholder="Select authentication performer" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem
-                                  value={MCPAuthenticationPerformer.ADMIN}
-                                >
-                                  Admin (shared credentials)
-                                </SelectItem>
-                                <SelectItem
-                                  value={MCPAuthenticationPerformer.PER_USER}
-                                >
-                                  Per-user (individual credentials)
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            {errors.auth_performer &&
-                              touched.auth_performer && (
-                                <div className="text-red-500 text-sm mt-1">
-                                  {errors.auth_performer}
-                                </div>
-                              )}
-                          </div>
-                        )}
+                        {values.auth_type !== MCPAuthenticationType.NONE &&
+                          values.auth_type !== MCPAuthenticationType.OAUTH && (
+                            <div>
+                              <Label htmlFor="auth_performer">
+                                Who performs authentication?
+                              </Label>
+                              <Select
+                                value={values.auth_performer}
+                                onValueChange={(value) =>
+                                  setFieldValue("auth_performer", value)
+                                }
+                              >
+                                <SelectTrigger className="mt-1">
+                                  <SelectValue placeholder="Select authentication performer" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem
+                                    value={MCPAuthenticationPerformer.ADMIN}
+                                  >
+                                    Admin (shared credentials)
+                                  </SelectItem>
+                                  <SelectItem
+                                    value={MCPAuthenticationPerformer.PER_USER}
+                                  >
+                                    Per-user (individual credentials)
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {errors.auth_performer &&
+                                touched.auth_performer && (
+                                  <div className="text-red-500 text-sm mt-1">
+                                    {errors.auth_performer}
+                                  </div>
+                                )}
+                            </div>
+                          )}
 
                         {values.auth_type === MCPAuthenticationType.API_TOKEN &&
                           values.auth_performer ===

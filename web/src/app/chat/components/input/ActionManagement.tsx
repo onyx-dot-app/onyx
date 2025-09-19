@@ -1271,10 +1271,18 @@ export function ActionToggle({
         (() => {
           const rect = mcpToolsPopup.anchorElement.getBoundingClientRect();
           // Anchor the popup to the server element using viewport coordinates
+          // Ensure the popup never falls off-screen vertically.
+          const POPUP_MAX_HEIGHT = 300; // matches max-h-[300px]
+          const MARGIN = 8; // small offset from edges and trigger
+          const clampedTop = Math.max(
+            MARGIN,
+            Math.min(rect.top, window.innerHeight - POPUP_MAX_HEIGHT - MARGIN)
+          );
+
           const positioning = {
             position: "fixed" as const,
-            left: rect.right + 8,
-            top: rect.top,
+            left: rect.right + MARGIN,
+            top: clampedTop,
             zIndex: 1000,
           };
 

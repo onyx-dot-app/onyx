@@ -164,7 +164,11 @@ def _create_mcp_client_function_runner(
                 raise ValueError(
                     f"Unexpected number of client tuple elements: {len(client_tuple)}"
                 )
-            async with ClientSession(read, write) as session:
+            from datetime import timedelta
+
+            async with ClientSession(
+                read, write, read_timeout_seconds=timedelta(seconds=300)
+            ) as session:
                 return await function(session, **kwargs)
 
     return run_client_function
@@ -283,11 +287,16 @@ async def initialize_mcp_client(
 
 async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
     # 1) initialize
+    import time
+
+    t1 = time.time()
     init_result = await session.initialize()  # sends JSON-RPC "initialize"
     logger.info(f"Initialized with server: {init_result.serverInfo}")
-
+    logger.info(f"Initialized with server time: {time.time() - t1}")
     # 2) tools/list
+    t2 = time.time()
     tools_response = await session.list_tools()  # sends JSON-RPC "tools/list"
+    logger.info(f"Listed tools with server time: {time.time() - t2}")
     return tools_response.tools
 
 

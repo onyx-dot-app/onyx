@@ -1188,11 +1188,18 @@ def _list_mcp_tools_by_id(
             connection_config.id,
             mcp_server.admin_connection_config_id,
         )
+    import time
+
+    t1 = time.time()
+    logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
     tools = discover_mcp_tools(
         mcp_server.server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
         transport=mcp_server.transport,
         auth=auth,
+    )
+    logger.info(
+        f"Discovered {len(tools)} tools for MCP server: {mcp_server.name}: {time.time() - t1}"
     )
 
     # TODO: Also list resources from the MCP server

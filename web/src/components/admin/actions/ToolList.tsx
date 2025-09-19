@@ -102,6 +102,8 @@ export function ToolList({
         // Update serverId for subsequent operations
         newServerId = serverResult.server_id;
         setCurrentServerId(newServerId);
+        // Ensure URL reflects the created server to avoid duplicate creation (409)
+        router.replace(`/admin/actions/edit-mcp?server_id=${newServerId}`);
       } else {
         // For OAuth servers, use the existing serverId
         if (!serverId) {
@@ -132,13 +134,29 @@ export function ToolList({
       ];
 
       const responses = await Promise.all(promises);
-      const toolResponse = await responses[0]?.json();
+      const toolsResp = responses[0];
+      let toolResponse: any = null;
+      try {
+        toolResponse = await toolsResp?.json();
+      } catch (e) {
+        // If body isn't JSON, ignore; we'll fall back to text below
+      }
+      console.log(toolResponse);
 
       // Check if list-tools request failed
-      if (!responses[0]?.ok) {
-        const errorData = await toolResponse;
+      if (!toolsResp?.ok) {
+        let errorMessage = "Unknown error";
+        if (toolResponse && typeof toolResponse === "object") {
+          errorMessage =
+            toolResponse.detail || toolResponse.message || errorMessage;
+        } else if (toolsResp) {
+          try {
+            const text = await toolsResp.text();
+            if (text) errorMessage = text;
+          } catch (_) {}
+        }
         setPopup({
-          message: `Failed to list tools: ${errorData?.detail || "Unknown error"}`,
+          message: `Failed to list tools: ${errorMessage}`,
           type: "error",
         });
         setListingTools(false);
