@@ -4,6 +4,7 @@ import { FeedbackType, Message, CitationMap } from "../../interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { AIMessage } from "./AIMessage";
 import { LlmDescriptor } from "@/lib/hooks";
+import { ProjectFile } from "@/app/chat/projects/projectsService";
 
 interface BaseMemoizedAIMessageProps {
   rawPackets: any[];
@@ -15,7 +16,7 @@ interface BaseMemoizedAIMessageProps {
   nodeId: number;
   otherMessagesCanSwitchTo: number[];
   onMessageSelection: (messageId: number) => void;
-  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
+  projectFiles?: ProjectFile[];
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -51,7 +52,7 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
   onMessageSelection,
   projectFiles,
 }: InternalMemoizedAIMessageProps & {
-  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
+  projectFiles?: ProjectFile[];
 }) {
   return (
     <AIMessage
@@ -89,7 +90,7 @@ export const MemoizedAIMessage = ({
   onMessageSelection,
   projectFiles,
 }: MemoizedAIMessageProps & {
-  projectFiles?: import("@/app/chat/projects/projectsService").ProjectFile[];
+  projectFiles?: ProjectFile[];
 }) => {
   const regenerate = useMemo(() => {
     if (messageId === undefined) {
