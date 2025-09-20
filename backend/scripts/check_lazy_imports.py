@@ -15,6 +15,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+_MODULES_TO_LAZY_IMPORT = {"vertexai"}
+
 
 @dataclass
 class EagerImportResult:
@@ -122,20 +124,17 @@ def find_python_files(
     return python_files
 
 
-def main() -> None:
+def main(
+    modules_to_lazy_import: Set[str], directories_to_ignore: Set[str] | None = None
+) -> None:
     backend_dir = Path(__file__).parent.parent  # Go up from scripts/ to backend/
-
-    # Modules that should be imported lazily
-    modules_to_lazy_import = {"vertexai"}
-
-    ignore_directories = {"model_server"}
 
     logger.info(
         f"Checking for direct imports of lazy modules: {', '.join(modules_to_lazy_import)}"
     )
 
     # Find all Python files to check
-    target_python_files = find_python_files(backend_dir, ignore_directories)
+    target_python_files = find_python_files(backend_dir, directories_to_ignore)
 
     violations_found = False
     all_violated_modules = set()
@@ -170,7 +169,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     try:
-        main()
+        main(_MODULES_TO_LAZY_IMPORT)
         sys.exit(0)
     except RuntimeError:
         sys.exit(1)
