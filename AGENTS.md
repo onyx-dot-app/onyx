@@ -4,7 +4,7 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## KEY NOTES
 
-- If you run into any missing python dependency errors, try running your command with `workon onyx &&` in front
+- If you run into any missing python dependency errors, try running your command with `source backend/.venv/bin/activate` \
 to assume the python venv.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
 - If using `playwright` to explore the frontend, you can usually log in with username `a@test.com` and password
