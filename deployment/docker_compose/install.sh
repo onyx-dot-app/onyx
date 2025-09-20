@@ -423,58 +423,43 @@ fi
 if [ -f "$ENV_FILE" ]; then
     print_info "Existing .env file found. What would you like to do?"
     echo ""
-    echo "1) Restart - Keep current configuration and restart services"
-    echo "2) Upgrade - Update to a newer version"
+    echo "• Press Enter to restart with current configuration"
+    echo "• Type 'update' to update to a newer version"
     echo ""
-    read -p "Choose an option (1-2) [default 1]: " -r
+    read -p "Choose an option [default: restart]: " -r
     echo ""
     
-    case "${REPLY:-1}" in
-        1)
-            print_info "Keeping existing configuration..."
-            print_success "Will restart with current settings"
-            ;;
-        2)
-            print_info "Upgrade selected. Which tag would you like to deploy?"
-            echo ""
-            echo "1) Latest (recommended)"
-            echo "2) Specific tag"
-            echo ""
-            read -p "Choose an option (1-2) [default 1]: " -r VERSION_CHOICE
-            echo ""
-            
-            case "${VERSION_CHOICE:-1}" in
-                1)
-                    VERSION="latest"
-                    print_info "Selected: Latest version"
-                    ;;
-                2)
-                    read -p "Enter version (e.g., v0.1.0): " -r VERSION
-                    if [ -z "$VERSION" ]; then
-                        VERSION="latest"
-                        print_info "No version specified, using latest"
-                    else
-                        print_info "Selected: $VERSION"
-                    fi
-                    ;;
-            esac
-            
-            # Update .env file with new version
-            print_info "Updating configuration for version $VERSION..."
-            if grep -q "^IMAGE_TAG=" "$ENV_FILE"; then
-                # Update existing IMAGE_TAG line
-                sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
-            else
-                # Add IMAGE_TAG line if it doesn't exist
-                echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
-            fi
-            print_success "Updated IMAGE_TAG to $VERSION in .env file"
-            print_success "Configuration updated for upgrade"
-            ;;
-        *)
-            print_info "Invalid choice, keeping existing configuration..."
-            ;;
-    esac
+    if [ "$REPLY" = "update" ]; then
+        print_info "Update selected. Which tag would you like to deploy?"
+        echo ""
+        echo "• Press Enter for latest (recommended)"
+        echo "• Type a specific tag (e.g., v0.1.0)"
+        echo ""
+        read -p "Enter tag [default: latest]: " -r VERSION
+        echo ""
+        
+        if [ -z "$VERSION" ]; then
+            VERSION="latest"
+            print_info "Selected: Latest version"
+        else
+            print_info "Selected: $VERSION"
+        fi
+        
+        # Update .env file with new version
+        print_info "Updating configuration for version $VERSION..."
+        if grep -q "^IMAGE_TAG=" "$ENV_FILE"; then
+            # Update existing IMAGE_TAG line
+            sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
+        else
+            # Add IMAGE_TAG line if it doesn't exist
+            echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
+        fi
+        print_success "Updated IMAGE_TAG to $VERSION in .env file"
+        print_success "Configuration updated for upgrade"
+    else
+        print_info "Keeping existing configuration..."
+        print_success "Will restart with current settings"
+    fi
 else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
@@ -482,27 +467,18 @@ else
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
-    echo "1) Latest (recommended)"
-    echo "2) Specific tag"
+    echo "• Press Enter for latest (recommended)"
+    echo "• Type a specific tag (e.g., v0.1.0)"
     echo ""
-    read -p "Choose an option (1-2) [default 1]: " -r VERSION_CHOICE
+    read -p "Enter tag [default: latest]: " -r VERSION
     echo ""
     
-    case "${VERSION_CHOICE:-1}" in
-        1)
-            VERSION="latest"
-            print_info "Selected: Latest tag"
-            ;;
-        2)
-            read -p "Enter tag (e.g., v0.1.0): " -r VERSION
-            if [ -z "$VERSION" ]; then
-                VERSION="latest"
-                print_info "No tag specified, using latest"
-            else
-                print_info "Selected: $VERSION"
-            fi
-            ;;
-    esac
+    if [ -z "$VERSION" ]; then
+        VERSION="latest"
+        print_info "Selected: Latest tag"
+    else
+        print_info "Selected: $VERSION"
+    fi
     
     # Ask for authentication schema
     echo ""
@@ -573,11 +549,11 @@ cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d && cd ../..
 
 # Monitor container startup
 print_step "Verifying service health"
-print_info "Waiting for services to initialize (30 seconds)..."
+print_info "Waiting for services to initialize (10 seconds)..."
 
 # Progress bar for waiting
-for i in {1..30}; do
-    printf "\r[%-30s] %d%%" $(printf '#%.0s' $(seq 1 $((i*30/30)))) $((i*100/30))
+for i in {1..10}; do
+    printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
     sleep 1
 done
 echo ""
@@ -621,18 +597,30 @@ if [ "$RESTART_ISSUES" = true ]; then
     exit 1
 fi
 
+# Important note about system readiness
+echo ""
+print_warning "IMPORTANT: Container health check only verifies that containers are not restarting."
+print_warning "The full system initialization may take several more minutes to complete."
+print_warning "You may need to wait 2-5 minutes before the web interface is fully accessible."
+echo ""
+
 # Success message
 print_step "Installation Complete!"
-print_success "All services are running successfully!"
+print_success "All containers are running successfully!"
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}   🎉 Onyx is ready to use! 🎉${NC}"
+echo -e "${GREEN}${BOLD}   🎉 Onyx containers are ready! 🎉${NC}"
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 print_info "Access Onyx at:"
 echo -e "   ${BOLD}http://localhost:3000${NC}"
 echo ""
-print_info "IMPORTANT: First-time setup required!"
+print_warning "SYSTEM INITIALIZATION IN PROGRESS:"
+echo "   • Containers are healthy, but full system startup may take 2-5 minutes"
+echo "   • Database migrations and service initialization are still running"
+echo "   • The web interface may not be immediately accessible"
+echo ""
+print_info "First-time setup required once system is fully ready:"
 echo "   • Visit http://localhost:3000 to create your admin account"
 echo "   • The first user you create will automatically have admin privileges"
 echo ""
