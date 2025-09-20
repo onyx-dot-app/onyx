@@ -167,6 +167,7 @@ export function useChatController({
     useDocumentsContext();
 
   const navigatingAway = useRef(false);
+  const requestInProgress = useRef<Set<string>>(new Set());
 
   // Local state that doesn't need to be in the store
   const [maxTokens, setMaxTokens] = useState<number>(4096);
@@ -291,7 +292,12 @@ export function useChatController({
       }
     }
 
+    // Reset all relevant state to ensure clean state for new requests
     updateChatStateAction(currentSession, "input");
+    updateCanContinue(false, currentSession);
+    setUncaughtError(currentSession, null);
+    setLoadingError(currentSession, null);
+    resetRegenerationState(currentSession);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -330,6 +336,25 @@ export function useChatController({
 
       navigatingAway.current = false;
       let frozenSessionId = getCurrentSessionId();
+
+      // Check if there's already a request in progress for this session
+      if (requestInProgress.current.has(frozenSessionId)) {
+        const currentSession = sessions.get(frozenSessionId);
+        if (
+          currentSession?.abortController &&
+          !currentSession.abortController.signal.aborted
+        ) {
+          currentSession.abortController.abort();
+          // Wait a short time for the abort to take effect
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        // Clear the previous request flag
+        requestInProgress.current.delete(frozenSessionId);
+      }
+
+      // Mark this session as having a request in progress
+      requestInProgress.current.add(frozenSessionId);
+
       updateCanContinue(false, frozenSessionId);
       setUncaughtError(frozenSessionId, null);
       setLoadingError(frozenSessionId, null);
@@ -399,14 +424,35 @@ export function useChatController({
             message: "Please wait for the content to upload",
             type: "error",
           });
+          return;
+        } else if (
+          currentChatState == "streaming" ||
+          currentChatState == "loading"
+        ) {
+          // If we're in streaming/loading state, check if there's actually a request running
+          const session = sessions.get(frozenSessionId);
+          if (
+            session?.abortController &&
+            !session.abortController.signal.aborted
+          ) {
+            session.abortController.abort();
+            // Wait a short time for the abort to take effect
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+
+          // Force reset the state to input to allow new requests
+          updateChatStateAction(frozenSessionId, "input");
+          updateCanContinue(false, frozenSessionId);
+          setUncaughtError(frozenSessionId, null);
+          setLoadingError(frozenSessionId, null);
+          resetRegenerationState(frozenSessionId);
         } else {
           setPopup({
             message: "Please wait for the response to complete",
             type: "error",
           });
+          return;
         }
-
-        return;
       }
 
       clientScrollToBottom();
@@ -605,8 +651,15 @@ export function useChatController({
 
         await delay(50);
         while (!stack.isComplete || !stack.isEmpty()) {
+          // Check if the request was aborted
+          if (controller.signal.aborted) {
+            console.log("Request aborted, breaking streaming loop");
+            break;
+          }
+
           if (stack.isEmpty()) {
             await delay(0.5);
+            continue;
           }
 
           if (!stack.isEmpty() && !controller.signal.aborted) {
@@ -614,25 +667,35 @@ export function useChatController({
             if (!packet) {
               continue;
             }
-            console.debug("Packet:", JSON.stringify(packet));
+
+            // Check if aborted after getting the packet
+            if (controller.signal.aborted) {
+              break;
+            }
+
+            // Double-check abort status before processing
+            if (controller.signal.aborted) {
+              break;
+            }
 
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
             updateChatStateAction(frozenSessionId, "streaming");
 
-            if ((packet as MessageResponseIDInfo).user_message_id) {
-              newUserMessageId = (packet as MessageResponseIDInfo)
-                .user_message_id;
-            }
-
+            // Handle MessageResponseIDInfo packets (can contain both user and assistant message IDs)
             if (
-              (packet as MessageResponseIDInfo).reserved_assistant_message_id
+              Object.hasOwn(packet, "user_message_id") ||
+              Object.hasOwn(packet, "reserved_assistant_message_id")
             ) {
-              newAssistantMessageId = (packet as MessageResponseIDInfo)
-                .reserved_assistant_message_id;
-            }
-
-            if (Object.hasOwn(packet, "user_files")) {
+              const messageIdInfo = packet as MessageResponseIDInfo;
+              if (messageIdInfo.user_message_id) {
+                newUserMessageId = messageIdInfo.user_message_id;
+              }
+              if (messageIdInfo.reserved_assistant_message_id) {
+                newAssistantMessageId =
+                  messageIdInfo.reserved_assistant_message_id;
+              }
+            } else if (Object.hasOwn(packet, "user_files")) {
               const userFiles = (packet as UserKnowledgeFilePacket).user_files;
               // Ensure files are unique by id
               const newUserFiles = userFiles.filter(
@@ -655,14 +718,12 @@ export function useChatController({
               Object.hasOwn(packet, "error") &&
               (packet as any).error != null
             ) {
-              setUncaughtError(
-                frozenSessionId,
-                (packet as StreamingError).error
-              );
+              const errorMessage = (packet as StreamingError).error;
+              setUncaughtError(frozenSessionId, errorMessage);
               updateChatStateAction(frozenSessionId, "input");
               updateSubmittedMessage(getCurrentSessionId(), "");
 
-              throw new Error((packet as StreamingError).error);
+              throw new Error(errorMessage);
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -671,7 +732,6 @@ export function useChatController({
                 updateCanContinue(true, frozenSessionId);
               }
             } else if (Object.hasOwn(packet, "obj")) {
-              console.debug("Object packet:", JSON.stringify(packet));
               packets.push(packet as Packet);
 
               // Check if the packet contains document information
@@ -697,8 +757,6 @@ export function useChatController({
                   );
                 }
               }
-            } else {
-              console.warn("Unknown packet:", JSON.stringify(packet));
             }
 
             // on initial message send, we insert a dummy system message
@@ -738,8 +796,10 @@ export function useChatController({
           }
         }
       } catch (e: any) {
-        console.log("Error:", e);
         const errorMsg = e.message;
+
+        // Clear the request in progress flag on error
+        requestInProgress.current.delete(frozenSessionId);
         const newMessageDetails = upsertToCompleteMessageTree({
           messages: [
             {
@@ -768,6 +828,9 @@ export function useChatController({
 
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
+
+      // Clear the request in progress flag
+      requestInProgress.current.delete(frozenSessionId);
 
       if (isNewSession) {
         if (!searchParamBasedChatSessionName) {
