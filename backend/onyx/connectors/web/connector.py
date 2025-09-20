@@ -17,6 +17,8 @@ from bs4 import BeautifulSoup
 from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
+from playwright.sync_api import Route
+from playwright.sync_api import Request
 from playwright.sync_api import sync_playwright
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
@@ -329,6 +331,13 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
+def abort_unnecessary_resources(route: Route, request: Request) -> None:
+    if request.resource_type in ["image", "stylesheet", "font", "media", "websocket", "manifest", "other"]:
+        route.abort()
+    else:
+        route.continue_()
+
+
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
@@ -528,13 +537,21 @@ class WebConnector(LoadConnector):
             return result
 
         page = session_ctx.playwright_context.new_page()
+        page.route("**/*", abort_unnecessary_resources)
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
-                wait_until="domcontentloaded",  # Wait for DOM to be ready
+                wait_until="commit",
             )
+            page.wait_for_function("document.readyState === 'interactive'")
+            page.evaluate("""
+                () => {
+                    const images = document.querySelectorAll('img');
+                    images.forEach(img => img.remove());
+                }
+            """)
+            page.wait_for_function("document.readyState === 'complete'") # wait for domcontentloaded
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
