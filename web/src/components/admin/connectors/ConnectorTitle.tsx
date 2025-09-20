@@ -67,10 +67,12 @@ export const ConnectorTitle = ({
     }
   } else if (connector.source === "jira") {
     const typedConnector = connector as Connector<JiraConfig>;
-    additionalMetadata.set(
-      "Jira Project URL",
-      typedConnector.connector_specific_config.jira_project_url
-    );
+    if (typedConnector.connector_specific_config.project_key) {
+      additionalMetadata.set(
+        "Jira Project Key",
+        typedConnector.connector_specific_config.project_key
+      );
+    }
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
     if (
