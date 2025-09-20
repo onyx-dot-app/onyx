@@ -363,7 +363,7 @@ from playwright.sync_api import BrowserContext
         assert 3 in violation_line_numbers  # import vertexai (top-level)
         assert 4 in violation_line_numbers  # import nltk (top-level)
         assert (
-            21 in violation_line_numbers
+            22 in violation_line_numbers
         )  # from playwright.sync_api import BrowserContext (top-level)
 
         # Function and method level imports should not be flagged
