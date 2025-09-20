@@ -36,7 +36,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.file_processing.html_utils import web_html_cleanup, remove_by_selector
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 from shared_configs.configs import MULTI_TENANT
@@ -438,13 +438,19 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        remove_by_selector: list[str] = [],
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
+        self.remove_by_selector = remove_by_selector or []
         self.web_connector_type = web_connector_type
+
+        if not isinstance(self.remove_by_selector, list):
+            self.remove_by_selector = []
+
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -571,6 +577,8 @@ class WebConnector(LoadConnector):
 
             content = page.content()
             soup = BeautifulSoup(content, "html.parser")
+            
+            remove_by_selector(soup, self.remove_by_selector)
 
             if self.recursive:
                 internal_links = get_internal_links(
