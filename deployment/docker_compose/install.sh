@@ -484,24 +484,24 @@ else
     echo ""
     print_info "Which authentication schema would you like to set up?"
     echo ""
-    echo "1) No Auth - Open access (development/testing)"
-    echo "2) Basic - Username/password authentication"
+    echo "1) Basic - Username/password authentication"
+    echo "2) No Auth - Open access (development/testing)"
     echo ""
     read -p "Choose an option (1-2) [default 1]: " -r AUTH_CHOICE
     echo ""
     
     case "${AUTH_CHOICE:-1}" in
         1)
-            AUTH_SCHEMA="disabled"
-            print_info "Selected: No authentication"
-            ;;
-        2)
             AUTH_SCHEMA="basic"
             print_info "Selected: Basic authentication"
             ;;
-        *)
+        2)
             AUTH_SCHEMA="disabled"
-            print_info "Invalid choice, using no authentication"
+            print_info "Selected: No authentication"
+            ;;
+        *)
+            AUTH_SCHEMA="basic"
+            print_info "Invalid choice, using basic authentication"
             ;;
     esac
     
