@@ -384,22 +384,179 @@ fi
 touch "onyx_data/data/nginx/local/.gitkeep"
 print_success "All configuration files downloaded successfully"
 
-# Create .env file from template
-print_step "Setting up environment configuration"
+# Set up deployment configuration
+print_step "Setting up deployment configs"
 ENV_FILE="onyx_data/deployment/.env"
-if [ ! -f "$ENV_FILE" ]; then
-    print_info "Creating .env file from template..."
-    cp "$ENV_TEMPLATE" "$ENV_FILE"
-    print_success ".env file created"
+
+# Check if services are already running
+if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.yml" ]; then
+    cd onyx_data/deployment
+    
+    # Determine compose command
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        COMPOSE_CMD=""
+    fi
+    
+    if [ -n "$COMPOSE_CMD" ]; then
+        # Check if any containers are running
+        RUNNING_CONTAINERS=$($COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
+        if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
+            print_error "Onyx services are currently running!"
+            echo ""
+            print_info "To make configuration changes, you must first shut down the services."
+            echo ""
+            print_info "Please run the following command to shut down Onyx:"
+            echo -e "   ${BOLD}./install.sh --shutdown${NC}"
+            echo ""
+            print_info "Then run this script again to make your changes."
+            exit 1
+        fi
+    fi
+    
+    cd ../..
+fi
+
+if [ -f "$ENV_FILE" ]; then
+    print_info "Existing .env file found. What would you like to do?"
     echo ""
-    print_info "IMPORTANT: The .env file has been created with default settings."
-    print_info "You may want to customize it later for:"
-    echo "  • Authentication settings (OAuth, SAML, etc.)"
+    echo "1) Restart - Keep current configuration and restart services"
+    echo "2) Upgrade - Update to a newer version"
+    echo ""
+    read -p "Choose an option (1-2) [default 1]: " -r
+    echo ""
+    
+    case "${REPLY:-1}" in
+        1)
+            print_info "Keeping existing configuration..."
+            print_success "Will restart with current settings"
+            ;;
+        2)
+            print_info "Upgrade selected. Which tag would you like to deploy?"
+            echo ""
+            echo "1) Latest (recommended)"
+            echo "2) Specific tag"
+            echo ""
+            read -p "Choose an option (1-2) [default 1]: " -r VERSION_CHOICE
+            echo ""
+            
+            case "${VERSION_CHOICE:-1}" in
+                1)
+                    VERSION="latest"
+                    print_info "Selected: Latest version"
+                    ;;
+                2)
+                    read -p "Enter version (e.g., v0.1.0): " -r VERSION
+                    if [ -z "$VERSION" ]; then
+                        VERSION="latest"
+                        print_info "No version specified, using latest"
+                    else
+                        print_info "Selected: $VERSION"
+                    fi
+                    ;;
+            esac
+            
+            # Update .env file with new version
+            print_info "Updating configuration for version $VERSION..."
+            if grep -q "^IMAGE_TAG=" "$ENV_FILE"; then
+                # Update existing IMAGE_TAG line
+                sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
+            else
+                # Add IMAGE_TAG line if it doesn't exist
+                echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
+            fi
+            print_success "Updated IMAGE_TAG to $VERSION in .env file"
+            print_success "Configuration updated for upgrade"
+            ;;
+        *)
+            print_info "Invalid choice, keeping existing configuration..."
+            ;;
+    esac
+else
+    print_info "No existing .env file found. Setting up new deployment..."
+    echo ""
+    
+    # Ask for version
+    print_info "Which tag would you like to deploy?"
+    echo ""
+    echo "1) Latest (recommended)"
+    echo "2) Specific tag"
+    echo ""
+    read -p "Choose an option (1-2) [default 1]: " -r VERSION_CHOICE
+    echo ""
+    
+    case "${VERSION_CHOICE:-1}" in
+        1)
+            VERSION="latest"
+            print_info "Selected: Latest tag"
+            ;;
+        2)
+            read -p "Enter tag (e.g., v0.1.0): " -r VERSION
+            if [ -z "$VERSION" ]; then
+                VERSION="latest"
+                print_info "No tag specified, using latest"
+            else
+                print_info "Selected: $VERSION"
+            fi
+            ;;
+    esac
+    
+    # Ask for authentication schema
+    echo ""
+    print_info "Which authentication schema would you like to set up?"
+    echo ""
+    echo "1) No Auth - Open access (development/testing)"
+    echo "2) Basic - Username/password authentication"
+    echo ""
+    read -p "Choose an option (1-2) [default 1]: " -r AUTH_CHOICE
+    echo ""
+    
+    case "${AUTH_CHOICE:-1}" in
+        1)
+            AUTH_SCHEMA="disabled"
+            print_info "Selected: No authentication"
+            ;;
+        2)
+            AUTH_SCHEMA="basic"
+            print_info "Selected: Basic authentication"
+            ;;
+        *)
+            AUTH_SCHEMA="disabled"
+            print_info "Invalid choice, using no authentication"
+            ;;
+    esac
+    
+    # Create .env file from template
+    print_info "Creating .env file with your selections..."
+    cp "$ENV_TEMPLATE" "$ENV_FILE"
+    
+    # Update IMAGE_TAG with selected version
+    print_info "Setting IMAGE_TAG to $VERSION..."
+    sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
+    print_success "IMAGE_TAG set to $VERSION"
+    
+    # Configure authentication settings based on selection
+    if [ "$AUTH_SCHEMA" = "disabled" ]; then
+        # Disable authentication in .env file
+        sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=disabled/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Authentication disabled in configuration"
+    else
+        # Enable basic authentication
+        sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Basic authentication enabled in configuration"
+    fi
+    
+    print_success ".env file created with your preferences"
+    echo ""
+    print_info "IMPORTANT: The .env file has been configured with your selections."
+    print_info "You can customize it later for:"
+    echo "  • Advanced authentication (OAuth, SAML, etc.)"
     echo "  • AI model configuration"
     echo "  • Domain settings (for production)"
     echo ""
-else
-    print_success ".env file already exists, keeping existing configuration"
 fi
 
 # Pull Docker images with visible output

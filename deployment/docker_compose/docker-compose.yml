@@ -277,7 +277,7 @@ services:
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
     command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   cache:
     image: redis:7.4-alpine
