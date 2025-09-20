@@ -261,7 +261,6 @@ services:
       - "3000:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
-      - ./nginx:/etc/nginx/conf.d/local
     # PRODUCTION: Add SSL certificate volumes for HTTPS support:
     #   - ../data/certbot/conf:/etc/letsencrypt
     #   - ../data/certbot/www:/var/www/certbot
@@ -278,11 +277,7 @@ services:
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
     command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && if [ -f /etc/nginx/conf.d/local/app.conf.template ]; then
-           /etc/nginx/conf.d/run-nginx.sh /etc/nginx/conf.d/local/app.conf.template;
-         else
-           /etc/nginx/conf.d/run-nginx.sh app.conf.template;
-         fi"
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
 
   cache:
     image: redis:7.4-alpine
