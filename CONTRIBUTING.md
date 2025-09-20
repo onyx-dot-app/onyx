@@ -84,10 +84,6 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-> **Note:**
-> This virtual environment MUST NOT be set up WITHIN the onyx directory if you plan on using mypy within certain IDEs.
-> For simplicity, we recommend setting up the virtual environment outside of the onyx directory.
-
 _For Windows, activate the virtual environment using Command Prompt:_
 
 ```bash
