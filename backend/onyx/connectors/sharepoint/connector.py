@@ -1029,7 +1029,7 @@ class SharepointConnector(
 
         # Filter pages based on time window if specified
         if start is not None or end is not None:
-            filtered_pages = []
+            filtered_pages: list[dict[str, Any]] = []
             for page in all_pages:
                 page_modified = page.get("lastModifiedDateTime")
                 if page_modified:
