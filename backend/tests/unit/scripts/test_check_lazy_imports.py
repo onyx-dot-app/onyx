@@ -237,6 +237,14 @@ from pathlib import Path
 def use_vertexai():
     import vertexai
     return vertexai.some_method()
+
+def use_playwright():
+    from playwright.sync_api import sync_playwright
+    return sync_playwright().start()
+
+def use_nltk():
+    import nltk
+    return nltk.download('stopwords')
 """
     )
 
@@ -245,8 +253,8 @@ def use_vertexai():
     script_path.parent.mkdir(parents=True)
 
     with patch("scripts.check_lazy_imports.__file__", str(script_path)):
-        # Should not raise an exception
-        main()
+        # Should not raise an exception since all imports are inside functions
+        main({"vertexai", "playwright", "nltk"})
 
 
 def test_main_function_with_violations(tmp_path: Path) -> None:
@@ -260,7 +268,8 @@ def test_main_function_with_violations(tmp_path: Path) -> None:
     violation_file.write_text(
         """
 import vertexai
-from transformers import AutoTokenizer
+import nltk
+from playwright.sync_api import sync_playwright
 """
     )
 
@@ -274,7 +283,7 @@ from transformers import AutoTokenizer
             RuntimeError,
             match="Found eager imports of .+\\. You must import them only when needed",
         ):
-            main()
+            main({"vertexai", "playwright", "nltk"})
 
 
 def test_main_function_specific_modules_only() -> None:
@@ -282,7 +291,8 @@ def test_main_function_specific_modules_only() -> None:
     test_content = """
 import requests  # Should not be flagged
 import vertexai  # Should be flagged
-import transformers  # Should be flagged
+import nltk  # Should be flagged
+from playwright.sync_api import sync_playwright  # Should be flagged
 import numpy  # Should not be flagged
 """
 
@@ -291,18 +301,21 @@ import numpy  # Should not be flagged
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "transformers"}
+        protected_modules = {"vertexai", "playwright", "nltk"}
         result = find_eager_imports(test_path, protected_modules)
 
-        # Should only flag vertexai and transformers
-        assert len(result.violation_lines) == 2
-        assert result.violated_modules == {"vertexai", "transformers"}
+        # Should only flag vertexai, nltk, and playwright
+        assert len(result.violation_lines) == 3
+        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
         assert 3 in violation_line_numbers  # import vertexai
-        assert 4 in violation_line_numbers  # import transformers
+        assert 4 in violation_line_numbers  # import nltk
+        assert (
+            5 in violation_line_numbers
+        )  # from playwright.sync_api import sync_playwright
         assert 2 not in violation_line_numbers  # import requests (not protected)
-        assert 5 not in violation_line_numbers  # import numpy (not protected)
+        assert 6 not in violation_line_numbers  # import numpy (not protected)
 
     finally:
         test_path.unlink()
@@ -313,23 +326,25 @@ def test_mixed_violations_and_clean_imports() -> None:
     test_content = """
 # Top-level violation
 import vertexai
+import nltk
 
 import os  # This is fine, not protected
 
 def process_data():
     # Function-level import is allowed
     import vertexai
-    from transformers import AutoTokenizer
+    import nltk
+    from playwright.sync_api import sync_playwright
     return "processed"
 
 class DataProcessor:
     def __init__(self):
         # Method-level import is allowed
-        import transformers
-        self.model = transformers.AutoModel()
+        import playwright
+        self.browser = playwright.chromium.launch()
 
 # Another top-level violation
-from transformers import pipeline
+from playwright.sync_api import BrowserContext
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -337,25 +352,27 @@ from transformers import pipeline
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "transformers"}
+        protected_modules = {"vertexai", "playwright", "nltk"}
         result = find_eager_imports(test_path, protected_modules)
 
-        # Should find 2 top-level violations
-        assert len(result.violation_lines) == 2
-        assert result.violated_modules == {"vertexai", "transformers"}
+        # Should find 3 top-level violations
+        assert len(result.violation_lines) == 3
+        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
         assert 3 in violation_line_numbers  # import vertexai (top-level)
+        assert 4 in violation_line_numbers  # import nltk (top-level)
         assert (
-            20 in violation_line_numbers
-        )  # from transformers import pipeline (top-level)
+            21 in violation_line_numbers
+        )  # from playwright.sync_api import BrowserContext (top-level)
 
         # Function and method level imports should not be flagged
         assert 9 not in violation_line_numbers  # import vertexai (in function)
+        assert 10 not in violation_line_numbers  # import nltk (in function)
         assert (
-            10 not in violation_line_numbers
-        )  # from transformers import AutoTokenizer (in function)
-        assert 16 not in violation_line_numbers  # import transformers (in method)
+            11 not in violation_line_numbers
+        )  # from playwright.sync_api import sync_playwright (in function)
+        assert 17 not in violation_line_numbers  # import playwright (in method)
 
     finally:
         test_path.unlink()
@@ -445,3 +462,129 @@ def test_find_python_files_nested_ignore() -> None:
 
         # Should exclude the deeply nested file
         assert len(files) == 0
+
+
+def test_playwright_violations() -> None:
+    """Test detection of playwright import violations."""
+    test_content = """
+from playwright.sync_api import sync_playwright
+from playwright.sync_api import BrowserContext, Playwright
+import playwright.async_api
+import playwright
+import os  # This should not be flagged
+
+def allowed_function():
+    from playwright.sync_api import sync_playwright
+    return sync_playwright()
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(test_content)
+        test_path = Path(f.name)
+
+    try:
+        protected_modules = {"playwright"}
+        result = find_eager_imports(test_path, protected_modules)
+
+        # Should find 4 violations (lines 2, 3, 4, 5)
+        assert len(result.violation_lines) == 4
+        assert result.violated_modules == {"playwright"}
+
+        violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
+        assert (
+            2 in violation_line_numbers
+        )  # from playwright.sync_api import sync_playwright
+        assert (
+            3 in violation_line_numbers
+        )  # from playwright.sync_api import BrowserContext, Playwright
+        assert 4 in violation_line_numbers  # import playwright.async_api
+        assert 5 in violation_line_numbers  # import playwright
+        assert 6 not in violation_line_numbers  # import os (not protected)
+        assert 9 not in violation_line_numbers  # import in function (allowed)
+
+    finally:
+        test_path.unlink()
+
+
+def test_nltk_violations() -> None:
+    """Test detection of NLTK import violations."""
+    test_content = """
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import nltk.data
+import requests  # This should not be flagged
+
+def allowed_function():
+    import nltk
+    nltk.download('stopwords')
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(test_content)
+        test_path = Path(f.name)
+
+    try:
+        protected_modules = {"nltk"}
+        result = find_eager_imports(test_path, protected_modules)
+
+        # Should find 4 violations (lines 2, 3, 4, 5)
+        assert len(result.violation_lines) == 4
+        assert result.violated_modules == {"nltk"}
+
+        violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
+        assert 2 in violation_line_numbers  # import nltk
+        assert 3 in violation_line_numbers  # from nltk.corpus import stopwords
+        assert 4 in violation_line_numbers  # from nltk.tokenize import word_tokenize
+        assert 5 in violation_line_numbers  # import nltk.data
+        assert 6 not in violation_line_numbers  # import requests (not protected)
+        assert 8 not in violation_line_numbers  # import in function (allowed)
+
+    finally:
+        test_path.unlink()
+
+
+def test_all_three_protected_modules() -> None:
+    """Test detection of vertexai, playwright, and nltk violations together."""
+    test_content = """
+import vertexai
+import nltk
+from playwright.sync_api import sync_playwright
+import os  # This should not be flagged
+
+def allowed_usage():
+    import vertexai
+    import nltk
+    from playwright.sync_api import sync_playwright
+    return "all good"
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(test_content)
+        test_path = Path(f.name)
+
+    try:
+        protected_modules = {"vertexai", "playwright", "nltk"}
+        result = find_eager_imports(test_path, protected_modules)
+
+        # Should find 3 violations (lines 2, 3, 4)
+        assert len(result.violation_lines) == 3
+        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
+
+        violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
+        assert 2 in violation_line_numbers  # import vertexai
+        assert 3 in violation_line_numbers  # import nltk
+        assert (
+            4 in violation_line_numbers
+        )  # from playwright.sync_api import sync_playwright
+        assert 5 not in violation_line_numbers  # import os (not protected)
+
+        # Function-level imports should not be flagged
+        assert 7 not in violation_line_numbers  # import vertexai (in function)
+        assert 8 not in violation_line_numbers  # import nltk (in function)
+        assert (
+            9 not in violation_line_numbers
+        )  # from playwright.sync_api import sync_playwright (in function)
+
+    finally:
+        test_path.unlink()
