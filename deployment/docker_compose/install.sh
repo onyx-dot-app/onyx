@@ -2,6 +2,44 @@
 
 set -e
 
+# Parse command line arguments
+SHUTDOWN_MODE=false
+DELETE_DATA_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --shutdown)
+            SHUTDOWN_MODE=true
+            shift
+            ;;
+        --delete-data)
+            DELETE_DATA_MODE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Onyx Installation Script"
+            echo ""
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --shutdown     Stop and remove Onyx containers"
+            echo "  --delete-data  Remove all Onyx data (containers, volumes, and files)"
+            echo "  --help, -h     Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                    # Install Onyx"
+            echo "  $0 --shutdown         # Stop Onyx services"
+            echo "  $0 --delete-data      # Completely remove Onyx and all data"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -37,6 +75,101 @@ print_step() {
 print_warning() {
     echo -e "${YELLOW}⚠${NC}  $1"
 }
+
+# Handle shutdown mode
+if [ "$SHUTDOWN_MODE" = true ]; then
+    echo ""
+    echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
+    echo ""
+    
+    if [ -d "onyx_data/deployment" ]; then
+        print_info "Stopping Onyx containers..."
+        cd onyx_data/deployment
+        
+        # Check if docker-compose.yml exists
+        if [ -f "docker-compose.yml" ]; then
+            # Determine compose command
+            if docker compose version &> /dev/null; then
+                COMPOSE_CMD="docker compose"
+            elif command -v docker-compose &> /dev/null; then
+                COMPOSE_CMD="docker-compose"
+            else
+                print_error "Docker Compose not found. Cannot stop containers."
+                exit 1
+            fi
+            
+            # Stop and remove containers
+            $COMPOSE_CMD -f docker-compose.yml down
+            print_success "Onyx containers stopped and removed"
+        else
+            print_warning "docker-compose.yml not found in onyx_data/deployment"
+        fi
+        
+        cd ../..
+    else
+        print_warning "Onyx data directory not found. Nothing to shutdown."
+    fi
+    
+    echo ""
+    print_success "Onyx shutdown complete!"
+    exit 0
+fi
+
+# Handle delete data mode
+if [ "$DELETE_DATA_MODE" = true ]; then
+    echo ""
+    echo -e "${RED}${BOLD}=== WARNING: This will permanently delete all Onyx data ===${NC}"
+    echo ""
+    print_warning "This action will remove:"
+    echo "  • All Onyx containers and volumes"
+    echo "  • All downloaded files and configurations"
+    echo "  • All user data and documents"
+    echo ""
+    read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
+    echo ""
+    
+    if [ "$REPLY" != "DELETE" ]; then
+        print_info "Operation cancelled."
+        exit 0
+    fi
+    
+    print_info "Removing Onyx containers and volumes..."
+    
+    if [ -d "onyx_data/deployment" ]; then
+        cd onyx_data/deployment
+        
+        # Check if docker-compose.yml exists
+        if [ -f "docker-compose.yml" ]; then
+            # Determine compose command
+            if docker compose version &> /dev/null; then
+                COMPOSE_CMD="docker compose"
+            elif command -v docker-compose &> /dev/null; then
+                COMPOSE_CMD="docker-compose"
+            else
+                print_error "Docker Compose not found. Cannot remove containers."
+                exit 1
+            fi
+            
+            # Stop and remove containers with volumes
+            $COMPOSE_CMD -f docker-compose.yml down -v
+            print_success "Onyx containers and volumes removed"
+        fi
+        
+        cd ../..
+    fi
+    
+    print_info "Removing data directories..."
+    if [ -d "onyx_data" ]; then
+        rm -rf onyx_data
+        print_success "Data directories removed"
+    else
+        print_warning "No onyx_data directory found"
+    fi
+    
+    echo ""
+    print_success "All Onyx data has been permanently deleted!"
+    exit 0
+fi
 
 # ASCII Art Banner
 echo ""
