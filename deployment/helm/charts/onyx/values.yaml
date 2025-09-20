@@ -856,7 +856,6 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   ONYX_BOT_RESPOND_EVERY_CHANNEL: ""
-  ONYX_BOT_DISABLE_COT: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3

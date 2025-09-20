@@ -93,7 +93,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
 
     if cc_pair.access_type != AccessType.SYNC:
         task_logger.error(
-            f"Recieved non-sync CC Pair {cc_pair.id} for external "
+            f"Received non-sync CC Pair {cc_pair.id} for external "
             f"group sync. Actual access type: {cc_pair.access_type}"
         )
         return False

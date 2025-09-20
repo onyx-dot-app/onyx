@@ -206,7 +206,7 @@ class CustomTool(BaseTool):
 
         # pretend like nothing happened if not parse-able
         logger.error(
-            f"Failed to parse args for '{self.name}' tool. Recieved: {args_result_str}"
+            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
         )
         return None
 

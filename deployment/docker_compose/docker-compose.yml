@@ -271,7 +271,7 @@ services:
         max-file: "6"
     # The specified script waits for the api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
-    # does not recieve any traffic
+    # does not receive any traffic
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
