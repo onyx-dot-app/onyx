@@ -126,7 +126,6 @@ Resources:
               HostPort: 3000
               Protocol: tcp
           Environment:
-              Value: "false"
             - Name: INTERNAL_URL
               Value: !Sub
                 - "http://${Environment}-onyx-backend-api-server-service.${ImportedNamespace}:8080"
