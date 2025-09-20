@@ -2,6 +2,8 @@ import re
 from datetime import datetime
 from typing import cast
 
+from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
@@ -41,7 +43,7 @@ from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.llm.utils import check_number_of_tokens
+from onyx.prompts.dr_prompts import FINAL_ANSWER_DEEP_CITATION_PROMPT
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
 from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
@@ -53,7 +55,10 @@ from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
+
 logger = setup_logger()
+
+_SOURCE_MATERIAL_PROMPT = "Can yut please put together all of the supporting material?"
 
 
 def extract_citation_numbers(text: str) -> list[int]:
@@ -228,7 +233,8 @@ def closer(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
 
-    uploaded_context = state.uploaded_test_context or ""
+    state.uploaded_test_context or ""
+    message_history_for_final_answer = state.orchestration_llm_messages
 
     clarification = state.clarification
     prompt_question = get_prompt_question(base_question, clarification)
@@ -312,42 +318,72 @@ def closer(
         writer,
     )
 
+    if state.query_list:
+        final_questions = "\n - " + "\n - ".join(state.query_list)
+    else:
+        final_questions = "(No final question specifications)"
+
     if research_type in [ResearchType.THOUGHTFUL, ResearchType.FAST]:
-        final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
+        final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS.build(
+            base_question=prompt_question,
+            final_questions=final_questions or "(No final question specifications)",
+            final_user_instructions=assistant_task_prompt
+            or "(No final user instructions)",
+        )
     elif research_type == ResearchType.DEEP:
-        final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
+        final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS.build(
+            base_question=prompt_question,
+            final_questions=final_questions or "(No final question specifications)",
+            final_user_instructions=assistant_task_prompt
+            or "(No final user instructions)",
+        )
+
+        message_history_for_final_answer.append(
+            HumanMessage(content=_SOURCE_MATERIAL_PROMPT)
+        )
+        message_history_for_final_answer.append(
+            AIMessage(
+                content=FINAL_ANSWER_DEEP_CITATION_PROMPT.build(
+                    iteration_responses_string=iteration_responses_w_docs_string
+                )
+            )
+        )
     else:
         raise ValueError(f"Invalid research type: {research_type}")
 
-    estimated_final_answer_prompt_tokens = check_number_of_tokens(
-        final_answer_base_prompt.build(
-            base_question=prompt_question,
-            iteration_responses_string=iteration_responses_w_docs_string,
-            chat_history_string=chat_history_string,
-            uploaded_context=uploaded_context,
-        )
+    message_history_for_final_answer.append(
+        HumanMessage(content=final_answer_base_prompt)
     )
+
+    # estimated_final_answer_prompt_tokens = check_number_of_tokens(
+    #     final_answer_base_prompt.build(
+    #         base_question=prompt_question,
+    #         iteration_responses_string=iteration_responses_w_docs_string,
+    #         chat_history_string=chat_history_string,
+    #         uploaded_context=uploaded_context,
+    #     )
+    # )
 
     # for DR, rely only on sub-answers and claims to save tokens if context is too long
     # TODO: consider compression step for Thoughtful mode if context is too long.
     # Should generally not be the case though.
 
-    max_allowed_input_tokens = graph_config.tooling.primary_llm.config.max_input_tokens
+    # max_allowed_input_tokens = graph_config.tooling.primary_llm.config.max_input_tokens
 
-    if (
-        estimated_final_answer_prompt_tokens > 0.8 * max_allowed_input_tokens
-        and research_type == ResearchType.DEEP
-    ):
-        iteration_responses_string = iteration_responses_wo_docs_string
-    else:
-        iteration_responses_string = iteration_responses_w_docs_string
+    # if (
+    #     estimated_final_answer_prompt_tokens > 0.8 * max_allowed_input_tokens
+    #     and research_type == ResearchType.DEEP
+    # ):
+    #     iteration_responses_string = iteration_responses_wo_docs_string
+    # else:
+    #     iteration_responses_string = iteration_responses_w_docs_string
 
-    final_answer_prompt = final_answer_base_prompt.build(
-        base_question=prompt_question,
-        iteration_responses_string=iteration_responses_string,
-        chat_history_string=chat_history_string,
-        uploaded_context=uploaded_context,
-    )
+    # final_answer_prompt = final_answer_base_prompt.build(
+    #     base_question=prompt_question,
+    #     iteration_responses_string=iteration_responses_string,
+    #     chat_history_string=chat_history_string,
+    #     uploaded_context=uploaded_context,
+    # )
 
     all_context_llmdocs = [
         llm_doc_from_inference_section(inference_section)
@@ -359,10 +395,7 @@ def closer(
             int(3 * TF_DR_TIMEOUT_LONG),
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
-                prompt=create_question_prompt(
-                    assistant_system_prompt,
-                    final_answer_prompt + (assistant_task_prompt or ""),
-                ),
+                prompt=message_history_for_final_answer,
                 event_name="basic_response",
                 writer=writer,
                 agent_answer_level=0,

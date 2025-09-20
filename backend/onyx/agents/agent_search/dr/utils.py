@@ -1,6 +1,7 @@
 import copy
 import re
 
+from langchain.schema.messages import AIMessage
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 
@@ -11,9 +12,13 @@ from onyx.agents.agent_search.kb_search.graph_utils import build_document_contex
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
+from onyx.llm.models import PreviousMessage
+from onyx.llm.utils import check_message_tokens
+from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
@@ -50,7 +55,9 @@ def extract_document_citations(
 
 
 def aggregate_context(
-    iteration_responses: list[IterationAnswer], include_documents: bool = True
+    iteration_responses: list[IterationAnswer],
+    include_documents: bool = True,
+    most_recent: bool = False,
 ) -> AggregatedDRContext:
     """
     Converts the iteration response into a single string with unified citations.
@@ -63,6 +70,12 @@ def aggregate_context(
         [1]: doc_xyz
         [2]: doc_abc
         [3]: doc_pqr
+
+    Args:
+        iteration_responses: List of iteration responses to aggregate
+        include_documents: Whether to include document contents in the output
+        most_recent: If True, only include iterations with the highest iteration_nr in output
+                     (but still use all iterations for global citation numbering)
     """
     # dedupe and merge inference section contents
     unrolled_inference_sections: list[InferenceSection] = []
@@ -93,8 +106,22 @@ def aggregate_context(
     output_strings: list[str] = []
     global_iteration_responses: list[IterationAnswer] = []
 
+    # Filter to only include most recent iteration if flag is set
+    # (but keep all iterations for global citation numbering above)
+    output_iteration_responses = iteration_responses
+    if most_recent and iteration_responses:
+        max_iteration_nr = max(
+            iteration_response.iteration_nr
+            for iteration_response in iteration_responses
+        )
+        output_iteration_responses = [
+            iteration_response
+            for iteration_response in iteration_responses
+            if iteration_response.iteration_nr == max_iteration_nr
+        ]
+
     for iteration_response in sorted(
-        iteration_responses,
+        output_iteration_responses,
         key=lambda x: (x.iteration_nr, x.parallelization_nr),
     ):
         # add basic iteration info
@@ -215,6 +242,48 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
         + f": {str(msg.content).strip()}"
         for msg in filtered_past_messages
     )
+
+
+def get_chat_history_messages(
+    chat_history: list[PreviousMessage],
+    max_messages: int,
+    max_tokens: int | None = None,
+) -> list[HumanMessage | AIMessage]:
+    """
+    Get the chat history (up to max_messages) as a list of messages.
+    If max_tokens is specified, drop messages from the beginning if total size exceeds the limit.
+    """
+    past_raw_messages = chat_history[-max_messages * 2 :]
+    filtered_past_raw_messages: list[HumanMessage | AIMessage] = []
+    for past_raw_message_number, past_raw_message in enumerate(past_raw_messages):
+        if past_raw_message.message_type == MessageType.USER:
+            filtered_past_raw_messages.append(
+                HumanMessage(content=past_raw_message.message)
+            )
+        else:
+            filtered_past_raw_messages.append(
+                AIMessage(content=past_raw_message.message)
+            )
+
+    # If max_tokens is specified, drop messages from beginning if needed
+    if max_tokens is not None and filtered_past_raw_messages:
+        # Calculate token counts for each message
+        messages_with_token_counts: list[tuple[BaseMessage, int]] = [
+            (msg, check_message_tokens(msg)) for msg in filtered_past_raw_messages
+        ]
+
+        # Use the drop_messages_history_overflow function to trim if needed
+        trimmed_messages = drop_messages_history_overflow(
+            messages_with_token_counts, max_tokens
+        )
+        # Filter to only HumanMessage and AIMessage (drop any SystemMessage)
+        filtered_past_raw_messages = [
+            msg
+            for msg in trimmed_messages
+            if isinstance(msg, (HumanMessage, AIMessage))
+        ]
+
+    return filtered_past_raw_messages  # type: ignore
 
 
 def get_prompt_question(
