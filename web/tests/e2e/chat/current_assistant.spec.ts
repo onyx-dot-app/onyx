@@ -3,7 +3,7 @@ import { dragElementAbove, dragElementBelow } from "../utils/dragUtils";
 import { loginAsRandomUser } from "../utils/auth";
 import { createAssistant, pinAssistantByName } from "../utils/assistantUtils";
 
-test("Assistant Drag and Drop", async ({ page }) => {
+test("Assistant Drag and Drop", async ({ page }, testInfo) => {
   await page.context().clearCookies();
   await loginAsRandomUser(page);
 
@@ -60,6 +60,14 @@ test("Assistant Drag and Drop", async ({ page }) => {
 
   // Get the initial order
   const initialOrder = await getAssistantOrder();
+  await testInfo.attach("assistant-order-initial", {
+    body: Buffer.from(JSON.stringify(initialOrder, null, 2), "utf-8"),
+    contentType: "application/json",
+  });
+  await testInfo.attach("screenshot-initial-order", {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: "image/png",
+  });
 
   // Drag second assistant above first
   const secondAssistant = page.locator('[data-testid^="assistant-["]').nth(1);
@@ -69,10 +77,19 @@ test("Assistant Drag and Drop", async ({ page }) => {
 
   // Check new order
   const orderAfterDragUp = await getAssistantOrder();
+  await testInfo.attach("assistant-order-after-drag-up", {
+    body: Buffer.from(JSON.stringify(orderAfterDragUp, null, 2), "utf-8"),
+    contentType: "application/json",
+  });
+  await testInfo.attach("screenshot-after-drag-up", {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: "image/png",
+  });
   expect(orderAfterDragUp[0]).toBe(initialOrder[1]);
   expect(orderAfterDragUp[1]).toBe(initialOrder[0]);
 
   // Drag last assistant to second position
+  console.log("Dragging last assistant to second position");
   const assistants = page.locator('[data-testid^="assistant-["]');
   const lastIndex = (await assistants.count()) - 1;
   const lastAssistant = assistants.nth(lastIndex);
@@ -83,10 +100,26 @@ test("Assistant Drag and Drop", async ({ page }) => {
 
   // Check new order
   const orderAfterDragDown = await getAssistantOrder();
+  await testInfo.attach("assistant-order-after-drag-down", {
+    body: Buffer.from(JSON.stringify(orderAfterDragDown, null, 2), "utf-8"),
+    contentType: "application/json",
+  });
+  await testInfo.attach("screenshot-after-drag-down", {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: "image/png",
+  });
   expect(orderAfterDragDown[1]).toBe(initialOrder[lastIndex]);
 
   // Refresh and verify order
   await page.reload();
   const orderAfterRefresh = await getAssistantOrder();
+  await testInfo.attach("assistant-order-after-refresh", {
+    body: Buffer.from(JSON.stringify(orderAfterRefresh, null, 2), "utf-8"),
+    contentType: "application/json",
+  });
+  await testInfo.attach("screenshot-after-refresh", {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: "image/png",
+  });
   expect(orderAfterRefresh).toEqual(orderAfterDragDown);
 });
