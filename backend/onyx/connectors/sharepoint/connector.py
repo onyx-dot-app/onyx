@@ -273,8 +273,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
                 )
                 raise SizeCapExceeded("during_download")
 
-        content_bytes = buf.getvalue()
-        return content_bytes
+        return buf.getvalue()
 
 
 def _download_via_sdk_with_cap(
@@ -295,8 +294,7 @@ def _download_via_sdk_with_cap(
     driveitem.download_session(buf, chunk_downloaded=on_chunk, chunk_size=chunk_size)
     # Execute the configured request with retries using existing helper
     sleep_and_retry(driveitem.context, "download_session")
-    content_bytes = buf.getvalue()
-    return content_bytes
+    return buf.getvalue()
 
 
 def _convert_driveitem_to_document_with_permissions(
@@ -481,7 +479,6 @@ def _convert_sitepage_to_document(
             for column in columns:
                 webparts = column.get("webparts", [])
                 for webpart in webparts:
-
                     # Extract text from different types of webparts
                     webpart_type = webpart.get("@odata.type", "")
 
@@ -520,7 +517,7 @@ def _convert_sitepage_to_document(
                             "searchablePlainTexts", []
                         )
 
-                        for text_idx, text_item in enumerate(searchable_texts):
+                        for text_item in searchable_texts:
                             if isinstance(text_item, dict):
                                 key = text_item.get("key", "")
                                 value = text_item.get("value", "")
@@ -808,8 +805,7 @@ class SharepointConnector(
                         f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                     )
 
-                final_driveitems = list(driveitems)
-                return final_driveitems
+                return list(driveitems)
 
             except Exception as e:
                 # Some drives might not be accessible
@@ -865,8 +861,7 @@ class SharepointConnector(
                     root_folder = drive.root
                     if site_descriptor.folder_path:
                         # If a specific folder is requested, navigate to it
-                        folder_parts = site_descriptor.folder_path.split("/")
-                        for part_idx, folder_part in enumerate(folder_parts):
+                        for folder_part in site_descriptor.folder_path.split("/"):
                             root_folder = root_folder.get_by_path(folder_part)
 
                     # Get all items recursively
@@ -954,8 +949,7 @@ class SharepointConnector(
     ) -> Generator[Site, None, None]:
         while sites:
             if sites.current_page:
-                for site in sites.current_page:
-                    yield site
+                yield from sites.current_page
             if not sites.has_next:
                 break
             sites = sites._get_next().execute_query()
@@ -967,16 +961,15 @@ class SharepointConnector(
             raise RuntimeError("No sites found in the tenant")
 
         # OneDrive personal sites should not be indexed with SharepointConnector
-        site_descriptors: list[SiteDescriptor] = []
-        for site in self._handle_paginated_sites(sites):
-            if "-my.sharepoint" not in site.web_url:
-                site_descriptors.append(
-                    SiteDescriptor(
-                        url=site.web_url or "",
-                        drive_name=None,
-                        folder_path=None,
-                    )
-                )
+        site_descriptors = [
+            SiteDescriptor(
+                url=site.web_url or "",
+                drive_name=None,
+                folder_path=None,
+            )
+            for site in self._handle_paginated_sites(sites)
+            if "-my.sharepoint" not in site.web_url
+        ]
         return site_descriptors
 
     def _fetch_site_pages(
@@ -1456,10 +1449,9 @@ class SharepointConnector(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"
                     )
                     # Yield a ConnectorFailure for individual document processing failures
-                    failure = self._create_document_failure(
+                    yield self._create_document_failure(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
-                    yield failure
 
             # Clear current drive after processing
             checkpoint.current_drive_name = None
@@ -1509,14 +1501,15 @@ class SharepointConnector(
                 logger.debug(
                     f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
                 )
-                converted_page = _convert_sitepage_to_document(
-                    site_page,
-                    site_descriptor.drive_name,
-                    client_ctx,
-                    self.graph_client,
-                    include_permissions=include_permissions,
+                yield (
+                    _convert_sitepage_to_document(
+                        site_page,
+                        site_descriptor.drive_name,
+                        client_ctx,
+                        self.graph_client,
+                        include_permissions=include_permissions,
+                    )
                 )
-                yield converted_page
             logger.info(
                 f"Finished processing site pages for site: {site_descriptor.url}"
             )

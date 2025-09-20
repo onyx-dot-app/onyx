@@ -48,3 +48,6 @@
 
 #     except Exception as e:
 #         logger.warning(f"Failed to log memory usage for {label}: {str(e)}")
+
+# For example, use this like:
+# log_memory_usage("my_operation", my_large_object, "my_large_object")

@@ -1298,7 +1298,6 @@ def _docprocessing_task(
     try:
         # Retrieve documents from storage
         documents = storage.get_batch(batch_num)
-
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
