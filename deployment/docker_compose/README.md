@@ -9,6 +9,11 @@ To set up Onyx there are several options, Onyx supports the following for deploy
 **For more detailed guides, please refer to the documentation: https://docs.onyx.app/deployment/overview**
 
 ## install.sh script
+
+```
+curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
+```
+
 This provides a guided installation of Onyx via Docker Compose. It will deploy the latest version of Onyx
 and set up the volumes to ensure data is persisted across deployments or upgrades.
 
