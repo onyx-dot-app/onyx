@@ -49,8 +49,8 @@ echo "Welcome to Onyx Installation Script"
 echo "===================================="
 echo ""
 
-# GitHub repo base URL
-GITHUB_RAW_URL="https://raw.githubusercontent.com/danswer-ai/danswer/main/deployment/docker_compose"
+# GitHub repo base URL - using docker-compose-easy branch
+GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/docker_compose"
 
 # Check system requirements
 print_step "Step 1: Verifying Docker installation"
@@ -160,122 +160,56 @@ if [ "$RESOURCE_WARNING" = true ]; then
     print_info "Proceeding with installation despite resource limitations..."
 fi
 
-# Set default values
-ENV_FILE=".env"
+# Create directory structure
+print_step "Step 3: Creating directory structure"
+mkdir -p onyx_data/deployment
+mkdir -p onyx_data/data/nginx
+print_success "Directory structure created"
 
-# Always use the default docker-compose.yml file
-print_step "Step 3: Setting up configuration"
-COMPOSE_FILE="docker-compose.yml"
-print_info "Using default Docker Compose configuration"
-
-# Check if we're in the docker_compose directory or need to download files
-if [ -f "$COMPOSE_FILE" ] && [ -f "env.template" ]; then
-    print_step "Step 4: Using local Docker Compose configuration"
-    print_success "Found local configuration files"
-    LOCAL_MODE=true
+# Download Docker Compose file
+print_step "Step 4: Downloading Docker Compose configuration"
+COMPOSE_FILE="onyx_data/deployment/docker-compose.yml"
+print_info "Downloading docker-compose.yml..."
+if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
+    print_success "Docker Compose file downloaded successfully"
 else
-    LOCAL_MODE=false
-    # Download Docker Compose file
-    print_step "Step 4: Downloading Docker Compose configuration"
-    print_info "Downloading $COMPOSE_FILE..."
-    if ! curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/${COMPOSE_FILE}" 2>/dev/null; then
-        # Try alternative branch name
-        GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
-        if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/${COMPOSE_FILE}" 2>/dev/null; then
-            print_success "Docker Compose file downloaded successfully"
-        else
-            print_error "Failed to download Docker Compose file"
-            print_info "Please ensure you're running this from the deployment/docker_compose directory"
-            exit 1
-        fi
-    else
-        print_success "Docker Compose file downloaded successfully"
-    fi
-
-    # Download env.template file
-    print_step "Step 5: Downloading environment template"
-    print_info "Downloading env.template..."
-    if ! curl -fsSL -o "env.template" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
-        print_warning "Failed to download env.template from GitHub"
-        print_info "Creating minimal env.template..."
-        # Create a minimal env.template
-        cat > env.template << 'EOF'
-# Onyx Configuration
-AUTH_TYPE=disabled
-SESSION_EXPIRE_TIME_SECONDS=86400
-POSTGRES_HOST=relational_db
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=password
-POSTGRES_DB=postgres
-VESPA_HOST=index
-VESPA_PORT=8081
-WEB_DOMAIN=http://localhost:3000
-
-# Model Configuration
-GEN_AI_MODEL_PROVIDER=openai
-GEN_AI_MODEL_VERSION=gpt-4
-FAST_GEN_AI_MODEL_VERSION=gpt-3.5-turbo
-GEN_AI_API_KEY=
-
-# Disable Telemetry
-DISABLE_TELEMETRY=true
-EOF
-        print_success "Created basic env.template"
-    else
-        print_success "Environment template downloaded successfully"
-    fi
+    print_error "Failed to download Docker Compose file"
+    print_info "Please ensure you have internet connection and try again"
+    exit 1
 fi
 
-# Create nginx directory if needed
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 6: Setting up nginx configuration"
+# Download env.template file
+print_step "Step 5: Downloading environment template"
+ENV_TEMPLATE="onyx_data/deployment/env.template"
+print_info "Downloading env.template..."
+if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
+    print_success "Environment template downloaded successfully"
 else
-    print_step "Step 5: Setting up nginx configuration"
+    print_error "Failed to download env.template"
+    print_info "Please ensure you have internet connection and try again"
+    exit 1
 fi
-mkdir -p nginx
-print_success "Created nginx directory"
 
-# Create a default nginx config if it doesn't exist
-NGINX_CONFIG="nginx/default.conf"
-if [ ! -f "$NGINX_CONFIG" ]; then
-    print_info "Creating default nginx configuration..."
-    cat > "$NGINX_CONFIG" << 'EOF'
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://web_server:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /api {
-        proxy_pass http://api_server:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-EOF
-    print_success "Default nginx configuration created"
+# Download nginx config
+print_step "Step 6: Setting up nginx configuration"
+NGINX_CONFIG="onyx_data/data/nginx/app.conf.template"
+print_info "Downloading nginx configuration..."
+# Note: nginx config is in a different path in the repo
+NGINX_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/data/nginx/app.conf.template"
+if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_URL" 2>/dev/null; then
+    print_success "Nginx configuration downloaded successfully"
 else
-    print_success "Nginx configuration already exists"
+    print_error "Failed to download nginx configuration"
+    print_info "Please ensure you have internet connection and try again"
+    exit 1
 fi
 
 # Create .env file from template
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 7: Setting up environment configuration"
-else
-    print_step "Step 6: Setting up environment configuration"
-fi
+print_step "Step 7: Setting up environment configuration"
+ENV_FILE="onyx_data/deployment/.env"
 if [ ! -f "$ENV_FILE" ]; then
     print_info "Creating .env file from template..."
-    cp env.template "$ENV_FILE"
+    cp "$ENV_TEMPLATE" "$ENV_FILE"
     print_success ".env file created"
     echo ""
     print_info "IMPORTANT: The .env file has been created with default settings."
@@ -288,44 +222,20 @@ else
     print_success ".env file already exists, keeping existing configuration"
 fi
 
-# Create necessary directories
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 8: Creating data directories"
-else
-    print_step "Step 7: Creating data directories"
-fi
-mkdir -p data/postgres
-mkdir -p data/vespa
-mkdir -p data/redis
-mkdir -p data/model_cache
-print_success "Data directories created"
-
 # Pull Docker images with visible output
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 9: Pulling Docker images"
-else
-    print_step "Step 8: Pulling Docker images"
-fi
+print_step "Step 8: Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
-$COMPOSE_CMD -f "$COMPOSE_FILE" pull
+cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull && cd ../..
 
 # Start services
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 10: Starting Onyx services"
-else
-    print_step "Step 9: Starting Onyx services"
-fi
+print_step "Step 9: Starting Onyx services"
 print_info "Launching containers..."
 echo ""
-$COMPOSE_CMD -f "$COMPOSE_FILE" up -d
+cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d && cd ../..
 
 # Monitor container startup
-if [ "$LOCAL_MODE" = false ]; then
-    print_step "Step 11: Verifying service health"
-else
-    print_step "Step 10: Verifying service health"
-fi
+print_step "Step 10: Verifying service health"
 print_info "Waiting for services to initialize (30 seconds)..."
 
 # Progress bar for waiting
@@ -339,10 +249,10 @@ echo ""
 # Check for restart loops
 print_info "Checking container health status..."
 RESTART_ISSUES=false
-CONTAINERS=$($COMPOSE_CMD -f "$COMPOSE_FILE" ps -q)
+CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q)
 
 for CONTAINER in $CONTAINERS; do
-    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed 's/^\/\|^docker_compose_//g')
+    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed 's/^\/\|^onyx_data_deployment_//g')
     RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
     STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
 
@@ -367,7 +277,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  $COMPOSE_CMD -f $COMPOSE_FILE logs"
+    echo "  cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     echo "Include the output of the logs command in your message."
@@ -390,10 +300,10 @@ echo "   Email:    ${BOLD}admin@onyx.test${NC}"
 echo "   Password: ${BOLD}admin${NC}"
 echo ""
 print_info "Useful commands:"
-echo "   View logs:     ${BOLD}$COMPOSE_CMD -f $COMPOSE_FILE logs -f${NC}"
-echo "   Stop Onyx:     ${BOLD}$COMPOSE_CMD -f $COMPOSE_FILE down${NC}"
-echo "   Restart Onyx:  ${BOLD}$COMPOSE_CMD -f $COMPOSE_FILE restart${NC}"
-echo "   Update Onyx:   ${BOLD}$COMPOSE_CMD -f $COMPOSE_FILE pull && $COMPOSE_CMD -f $COMPOSE_FILE up -d${NC}"
+echo "   View logs:     ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs -f${NC}"
+echo "   Stop Onyx:     ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml down${NC}"
+echo "   Restart Onyx:  ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml restart${NC}"
+echo "   Update Onyx:   ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull && $COMPOSE_CMD -f docker-compose.yml up -d${NC}"
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
