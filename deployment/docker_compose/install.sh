@@ -50,7 +50,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=10
+TOTAL_STEPS=8
 
 # Print colored output
 print_success() {
@@ -300,12 +300,28 @@ fi
 
 # Create directory structure
 print_step "Creating directory structure"
-mkdir -p onyx_data/deployment
-mkdir -p onyx_data/data/nginx/local
-print_success "Directory structure created"
+if [ -d "onyx_data" ]; then
+    print_info "Directory structure already exists"
+    print_success "Using existing onyx_data directory"
+else
+    mkdir -p onyx_data/deployment
+    mkdir -p onyx_data/data/nginx/local
+    print_success "Directory structure created"
+fi
+
+# Download all required files
+print_step "Downloading Onyx configuration files"
+print_info "This step downloads all necessary configuration files from GitHub..."
+echo ""
+print_info "Downloading the following files:"
+echo "  • docker-compose.yml - Main Docker Compose configuration"
+echo "  • env.template - Environment variables template"
+echo "  • nginx/app.conf.template - Nginx web server configuration"
+echo "  • nginx/run-nginx.sh - Nginx startup script"
+echo "  • README.md - Documentation and setup instructions"
+echo ""
 
 # Download Docker Compose file
-print_step "Downloading Docker Compose configuration"
 COMPOSE_FILE="onyx_data/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
 if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
@@ -317,7 +333,6 @@ else
 fi
 
 # Download env.template file
-print_step "Downloading environment template"
 ENV_TEMPLATE="onyx_data/deployment/env.template"
 print_info "Downloading env.template..."
 if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
@@ -329,9 +344,6 @@ else
 fi
 
 # Download nginx config files
-print_step "Setting up nginx configuration"
-
-# Base URL for nginx files
 NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/data/nginx"
 
 # Download app.conf.template
@@ -357,9 +369,20 @@ else
     exit 1
 fi
 
+# Download README file
+README_FILE="onyx_data/README.md"
+print_info "Downloading README.md..."
+if curl -fsSL -o "$README_FILE" "${GITHUB_RAW_URL}/README.md" 2>/dev/null; then
+    print_success "README.md downloaded successfully"
+else
+    print_error "Failed to download README.md"
+    print_info "Please ensure you have internet connection and try again"
+    exit 1
+fi
+
 # Create empty local directory marker (if needed)
 touch "onyx_data/data/nginx/local/.gitkeep"
-print_success "Nginx configuration setup complete"
+print_success "All configuration files downloaded successfully"
 
 # Create .env file from template
 print_step "Setting up environment configuration"
