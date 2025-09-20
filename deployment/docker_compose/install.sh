@@ -10,6 +10,10 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# Step counter variables
+CURRENT_STEP=0
+TOTAL_STEPS=10
+
 # Print colored output
 print_success() {
     echo -e "${GREEN}✓${NC} $1"
@@ -24,8 +28,9 @@ print_info() {
 }
 
 print_step() {
+    CURRENT_STEP=$((CURRENT_STEP + 1))
     echo ""
-    echo -e "${BLUE}${BOLD}=== $1 ===${NC}"
+    echo -e "${BLUE}${BOLD}=== $1 - Step ${CURRENT_STEP}/${TOTAL_STEPS} ===${NC}"
     echo ""
 }
 
@@ -53,7 +58,7 @@ echo ""
 GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/docker_compose"
 
 # Check system requirements
-print_step "Step 1: Verifying Docker installation"
+print_step "Verifying Docker installation"
 
 # Check Docker
 if ! command -v docker &> /dev/null; then
@@ -87,7 +92,7 @@ fi
 print_success "Docker daemon is running"
 
 # Check Docker resources
-print_step "Step 2: Verifying Docker resources"
+print_step "Verifying Docker resources"
 
 # Get Docker system info
 DOCKER_INFO=$(docker system info 2>/dev/null)
@@ -161,13 +166,13 @@ if [ "$RESOURCE_WARNING" = true ]; then
 fi
 
 # Create directory structure
-print_step "Step 3: Creating directory structure"
+print_step "Creating directory structure"
 mkdir -p onyx_data/deployment
-mkdir -p onyx_data/data/nginx
+mkdir -p onyx_data/data/nginx/local
 print_success "Directory structure created"
 
 # Download Docker Compose file
-print_step "Step 4: Downloading Docker Compose configuration"
+print_step "Downloading Docker Compose configuration"
 COMPOSE_FILE="onyx_data/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
 if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
@@ -179,7 +184,7 @@ else
 fi
 
 # Download env.template file
-print_step "Step 5: Downloading environment template"
+print_step "Downloading environment template"
 ENV_TEMPLATE="onyx_data/deployment/env.template"
 print_info "Downloading env.template..."
 if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
@@ -190,22 +195,41 @@ else
     exit 1
 fi
 
-# Download nginx config
-print_step "Step 6: Setting up nginx configuration"
+# Download nginx config files
+print_step "Setting up nginx configuration"
+
+# Base URL for nginx files
+NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/data/nginx"
+
+# Download app.conf.template
 NGINX_CONFIG="onyx_data/data/nginx/app.conf.template"
-print_info "Downloading nginx configuration..."
-# Note: nginx config is in a different path in the repo
-NGINX_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/data/nginx/app.conf.template"
-if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_URL" 2>/dev/null; then
-    print_success "Nginx configuration downloaded successfully"
+print_info "Downloading nginx configuration template..."
+if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_BASE_URL/app.conf.template" 2>/dev/null; then
+    print_success "Nginx configuration template downloaded"
 else
-    print_error "Failed to download nginx configuration"
+    print_error "Failed to download nginx configuration template"
     print_info "Please ensure you have internet connection and try again"
     exit 1
 fi
 
+# Download run-nginx.sh script
+NGINX_RUN_SCRIPT="onyx_data/data/nginx/run-nginx.sh"
+print_info "Downloading nginx startup script..."
+if curl -fsSL -o "$NGINX_RUN_SCRIPT" "$NGINX_BASE_URL/run-nginx.sh" 2>/dev/null; then
+    chmod +x "$NGINX_RUN_SCRIPT"
+    print_success "Nginx startup script downloaded and made executable"
+else
+    print_error "Failed to download nginx startup script"
+    print_info "Please ensure you have internet connection and try again"
+    exit 1
+fi
+
+# Create empty local directory marker (if needed)
+touch "onyx_data/data/nginx/local/.gitkeep"
+print_success "Nginx configuration setup complete"
+
 # Create .env file from template
-print_step "Step 7: Setting up environment configuration"
+print_step "Setting up environment configuration"
 ENV_FILE="onyx_data/deployment/.env"
 if [ ! -f "$ENV_FILE" ]; then
     print_info "Creating .env file from template..."
@@ -223,19 +247,19 @@ else
 fi
 
 # Pull Docker images with visible output
-print_step "Step 8: Pulling Docker images"
+print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull && cd ../..
 
 # Start services
-print_step "Step 9: Starting Onyx services"
+print_step "Starting Onyx services"
 print_info "Launching containers..."
 echo ""
 cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d && cd ../..
 
 # Monitor container startup
-print_step "Step 10: Verifying service health"
+print_step "Verifying service health"
 print_info "Waiting for services to initialize (30 seconds)..."
 
 # Progress bar for waiting
@@ -293,17 +317,11 @@ echo -e "${GREEN}${BOLD}   🎉 Onyx is ready to use! 🎉${NC}"
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 print_info "Access Onyx at:"
-echo -e "${BOLD}   http://localhost:3000${NC}"
+echo -e "   ${BOLD}http://localhost:3000${NC}"
 echo ""
-print_info "Default credentials:"
-echo "   Email:    ${BOLD}admin@onyx.test${NC}"
-echo "   Password: ${BOLD}admin${NC}"
-echo ""
-print_info "Useful commands:"
-echo "   View logs:     ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs -f${NC}"
-echo "   Stop Onyx:     ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml down${NC}"
-echo "   Restart Onyx:  ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml restart${NC}"
-echo "   Update Onyx:   ${BOLD}cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull && $COMPOSE_CMD -f docker-compose.yml up -d${NC}"
+print_info "IMPORTANT: First-time setup required!"
+echo "   • Visit http://localhost:3000 to create your admin account"
+echo "   • The first user you create will automatically have admin privileges"
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
