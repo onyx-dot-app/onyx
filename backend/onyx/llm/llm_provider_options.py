@@ -169,6 +169,34 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
 }
 
+# OpenRouter Provider
+
+# LiteLLM expects models in the form: "openrouter/vendor/model"
+OPENROUTER_PROVIDER_NAME = "openrouter"
+OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o"
+OPENROUTER_DEFAULT_FAST_MODEL = "openai/gpt-4o-mini"
+OPENROUTER_MODEL_NAMES = [
+    # OpenAI
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    # Anthropic
+    "anthropic/claude-3-7-sonnet",
+    "anthropic/claude-3-5-sonnet",
+    # Google
+    "google/gemini-1.5-pro",
+    "google/gemini-1.5-flash",
+]
+OPENROUTER_VISIBLE_MODEL_NAMES = [
+    OPENROUTER_DEFAULT_MODEL,
+    OPENROUTER_DEFAULT_FAST_MODEL,
+]
+
+# Register in maps
+_PROVIDER_TO_MODELS_MAP[OPENROUTER_PROVIDER_NAME] = OPENROUTER_MODEL_NAMES
+_PROVIDER_TO_VISIBLE_MODELS_MAP[OPENROUTER_PROVIDER_NAME] = (
+    OPENROUTER_VISIBLE_MODEL_NAMES
+)
+
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
@@ -184,6 +212,36 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=OPENROUTER_PROVIDER_NAME,
+            display_name="OpenRouter",
+            api_key_required=True,
+            api_base_required=False,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(
+                    name="OR_SITE_URL",
+                    display_name="Site URL (Referer)",
+                    is_required=False,
+                    description=(
+                        "Optional. Used by OpenRouter for analytics and rate limits."
+                    ),
+                ),
+                CustomConfigKey(
+                    name="OR_APP_NAME",
+                    display_name="App Name",
+                    is_required=False,
+                    description=(
+                        "Optional. Human-readable app name sent to OpenRouter."
+                    ),
+                ),
+            ],
+            model_configurations=fetch_model_configurations_for_provider(
+                OPENROUTER_PROVIDER_NAME
+            ),
+            default_model=OPENROUTER_DEFAULT_MODEL,
+            default_fast_model=OPENROUTER_DEFAULT_FAST_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,
