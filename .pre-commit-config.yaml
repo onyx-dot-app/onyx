@@ -37,6 +37,15 @@ repos:
       additional_dependencies:
       - prettier
 
+  - repo: local
+    hooks:
+      - id: check-lazy-imports
+        name: Check lazy imports are not directly imported
+        entry: python3 backend/scripts/check_lazy_imports.py
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
   # We would like to have a mypy pre-commit hook, but due to the fact that
   # pre-commit runs in it's own isolated environment, we would need to install
   # and keep in sync all dependencies so mypy has access to the appropriate type

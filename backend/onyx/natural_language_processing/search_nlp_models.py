@@ -15,7 +15,6 @@ import aioboto3  # type: ignore
 import httpx
 import openai
 import requests
-import vertexai  # type: ignore
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
 from google.oauth2 import service_account  # type: ignore
@@ -25,8 +24,6 @@ from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
 from retry import retry
-from vertexai.language_models import TextEmbeddingInput  # type: ignore
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -266,6 +263,9 @@ class CloudEmbedding:
     async def _embed_vertex(
         self, texts: list[str], model: str | None, embedding_type: str
     ) -> list[Embedding]:
+        import vertexai  # type: ignore[import-untyped]
+        from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput  # type: ignore[import-untyped]
+
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
@@ -551,8 +551,7 @@ class EmbeddingModel:
         if embed_request.manual_query_prefix or embed_request.manual_passage_prefix:
             logger.warning("Prefix provided for cloud model, which is not supported")
             raise ValueError(
-                "Prefix string is not valid for cloud models. "
-                "Cloud models take an explicit text type instead."
+                "Prefix string is not valid for cloud models. Cloud models take an explicit text type instead."
             )
 
         if not all(embed_request.texts):
