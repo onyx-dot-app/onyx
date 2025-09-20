@@ -193,9 +193,16 @@ echo "1. Download deployment files for Onyx into a new 'onyx_data' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
 echo ""
-echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
-read -r
-echo ""
+
+# Only prompt for acknowledgment if running interactively
+if [ -t 0 ]; then
+    echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
+    read -r
+    echo ""
+else
+    echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
+    echo ""
+fi
 
 # GitHub repo base URL - using docker-compose-easy branch
 GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/docker_compose"
@@ -609,13 +616,6 @@ if [ "$RESTART_ISSUES" = true ]; then
     exit 1
 fi
 
-# Important note about system readiness
-echo ""
-print_warning "IMPORTANT: Container health check only verifies that containers are not restarting."
-print_warning "The full system initialization may take several more minutes to complete."
-print_warning "You may need to wait 2-5 minutes before the web interface is fully accessible."
-echo ""
-
 # Success message
 print_step "Installation Complete!"
 print_success "All containers are running successfully!"
@@ -632,9 +632,9 @@ echo "   • Containers are healthy, but full system startup may take 2-5 minute
 echo "   • Database migrations and service initialization are still running"
 echo "   • The web interface may not be immediately accessible"
 echo ""
-print_info "First-time setup required once system is fully ready:"
+print_info "If authentication is enabled, you can create your admin account here:"
 echo "   • Visit http://localhost:3000/auth/signup to create your admin account"
-echo "   • The first user you create will automatically have admin privileges"
+echo "   • The first user created will automatically have admin privileges"
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
