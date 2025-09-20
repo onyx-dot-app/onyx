@@ -22,13 +22,13 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --shutdown     Stop and remove Onyx containers"
+            echo "  --shutdown     Stop (pause) Onyx containers"
             echo "  --delete-data  Remove all Onyx data (containers, volumes, and files)"
             echo "  --help, -h     Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                    # Install Onyx"
-            echo "  $0 --shutdown         # Stop Onyx services"
+            echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
             exit 0
             ;;
@@ -98,9 +98,9 @@ if [ "$SHUTDOWN_MODE" = true ]; then
                 exit 1
             fi
             
-            # Stop and remove containers
-            $COMPOSE_CMD -f docker-compose.yml down
-            print_success "Onyx containers stopped and removed"
+            # Stop containers (without removing them)
+            $COMPOSE_CMD -f docker-compose.yml stop
+            print_success "Onyx containers stopped (paused)"
         else
             print_warning "docker-compose.yml not found in onyx_data/deployment"
         fi
@@ -205,7 +205,7 @@ else
 fi
 
 # GitHub repo base URL - using docker-compose-easy branch
-GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/docker_compose"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
 
 # Check system requirements
 print_step "Verifying Docker installation"
@@ -361,7 +361,7 @@ else
 fi
 
 # Download nginx config files
-NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/docker-compose-easy/deployment/data/nginx"
+NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
 
 # Download app.conf.template
 NGINX_CONFIG="onyx_data/data/nginx/app.conf.template"
@@ -567,8 +567,8 @@ echo ""
 cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d && cd ../..
 
 # Monitor container startup
-print_step "Verifying service health"
-print_info "Waiting for services to initialize (10 seconds)..."
+print_step "Verifying container health"
+print_info "Waiting for containers to initialize (10 seconds)..."
 
 # Progress bar for waiting
 for i in {1..10}; do
@@ -616,25 +616,74 @@ if [ "$RESTART_ISSUES" = true ]; then
     exit 1
 fi
 
+# Health check function
+check_onyx_health() {
+    local max_attempts=600  # 10 minutes * 60 attempts per minute (every 1 second)
+    local attempt=1
+    
+    print_info "Checking Onyx service health..."
+    echo "Containers are healthy, waiting for database migrations and service initialization to finish."
+    echo ""
+    
+    while [ $attempt -le $max_attempts ]; do
+        # Check for successful HTTP responses (200, 301, 302, etc.)
+        local http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000)
+        if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
+            return 0
+        fi
+        
+        # Show animated progress with time elapsed
+        local elapsed=$((attempt))
+        local minutes=$((elapsed / 60))
+        local seconds=$((elapsed % 60))
+        
+        # Create animated dots with fixed spacing (cycle through 1-3 dots)
+        local dots=""
+        case $((attempt % 3)) in
+            0) dots=".  " ;;
+            1) dots=".. " ;;
+            2) dots="..." ;;
+        esac
+        
+        # Clear line and show progress with fixed spacing
+        printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
+        
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    
+    echo ""  # New line after the progress line
+    return 1
+}
+
 # Success message
 print_step "Installation Complete!"
 print_success "All containers are running successfully!"
 echo ""
-echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}   🎉 Onyx containers are ready! 🎉${NC}"
-echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# Run health check
+if check_onyx_health; then
+    echo ""
+    echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}   🎉 Onyx service is ready! 🎉${NC}"
+    echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+else
+    print_warning "Health check timed out after 10 minutes"
+    print_info "Containers are running, but the web service may still be initializing (or something went wrong)"
+    echo ""
+    echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers are running ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+fi
 echo ""
 print_info "Access Onyx at:"
 echo -e "   ${BOLD}http://localhost:3000${NC}"
 echo ""
-print_warning "SYSTEM INITIALIZATION IN PROGRESS:"
-echo "   • Containers are healthy, but full system startup may take 2-5 minutes"
-echo "   • Database migrations and service initialization are still running"
-echo "   • The web interface may not be immediately accessible"
-echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
 echo "   • Visit http://localhost:3000/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
+echo ""
+print_info "Refer to the README in the onyx_data directory for more information."
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
