@@ -202,7 +202,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
           return (
             <div
-              className="text-text"
               id={`message-${message.nodeId}`}
               key={messageReactComponentKey}
               ref={i === messageHistory.length - 1 ? lastMessageRef : null}

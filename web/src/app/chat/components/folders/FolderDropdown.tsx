@@ -6,15 +6,16 @@ import React, {
   useCallback,
   forwardRef,
 } from "react";
-import { Folder } from "./interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
 import { FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { Caret } from "@/components/icons/icons";
-import { deleteFolder } from "./FolderManagement";
+import { deleteFolder } from "@/app/chat/components/folders/FolderManagement";
 import { PencilIcon } from "lucide-react";
 import { Popover } from "@/components/popover/Popover";
 import { useChatContext } from "@/components/context/ChatContext";
 import { useSortable } from "@dnd-kit/sortable";
+import Text from "@/components-2/Text";
 
 interface FolderDropdownProps {
   folder: Folder;
@@ -153,26 +154,23 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        <div
-          className="sticky top-0 bg-background-sidebar dark:bg-transparent z-10"
-          style={{ zIndex: 1000 - index }}
-        >
+        <div className="sticky top-0 z-10" style={{ zIndex: 1000 - index }}>
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar  dark:bg-[#000] relative sticky top-0"
+            className="flex overflow-visible items-center w-full rounded-md p-1 bg-background-tint-02 relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
             <button
-              className="flex overflow-hidden bg-background-sidebar dark:bg-[#000] items-center flex-grow"
+              className="flex overflow-hidden items-center flex-grow"
               onClick={() => !isEditing && setIsOpen(!isOpen)}
               {...(isEditing ? {} : listeners)}
             >
               {isOpen ? (
-                <Caret size={16} className="mr-1" />
+                <Caret size={16} className="text-text-02 mr-1" />
               ) : (
-                <Caret size={16} className="-rotate-90 mr-1" />
+                <Caret size={16} className="text-text-02 -rotate-90 mr-1" />
               )}
               {isEditing ? (
                 <div ref={editingRef} className="flex-grow z-[9999] relative">
@@ -181,7 +179,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                     type="text"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
-                    className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
+                    className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-border-02 transition-colors duration-200"
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === "Enter") {
@@ -193,9 +191,9 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                 </div>
               ) : (
                 <div className="flex items-center">
-                  <span className="text-sm font-[500]">
+                  <Text text02 secondaryBody>
                     {folder.folder_name}
-                  </span>
+                  </Text>
                 </div>
               )}
             </button>
@@ -207,7 +205,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                 }}
                 className="ml-auto px-1"
               >
-                <PencilIcon size={14} />
+                <PencilIcon size={14} className="stroke-text-02" />
               </button>
             )}
             {(isHovered || isDeletePopoverOpen) &&
@@ -224,23 +222,23 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                       }}
                       className="px-1"
                     >
-                      <FiTrash2 size={14} />
+                      <FiTrash2 size={14} className="stroke-text-02" />
                     </button>
                   }
                   popover={
-                    <div className="p-3 w-64 border border-border rounded-lg bg-background z-50">
+                    <div className="p-3 w-64 border rounded-lg bg-background-neutral-01 z-50">
                       <p className="text-sm mb-3">
                         Are you sure you want to delete this folder?
                       </p>
                       <div className="flex justify-center gap-2">
                         <button
-                          className="px-3 py-1 text-sm bg-background-200 rounded"
+                          className="px-3 py-1 text-sm bg-background-neutral-02 rounded"
                           onClick={handleCancelDelete}
                         >
                           Cancel
                         </button>
                         <button
-                          className="px-3 py-1 text-sm bg-red-500 text-white rounded"
+                          className="px-3 py-1 text-sm bg-action-danger-04 text-text-inverted-01 rounded"
                           onClick={handleConfirmDelete}
                         >
                           Delete
@@ -271,5 +269,4 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
     );
   }
 );
-
 FolderDropdown.displayName = "FolderDropdown";

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
 import {
   ClipboardIcon,
@@ -29,12 +30,11 @@ import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
-import { SettingsContext } from "../settings/SettingsProvider";
-import { useContext, useState } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MdOutlineCreditCard } from "react-icons/md";
 import { UserSettingsModal } from "@/app/chat/components/modal/UserSettingsModal";
 import { usePopup } from "./connectors/Popup";
-import { useChatContext } from "../context/ChatContext";
+import { useChatContext } from "@/components/context/ChatContext";
 import {
   ApplicationStatus,
   CombinedSettings,
@@ -411,7 +411,7 @@ export function ClientLayout({
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
   const pathname = usePathname();
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const toggleUserSettings = () => {
     setUserSettingsOpen(!userSettingsOpen);

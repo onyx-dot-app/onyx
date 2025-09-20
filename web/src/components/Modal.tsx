@@ -1,4 +1,5 @@
 "use client";
+
 import { Separator } from "@/components/ui/separator";
 import { IconProps, XIcon } from "./icons/icons";
 import { useRef } from "react";
@@ -8,8 +9,8 @@ import { cn } from "@/lib/utils";
 
 interface ModalProps {
   icon?: ({ size, className }: IconProps) => JSX.Element;
-  children: JSX.Element | string;
-  title?: JSX.Element | string;
+  children?: React.ReactNode;
+  title?: React.ReactNode;
   onOutsideClick?: () => void;
   className?: string;
   width?: string;
@@ -52,19 +53,18 @@ export function Modal({
     };
   }, []);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     // Only close if the user clicked exactly on the overlay (and not on a child element).
     if (onOutsideClick && e.target === e.currentTarget) {
       onOutsideClick();
     }
-  };
+  }
 
   const modalContent = (
     <div
       onMouseDown={handleMouseDown}
       className={cn(
-        `fixed inset-0 bg-neutral-950/50 border border-neutral-200 dark:border-neutral-800 bg-opacity-30 backdrop-blur-sm h-full
-        flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out`
+        `fixed inset-0 bg-mask-01 border bg-opacity-30 backdrop-blur-md h-full flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out`
       )}
     >
       <div
@@ -75,9 +75,8 @@ export function Modal({
           }
         }}
         className={`
-          bg-neutral-50 dark:bg-neutral-800
-          text-neutral-950 dark:text-neutral-50
-          rounded
+          bg-background-tint-02
+          rounded-08
           shadow-2xl
           transform
           transition-all
@@ -89,7 +88,6 @@ export function Modal({
           ${className || ""}
           flex
           flex-col
-
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
           ${hideOverflow ? "overflow-hidden" : "overflow-visible"}
         `}
@@ -98,7 +96,7 @@ export function Modal({
           <div className="absolute top-2 right-2">
             <button
               onClick={onOutsideClick}
-              className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
+              className="cursor-pointer transition-colors duration-200 p-2"
               aria-label="Close modal"
             >
               <XIcon className="w-5 h-5" />

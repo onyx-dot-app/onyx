@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
 import { FolderIcon, ArrowUp, ArrowDown } from "lucide-react";
-import { SelectedItemsList } from "./SelectedItemsList";
+import { SelectedItemsList } from "@/app/chat/my-documents/components/SelectedItemsList";
 import {
   useDocumentsContext,
   FolderResponse,
   FileResponse,
-} from "../DocumentsContext";
+} from "@/app/chat/my-documents/DocumentsContext";
 import {
   DndContext,
   closestCenter,
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getFormattedDateTime } from "@/lib/dateUtils";
-import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
+import { FileUploadSection } from "@/app/chat/my-documents/[id]/components/upload/FileUploadSection";
 import { truncateString } from "@/lib/utils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
@@ -48,14 +48,23 @@ export interface UploadingFile {
   progress: number;
 }
 
-const DraggableItem: React.FC<{
+interface DraggableItemProps {
   id: string;
   type: "folder" | "file";
   item: FolderResponse | FileResponse;
   onClick?: () => void;
   onSelect?: (e: React.MouseEvent<HTMLDivElement>) => void;
   isSelected: boolean;
-}> = ({ id, type, item, onClick, onSelect, isSelected }) => {
+}
+
+function DraggableItem({
+  id,
+  type,
+  item,
+  onClick,
+  onSelect,
+  isSelected,
+}: DraggableItemProps) {
   const {
     attributes,
     listeners,
@@ -74,8 +83,8 @@ const DraggableItem: React.FC<{
   };
 
   const selectedClassName = isSelected
-    ? "bg-neutral-200/50 dark:bg-neutral-800/50"
-    : "hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50";
+    ? "bg-background-tint-02"
+    : "hover:bg-background-tint-02";
 
   if (type === "folder") {
     return (
@@ -112,11 +121,7 @@ const DraggableItem: React.FC<{
           }}
         >
           <div
-            className={`w-4 h-4 border rounded ${
-              isSelected
-                ? "bg-black border-black"
-                : "border-neutral-400 hover:bg-neutral-100 dark:border-neutral-600"
-            } flex items-center justify-center cursor-pointer hover:border-neutral-500 dark:hover:border-neutral-500  dark:hover:bg-neutral-800`}
+            className={`w-4 h-4 border rounded hover:bg-background-tint-01 flex items-center justify-center cursor-pointer`}
           >
             {isSelected && (
               <svg
@@ -128,7 +133,7 @@ const DraggableItem: React.FC<{
               >
                 <path
                   d="M20 6L9 17L4 12"
-                  stroke="white"
+                  stroke="var(--text-05)"
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -139,7 +144,7 @@ const DraggableItem: React.FC<{
         </div>
       </div>
       <div
-        className={`group w-full relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
+        className={`group w-full relative flex cursor-pointer items-center border-b ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
       >
         <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
           <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
@@ -148,7 +153,7 @@ const DraggableItem: React.FC<{
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="truncate text-text-dark dark:text-text-dark">
+                    <span className="truncate">
                       {truncateString(file.name, 34)}
                     </span>
                   </TooltipTrigger>
@@ -158,13 +163,11 @@ const DraggableItem: React.FC<{
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <span className="truncate text-text-dark dark:text-text-dark">
-                {file.name}
-              </span>
+              <span className="truncate">{file.name}</span>
             )}
           </div>
 
-          <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
+          <div className="w-[35%] text-right text-sm pr-4">
             {file.created_at
               ? getFormattedDateTime(new Date(file.created_at))
               : "–"}
@@ -173,19 +176,27 @@ const DraggableItem: React.FC<{
       </div>
     </div>
   );
-};
+}
 
-const FilePickerFolderItem: React.FC<{
+interface FilePickerFolderItemProps {
   folder: FolderResponse;
   onClick: () => void;
   onSelect: (e: React.MouseEvent<HTMLDivElement>) => void;
   isSelected: boolean;
   allFilesSelected: boolean;
-}> = ({ folder, onClick, onSelect, isSelected, allFilesSelected }) => {
+}
+
+function FilePickerFolderItem({
+  folder,
+  onClick,
+  onSelect,
+  isSelected,
+  allFilesSelected,
+}: FilePickerFolderItemProps) {
   const selectedClassName =
     isSelected || allFilesSelected
-      ? "bg-neutral-200/50 dark:bg-neutral-800/50"
-      : "hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50";
+      ? "bg-background-tint-02"
+      : "hover:bg-background-tint-02";
 
   // Determine if the folder is empty
   const isEmpty = folder.files.length === 0;
@@ -207,11 +218,7 @@ const FilePickerFolderItem: React.FC<{
             }}
           >
             <div
-              className={`w-4 h-4 border rounded ${
-                isSelected || allFilesSelected
-                  ? "bg-black border-black"
-                  : "border-neutral-400 dark:border-neutral-600"
-              } flex items-center justify-center cursor-pointer hover:border-neutral-500 dark:hover:border-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800`}
+              className={`w-4 h-4 border rounded flex items-center justify-center cursor-pointer hover:bg-background-tint-01`}
             >
               {(isSelected || allFilesSelected) && (
                 <svg
@@ -223,7 +230,7 @@ const FilePickerFolderItem: React.FC<{
                 >
                   <path
                     d="M20 6L9 17L4 12"
-                    stroke="white"
+                    stroke="currentColor"
                     strokeWidth="3"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -235,19 +242,19 @@ const FilePickerFolderItem: React.FC<{
         )}
       </div>
       <div
-        className={`group w-full relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${
+        className={`group w-full relative flex cursor-pointer items-center border-b ${
           !isEmpty ? selectedClassName : ""
         } py-2 px-3 transition-all ease-in-out`}
       >
         <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
           <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
-            <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+            <FolderIcon className="h-5 w-5 shrink-0" />
 
             {folder.name.length > 40 ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="truncate text-text-dark dark:text-text-dark">
+                    <span className="truncate">
                       {truncateString(folder.name, 40)}
                     </span>
                   </TooltipTrigger>
@@ -257,20 +264,18 @@ const FilePickerFolderItem: React.FC<{
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <span className="truncate text-text-dark dark:text-text-dark">
-                {folder.name}
-              </span>
+              <span className="truncate">{folder.name}</span>
             )}
           </div>
 
-          <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
+          <div className="w-[35%] text-right text-sm text-text-04 pr-4">
             {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
 export interface FilePickerModalProps {
   isOpen: boolean;
@@ -300,13 +305,13 @@ enum SortDirection {
   Descending = "desc",
 }
 
-export const FilePickerModal: React.FC<FilePickerModalProps> = ({
+export function FilePickerModal({
   isOpen,
   onClose,
   onSave,
   setPresentingDocument,
   buttonContent,
-}) => {
+}: FilePickerModalProps) {
   const {
     folders,
     refreshFolders,
@@ -927,7 +932,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     if (currentFolder !== null) {
       return (
         <div
-          className="flex items-center mb-2 text-sm text-neutral-600 cursor-pointer hover:text-neutral-800"
+          className="flex items-center mb-2 text-sm cursor-pointer"
           onClick={() => setCurrentFolder(null)}
         >
           <svg
@@ -1098,21 +1103,21 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       }
     >
       <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col">
-        <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 desktop:grid-cols-2">
-          <div className="w-full h-full pb-4 overflow-hidden ">
+        <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1 w-full divide-x desktop:grid-cols-2">
+          <div className="w-full h-full pb-4 overflow-hidden">
             <div className="px-6 sticky flex flex-col gap-y-2 z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
               <div className="w-full relative">
                 <input
                   type="text"
                   placeholder="Search documents..."
-                  className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full pl-10 pr-4 py-2 border rounded-md focus:border-transparent bg-background-tint-00"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
 
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg
-                    className="h-5 w-5 text-text-dark dark:text-neutral-400"
+                    className="h-5 w-5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1130,8 +1135,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             </div>
 
             {filteredFolders.length + currentFolderFiles.length > 0 ? (
-              <div className="pl-2 h-full flex-grow  overflow-y-auto max-h-full default-scrollbar pr-4">
-                <div className="flex ml-6 items-center border-b border-border dark:border-border-200 py-2 pr-3 text-sm font-medium text-text-400 dark:text-neutral-400">
+              <div className="pl-2 h-full flex-grow overflow-y-auto max-h-full default-scrollbar pr-4">
+                <div className="flex ml-6 items-center border-b py-2 pr-3 text-sm font-medium">
                   <div className="flex pl-2 items-center gap-3 w-[65%] min-w-0">
                     <button
                       onClick={() => handleSortChange(SortType.Alphabetical)}
@@ -1255,18 +1260,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               </div>
             ) : folders.length > 0 ? (
               <div className="flex-grow overflow-y-auto px-4">
-                <p className="text-text-subtle dark:text-neutral-400">
-                  No folders found
-                </p>
+                <p>No folders found</p>
               </div>
             ) : (
               <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
-                <p className="text-sm text-muted-foreground dark:text-neutral-400">
-                  No folders found
-                </p>
+                <p className="text-sm">No folders found</p>
                 <a
                   href="/chat/my-documents?createFolder=true"
-                  className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
+                  className="inline-flex items-center text-sm justify-center hover:underline"
                 >
                   <FolderIcon className="mr-2 h-4 w-4" />
                   Create folder in My Documents
@@ -1276,7 +1277,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           </div>
           <div
             className={`mobile:hidden overflow-y-auto w-full h-full flex flex-col ${
-              isHoveringRight ? "bg-neutral-100 dark:bg-neutral-800/30" : ""
+              isHoveringRight ? "bg-background-tint-02" : ""
             }`}
             onDragEnter={() => setIsHoveringRight(true)}
             onDragLeave={() => setIsHoveringRight(false)}
@@ -1284,9 +1285,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             <div className="px-5 h-full flex flex-col">
               {/* Top section: scrollable, takes remaining space */}
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-                  Selected Items
-                </h3>
+                <h3 className="text-sm font-semibold">Selected Items</h3>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <SelectedItemsList
@@ -1367,12 +1366,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             </div>
           </div>
         </div>
-        <div className="px-5 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+        <div className="px-5 pt-4 border-t">
           <div className="flex flex-col items-center justify-center py-2 space-y-4">
             <div className="flex items-center gap-3">
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                Selected context:
-              </span>
+              <span className="text-sm">Selected context:</span>
               <TokenDisplay
                 totalTokens={selectedItems.totalTokens}
                 maxTokens={selectedModel.maxTokens}
@@ -1416,4 +1413,4 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       </div>
     </Modal>
   );
-};
+}

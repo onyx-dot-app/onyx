@@ -4,17 +4,9 @@ import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { ChatSession, ChatSessionSharedStatus, Message } from "../interfaces";
 
 import Cookies from "js-cookie";
-import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { personaIncludesRetrieval, useScrollonStream } from "../services/lib";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -25,15 +17,13 @@ import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
-import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import FixedLogo from "@/components/logo/FixedLogo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
@@ -48,7 +38,6 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
-import AssistantModal from "../../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "../my-documents/components/FilePicker";
 
@@ -56,7 +45,6 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { ChatSearchModal } from "../chat_search/ChatSearchModal";
-import { ErrorBanner } from "../message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
 import { DocumentResults } from "./documentSidebar/DocumentResults";
@@ -147,7 +135,7 @@ export function ChatPage({
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
 
   const [toggleDocSelection, setToggleDocSelection] = useState(false);
@@ -900,388 +888,254 @@ export function ChatPage({
         />
       )}
 
-      {showAssistantsModal && (
-        <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
-      )}
-
       {isReady && <FederatedOAuthModal />}
 
-      <div className="fixed inset-0 flex flex-col text-text-dark">
-        <div className="h-[100dvh] overflow-y-hidden">
-          <div className="w-full">
-            <div
-              ref={sidebarElementRef}
-              className={`
-                flex-none
-                fixed
-                left-0
-                z-40
-                bg-neutral-200
-                h-screen
-                transition-all
-                bg-opacity-80
-                duration-300
-                ease-in-out
-                ${
-                  !untoggled && (showHistorySidebar || sidebarVisible)
-                    ? "opacity-100 w-[250px] translate-x-0"
-                    : "opacity-0 w-[250px] pointer-events-none -translate-x-10"
-                }`}
-            >
-              <div className="w-full relative">
-                {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function 
-                props are wrapped in useCallback. */}
-                <HistorySidebar
-                  toggleChatSessionSearchModal={toggleChatSessionSearchModal}
-                  liveAssistant={liveAssistant}
-                  setShowAssistantsModal={setShowAssistantsModal}
-                  explicitlyUntoggle={explicitlyUntoggle}
-                  reset={reset}
-                  page="chat"
-                  ref={innerSidebarElementRef}
-                  toggleSidebar={toggleSidebar}
-                  toggled={sidebarVisible}
-                  existingChats={chatSessions}
-                  currentChatSession={selectedChatSession}
-                  folders={folders}
-                  removeToggle={removeToggle}
-                  showShareModal={setSharedChatSession}
-                />
-              </div>
-
-              <div
-                className={`
-                flex-none
-                fixed
-                left-0
-                z-40
-                bg-background-100
-                h-screen
-                transition-all
-                bg-opacity-80
-                duration-300
-                ease-in-out
-                ${
-                  documentSidebarVisible &&
-                  !settings?.isMobile &&
-                  "opacity-100 w-[350px]"
-                }`}
-              ></div>
-            </div>
-          </div>
-
-          <div
-            style={{ transition: "width 0.30s ease-out" }}
-            className={`
-                flex-none 
-                fixed
-                right-0
-                z-[1000]
-                h-screen
-                transition-all
-                duration-300
-                ease-in-out
-                bg-transparent
-                transition-all
-                duration-300
-                ease-in-out
-                h-full
-                ${
-                  documentSidebarVisible && !settings?.isMobile
-                    ? "w-[400px]"
-                    : "w-[0px]"
-                }
-            `}
-          >
-            {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
-            props are wrapped in useCallback. */}
-            <DocumentResults
-              setPresentingDocument={setPresentingDocument}
-              modal={false}
-              ref={innerSidebarElementRef}
-              closeSidebar={handleDesktopDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-              toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={clearSelectedDocuments}
-              // TODO (chris): fix
-              selectedDocumentTokens={0}
-              maxTokens={maxTokens}
-              initialWidth={400}
-              isOpen={documentSidebarVisible && !settings?.isMobile}
-            />
-          </div>
-
-          <BlurBackground
-            visible={!untoggled && (showHistorySidebar || sidebarVisible)}
-            onClick={() => toggleSidebar()}
+      <div className="h-full overflow-y-hidden">
+        <div
+          style={{ transition: "width 0.30s ease-out" }}
+          className={`
+              flex-none 
+              fixed
+              right-0
+              z-[1000]
+              h-screen
+              transition-all
+              duration-300
+              ease-in-out
+              bg-transparent
+              transition-all
+              duration-300
+              ease-in-out
+              h-full
+              ${
+                documentSidebarVisible && !settings?.isMobile
+                  ? "w-[400px]"
+                  : "w-[0px]"
+              }
+          `}
+        >
+          {/* IMPORTANT: this is a memoized component, and it's very important
+          for performance reasons that this stays true. MAKE SURE that all function 
+          props are wrapped in useCallback. */}
+          <DocumentResults
+            setPresentingDocument={setPresentingDocument}
+            modal={false}
+            ref={innerSidebarElementRef}
+            closeSidebar={handleDesktopDocumentSidebarClose}
+            selectedDocuments={selectedDocuments}
+            toggleDocumentSelection={toggleDocumentSelection}
+            clearSelectedDocuments={clearSelectedDocuments}
+            // TODO (chris): fix
+            selectedDocumentTokens={0}
+            maxTokens={maxTokens}
+            initialWidth={400}
+            isOpen={documentSidebarVisible && !settings?.isMobile}
           />
+        </div>
 
-          <div
-            ref={masterFlexboxRef}
-            className="flex h-full w-full overflow-x-hidden"
-          >
-            <div
-              id="scrollableContainer"
-              className="flex h-full relative px-2 flex-col w-full"
+        <BlurBackground
+          visible={!untoggled && (showHistorySidebar || sidebarVisible)}
+          onClick={() => toggleSidebar()}
+        />
+
+        <div
+          id="scrollableContainer"
+          className="flex h-full w-full overflow-x-hidden relative px-2 flex-col"
+          ref={masterFlexboxRef}
+        >
+          {documentSidebarInitialWidth !== undefined && isReady ? (
+            <Dropzone
+              key={chatSessionId}
+              onDrop={(acceptedFiles) =>
+                handleMessageSpecificFileUpload(acceptedFiles)
+              }
+              noClick
             >
-              {/* IMPORTANT: this is a memoized component, and it's very important
-              for performance reasons that this stays true. MAKE SURE that all function 
-              props are wrapped in useCallback. */}
-              {liveAssistant && (
-                <FunctionalHeader
-                  toggleUserSettings={handleToggleUserSettings}
-                  sidebarToggled={sidebarVisible}
-                  reset={handleHeaderReset}
-                  page="chat"
-                  setSharingModalVisible={
-                    chatSessionId !== null ? setSharingModalVisible : undefined
-                  }
-                  documentSidebarVisible={
-                    documentSidebarVisible && !settings?.isMobile
-                  }
-                  toggleSidebar={toggleSidebar}
-                  currentChatSession={selectedChatSession}
-                  hideUserDropdown={user?.is_anonymous_user}
-                />
-              )}
+              {({ getRootProps }) => (
+                <div className="flex h-full w-full">
+                  <div
+                    className={`h-full w-full relative flex-auto transition-margin duration-300 overflow-x-auto mobile:pb-12 desktop:pb-[100px]`}
+                    {...getRootProps()}
+                  >
+                    <div
+                      onScroll={handleScroll}
+                      className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
+                      ref={scrollableDivRef}
+                    >
+                      {liveAssistant && (
+                        <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
+                          {!settings?.isMobile && (
+                            <div
+                              style={{ transition: "width 0.30s ease-out" }}
+                              className={`
+                              flex-none 
+                              overflow-y-hidden 
+                              transition-all 
+                              pointer-events-none
+                              duration-300 
+                              ease-in-out
+                              h-full
+                              ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
+                          `}
+                            />
+                          )}
+                        </div>
+                      )}
 
-              {documentSidebarInitialWidth !== undefined && isReady ? (
-                <Dropzone
-                  key={chatSessionId}
-                  onDrop={(acceptedFiles) =>
-                    handleMessageSpecificFileUpload(acceptedFiles)
-                  }
-                  noClick
-                >
-                  {({ getRootProps }) => (
-                    <div className="flex h-full w-full">
-                      {!settings?.isMobile && (
-                        <div
-                          style={{ transition: "width 0.30s ease-out" }}
-                          className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          bg-transparent
-                          transition-all 
-                          bg-opacity-80
-                          duration-300 
-                          ease-in-out
-                          h-full
-                          ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
-                      `}
-                        ></div>
+                      <MessagesDisplay
+                        messageHistory={messageHistory}
+                        completeMessageTree={completeMessageTree}
+                        liveAssistant={liveAssistant}
+                        llmManager={llmManager}
+                        deepResearchEnabled={deepResearchEnabled}
+                        selectedFiles={selectedFiles}
+                        selectedFolders={selectedFolders}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={setPresentingDocument}
+                        setCurrentFeedback={setCurrentFeedback}
+                        onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        uncaughtError={uncaughtError}
+                        loadingError={loadingError}
+                        handleResubmitLastMessage={handleResubmitLastMessage}
+                        autoScrollEnabled={autoScrollEnabled}
+                        getContainerHeight={getContainerHeight}
+                        lastMessageRef={lastMessageRef}
+                        endPaddingRef={endPaddingRef}
+                        endDivRef={endDivRef}
+                        hasPerformedInitialScroll={hasPerformedInitialScroll}
+                        chatSessionId={chatSessionId}
+                        enterpriseSettings={enterpriseSettings}
+                      />
+                    </div>
+
+                    <div
+                      ref={inputRef}
+                      className={`absolute pointer-events-none z-10 w-full ${
+                        showCenteredInput
+                          ? "inset-0"
+                          : "bottom-0 left-0 right-0 translate-y-0"
+                      }`}
+                    >
+                      {!showCenteredInput && aboveHorizon && (
+                        <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
+                          <button
+                            onClick={() => clientScrollToBottom()}
+                            className="p-1 pointer-events-auto text-neutral-700 dark:text-neutral-800 rounded-2xl bg-neutral-200 border border-border  mx-auto "
+                          >
+                            <FiArrowDown size={18} />
+                          </button>
+                        </div>
                       )}
 
                       <div
-                        className={`h-full w-full relative flex-auto transition-margin duration-300 overflow-x-auto mobile:pb-12 desktop:pb-[100px]`}
-                        {...getRootProps()}
+                        className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
+                          showCenteredInput
+                            ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
+                            : "mb-8"
+                        }`}
                       >
-                        <div
-                          onScroll={handleScroll}
-                          className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
-                          ref={scrollableDivRef}
-                        >
-                          {liveAssistant && (
-                            <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
-                              {!settings?.isMobile && (
-                                <div
-                                  style={{ transition: "width 0.30s ease-out" }}
-                                  className={`
-                                  flex-none 
-                                  overflow-y-hidden 
-                                  transition-all 
-                                  pointer-events-none
-                                  duration-300 
-                                  ease-in-out
-                                  h-full
-                                  ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
-                              `}
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          <MessagesDisplay
-                            messageHistory={messageHistory}
-                            completeMessageTree={completeMessageTree}
-                            liveAssistant={liveAssistant}
-                            llmManager={llmManager}
+                        {showCenteredInput && (
+                          <WelcomeMessage assistant={liveAssistant} />
+                        )}
+                        <div className={showCenteredInput ? "row-start-2" : ""}>
+                          <ChatInputBar
                             deepResearchEnabled={deepResearchEnabled}
-                            selectedFiles={selectedFiles}
-                            selectedFolders={selectedFolders}
-                            currentMessageFiles={currentMessageFiles}
-                            setPresentingDocument={setPresentingDocument}
-                            setCurrentFeedback={setCurrentFeedback}
-                            onSubmit={onSubmit}
-                            onMessageSelection={onMessageSelection}
+                            toggleDeepResearch={toggleDeepResearch}
+                            toggleDocumentSidebar={toggleDocumentSidebar}
+                            filterManager={filterManager}
+                            llmManager={llmManager}
+                            removeDocs={clearSelectedDocuments}
+                            retrievalEnabled={retrievalEnabled}
+                            toggleDocSelection={handleToggleDocSelection}
+                            showConfigureAPIKey={handleShowApiKeyModal}
+                            selectedDocuments={selectedDocuments}
+                            message={message}
+                            setMessage={setMessage}
                             stopGenerating={stopGenerating}
-                            uncaughtError={uncaughtError}
-                            loadingError={loadingError}
-                            handleResubmitLastMessage={
-                              handleResubmitLastMessage
+                            onSubmit={handleChatInputSubmit}
+                            chatState={currentChatState}
+                            selectedAssistant={
+                              selectedAssistant || liveAssistant
                             }
-                            autoScrollEnabled={autoScrollEnabled}
-                            getContainerHeight={getContainerHeight}
-                            lastMessageRef={lastMessageRef}
-                            endPaddingRef={endPaddingRef}
-                            endDivRef={endDivRef}
-                            hasPerformedInitialScroll={
-                              hasPerformedInitialScroll
-                            }
-                            chatSessionId={chatSessionId}
-                            enterpriseSettings={enterpriseSettings}
+                            handleFileUpload={handleMessageSpecificFileUpload}
+                            textAreaRef={textAreaRef}
                           />
                         </div>
 
-                        <div
-                          ref={inputRef}
-                          className={`absolute pointer-events-none z-10 w-full ${
-                            showCenteredInput
-                              ? "inset-0"
-                              : "bottom-0 left-0 right-0 translate-y-0"
-                          }`}
-                        >
-                          {!showCenteredInput && aboveHorizon && (
-                            <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
-                              <button
-                                onClick={() => clientScrollToBottom()}
-                                className="p-1 pointer-events-auto text-neutral-700 dark:text-neutral-800 rounded-2xl bg-neutral-200 border border-border  mx-auto "
-                              >
-                                <FiArrowDown size={18} />
-                              </button>
+                        {liveAssistant.starter_messages &&
+                          liveAssistant.starter_messages.length > 0 &&
+                          messageHistory.length === 0 &&
+                          showCenteredInput && (
+                            <div className="mt-6 row-start-3">
+                              <StarterMessageDisplay
+                                starterMessages={liveAssistant.starter_messages}
+                                onSelectStarterMessage={(message) => {
+                                  onSubmit({
+                                    message: message,
+                                    selectedFiles: selectedFiles,
+                                    selectedFolders: selectedFolders,
+                                    currentMessageFiles: currentMessageFiles,
+                                    useAgentSearch: deepResearchEnabled,
+                                  });
+                                }}
+                              />
                             </div>
                           )}
 
-                          <div
-                            className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
-                              showCenteredInput
-                                ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
-                                : "mb-8"
-                            }`}
-                          >
-                            {showCenteredInput && (
-                              <WelcomeMessage assistant={liveAssistant} />
-                            )}
-                            <div
-                              className={showCenteredInput ? "row-start-2" : ""}
-                            >
-                              <ChatInputBar
-                                deepResearchEnabled={deepResearchEnabled}
-                                toggleDeepResearch={toggleDeepResearch}
-                                toggleDocumentSidebar={toggleDocumentSidebar}
-                                filterManager={filterManager}
-                                llmManager={llmManager}
-                                removeDocs={clearSelectedDocuments}
-                                retrievalEnabled={retrievalEnabled}
-                                toggleDocSelection={handleToggleDocSelection}
-                                showConfigureAPIKey={handleShowApiKeyModal}
-                                selectedDocuments={selectedDocuments}
-                                message={message}
-                                setMessage={setMessage}
-                                stopGenerating={stopGenerating}
-                                onSubmit={handleChatInputSubmit}
-                                chatState={currentChatState}
-                                selectedAssistant={
-                                  selectedAssistant || liveAssistant
-                                }
-                                handleFileUpload={
-                                  handleMessageSpecificFileUpload
-                                }
-                                textAreaRef={textAreaRef}
+                        {enterpriseSettings &&
+                          enterpriseSettings.custom_lower_disclaimer_content && (
+                            <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
+                              <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
+                                <MinimalMarkdown
+                                  content={
+                                    enterpriseSettings.custom_lower_disclaimer_content
+                                  }
+                                />
+                              </div>
+                            </div>
+                          )}
+                        {enterpriseSettings &&
+                          enterpriseSettings.use_custom_logotype && (
+                            <div className="hidden lg:block fixed right-12 bottom-8 pointer-events-none z-10">
+                              <img
+                                src="/api/enterprise-settings/logotype"
+                                alt="logotype"
+                                style={{ objectFit: "contain" }}
+                                className="w-fit h-9"
                               />
                             </div>
-
-                            {liveAssistant.starter_messages &&
-                              liveAssistant.starter_messages.length > 0 &&
-                              messageHistory.length === 0 &&
-                              showCenteredInput && (
-                                <div className="mt-6 row-start-3">
-                                  <StarterMessageDisplay
-                                    starterMessages={
-                                      liveAssistant.starter_messages
-                                    }
-                                    onSelectStarterMessage={(message) => {
-                                      onSubmit({
-                                        message: message,
-                                        selectedFiles: selectedFiles,
-                                        selectedFolders: selectedFolders,
-                                        currentMessageFiles:
-                                          currentMessageFiles,
-                                        useAgentSearch: deepResearchEnabled,
-                                      });
-                                    }}
-                                  />
-                                </div>
-                              )}
-
-                            {enterpriseSettings &&
-                              enterpriseSettings.custom_lower_disclaimer_content && (
-                                <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
-                                  <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
-                                    <MinimalMarkdown
-                                      content={
-                                        enterpriseSettings.custom_lower_disclaimer_content
-                                      }
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            {enterpriseSettings &&
-                              enterpriseSettings.use_custom_logotype && (
-                                <div className="hidden lg:block fixed right-12 bottom-8 pointer-events-none z-10">
-                                  <img
-                                    src="/api/enterprise-settings/logotype"
-                                    alt="logotype"
-                                    style={{ objectFit: "contain" }}
-                                    className="w-fit h-9"
-                                  />
-                                </div>
-                              )}
-                          </div>
-                        </div>
+                          )}
                       </div>
-
-                      <div
-                        style={{ transition: "width 0.30s ease-out" }}
-                        className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          bg-opacity-80
-                          duration-300 
-                          ease-in-out
-                          h-full
-                          ${
-                            documentSidebarVisible && !settings?.isMobile
-                              ? "w-[350px]"
-                              : "w-[0px]"
-                          }
-                      `}
-                      />
                     </div>
-                  )}
-                </Dropzone>
-              ) : (
-                <div className="mx-auto h-full flex">
+                  </div>
+
                   <div
                     style={{ transition: "width 0.30s ease-out" }}
-                    className={`flex-none bg-transparent transition-all bg-opacity-80 duration-300 ease-in-out h-full
-                        ${
-                          sidebarVisible && !settings?.isMobile
-                            ? "w-[250px] "
-                            : "w-[0px]"
-                        }`}
+                    className={`
+                      flex-none 
+                      overflow-y-hidden 
+                      transition-all 
+                      bg-opacity-80
+                      duration-300 
+                      ease-in-out
+                      h-full
+                      ${
+                        documentSidebarVisible && !settings?.isMobile
+                          ? "w-[350px]"
+                          : "w-[0px]"
+                      }
+                  `}
                   />
-                  <div className="my-auto">
-                    <OnyxInitializingLoader />
-                  </div>
                 </div>
               )}
+            </Dropzone>
+          ) : (
+            <div className="mx-auto h-full flex">
+              <OnyxInitializingLoader />
             </div>
-          </div>
-          <FixedLogo backgroundToggled={sidebarVisible || showHistorySidebar} />
+          )}
         </div>
       </div>
     </>

@@ -1,20 +1,22 @@
 "use client";
 
 import { useContext } from "react";
-import { SettingsContext } from "../settings/SettingsProvider";
-import { OnyxIcon, OnyxLogoTypeIcon } from "../icons/icons";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
+
+interface LogoProps {
+  height?: number;
+  width?: number;
+  className?: string;
+  size?: "small" | "default" | "large";
+}
 
 export function Logo({
   height,
   width,
   className,
   size = "default",
-}: {
-  height?: number;
-  width?: number;
-  className?: string;
-  size?: "small" | "default" | "large";
-}) {
+}: LogoProps) {
   const settings = useContext(SettingsContext);
 
   const sizeMap = {
@@ -34,10 +36,7 @@ export function Logo({
   ) {
     return (
       <div style={{ height, width }} className={className}>
-        <OnyxIcon
-          size={height}
-          className={`${className} dark:text-[#fff] text-[#000]`}
-        />
+        <OnyxIcon size={height} className={className} />
       </div>
     );
   }
@@ -57,15 +56,10 @@ export function Logo({
   );
 }
 
-export function LogoType({
-  size = "default",
-}: {
+interface LogoTypeProps {
   size?: "small" | "default" | "large";
-}) {
-  return (
-    <OnyxLogoTypeIcon
-      size={115}
-      className={`items-center w-full dark:text-[#fff]`}
-    />
-  );
+}
+
+export function LogoType({ size = "default" }: LogoTypeProps) {
+  return <OnyxLogoTypeIcon size={115} className="items-center w-full" />;
 }
