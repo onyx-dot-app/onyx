@@ -54,15 +54,15 @@ TOTAL_STEPS=8
 
 # Print colored output
 print_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    echo -e "${GREEN}[OK]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}✗${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
 print_info() {
-    echo -e "${YELLOW}ℹ${NC} $1"
+    echo -e "${YELLOW}[INFO]${NC} $1"
 }
 
 print_step() {
@@ -73,7 +73,7 @@ print_step() {
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${NC}  $1"
+    echo -e "${YELLOW}[WARNING]${NC}  $1"
 }
 
 # Handle shutdown mode
@@ -121,9 +121,9 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo -e "${RED}${BOLD}=== WARNING: This will permanently delete all Onyx data ===${NC}"
     echo ""
     print_warning "This action will remove:"
-    echo "  • All Onyx containers and volumes"
-    echo "  • All downloaded files and configurations"
-    echo "  • All user data and documents"
+    echo "  - All Onyx containers and volumes"
+    echo "  - All downloaded files and configurations"
+    echo "  - All user data and documents"
     echo ""
     read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
     echo ""
@@ -314,11 +314,11 @@ print_step "Downloading Onyx configuration files"
 print_info "This step downloads all necessary configuration files from GitHub..."
 echo ""
 print_info "Downloading the following files:"
-echo "  • docker-compose.yml - Main Docker Compose configuration"
-echo "  • env.template - Environment variables template"
-echo "  • nginx/app.conf.template - Nginx web server configuration"
-echo "  • nginx/run-nginx.sh - Nginx startup script"
-echo "  • README.md - Documentation and setup instructions"
+echo "  - docker-compose.yml - Main Docker Compose configuration"
+echo "  - env.template - Environment variables template"
+echo "  - nginx/app.conf.template - Nginx web server configuration"
+echo "  - nginx/run-nginx.sh - Nginx startup script"
+echo "  - README.md - Documentation and setup instructions"
 echo ""
 
 # Download Docker Compose file
@@ -423,8 +423,8 @@ fi
 if [ -f "$ENV_FILE" ]; then
     print_info "Existing .env file found. What would you like to do?"
     echo ""
-    echo "• Press Enter to restart with current configuration"
-    echo "• Type 'update' to update to a newer version"
+    echo "- Press Enter to restart with current configuration"
+    echo "- Type 'update' to update to a newer version"
     echo ""
     read -p "Choose an option [default: restart]: " -r
     echo ""
@@ -432,8 +432,8 @@ if [ -f "$ENV_FILE" ]; then
     if [ "$REPLY" = "update" ]; then
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for latest (recommended)"
-        echo "• Type a specific tag (e.g., v0.1.0)"
+        echo "- Press Enter for latest (recommended)"
+        echo "- Type a specific tag (e.g., v0.1.0)"
         echo ""
         read -p "Enter tag [default: latest]: " -r VERSION
         echo ""
@@ -467,8 +467,8 @@ else
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
-    echo "• Press Enter for latest (recommended)"
-    echo "• Type a specific tag (e.g., v0.1.0)"
+    echo "- Press Enter for latest (recommended)"
+    echo "- Type a specific tag (e.g., v0.1.0)"
     echo ""
     read -p "Enter tag [default: latest]: " -r VERSION
     echo ""
@@ -529,17 +529,19 @@ else
     echo ""
     print_info "IMPORTANT: The .env file has been configured with your selections."
     print_info "You can customize it later for:"
-    echo "  • Advanced authentication (OAuth, SAML, etc.)"
-    echo "  • AI model configuration"
-    echo "  • Domain settings (for production)"
+    echo "  - Advanced authentication (OAuth, SAML, etc.)"
+    echo "  - AI model configuration"
+    echo "  - Domain settings (for production)"
     echo ""
 fi
 
-# Pull Docker images with visible output
+# Pull Docker images with reduced output
 print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
-cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull && cd ../..
+print_info "Downloading Docker images (this may take a while)..."
+cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull --quiet && cd ../..
+print_success "Docker images downloaded successfully"
 
 # Start services
 print_step "Starting Onyx services"
@@ -608,21 +610,21 @@ echo ""
 print_step "Installation Complete!"
 print_success "All containers are running successfully!"
 echo ""
-echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}   🎉 Onyx containers are ready! 🎉${NC}"
-echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}============================================${NC}"
+echo -e "${GREEN}${BOLD}   [SUCCESS] Onyx containers are ready! [SUCCESS]${NC}"
+echo -e "${GREEN}${BOLD}============================================${NC}"
 echo ""
 print_info "Access Onyx at:"
 echo -e "   ${BOLD}http://localhost:3000${NC}"
 echo ""
 print_warning "SYSTEM INITIALIZATION IN PROGRESS:"
-echo "   • Containers are healthy, but full system startup may take 2-5 minutes"
-echo "   • Database migrations and service initialization are still running"
-echo "   • The web interface may not be immediately accessible"
+echo "   - Containers are healthy, but full system startup may take 2-5 minutes"
+echo "   - Database migrations and service initialization are still running"
+echo "   - The web interface may not be immediately accessible"
 echo ""
 print_info "First-time setup required once system is fully ready:"
-echo "   • Visit http://localhost:3000 to create your admin account"
-echo "   • The first user you create will automatically have admin privileges"
+echo "   - Visit http://localhost:3000 to create your admin account"
+echo "   - The first user you create will automatically have admin privileges"
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
