@@ -15,7 +15,6 @@ import aioboto3  # type: ignore
 import httpx
 import openai
 import requests
-import vertexai  # type: ignore
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
 from google.oauth2 import service_account  # type: ignore
@@ -25,8 +24,6 @@ from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
 from retry import retry
-from vertexai.language_models import TextEmbeddingInput  # type: ignore
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -39,6 +36,7 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.lazy_handling.lazy_import_registry import lazy_vertexai
 from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
@@ -274,10 +272,12 @@ class CloudEmbedding:
             service_account_info
         )
         project_id = service_account_info["project_id"]
-        vertexai.init(project=project_id, credentials=credentials)
-        client = TextEmbeddingModel.from_pretrained(model)
+        lazy_vertexai.init(project=project_id, credentials=credentials)
+        client = lazy_vertexai.TextEmbeddingModel.from_pretrained(model)
 
-        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+        inputs = [
+            lazy_vertexai.TextEmbeddingInput(text, embedding_type) for text in texts
+        ]
 
         # Split into batches of 25 texts
         max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
