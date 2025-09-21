@@ -182,6 +182,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
+          cp env.template .env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
           GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }} \
@@ -189,14 +190,14 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose -p danswer-stack up -d
+          docker compose up -d
         id: start_docker
 
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f danswer-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -244,7 +245,7 @@ jobs:
         if: success() || failure()
         run: |
           cd deployment/docker_compose
-          docker compose -p danswer-stack logs > docker-compose.log
+          docker compose logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
 
       - name: Upload logs
@@ -257,7 +258,7 @@ jobs:
       - name: Stop Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -p danswer-stack down -v
+          docker compose down -v
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.
