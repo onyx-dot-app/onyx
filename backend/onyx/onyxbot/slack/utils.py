@@ -123,7 +123,7 @@ def check_message_limit() -> bool:
     High traffic at the end of one period and start of another could cause
     the limit to be exceeded.
     """
-    if ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD == 0:
+    if ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD <= 0:
         return True
     global _ONYX_BOT_MESSAGE_COUNT
     global _ONYX_BOT_COUNT_START_TIME

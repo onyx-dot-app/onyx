@@ -13,9 +13,9 @@ ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER = os.environ.get(
     "ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER", ""
 ).lower() not in ["false", ""]
 # When Onyx is considering a message, what emoji does it react with
-DANSWER_REACT_EMOJI = os.environ.get("DANSWER_REACT_EMOJI") or "eyes"
+ONYX_BOT_REACT_EMOJI = os.environ.get("ONYX_BOT_REACT_EMOJI") or "eyes"
 # When User needs more help, what should the emoji be
-DANSWER_FOLLOWUP_EMOJI = os.environ.get("DANSWER_FOLLOWUP_EMOJI") or "sos"
+ONYX_BOT_FOLLOWUP_EMOJI = os.environ.get("ONYX_BOT_FOLLOWUP_EMOJI") or "sos"
 # What kind of message should be shown when someone gives an AI answer feedback to OnyxBot
 # Defaults to Private if not provided or invalid
 # Private: Only visible to user clicking the feedback
