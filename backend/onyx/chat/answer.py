@@ -20,6 +20,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.agent_configs import TF_DR_DEFAULT_FAST
+from onyx.configs.tool_configs import DR_CUSTOM_TOOL_USE_LLM_SUMMARY
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
@@ -105,6 +106,7 @@ class Answer:
             tools=tools or [],
             force_use_tool=force_use_tool,
             using_tool_calling_llm=using_tool_calling_llm,
+            dr_custom_tool_use_llm_summary=DR_CUSTOM_TOOL_USE_LLM_SUMMARY,
         )
         self.graph_persistence = GraphPersistence(
             db_session=db_session,
