@@ -1,3 +1,5 @@
+name: onyx
+
 services:
   api_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
