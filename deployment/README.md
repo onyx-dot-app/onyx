@@ -30,18 +30,18 @@ This section is for getting started quickly without setting up GPUs. For deploym
 
 1. To run Onyx, navigate to `docker_compose` directory and run the following:
 
-   - `docker compose -f docker-compose.dev.yml -p onyx-stack up -d --pull always --force-recreate` - or run: `docker compose -f docker-compose.dev.yml -p onyx-stack up -d --build --force-recreate`
+   - `docker compose up -d --pull always --force-recreate` - or run: `docker compose up -d --build --force-recreate`
      to build from source
    - Downloading images or packages/requirements may take 15+ minutes depending on your internet connection.
 
 2. To shut down the deployment, run:
 
-   - To stop the containers: `docker compose -f docker-compose.dev.yml -p onyx-stack stop`
-   - To delete the containers: `docker compose -f docker-compose.dev.yml -p onyx-stack down`
+   - To stop the containers: `docker compose stop`
+   - To delete the containers: `docker compose down`
 
 3. To completely remove Onyx run:
    - **WARNING, this will also erase your indexed data and users**
-   - `docker compose -f docker-compose.dev.yml -p onyx-stack down -v`
+   - `docker compose down -v`
 
 Additional steps for user auth and https if you do want to use Docker Compose for production:
 

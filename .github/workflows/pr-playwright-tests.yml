@@ -189,7 +189,7 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+          docker compose -p danswer-stack up -d
         id: start_docker
 
       - name: Wait for service to be ready
@@ -244,7 +244,7 @@ jobs:
         if: success() || failure()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
+          docker compose -p danswer-stack logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
 
       - name: Upload logs
@@ -257,7 +257,7 @@ jobs:
       - name: Stop Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+          docker compose -p danswer-stack down -v
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.

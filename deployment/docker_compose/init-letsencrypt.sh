@@ -61,7 +61,7 @@ echo
 
 
 echo "### Starting nginx ..."
-$COMPOSE_CMD -f docker-compose.prod.yml -p onyx-stack up --force-recreate -d nginx
+$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d nginx
 echo
 
 echo "Waiting for nginx to be ready, this may take a minute..."
@@ -122,4 +122,4 @@ $COMPOSE_CMD -f docker-compose.prod.yml run --name onyx-stack --rm --entrypoint 
   done'" certbot
 
 echo "### Reloading nginx ..."
-$COMPOSE_CMD -f docker-compose.prod.yml -p onyx-stack up --force-recreate -d
+$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d

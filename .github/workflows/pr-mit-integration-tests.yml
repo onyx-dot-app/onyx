@@ -253,7 +253,7 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up \
+          docker compose up \
             relational_db \
             index \
             cache \
@@ -351,13 +351,13 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
 
       - name: Dump all-container logs (optional)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+          docker compose logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
         if: always()
@@ -371,7 +371,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+          docker compose down -v
 
   
   required: 
