@@ -42,8 +42,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    env_file:
-      - .env
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -58,6 +56,16 @@ services:
     # PRODUCTION: Remove this port exposure for security (only nginx should be accessible)
     ports:
       - "8080:8080"
+    environment:
+      # Auth Settings
+      - AUTH_TYPE=${AUTH_TYPE:-basic}
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+      - VESPA_HOST=${VESPA_HOST:-index}
+      - REDIS_HOST=${REDIS_HOST:-cache}
+      - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -77,8 +85,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    env_file:
-      - .env
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -92,6 +98,15 @@ services:
       - inference_model_server
       - indexing_model_server
     restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+      - VESPA_HOST=${VESPA_HOST:-index}
+      - REDIS_HOST=${REDIS_HOST:-cache}
+      - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
+      - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -134,8 +149,6 @@ services:
     depends_on:
       - api_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
 
@@ -144,8 +157,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
-    env_file:
-      - .env
     # GPU Support: Uncomment the following lines to enable GPU support
     # Requires nvidia-container-toolkit to be installed on the host
     # deploy:
@@ -179,8 +190,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
-    env_file:
-      - .env
     # GPU Support: Uncomment the following lines to enable GPU support
     # Requires nvidia-container-toolkit to be installed on the host
     # deploy:
@@ -216,8 +225,10 @@ services:
     shm_size: 1g
     command: -c 'max_connections=250'
     restart: unless-stopped
-    env_file:
-      - .env
+    # PRODUCTION: Override the defaults by passing in the environment variables
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
     # PRODUCTION: Remove this port exposure for security (database should only be accessible internally)
     ports:
       - "5432:5432"
@@ -228,10 +239,8 @@ services:
   index:
     image: vespaengine/vespa:8.526.15
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      - VESPA_SKIP_UPGRADE_CHECK=true
+      - VESPA_SKIP_UPGRADE_CHECK=${VESPA_SKIP_UPGRADE_CHECK:-true}
     # PRODUCTION: Remove these port exposures for security (Vespa should only be accessible internally)
     ports:
       - "19071:19071"
@@ -247,8 +256,6 @@ services:
   nginx:
     image: nginx:1.23.4-alpine
     restart: unless-stopped
-    env_file:
-      - .env
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -282,8 +289,6 @@ services:
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
-    env_file:
-      - .env
     # PRODUCTION: Remove this port exposure for security (Redis should only be accessible internally)
     ports:
       - "6379:6379"
@@ -294,12 +299,15 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
-    env_file:
-      - .env
     # PRODUCTION: Remove these port exposures for security (MinIO should only be accessible internally)
     ports:
       - "9004:9000"
       - "9005:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Note: we've seen the default bucket creation logic not work in some cases
+      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

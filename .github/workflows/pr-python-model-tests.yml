@@ -72,7 +72,6 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          cp env.template .env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
           REQUIRE_EMAIL_VERIFICATION=false \

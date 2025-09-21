@@ -246,7 +246,6 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          cp env.template .env
           AUTH_TYPE=basic \
           POSTGRES_POOL_PRE_PING=true \
           POSTGRES_USE_NULL_POOL=true \

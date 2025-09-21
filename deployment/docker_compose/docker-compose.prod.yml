@@ -16,8 +16,6 @@ services:
       - minio
       - inference_model_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
@@ -63,8 +61,6 @@ services:
       - inference_model_server
       - indexing_model_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
@@ -115,8 +111,6 @@ services:
     depends_on:
       - api_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - INTERNAL_URL=http://api_server:8080
     logging:
@@ -131,8 +125,6 @@ services:
     command: -c 'max_connections=250'
     restart: unless-stopped
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
-    env_file:
-      - .env
     volumes:
       - db_volume:/var/lib/postgresql/data
     logging:
