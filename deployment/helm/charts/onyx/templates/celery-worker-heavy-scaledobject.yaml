@@ -2,14 +2,14 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-worker-heavy
+  name: {{ include "onyx.fullname" . }}-celery-worker-heavy
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx-stack.fullname" . }}-celery-worker-heavy
+    name: {{ include "onyx.fullname" . }}-celery-worker-heavy
   minReplicaCount: {{ .Values.celery_worker_heavy.autoscaling.minReplicas | default 1 }}
   maxReplicaCount: {{ .Values.celery_worker_heavy.autoscaling.maxReplicas | default 10 }}
   pollingInterval: {{ .Values.celery_worker_heavy.autoscaling.pollingInterval | default 30 }}

@@ -274,7 +274,7 @@ jobs:
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -318,7 +318,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running integration tests for ${{ matrix.test-dir.path }}..."
-            docker run --rm --network onyx-stack_default \
+            docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
@@ -439,7 +439,7 @@ jobs:
       - name: Wait for service to be ready (multi-tenant)
         run: |
           echo "Starting wait-for-service script for multi-tenant..."
-          docker logs -f onyx-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
           start_time=$(date +%s)
           timeout=300
           while true; do
@@ -465,7 +465,7 @@ jobs:
       - name: Run Multi-Tenant Integration Tests
         run: |
           echo "Running multi-tenant integration tests..."
-          docker run --rm --network onyx-stack_default \
+          docker run --rm --network onyx_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \

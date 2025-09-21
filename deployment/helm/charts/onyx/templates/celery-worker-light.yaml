@@ -2,16 +2,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-worker-light
+  name: {{ include "onyx.fullname" . }}-celery-worker-light
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.celery_worker_light.autoscaling.enabled }}
   replicas: {{ .Values.celery_worker_light.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
       {{- if .Values.celery_worker_light.deploymentLabels }}
       {{- toYaml .Values.celery_worker_light.deploymentLabels | nindent 6 }}
       {{- end }}
@@ -23,7 +23,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- include "onyx.labels" . | nindent 8 }}
         {{- with .Values.celery_worker_light.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -32,7 +32,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       {{- with .Values.celery_worker_light.nodeSelector }}
@@ -62,7 +62,7 @@ spec:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
-            {{- include "onyx-stack.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecrets" . | nindent 12}}
           {{- with .Values.celery_worker_light.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

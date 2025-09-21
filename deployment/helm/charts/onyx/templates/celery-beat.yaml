@@ -2,14 +2,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-beat
+  name: {{ include "onyx.fullname" . }}-celery-beat
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.celery_beat.replicaCount }}
   selector:
     matchLabels:
-      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
       {{- if .Values.celery_beat.deploymentLabels }}
       {{- toYaml .Values.celery_beat.deploymentLabels | nindent 6 }}
       {{- end }}
@@ -21,7 +21,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- include "onyx.labels" . | nindent 8 }}
         {{- with .Values.celery_beat.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -30,7 +30,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       {{- with .Values.celery_beat.nodeSelector }}
@@ -57,7 +57,7 @@ spec:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
-            {{- include "onyx-stack.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecrets" . | nindent 12}}
           {{- with .Values.celery_beat.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

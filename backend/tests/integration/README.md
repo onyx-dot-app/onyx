@@ -34,7 +34,7 @@ navigate to `backend/tests/integration/mock_services` and run
 docker compose -f docker-compose.mock-it-services.yml -p mock-it-services-stack up -d
 ```
 You will have to modify the networks section of the docker-compose file to `<your stack name>_default` if you brought up the standard
-onyx services with a name different from the default `onyx-stack`.
+onyx services with a name different from the default `onyx`.
 
 ## Guidelines for Writing Integration Tests
 

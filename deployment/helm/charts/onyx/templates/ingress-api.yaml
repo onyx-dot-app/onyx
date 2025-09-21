@@ -2,12 +2,12 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-ingress-api
+  name: {{ include "onyx.fullname" . }}-ingress-api
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
-    cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
+    cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
   rules:
     - host: {{ .Values.ingress.api.host }}
@@ -17,11 +17,11 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "onyx-stack.fullname" . }}-api-service
+                name: {{ include "onyx.fullname" . }}-api-service
                 port:
                   number: {{ .Values.api.service.servicePort }}
   tls:
     - hosts:
         - {{ .Values.ingress.api.host }}
-      secretName: {{ include "onyx-stack.fullname" . }}-ingress-api-tls
+      secretName: {{ include "onyx.fullname" . }}-ingress-api-tls
 {{- end }}

@@ -2,14 +2,14 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-api
+  name: {{ include "onyx.fullname" . }}-api
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx-stack.fullname" . }}-api-server
+    name: {{ include "onyx.fullname" . }}-api-server
   minReplicaCount: {{ .Values.api.autoscaling.minReplicas | default 1 }}
   maxReplicaCount: {{ .Values.api.autoscaling.maxReplicas | default 10 }}
   pollingInterval: {{ .Values.api.autoscaling.pollingInterval | default 30 }}

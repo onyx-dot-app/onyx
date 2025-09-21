@@ -104,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--postgres_container_name",
         type=str,
-        default="onyx-stack-relational_db-1",
+        default="onyx-relational_db-1",
         help="Name of the postgres container to dump",
     )
     parser.add_argument(

@@ -1,5 +1,5 @@
 apiVersion: v2
-name: onyx-stack
+name: onyx
 description: A Helm chart for Kubernetes
 home: https://www.onyx.app/
 sources:

@@ -3,9 +3,9 @@ kind: ConfigMap
 metadata:
   name: {{ .Values.config.envConfigMapName }}
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 data:
-  INTERNAL_URL: "http://{{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
+  INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-postgresql
   {{- end }}
@@ -15,8 +15,8 @@ data:
   {{- if .Values.redis.enabled }}
   REDIS_HOST: {{ .Release.Name }}-redis-master
   {{- end }}
-  MODEL_SERVER_HOST: "{{ include "onyx-stack.fullname" . }}-inference-model-service"
-  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx-stack.fullname" . }}-indexing-model-service"
+  MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
+  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-indexing-model-service"
 {{- range $key, $value := .Values.configMap }}
 {{- if not (empty $value) }}
   {{ $key }}: "{{ $value }}"
