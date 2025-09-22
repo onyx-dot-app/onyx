@@ -252,7 +252,7 @@ def upgrade() -> None:
             SELECT DISTINCT uf.id AS uf_id, ccp.id AS cc_pair_id
             FROM user_file uf
             JOIN document_by_connector_credential_pair dcc
-                ON dcc.id = uf.document_id
+                ON dcc.id = REPLACE(uf.document_id, 'USER_FILE_CONNECTOR__', 'FILE_CONNECTOR__')
             JOIN connector_credential_pair ccp
                 ON ccp.connector_id = dcc.connector_id
                 AND ccp.credential_id = dcc.credential_id
