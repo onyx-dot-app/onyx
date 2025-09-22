@@ -259,14 +259,14 @@ def upgrade() -> None:
         )
         UPDATE user_file uf
         SET status = CASE
-            WHEN la.status = 'failed' THEN 'failed'
-            ELSE 'completed'
+            WHEN la.status = 'FAILED' THEN 'FAILED'
+            ELSE 'COMPLETED'
         END
         FROM uf_to_ccp ufc
         LEFT JOIN latest_attempt la
             ON la.connector_credential_pair_id = ufc.cc_pair_id
         WHERE uf.id = ufc.uf_id
-        AND uf.status = 'processing'
+        AND uf.status = 'PROCESSING'
     """
         )
     )
@@ -316,7 +316,7 @@ def downgrade() -> None:
     if "user_file" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("user_file")]
         if "status" in columns:
-            bind.execute(text("UPDATE user_file SET status = 'processing'"))
+            bind.execute(text("UPDATE user_file SET status = 'PROCESSING'"))
             logger.info("Reset user_file.status to default")
 
     logger.info("Downgrade completed successfully")

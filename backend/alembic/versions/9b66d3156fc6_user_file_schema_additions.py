@@ -62,15 +62,15 @@ def upgrade() -> None:
             sa.Column(
                 "status",
                 sa.Enum(
-                    "processing",
-                    "completed",
-                    "failed",
-                    "canceled",
+                    "PROCESSING",
+                    "COMPLETED",
+                    "FAILED",
+                    "CANCELED",
                     name="userfilestatus",
                     native_enum=False,
                 ),
                 nullable=False,
-                server_default="processing",
+                server_default="PROCESSING",
             ),
         )
         logger.info("Added status column to user_file")

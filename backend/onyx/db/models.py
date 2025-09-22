@@ -3279,6 +3279,7 @@ class UserFile(Base):
         back_populates="user_files",
     )
     file_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow
@@ -3289,7 +3290,7 @@ class UserFile(Base):
     file_type: Mapped[str] = mapped_column(String, nullable=False)
 
     status: Mapped[UserFileStatus] = mapped_column(
-        Enum(UserFileStatus, native_enum=False),
+        Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
         nullable=False,
         default=UserFileStatus.PROCESSING,
     )
@@ -3306,6 +3307,9 @@ class UserFile(Base):
 
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_id_migrated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     projects: Mapped[list["UserProject"]] = relationship(
         "UserProject",

@@ -112,9 +112,14 @@ def upgrade() -> None:
     logger.info("Updating foreign key constraints...")
 
     # Recreate persona__user_file foreign key to point to user_file.id
+    # Drop existing FK first to break dependency on the unique constraint
     op.execute(
         "ALTER TABLE persona__user_file DROP CONSTRAINT IF EXISTS persona__user_file_user_file_id_fkey"
     )
+    # Drop the unique constraint on (formerly) new_id BEFORE recreating the FK,
+    # so the FK will bind to the primary key instead of the unique index.
+    op.execute("ALTER TABLE user_file DROP CONSTRAINT IF EXISTS uq_user_file_new_id")
+    # Now recreate FK to the primary key column
     op.create_foreign_key(
         "persona__user_file_user_file_id_fkey",
         "persona__user_file",
@@ -122,10 +127,6 @@ def upgrade() -> None:
         local_cols=["user_file_id"],
         remote_cols=["id"],
     )
-
-    # Now that persona__user_file references the new primary key, we can drop
-    # the unique constraint that previously backed references to new_id.
-    op.execute("ALTER TABLE user_file DROP CONSTRAINT IF EXISTS uq_user_file_new_id")
 
     # Add foreign keys for project__user_file
     existing_fks = inspector.get_foreign_keys("project__user_file")
