@@ -448,9 +448,6 @@ class WebConnector(LoadConnector):
         self.remove_by_selector = remove_by_selector or []
         self.web_connector_type = web_connector_type
 
-        if not isinstance(self.remove_by_selector, list):
-            self.remove_by_selector = []
-
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]

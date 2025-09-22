@@ -235,5 +235,5 @@ def remove_by_selector(soup: bs4.BeautifulSoup, selector: list[str]):
             s = s.strip()
             if not s:
                 continue
-            for tag in soup.select(s):
-                tag.decompose()
+            for element in soup.select(s):
+                element.decompose()
