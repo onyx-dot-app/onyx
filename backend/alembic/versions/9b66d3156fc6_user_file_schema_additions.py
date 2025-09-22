@@ -117,7 +117,7 @@ def upgrade() -> None:
                 "document_id_migrated",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("false"),
+                server_default=sa.text("true"),
             ),
         )
         logger.info("Added document_id_migrated column to user_file")

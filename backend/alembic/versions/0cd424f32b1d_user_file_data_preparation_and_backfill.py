@@ -233,7 +233,78 @@ def upgrade() -> None:
                 f"Warning: {remaining_null} chat_session records could not be mapped to projects"
             )
 
-    # === Step 5: Backfill user_file.status from index_attempt ===
+    # === Step 5: Update plaintext FileRecord IDs/display names to UUID scheme ===
+    # Prior to UUID migration, plaintext cache files were stored with file_id like 'plain_text_<int_id>'.
+    # After migration, we use 'plaintext_<uuid>' (note the name change to 'plaintext_').
+    # This step remaps existing FileRecord rows to the new naming while preserving object_key/bucket.
+    try:
+        logger.info(
+            "Updating plaintext FileRecord ids and display names to UUID scheme..."
+        )
+
+        # Count legacy plaintext records that can be mapped to UUID user_file ids
+        count_query = text(
+            """
+            SELECT COUNT(*)
+            FROM file_record fr
+            JOIN user_file uf ON fr.file_id = CONCAT('plaintext_', uf.id::text)
+            WHERE fr.file_origin = 'plaintext_cache'
+            """
+        )
+        legacy_count = bind.execute(count_query).scalar_one()
+
+        if legacy_count and legacy_count > 0:
+            logger.info(f"Found {legacy_count} legacy plaintext file records to update")
+
+            # Update display_name first for readability (safe regardless of rename)
+            bind.execute(
+                text(
+                    """
+                    UPDATE file_record fr
+                    SET display_name = CONCAT('Plaintext for user file ', uf.new_id::text)
+                    FROM user_file uf
+                    WHERE fr.file_origin = 'plaintext_cache'
+                      AND fr.file_id = CONCAT('plaintext_', uf.id::text)
+                    """
+                )
+            )
+
+            # Remap file_id from 'plaintext_<int>' -> 'plaintext_<uuid>' using transitional new_id
+            # Use a single UPDATE ... WHERE file_id LIKE 'plain_text_%'
+            # and ensure it aligns to existing user_file ids to avoid renaming unrelated rows
+            result = bind.execute(
+                text(
+                    """
+                    UPDATE file_record fr
+                    SET file_id = CONCAT('plaintext_', uf.new_id::text)
+                    FROM user_file uf
+                    WHERE fr.file_origin = 'plaintext_cache'
+                      AND fr.file_id = CONCAT('plain_text_', uf.id::text)
+                    """
+                )
+            )
+            logger.info(
+                f"Updated {result.rowcount} plaintext file_record ids to UUID scheme"
+            )
+    except Exception as e:
+        logger.warning(f"Plaintext FileRecord remap skipped due to error: {e}")
+
+    # === Step 6: Ensure document_id_migrated default TRUE and backfill existing FALSE ===
+    # New records should default to migrated=True so the migration task won't run for them.
+    # Existing rows that had a legacy document_id should be marked as not migrated to be processed.
+
+    # Backfill existing records: if document_id is not null, set to FALSE
+    bind.execute(
+        text(
+            """
+            UPDATE user_file
+            SET document_id_migrated = FALSE
+            WHERE document_id IS NOT NULL
+            """
+        )
+    )
+
+    # === Step 7: Backfill user_file.status from index_attempt ===
     logger.info("Backfilling user_file.status from index_attempt...")
 
     # Update user_file status based on latest index attempt

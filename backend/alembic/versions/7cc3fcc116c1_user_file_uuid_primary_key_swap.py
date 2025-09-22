@@ -11,7 +11,6 @@ It updates all foreign key references to use UUIDs instead of integers.
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql as psql
-from sqlalchemy import text
 import logging
 
 logger = logging.getLogger("alembic.runtime.migration")
@@ -165,19 +164,6 @@ def upgrade() -> None:
 
     # === Step 4: Mark files for document_id migration ===
     logger.info("Marking files for background document_id migration...")
-
-    # Set flag for background task to process
-    result = bind.execute(
-        text(
-            """
-        UPDATE user_file
-        SET document_id_migrated = false
-        WHERE document_id_migrated IS NOT true
-    """
-        )
-    )
-
-    logger.info(f"Marked {result.rowcount} files for background processing")
 
     logger.info("Migration 4 (UUID primary key swap) completed successfully")
     logger.info(

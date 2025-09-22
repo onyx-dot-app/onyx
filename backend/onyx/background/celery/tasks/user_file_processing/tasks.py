@@ -20,6 +20,7 @@ from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -28,6 +29,8 @@ from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
+from onyx.db.models import FileRecord
+from onyx.db.models import SearchDoc
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
@@ -39,6 +42,8 @@ from onyx.document_index.vespa.shared_utils.utils import (
 )
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import S3BackedFileStore
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -498,14 +503,14 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
 
             # Fetch mappings of legacy -> new ids
             rows = db_session.execute(
-                sa.text(
-                    """
-                    SELECT document_id, id
-                    FROM user_file
-                    WHERE document_id IS NOT NULL AND document_id_migrated IS NOT TRUE
-                    """
+                sa.select(
+                    UserFile.document_id.label("document_id"),
+                    UserFile.id.label("id"),
+                ).where(
+                    UserFile.document_id.is_not(None),
+                    UserFile.document_id_migrated.is_(False),
                 )
-            ).fetchall()
+            ).all()
 
             # dedupe by old document_id
             seen: set[str] = set()
@@ -538,28 +543,105 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     )
 
             # Update search_doc records to refer to the UUID string
-            db_session.execute(
-                sa.text(
-                    """
-                    UPDATE search_doc sd
-                    SET document_id = uf.id::text
-                    FROM user_file uf
-                    WHERE uf.document_id IS NOT NULL AND uf.document_id_migrated IS NOT TRUE
-                      AND sd.document_id = uf.document_id
-                    """
+            uf_id_subq = (
+                sa.select(sa.cast(UserFile.id, sa.String))
+                .where(
+                    UserFile.document_id.is_not(None),
+                    UserFile.document_id_migrated.is_(False),
+                    SearchDoc.document_id == UserFile.document_id,
                 )
+                .correlate(SearchDoc)
+                .scalar_subquery()
+            )
+            db_session.execute(
+                sa.update(SearchDoc)
+                .where(
+                    sa.exists(
+                        sa.select(sa.literal(1)).where(
+                            UserFile.document_id.is_not(None),
+                            UserFile.document_id_migrated.is_(False),
+                            SearchDoc.document_id == UserFile.document_id,
+                        )
+                    )
+                )
+                .values(document_id=uf_id_subq)
             )
             # Mark all processed user_files as migrated
             db_session.execute(
-                sa.text(
-                    """
-                    UPDATE user_file
-                    SET document_id_migrated = TRUE
-                    WHERE document_id IS NOT NULL AND document_id_migrated IS NOT TRUE
-                    """
+                sa.update(UserFile)
+                .where(
+                    UserFile.document_id.is_not(None),
+                    UserFile.document_id_migrated.is_(False),
                 )
+                .values(document_id_migrated=True)
             )
             db_session.commit()
+
+            # Normalize plaintext FileRecord blobs: ensure S3 object key aligns with current file_id
+            try:
+                store = get_default_file_store()
+                # Only supported for S3-backed stores where we can manipulate object keys
+                if isinstance(store, S3BackedFileStore):
+                    s3_client = store._get_s3_client()
+                    bucket_name = store._get_bucket_name()
+
+                    plaintext_records: list[FileRecord] = (
+                        db_session.execute(
+                            sa.select(FileRecord).where(
+                                FileRecord.file_origin == FileOrigin.PLAINTEXT_CACHE,
+                                FileRecord.file_id.like("plaintext_%"),
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+
+                    normalized = 0
+                    for fr in plaintext_records:
+                        try:
+                            expected_key = store._get_s3_key(fr.file_id)
+                            if fr.object_key == expected_key:
+                                continue
+
+                            # Copy old object to new key
+                            copy_source = f"{fr.bucket_name}/{fr.object_key}"
+                            s3_client.copy_object(
+                                CopySource=copy_source,
+                                Bucket=bucket_name,
+                                Key=expected_key,
+                                MetadataDirective="COPY",
+                            )
+
+                            # Delete old object (best-effort)
+                            try:
+                                s3_client.delete_object(
+                                    Bucket=fr.bucket_name, Key=fr.object_key
+                                )
+                            except Exception:
+                                pass
+
+                            # Update DB record with new key
+                            fr.object_key = expected_key
+                            db_session.add(fr)
+                            normalized += 1
+                        except Exception as e:
+                            task_logger.warning(
+                                f"Tenant={tenant_id} failed plaintext object normalize for id={fr.file_id}: {e}"
+                            )
+
+                    if normalized:
+                        db_session.commit()
+                        task_logger.info(
+                            f"user_file_docid_migration_task normalized {normalized} plaintext objects for tenant={tenant_id}"
+                        )
+                else:
+                    task_logger.info(
+                        "user_file_docid_migration_task skipping plaintext object normalization (non-S3 store)"
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"user_file_docid_migration_task encountered an error during plaintext normalization for tenant={tenant_id}"
+                )
 
         task_logger.info(
             f"user_file_docid_migration_task completed for tenant={tenant_id} (rows={len(rows)})"
