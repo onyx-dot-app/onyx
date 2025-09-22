@@ -125,7 +125,7 @@ export const SlackTokensForm = ({
             name="user_token"
             label="Slack User Token (Optional)"
             type="password"
-            subtext="Optional: User OAuth token with search:read.public scope for enhanced public channel access"
+            subtext="Optional: User OAuth token for enhanced private channel access"
           />
           <div className="flex justify-end w-full mt-4">
             <Button

@@ -3,11 +3,12 @@ import re
 import socket
 from enum import auto
 from enum import Enum
-from typing import Union
 
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+SLACK_USER_TOKEN_PREFIX = "xoxp-"
+SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 SOURCE_TYPE = "source_type"
@@ -209,7 +210,7 @@ class DocumentSource(str, Enum):
 class FederatedConnectorSource(str, Enum):
     FEDERATED_SLACK = "federated_slack"
 
-    def to_non_federated_source(self) -> Union[DocumentSource, None]:
+    def to_non_federated_source(self) -> DocumentSource | None:
         if self == FederatedConnectorSource.FEDERATED_SLACK:
             return DocumentSource.SLACK
         return None

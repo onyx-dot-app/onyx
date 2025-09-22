@@ -41,6 +41,42 @@ HIGHLIGHT_START_CHAR = "\ue000"
 HIGHLIGHT_END_CHAR = "\ue001"
 
 
+def _should_skip_channel(
+    channel_id: str,
+    allowed_private_channel: str | None,
+    bot_token: str | None,
+    access_token: str,
+    include_dm: bool,
+) -> bool:
+    """
+    Determine if a channel should be skipped if in bot context. When an allowed_private_channel is passed in,
+    all other private channels are filtered out except that specific one.
+    """
+    if bot_token and not include_dm:
+        try:
+            # Use bot token if available (has full permissions), otherwise fall back to user token
+            token_to_use = bot_token or access_token
+            channel_client = WebClient(token=token_to_use)
+            channel_info = channel_client.conversations_info(channel=channel_id)
+
+            if isinstance(channel_info.data, dict) and not _is_public_channel(
+                channel_info.data
+            ):
+                # This is a private channel - filter it out
+                if channel_id != allowed_private_channel:
+                    logger.debug(
+                        f"Skipping message from private channel {channel_id} "
+                        f"(not the allowed private channel: {allowed_private_channel})"
+                    )
+                    return True
+        except Exception as e:
+            logger.warning(
+                f"Could not determine channel type for {channel_id}, filtering out: {e}"
+            )
+            return True
+    return False
+
+
 def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     # get time filter
     time_filter = ""
@@ -82,12 +118,6 @@ def _is_public_channel(channel_info: dict[str, Any]) -> bool:
         is_channel and not is_private and not is_group and not is_mpim and not is_im
     )
 
-    # Add detailed logging for debugging
-    logger.debug(
-        f"Channel info: is_channel={is_channel}, is_private={is_private}, "
-        f"is_group={is_group}, is_mpim={is_mpim}, is_im={is_im}, is_public={is_public}"
-    )
-
     return is_public
 
 
@@ -96,9 +126,9 @@ def query_slack(
     original_query: SearchQuery,
     access_token: str,
     limit: int | None = None,
-    allowed_private_channel: str | None = None,  # Add allowed private channel parameter
-    bot_token: str | None = None,  # Add bot token parameter for channel info calls
-    include_dm: bool = False,  # Whether to include direct messages
+    allowed_private_channel: str | None = None,
+    bot_token: str | None = None,
+    include_dm: bool = False,
 ) -> list[SlackMessage]:
     # query slack
     slack_client = WebClient(token=access_token)
@@ -151,72 +181,11 @@ def query_slack(
             continue
 
         # Apply channel filtering if needed
-        if allowed_private_channel is not None:
-            # Private channel context: only allow the specific private channel + public channels
-            if channel_id == allowed_private_channel:
-                # This is the allowed private channel - keep it
-                pass
-            else:
-                # Check if this is a public channel
-                try:
-                    # Use bot token if available (has full permissions), otherwise fall back to user token
-                    token_to_use = bot_token if bot_token else access_token
-                    channel_client = WebClient(token=token_to_use)
-                    channel_info = channel_client.conversations_info(channel=channel_id)
-
-                    if isinstance(channel_info.data, dict) and _is_public_channel(
-                        channel_info.data
-                    ):
-                        # This is a public channel - keep it
-                        pass
-                    else:
-                        # This is another private channel - filter it out
-                        filtered_count += 1
-                        logger.debug(
-                            f"Skipping message from private channel {channel_id} "
-                            f"(not the allowed private channel: {allowed_private_channel})"
-                        )
-                        continue
-                except Exception as e:
-                    logger.warning(
-                        f"Could not determine channel type for {channel_id}, filtering out: {e}"
-                    )
-                    filtered_count += 1
-                    continue
-        elif include_dm:
-            # Include direct messages - no filtering needed
-            pass
-        elif (
-            allowed_private_channel is None and not include_dm and bot_token is not None
+        if _should_skip_channel(
+            channel_id, allowed_private_channel, bot_token, access_token, include_dm
         ):
-            # Slack bot context (has bot_token but no specific channel context): apply default filtering (only public channels)
-            try:
-                # Use bot token if available (has full permissions), otherwise fall back to user token
-                token_to_use = bot_token if bot_token else access_token
-                channel_client = WebClient(token=token_to_use)
-                channel_info = channel_client.conversations_info(channel=channel_id)
-
-                if isinstance(channel_info.data, dict) and _is_public_channel(
-                    channel_info.data
-                ):
-                    # This is a public channel - keep it
-                    pass
-                else:
-                    # This is a private channel - filter it out
-                    filtered_count += 1
-                    logger.debug(
-                        f"Skipping message from private channel {channel_id} (only public channels allowed in Slack bot context)"
-                    )
-                    continue
-            except Exception as e:
-                logger.warning(
-                    f"Could not determine channel type for {channel_id}, filtering out: {e}"
-                )
-                filtered_count += 1
-                continue
-        else:
-            # Web chat federated search: no filtering - include all channels
-            pass
+            filtered_count += 1
+            continue
 
         # generate thread id and document id
         thread_id = (
@@ -453,22 +422,14 @@ def slack_retrieval(
     if not slack_messages:
         return []
 
-    # Check if we're in a bot context by looking at the access token prefix
-    if access_token.startswith("xoxp-"):
-        logger.info(
-            "Bot context detected (user OAuth token): skipping thread context to avoid additional scope requirements"
-        )
-        # Use original message text without thread context
-    else:
-        thread_texts: list[str] = run_functions_tuples_in_parallel(
-            [
-                (get_contextualized_thread_text, (slack_message, access_token))
-                for slack_message in slack_messages
-            ]
-        )
-        for slack_message, thread_text in zip(slack_messages, thread_texts):
-            slack_message.text = thread_text
-    # else: use original message text without thread context
+    thread_texts: list[str] = run_functions_tuples_in_parallel(
+        [
+            (get_contextualized_thread_text, (slack_message, access_token))
+            for slack_message in slack_messages
+        ]
+    )
+    for slack_message, thread_text in zip(slack_messages, thread_texts):
+        slack_message.text = thread_text
 
     # get the highlighted texts from shortest to longest
     highlighted_texts: set[str] = set()
