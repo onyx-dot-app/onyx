@@ -17,7 +17,7 @@ import {
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import {
   Tooltip,
@@ -60,7 +60,7 @@ const AssistantCard: React.FC<{
 }> = ({ persona, pinned, closeModal }) => {
   const { user, toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
-  const { refreshAssistants, pinnedAssistants } = useAssistants();
+  const { refreshAssistants, pinnedAssistants } = useAssistantsContext();
   const { popup, setPopup } = usePopup();
 
   const isOwnedByUser = checkUserOwnsAssistant(user, persona);

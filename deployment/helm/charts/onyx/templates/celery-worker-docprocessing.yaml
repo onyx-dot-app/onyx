@@ -1,3 +1,4 @@
+{{- if gt (int .Values.celery_worker_docprocessing.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,8 +17,9 @@ spec:
       {{- end }}
   template:
     metadata:
-      {{- with .Values.celery_worker_docprocessing.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.celery_worker_docprocessing.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -32,11 +34,15 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.celery_worker_docprocessing.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_worker_docprocessing.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: celery-worker-docprocessing
           securityContext:
-            {{- toYaml .Values.celery_worker_docprocessing.securityContext | nindent 12 }}
+            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -62,6 +68,10 @@ spec:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_docprocessing.enableMiniChunk }}"
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+          {{- with .Values.celery_worker_docprocessing.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
@@ -84,3 +94,8 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_docprocessing_liveness.txt
+      {{- with .Values.celery_worker_docprocessing.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

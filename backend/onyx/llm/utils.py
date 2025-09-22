@@ -136,16 +136,7 @@ def _build_content(
     if not files:
         return message
 
-    text_files = [
-        file
-        for file in files
-        if file.file_type
-        in (
-            ChatFileType.PLAIN_TEXT,
-            ChatFileType.CSV,
-            ChatFileType.USER_KNOWLEDGE,
-        )
-    ]
+    text_files = [file for file in files if file.file_type.is_text_file()]
 
     if not text_files:
         return message

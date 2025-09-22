@@ -1,6 +1,9 @@
 import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
-import { ConnectorIndexingStatus } from "@/lib/types";
+import {
+  ConnectorIndexingStatus,
+  ConnectorIndexingStatusLite,
+} from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -16,7 +19,7 @@ import { FiMaximize2 } from "react-icons/fi";
 export function ReindexingProgressTable({
   reindexingProgress,
 }: {
-  reindexingProgress: ConnectorIndexingStatus<any, any>[];
+  reindexingProgress: ConnectorIndexingStatusLite[];
 }) {
   const numToDisplay = 10;
   const [page, setPage] = useState(1);
@@ -48,15 +51,15 @@ export function ReindexingProgressTable({
                     </Link>
                   </TableCell>
                   <TableCell>
-                    {reindexingProgress.latest_index_attempt?.status && (
+                    {reindexingProgress.last_status && (
                       <IndexAttemptStatus
-                        status={reindexingProgress.latest_index_attempt.status}
+                        status={reindexingProgress.last_status}
                       />
                     )}
                   </TableCell>
                   <TableCell>
-                    {reindexingProgress?.latest_index_attempt
-                      ?.total_docs_indexed || "-"}
+                    {reindexingProgress?.latest_index_attempt_docs_indexed ||
+                      "-"}
                   </TableCell>
                 </TableRow>
               );

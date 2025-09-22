@@ -9,7 +9,7 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Prompt
+from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
@@ -37,6 +37,24 @@ def get_current_llm_day_time(
     return f"{formatted_datetime}"
 
 
+def replace_current_datetime_tag(
+    prompt_str: str,
+    *,
+    full_sentence: bool = False,
+    include_day_of_week: bool = True,
+) -> str:
+    if _DANSWER_DATETIME_REPLACEMENT_PAT not in prompt_str:
+        return prompt_str
+
+    return prompt_str.replace(
+        _DANSWER_DATETIME_REPLACEMENT_PAT,
+        get_current_llm_day_time(
+            full_sentence=full_sentence,
+            include_day_of_week=include_day_of_week,
+        ),
+    )
+
+
 def build_date_time_string() -> str:
     return ADDITIONAL_INFO.format(
         datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
@@ -55,11 +73,13 @@ def handle_onyx_date_awareness(
     This can later be expanded to support other tags.
     """
 
-    if _DANSWER_DATETIME_REPLACEMENT_PAT in prompt_str:
-        return prompt_str.replace(
-            _DANSWER_DATETIME_REPLACEMENT_PAT,
-            get_current_llm_day_time(full_sentence=False, include_day_of_week=True),
-        )
+    prompt_with_datetime = replace_current_datetime_tag(
+        prompt_str,
+        full_sentence=False,
+        include_day_of_week=True,
+    )
+    if prompt_with_datetime != prompt_str:
+        return prompt_with_datetime
     any_tag_present = any(
         _DANSWER_DATETIME_REPLACEMENT_PAT in text
         for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
@@ -70,13 +90,13 @@ def handle_onyx_date_awareness(
 
 
 def build_task_prompt_reminders(
-    prompt: Prompt | PromptConfig,
+    prompt: Persona | PromptConfig,
     use_language_hint: bool,
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.task_prompt
-    citation_or_nothing = citation_str if prompt.include_citations else ""
+    base_task = prompt.task_prompt or ""
+    citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
 

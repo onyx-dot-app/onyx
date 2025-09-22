@@ -195,12 +195,12 @@ def should_index(
     )
 
     # uncomment for debugging
-    task_logger.info(
-        f"_should_index: "
-        f"cc_pair={cc_pair.id} "
-        f"connector={cc_pair.connector_id} "
-        f"refresh_freq={connector.refresh_freq}"
-    )
+    # task_logger.debug(
+    #     f"_should_index: "
+    #     f"cc_pair={cc_pair.id} "
+    #     f"connector={cc_pair.connector_id} "
+    #     f"refresh_freq={connector.refresh_freq}"
+    # )
 
     # don't kick off indexing for `NOT_APPLICABLE` sources
     if connector.source == DocumentSource.NOT_APPLICABLE:

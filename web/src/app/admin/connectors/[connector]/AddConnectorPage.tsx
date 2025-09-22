@@ -59,6 +59,7 @@ import { CreateStdOAuthCredential } from "@/components/credentials/actions/Creat
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
 import { deleteConnector } from "@/lib/connector";
+import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -640,6 +641,7 @@ export default function AddConnector({
                   null
                 }
               />
+              <ConnectorDocsLink sourceType={connector} />
             </CardSection>
           )}
 

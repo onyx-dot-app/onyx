@@ -43,6 +43,7 @@ from onyx.utils.logger import ColoredFormatter
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
@@ -421,6 +422,13 @@ def on_setup_logging(
     root_logger.addHandler(root_handler)
 
     if logfile:
+        # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
+        if DEV_LOGGING_ENABLED and os.path.exists(logfile):
+            try:
+                open(logfile, "w").close()  # Truncate the file
+            except Exception:
+                pass  # Ignore errors, just proceed with normal logging
+
         root_file_handler = logging.FileHandler(logfile)
         root_file_formatter = PlainFormatter(
             log_format,
@@ -444,6 +452,7 @@ def on_setup_logging(
     task_logger.addHandler(task_handler)
 
     if logfile:
+        # No need to truncate again, already done above for root logger
         task_file_handler = logging.FileHandler(logfile)
         task_file_handler.addFilter(TenantContextFilter())
         task_file_formatter = CeleryTaskPlainFormatter(

@@ -38,6 +38,9 @@ DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
+# If set to true, will show extra/uncommon connectors in the "Other" category
+SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
+
 # Controls whether to allow admin query history reports with:
 # 1. associated user emails
 # 2. anonymized user emails
@@ -108,7 +111,11 @@ _VALID_EMAIL_DOMAINS_STR = (
     os.environ.get("VALID_EMAIL_DOMAINS", "") or _VALID_EMAIL_DOMAIN
 )
 VALID_EMAIL_DOMAINS = (
-    [domain.strip() for domain in _VALID_EMAIL_DOMAINS_STR.split(",")]
+    [
+        domain.strip().lower()
+        for domain in _VALID_EMAIL_DOMAINS_STR.split(",")
+        if domain.strip()
+    ]
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )
@@ -121,6 +128,8 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+# OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
+OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -225,9 +234,12 @@ try:
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
+# RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
-
+# Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
+# Note: This is separate from RDS IAM auth as they use different authentication mechanisms
+USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
@@ -343,6 +355,14 @@ CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
 )
 
+CELERY_WORKER_PRIMARY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
+)
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
 
@@ -358,6 +378,12 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # If this is empty, all connectors are enabled, this is an option for security heavy orgs where
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
+
+# If set to true, curators can only access and edit assistants that they created
+CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
+    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
+    == "true"
+)
 
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
@@ -594,6 +620,10 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # exception without aborting the attempt.
 INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
+# Maximum number of user file connector credential pairs to index in a single batch
+# Setting this number too high may overload the indexing process
+USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
+
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
@@ -610,6 +640,17 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 )
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
+
+
+#####
+# Tool Configs
+#####
+OKTA_PROFILE_TOOL_ENABLED = (
+    os.environ.get("OKTA_PROFILE_TOOL_ENABLED", "").lower() == "true"
+)
+# API token for SSWS auth to Okta Admin API. If set, Users API will be used to enrich profile.
+OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN") or ""
+
 
 #####
 # Miscellaneous
@@ -643,6 +684,17 @@ LOG_POSTGRES_CONN_COUNTS = (
 )
 # Anonymous usage telemetry
 DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
+
+#####
+# Braintrust Configuration
+#####
+# Enable Braintrust tracing for LangGraph/LangChain applications
+BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
+# Braintrust project name
+BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Maximum concurrency for Braintrust evaluations
+BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"

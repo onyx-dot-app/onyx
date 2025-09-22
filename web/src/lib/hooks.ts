@@ -7,10 +7,20 @@ import {
   ConnectorStatus,
   CCPairBasicInfo,
   FederatedConnectorDetail,
+  ValidSources,
+  ConnectorIndexingStatusLiteResponse,
+  IndexingStatusRequest,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llm/utils";
@@ -27,8 +37,8 @@ import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -80,23 +90,120 @@ export const useObjectState = <T>(
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
-export const useConnectorCredentialIndexingStatus = (
-  refreshInterval = 30000, // 30 seconds
-  getEditable = false
+export const useConnectorIndexingStatusWithPagination = (
+  filters: Omit<IndexingStatusRequest, "source" | "source_to_page"> = {},
+  refreshInterval = 30000
 ) => {
   const { mutate } = useSWRConfig();
-  const url = `${INDEXING_STATUS_URL}${
-    getEditable ? "?get_editable=true" : ""
-  }`;
-  const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
-    url,
-    errorHandlingFetcher,
-    { refreshInterval: refreshInterval }
+  //maintains the current page for each source
+  const [sourcePages, setSourcePages] = useState<Record<ValidSources, number>>(
+    {} as Record<ValidSources, number>
+  );
+  const [mergedData, setMergedData] = useState<
+    ConnectorIndexingStatusLiteResponse[]
+  >([]);
+  //maintains the loading state for each source
+  const [sourceLoadingStates, setSourceLoadingStates] = useState<
+    Record<ValidSources, boolean>
+  >({} as Record<ValidSources, boolean>);
+
+  //ref to maintain the current source pages for the main request
+  const sourcePagesRef = useRef(sourcePages);
+  sourcePagesRef.current = sourcePages;
+
+  // Main request that includes current pagination state
+  const mainRequest: IndexingStatusRequest = useMemo(
+    () => ({
+      secondary_index: false,
+      access_type_filters: [],
+      last_status_filters: [],
+      docs_count_operator: null,
+      docs_count_value: null,
+      ...filters,
+    }),
+    [filters]
   );
 
+  const swrKey = [INDEXING_STATUS_URL, JSON.stringify(mainRequest)];
+
+  // Main data fetch with auto-refresh
+  const { data, isLoading, error } = useSWR<
+    ConnectorIndexingStatusLiteResponse[]
+  >(
+    swrKey,
+    () => fetchConnectorIndexingStatus(mainRequest, sourcePagesRef.current),
+    {
+      refreshInterval,
+    }
+  );
+
+  // Update merged data when main data changes
+  useEffect(() => {
+    if (data) {
+      setMergedData(data);
+    }
+  }, [data]);
+
+  // Function to handle page changes for a specific source
+  const handlePageChange = useCallback(
+    async (source: ValidSources, page: number) => {
+      // Update the source page state
+      setSourcePages((prev) => ({ ...prev, [source]: page }));
+
+      const sourceRequest: IndexingStatusRequest = {
+        ...filters,
+        source: source,
+        source_to_page: { [source]: page } as Record<ValidSources, number>,
+      };
+      setSourceLoadingStates((prev) => ({ ...prev, [source]: true }));
+
+      try {
+        const sourceData = await fetchConnectorIndexingStatus(sourceRequest);
+        if (sourceData && sourceData.length > 0) {
+          setMergedData((prevData) =>
+            prevData
+              .map((existingSource) =>
+                existingSource.source === source
+                  ? sourceData[0]
+                  : existingSource
+              )
+              .filter(
+                (item): item is ConnectorIndexingStatusLiteResponse =>
+                  item !== undefined
+              )
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Failed to fetch page ${page} for source ${source}:`,
+          error
+        );
+      } finally {
+        setSourceLoadingStates((prev) => ({ ...prev, [source]: false }));
+      }
+    },
+    [filters]
+  );
+
+  // Function to refresh all data (maintains current pagination)
+  const refreshAllData = useCallback(() => {
+    mutate(swrKey);
+  }, [mutate, swrKey]);
+
+  // Reset pagination when filters change (but not search)
+  const resetPagination = useCallback(() => {
+    setSourcePages({} as Record<ValidSources, number>);
+  }, []);
+
   return {
-    ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
+    data: mergedData,
+    isLoading,
+    error,
+    handlePageChange,
+    sourcePages,
+    sourceLoadingStates,
+    refreshAllData,
+    resetPagination,
   };
 };
 
@@ -242,7 +349,7 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = () => {
+  const getFilterString = useCallback(() => {
     const params = new URLSearchParams();
 
     if (timeRange) {
@@ -273,14 +380,14 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
-  };
+  }, [timeRange, selectedSources, selectedDocumentSets, selectedTags]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  };
+  }, []);
 
   function buildFiltersFromQueryString(
     filterString: string,
@@ -515,7 +622,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider };
+        return { ...model, provider: provider.provider, name: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -530,6 +637,11 @@ export function useLlmManager(
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
     setCurrentLlm(newLlm);
+    setUserHasManuallyOverriddenLLM(true);
+  };
+
+  const updateCurrentLlmToModelName = (modelName: string) => {
+    setCurrentLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
@@ -672,6 +784,33 @@ export const useUserGroups = (): {
   };
 };
 
+export const fetchConnectorIndexingStatus = async (
+  request: IndexingStatusRequest = {},
+  sourcePages: Record<ValidSources, number> | null = null
+): Promise<ConnectorIndexingStatusLiteResponse[]> => {
+  const response = await fetch(INDEXING_STATUS_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      secondary_index: false,
+      access_type_filters: [],
+      last_status_filters: [],
+      docs_count_operator: null,
+      docs_count_value: null,
+      source_to_page: sourcePages || {}, // Use current pagination state
+      ...request,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+};
+
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
   "o1-2025-12-17": "o1 (December 2025)",
@@ -679,6 +818,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "o1-mini": "o1 Mini",
   "o1-preview": "o1 Preview",
   o1: "o1",
+  "gpt-5": "GPT 5",
+  "gpt-5-mini": "GPT 5 Mini",
   "gpt-4.1": "GPT 4.1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
@@ -741,7 +882,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // Google Models
 
   // 2.5 pro models
-  "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
+  "gemini-2.5-pro": "Gemini 2.5 Pro",
+  "gemini-2.5-flash": "Gemini 2.5 Flash",
+  "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
+  // "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
 
   // 2.0 flash lite models
   "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
@@ -753,7 +897,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-2.0-flash": "Gemini 2.0 Flash",
   "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
   "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
-  "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
+  // "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
   // "gemini-2.0-flash-thinking-exp-01-02":
   //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
   // "gemini-2.0-flash-thinking-exp-01-21":

@@ -8,6 +8,7 @@ import {
   useField,
   useFormikContext,
 } from "formik";
+import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
@@ -37,6 +38,13 @@ import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import { DatePicker } from "./ui/datePicker";
 import { Textarea, TextareaProps } from "./ui/textarea";
+import { RichTextSubtext } from "./RichTextSubtext";
+import {
+  TypedFile,
+  createTypedFile,
+  getFileTypeDefinitionForField,
+  FILE_TYPE_DEFINITIONS,
+} from "@/lib/connectors/fileTypes";
 
 export function SectionHeader({
   children,
@@ -50,13 +58,16 @@ export function Label({
   children,
   small,
   className,
+  htmlFor,
 }: {
   children: string | JSX.Element;
   small?: boolean;
   className?: string;
+  htmlFor?: string;
 }) {
   return (
     <label
+      {...(htmlFor ? { htmlFor } : {})}
       className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
         small ? "text-sm" : "text-base"
       }`}
@@ -82,10 +93,27 @@ export function LabelWithTooltip({
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
+  // Add whitespace-pre-wrap for multiline descriptions (when children is a string with newlines)
+  const hasNewlines = typeof children === "string" && children.includes("\n");
+
+  // If children is a string, use RichTextSubtext to parse and render links
+  if (typeof children === "string") {
+    return (
+      <span className="block text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+        <RichTextSubtext
+          text={children}
+          className={hasNewlines ? "whitespace-pre-wrap" : ""}
+        />
+      </span>
+    );
+  }
+
   return (
-    <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+    <span
+      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
+    >
       {children}
-    </div>
+    </span>
   );
 }
 
@@ -381,6 +409,120 @@ export function FileUploadFormField({
   );
 }
 
+export function TypedFileUploadFormField({
+  name,
+  label,
+  subtext,
+}: {
+  name: string;
+  label: string;
+  subtext?: string | JSX.Element;
+}) {
+  const [field, , helpers] = useField<TypedFile | null>(name);
+  const [customError, setCustomError] = useState<string>("");
+  const [isValidating, setIsValidating] = useState(false);
+  const [description, setDescription] = useState<string>("");
+
+  useEffect(() => {
+    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    if (typeDefinitionKey) {
+      setDescription(
+        FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
+      );
+    }
+  }, [name]);
+
+  useEffect(() => {
+    const validateFile = async () => {
+      if (!field.value) {
+        setIsValidating(false);
+        return;
+      }
+
+      setIsValidating(true);
+
+      try {
+        const validation = await field.value.validate();
+        if (validation?.isValid) {
+          setCustomError("");
+        } else {
+          setCustomError(validation?.errors.join(", ") || "Unknown error");
+          helpers.setValue(null);
+        }
+      } catch (error) {
+        setCustomError(
+          error instanceof Error ? error.message : "Validation error"
+        );
+        helpers.setValue(null);
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateFile();
+  }, [field.value, helpers]);
+
+  const handleFileSelection = async (files: File[]) => {
+    if (files.length === 0) {
+      helpers.setValue(null);
+      setCustomError("");
+      return;
+    }
+
+    const file = files[0];
+    if (!file) {
+      setCustomError("File selection error");
+      return;
+    }
+
+    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+
+    if (!typeDefinitionKey) {
+      setCustomError(`No file type definition found for field: ${name}`);
+      return;
+    }
+
+    try {
+      const typedFile = createTypedFile(file, name, typeDefinitionKey);
+      helpers.setValue(typedFile);
+      setCustomError("");
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : "Unknown error");
+      helpers.setValue(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <FieldLabel name={name} label={label} subtext={subtext} />
+      {description && (
+        <div className="text-sm text-gray-500 mb-2">{description}</div>
+      )}
+      <FileUpload
+        selectedFiles={field.value ? [field.value.file] : []}
+        setSelectedFiles={handleFileSelection}
+        multiple={false}
+      />
+      {/* Validation feedback */}
+      {isValidating && (
+        <div className="text-blue-500 text-sm mt-1">Validating file...</div>
+      )}
+
+      {customError ? (
+        <div className="text-red-500 text-sm mt-1">{customError}</div>
+      ) : (
+        <ErrorMessage
+          name={name}
+          component="div"
+          className="text-red-500 text-sm mt-1"
+        />
+      )}
+    </div>
+  );
+}
+
 export function MultiSelectField({
   name,
   label,
@@ -566,14 +708,18 @@ export const BooleanFormField = ({
     [disabled, name, setFieldValue, onChange]
   );
 
+  // Generate a stable, valid id from the field name for label association
+  const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
   return (
     <div>
-      <label className="flex items-center text-sm cursor-pointer">
+      <div className="flex items-center text-sm">
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger asChild>
               <CheckboxField
                 name={name}
+                id={checkboxId}
                 size="sm"
                 className={`
                   ${disabled ? "opacity-50" : ""}
@@ -593,16 +739,21 @@ export const BooleanFormField = ({
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
-              <Label small={small}>{`${label}${
-                optional ? " (Optional)" : ""
-              }`}</Label>
+              <Label
+                htmlFor={checkboxId}
+                small={small}
+                className="cursor-pointer"
+              >{`${label}${optional ? " (Optional)" : ""}`}</Label>
               {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
             </div>
-
-            {subtext && <SubLabel>{subtext}</SubLabel>}
+            {subtext && (
+              <label htmlFor={checkboxId} className="cursor-pointer">
+                <SubLabel>{subtext}</SubLabel>
+              </label>
+            )}
           </div>
         )}
-      </label>
+      </div>
 
       <ErrorMessage
         name={name}

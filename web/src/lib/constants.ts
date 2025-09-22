@@ -108,3 +108,11 @@ export const ALLOWED_URL_PROTOCOLS = [
 ];
 
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+
+//Credential form data key constants
+export const CREDENTIAL_NAME = "name";
+export const CREDENTIAL_SOURCE = "source";
+export const CREDENTIAL_UPLOADED_FILE = "uploaded_file";
+export const CREDENTIAL_FIELD_KEY = "field_key";
+export const CREDENTIAL_TYPE_DEFINITION_KEY = "type_definition_key";
+export const CREDENTIAL_JSON = "credential_json";

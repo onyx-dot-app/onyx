@@ -34,7 +34,7 @@ class ConnectorManager:
             connector_specific_config=(
                 connector_specific_config
                 or (
-                    {"file_locations": [], "zip_metadata": {}}
+                    {"file_locations": [], "file_names": [], "zip_metadata": {}}
                     if source == DocumentSource.FILE
                     else {}
                 )

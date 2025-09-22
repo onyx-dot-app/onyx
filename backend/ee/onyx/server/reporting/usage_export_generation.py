@@ -67,7 +67,7 @@ def generate_chat_messages_report(
         file_id = file_store.save_file(
             content=temp_file,
             display_name=file_name,
-            file_origin=FileOrigin.OTHER,
+            file_origin=FileOrigin.GENERATED_REPORT,
             file_type="text/csv",
         )
 
@@ -99,7 +99,7 @@ def generate_user_report(
         file_id = file_store.save_file(
             content=temp_file,
             display_name=file_name,
-            file_origin=FileOrigin.OTHER,
+            file_origin=FileOrigin.GENERATED_REPORT,
             file_type="text/csv",
         )
 

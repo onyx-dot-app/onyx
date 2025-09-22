@@ -32,9 +32,7 @@ def format_entity_id_for_models(entity_id_name: str) -> str:
         separator = entity_type = ""
 
     formatted_entity_type = entity_type.strip().upper()
-    formatted_entity_name = (
-        entity_name.strip().replace('"', "").replace("'", "").title()
-    )
+    formatted_entity_name = entity_name.strip().replace('"', "").replace("'", "")
 
     return f"{formatted_entity_type}{separator}{formatted_entity_name}"
 

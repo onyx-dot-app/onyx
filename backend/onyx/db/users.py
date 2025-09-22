@@ -12,8 +12,7 @@ from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.elements import KeyedColumnElement
 
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import write_invited_users
+from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.models import DocumentSet__User
@@ -342,10 +341,4 @@ def delete_user_from_db(
 
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.
-    user_emails = get_invited_users()
-    remaining_users = [
-        remaining_user_email
-        for remaining_user_email in user_emails
-        if remaining_user_email != user_to_delete.email
-    ]
-    write_invited_users(remaining_users)
+    remove_user_from_invited_users(user_to_delete.email)

@@ -3,7 +3,6 @@ import json
 from typing import Any
 from typing import Literal
 from typing import NotRequired
-from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -41,7 +40,11 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
+from sqlalchemy import ForeignKeyConstraint
 
+from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+    GeneratedImageFullResult,
+)
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
@@ -58,6 +61,7 @@ from onyx.db.enums import (
     IndexingMode,
     SyncType,
     SyncStatus,
+    MCPAuthenticationType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -68,7 +72,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
-from onyx.db.pydantic_type import PydanticType
+from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -77,13 +81,18 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.kg.models import KGStage
+from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
+from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 
 logger = setup_logger()
+
+PROMPT_LENGTH = 5_000_000
 
 
 class Base(DeclarativeBase):
@@ -204,7 +213,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "ChatFolder", back_populates="user"
     )
 
-    prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
     input_prompts: Mapped[list["InputPrompt"]] = relationship(
         "InputPrompt", back_populates="user"
     )
@@ -225,6 +233,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+    # MCP servers accessible to this user
+    accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer", secondary="mcp_server__user", back_populates="users"
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -294,13 +306,6 @@ class Persona__DocumentSet(Base):
     document_set_id: Mapped[int] = mapped_column(
         ForeignKey("document_set.id"), primary_key=True
     )
-
-
-class Persona__Prompt(Base):
-    __tablename__ = "persona__prompt"
-
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    prompt_id: Mapped[int] = mapped_column(ForeignKey("prompt.id"), primary_key=True)
 
 
 class Persona__User(Base):
@@ -381,10 +386,22 @@ class Document__Tag(Base):
 
 
 class Persona__Tool(Base):
+    """An entry in this table represents a tool that is **available** to a persona.
+    It does NOT necessarily mean that the tool is actually usable to the persona.
+
+    For example, a persona may have the image generation tool attached to it, even though
+    the image generation tool is not set up / enabled. In this case, the tool should not
+    show up in the UI for the persona + it should not be usable by the persona in chat.
+    """
+
     __tablename__ = "persona__tool"
 
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    tool_id: Mapped[int] = mapped_column(ForeignKey("tool.id"), primary_key=True)
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class StandardAnswer__StandardAnswerCategory(Base):
@@ -677,8 +694,8 @@ class KGEntityType(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    grounded_source_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
+    grounded_source_name: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=False
     )
 
     entity_values: Mapped[list[str]] = mapped_column(
@@ -1293,6 +1310,7 @@ class Tag(Base):
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False)
     )
+    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     documents = relationship(
         "Document",
@@ -1302,7 +1320,11 @@ class Tag(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tag_key", "tag_value", "source", name="_tag_key_value_source_uc"
+            "tag_key",
+            "tag_value",
+            "source",
+            "is_list",
+            name="_tag_key_value_source_list_uc",
         ),
     )
 
@@ -1685,12 +1707,14 @@ class IndexAttempt(Base):
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # NEW: Database-based coordination fields (replacing Redis fencing)
+    # Database-based coordination fields (replacing Redis fencing)
     celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
     cancellation_requested: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # NEW: Batch coordination fields (replacing FileStore state)
+    # Batch coordination fields
+    # Once this is set, docfetching has completed
     total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # batches that are fully indexed (i.e. have completed docfetching and docprocessing)
     completed_batches: Mapped[int] = mapped_column(Integer, default=0)
     # TODO: unused, remove this column
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
@@ -1702,7 +1726,7 @@ class IndexAttempt(Base):
     )
     last_batches_completed_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    # NEW: Heartbeat tracking for worker liveness detection
+    # Heartbeat tracking for worker liveness detection
     heartbeat_counter: Mapped[int] = mapped_column(Integer, default=0)
     last_heartbeat_value: Mapped[int] = mapped_column(Integer, default=0)
     last_heartbeat_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -2082,11 +2106,6 @@ class ChatMessage(Base):
     latest_child_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     rephrased_query: Mapped[str] = mapped_column(Text, nullable=True)
-    # If None, then there is no answer generation, it's the special case of only
-    # showing the user the retrieved docs
-    prompt_id: Mapped[int | None] = mapped_column(ForeignKey("prompt.id"))
-    # If prompt is None, then token_count is 0 as this message won't be passed into
-    # the LLM's context (not included in the history of messages)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
         Enum(MessageType, native_enum=False)
@@ -2108,7 +2127,6 @@ class ChatMessage(Base):
     refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
 
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
-    prompt: Mapped[Optional["Prompt"]] = relationship("Prompt")
 
     chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
         "ChatMessageFeedback",
@@ -2139,10 +2157,24 @@ class ChatMessage(Base):
         order_by="(AgentSubQuestion.level, AgentSubQuestion.level_question_num)",
     )
 
+    research_iterations: Mapped[list["ResearchAgentIteration"]] = relationship(
+        "ResearchAgentIteration",
+        foreign_keys="ResearchAgentIteration.primary_question_id",
+        cascade="all, delete-orphan",
+    )
+
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
         "StandardAnswer",
         secondary=ChatMessage__StandardAnswer.__table__,
         back_populates="chat_messages",
+    )
+
+    research_type: Mapped[ResearchType] = mapped_column(
+        Enum(ResearchType, native_enum=False), nullable=True
+    )
+    research_plan: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
+        Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
 
 
@@ -2439,32 +2471,6 @@ class DocumentSet(Base):
     )
 
 
-class Prompt(Base):
-    __tablename__ = "prompt"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    name: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String)
-    system_prompt: Mapped[str] = mapped_column(String(length=8000))
-    task_prompt: Mapped[str] = mapped_column(String(length=8000))
-    include_citations: Mapped[bool] = mapped_column(Boolean, default=True)
-    datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Default prompts are configured via backend during deployment
-    # Treated specially (cannot be user edited etc.)
-    default_prompt: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    user: Mapped[User] = relationship("User", back_populates="prompts")
-    personas: Mapped[list["Persona"]] = relationship(
-        "Persona",
-        secondary=Persona__Prompt.__table__,
-        back_populates="prompts",
-    )
-
-
 class Tool(Base):
     __tablename__ = "tool"
 
@@ -2480,6 +2486,10 @@ class Tool(Base):
     openapi_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP tool input schema. Only applies to MCP tools.
+    mcp_input_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -2489,6 +2499,10 @@ class Tool(Base):
     )
     # whether to pass through the user's OAuth token as Authorization header
     passthrough_auth: Mapped[bool] = mapped_column(Boolean, default=False)
+    # MCP server this tool is associated with (null for non-MCP tools)
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
@@ -2497,19 +2511,17 @@ class Tool(Base):
         secondary=Persona__Tool.__table__,
         back_populates="tools",
     )
+    # MCP server relationship
+    mcp_server: Mapped["MCPServer | None"] = relationship(
+        "MCPServer", back_populates="current_actions"
+    )
 
 
-class StarterMessage(TypedDict):
-    """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
-    in Postgres"""
+class StarterMessage(BaseModel):
+    """Starter message for a persona."""
 
     name: str
     message: str
-
-
-class StarterMessageModel(BaseModel):
-    message: str
-    name: str
 
 
 class Persona__PersonaLabel(Base):
@@ -2555,7 +2567,7 @@ class Persona(Base):
         String, nullable=True
     )
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+        PydanticListType(StarterMessage), nullable=True
     )
     search_start_date: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
@@ -2579,16 +2591,19 @@ class Persona(Base):
     )
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Prompt fields merged from Prompt table
+    system_prompt: Mapped[str | None] = mapped_column(
+        String(length=PROMPT_LENGTH), nullable=True
+    )
+    task_prompt: Mapped[str | None] = mapped_column(
+        String(length=PROMPT_LENGTH), nullable=True
+    )
+    datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
+
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
     icon_color: Mapped[str | None] = mapped_column(String, nullable=True)
     icon_shape: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # These are only defaults, users can select from all if desired
-    prompts: Mapped[list[Prompt]] = relationship(
-        "Prompt",
-        secondary=Persona__Prompt.__table__,
-        back_populates="personas",
-    )
     # These are only defaults, users can select from all if desired
     document_sets: Mapped[list[DocumentSet]] = relationship(
         "DocumentSet",
@@ -2631,6 +2646,7 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
@@ -2671,6 +2687,20 @@ class PersonaLabel(Base):
         back_populates="labels",
         cascade="all, delete-orphan",
         single_parent=True,
+    )
+
+
+class Assistant__UserSpecificConfig(Base):
+    __tablename__ = "assistant__user_specific_config"
+
+    assistant_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    disabled_tool_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False
     )
 
 
@@ -3016,6 +3046,10 @@ class UserGroup(Base):
         "Credential",
         secondary=Credential__UserGroup.__table__,
     )
+    # MCP servers accessible to this user group
+    accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer", secondary="mcp_server__user_group", back_populates="user_groups"
+    )
 
 
 """Tables related to Token Rate Limiting
@@ -3342,4 +3376,228 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+
+class ResearchAgentIteration(Base):
+    __tablename__ = "research_agent_iteration"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    primary_question_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
+    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    purpose: Mapped[str] = mapped_column(String, nullable=True)
+
+    reasoning: Mapped[str] = mapped_column(String, nullable=True)
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+        back_populates="research_iterations",
+    )
+
+    sub_steps: Mapped[list["ResearchAgentIterationSubStep"]] = relationship(
+        "ResearchAgentIterationSubStep",
+        primaryjoin=(
+            "and_("
+            "ResearchAgentIteration.primary_question_id == ResearchAgentIterationSubStep.primary_question_id, "
+            "ResearchAgentIteration.iteration_nr == ResearchAgentIterationSubStep.iteration_nr"
+            ")"
+        ),
+        foreign_keys="[ResearchAgentIterationSubStep.primary_question_id, ResearchAgentIterationSubStep.iteration_nr]",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "primary_question_id",
+            "iteration_nr",
+            name="_research_agent_iteration_unique_constraint",
+        ),
+    )
+
+
+class ResearchAgentIterationSubStep(Base):
+    __tablename__ = "research_agent_iteration_sub_step"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    primary_question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    iteration_sub_step_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    sub_step_instructions: Mapped[str | None] = mapped_column(String, nullable=True)
+    sub_step_tool_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # for all step-types
+    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
+    sub_answer: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # for search-based step-types
+    cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+
+    # for image generation step-types
+    generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(
+        PydanticType(GeneratedImageFullResult), nullable=True
+    )
+
+    # for custom step-types
+    additional_data: Mapped[JSON_ro | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Relationships
+    # Note: ChatMessage is accessible via primary_question_id. It is tied to the
+    # primary_question_id in research_agent_iteration, which has a foreign key constraint
+    # to ChatMessage.id.
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["primary_question_id", "iteration_nr"],
+            [
+                "research_agent_iteration.primary_question_id",
+                "research_agent_iteration.iteration_nr",
+            ],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class MCPServer(Base):
+    """Model for storing MCP server configurations"""
+
+    __tablename__ = "mcp_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Owner email of user who configured this server
+    owner: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    server_url: Mapped[str] = mapped_column(String, nullable=False)
+    # Auth type: "none", "api_token", or "oauth"
+    auth_type: Mapped[MCPAuthenticationType] = mapped_column(
+        Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    )
+    # Admin connection config - used for the config page
+    # and (when applicable) admin-managed auth
+    # and (when applicable) per-user auth
+    admin_connection_config_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_connection_config.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
+        "MCPConnectionConfig",
+        foreign_keys=[admin_connection_config_id],
+        back_populates="admin_servers",
+    )
+
+    user_connection_configs: Mapped[list["MCPConnectionConfig"]] = relationship(
+        "MCPConnectionConfig",
+        foreign_keys="MCPConnectionConfig.mcp_server_id",
+        back_populates="mcp_server",
+    )
+    current_actions: Mapped[list["Tool"]] = relationship(
+        "Tool", back_populates="mcp_server", cascade="all, delete-orphan"
+    )
+    # Many-to-many relationships for access control
+    users: Mapped[list["User"]] = relationship(
+        "User", secondary="mcp_server__user", back_populates="accessible_mcp_servers"
+    )
+    user_groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="mcp_server__user_group",
+        back_populates="accessible_mcp_servers",
+    )
+
+
+class MCPServer__User(Base):
+    __tablename__ = "mcp_server__user"
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class MCPServer__UserGroup(Base):
+    __tablename__ = "mcp_server__user_group"
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id"), primary_key=True
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class MCPConnectionConfig(Base):
+    """Model for storing MCP connection configurations (credentials, auth data)"""
+
+    __tablename__ = "mcp_connection_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Server this config is for (nullable for template configs)
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
+    )
+    # User email this config is for (empty for admin configs and templates)
+    user_email: Mapped[str] = mapped_column(String, nullable=False, default="")
+    # Config data stored as JSON
+    # Format: {
+    #   "refresh_token": "<token>",  # OAuth only
+    #   "access_token": "<token>",   # OAuth only
+    #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
+    #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
+    #   "client_id": "<id>",  # For dynamically registered OAuth clients
+    #   "client_secret": "<secret>",  # For confidential clients
+    #   "registration_access_token": "<token>",  # For managing registration
+    #   "registration_client_uri": "<uri>",  # For managing registration
+    # }
+    config: Mapped[MCPConnectionData] = mapped_column(
+        EncryptedJson(), nullable=False, default=dict
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    mcp_server: Mapped["MCPServer | None"] = relationship(
+        "MCPServer",
+        foreign_keys=[mcp_server_id],
+        back_populates="user_connection_configs",
+    )
+    admin_servers: Mapped[list["MCPServer"]] = relationship(
+        "MCPServer",
+        foreign_keys="MCPServer.admin_connection_config_id",
+        back_populates="admin_connection_config",
+    )
+
+    __table_args__ = (
+        Index("ix_mcp_connection_config_user_email", "user_email"),
+        Index("ix_mcp_connection_config_server_user", "mcp_server_id", "user_email"),
     )

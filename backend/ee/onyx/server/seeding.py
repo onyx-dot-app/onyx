@@ -131,32 +131,35 @@ def _seed_llms(
 def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) -> None:
     if personas:
         logger.notice("Seeding Personas")
-        for persona in personas:
-            if not persona.prompt_ids:
-                raise ValueError(
-                    f"Invalid Persona with name {persona.name}; no prompts exist"
+        try:
+            for persona in personas:
+                upsert_persona(
+                    user=None,  # Seeding is done as admin
+                    name=persona.name,
+                    description=persona.description,
+                    num_chunks=(
+                        persona.num_chunks if persona.num_chunks is not None else 0.0
+                    ),
+                    llm_relevance_filter=persona.llm_relevance_filter,
+                    llm_filter_extraction=persona.llm_filter_extraction,
+                    recency_bias=RecencyBiasSetting.AUTO,
+                    document_set_ids=persona.document_set_ids,
+                    llm_model_provider_override=persona.llm_model_provider_override,
+                    llm_model_version_override=persona.llm_model_version_override,
+                    starter_messages=persona.starter_messages,
+                    is_public=persona.is_public,
+                    db_session=db_session,
+                    tool_ids=persona.tool_ids,
+                    display_priority=persona.display_priority,
+                    system_prompt=persona.system_prompt,
+                    task_prompt=persona.task_prompt,
+                    datetime_aware=persona.datetime_aware,
+                    commit=False,
                 )
-
-            upsert_persona(
-                user=None,  # Seeding is done as admin
-                name=persona.name,
-                description=persona.description,
-                num_chunks=(
-                    persona.num_chunks if persona.num_chunks is not None else 0.0
-                ),
-                llm_relevance_filter=persona.llm_relevance_filter,
-                llm_filter_extraction=persona.llm_filter_extraction,
-                recency_bias=RecencyBiasSetting.AUTO,
-                prompt_ids=persona.prompt_ids,
-                document_set_ids=persona.document_set_ids,
-                llm_model_provider_override=persona.llm_model_provider_override,
-                llm_model_version_override=persona.llm_model_version_override,
-                starter_messages=persona.starter_messages,
-                is_public=persona.is_public,
-                db_session=db_session,
-                tool_ids=persona.tool_ids,
-                display_priority=persona.display_priority,
-            )
+            db_session.commit()
+        except Exception:
+            logger.exception("Failed to seed personas.")
+            raise
 
 
 def _seed_settings(settings: Settings) -> None:

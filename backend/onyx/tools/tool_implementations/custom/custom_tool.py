@@ -12,6 +12,9 @@ from typing import List
 import requests
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+)
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
@@ -77,6 +80,7 @@ class CustomToolCallSummary(BaseModel):
 class CustomTool(BaseTool):
     def __init__(
         self,
+        id: int,
         method_spec: MethodSpec,
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
@@ -86,6 +90,7 @@ class CustomTool(BaseTool):
         self._method_spec = method_spec
         self._tool_definition = self._method_spec.to_tool_definition()
         self._user_oauth_token = user_oauth_token
+        self._id = id
 
         self._name = self._method_spec.name
         self._description = self._method_spec.summary
@@ -106,6 +111,10 @@ class CustomTool(BaseTool):
 
         if self._user_oauth_token:
             self.headers["Authorization"] = f"Bearer {self._user_oauth_token}"
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:
@@ -361,6 +370,7 @@ class CustomTool(BaseTool):
 
 
 def build_custom_tools_from_openapi_schema_and_headers(
+    tool_id: int,
     openapi_schema: dict[str, Any],
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
@@ -382,11 +392,13 @@ def build_custom_tools_from_openapi_schema_and_headers(
 
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
+
     return [
         CustomTool(
-            method_spec,
-            url,
-            custom_headers,
+            id=tool_id,
+            method_spec=method_spec,
+            base_url=url,
+            custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
         )
         for method_spec in method_specs
@@ -442,7 +454,9 @@ if __name__ == "__main__":
     validate_openapi_schema(openapi_schema)
 
     tools = build_custom_tools_from_openapi_schema_and_headers(
-        openapi_schema, dynamic_schema_info=None
+        tool_id=0,  # dummy tool id
+        openapi_schema=openapi_schema,
+        dynamic_schema_info=None,
     )
 
     openai_client = openai.OpenAI()
@@ -457,7 +471,9 @@ if __name__ == "__main__":
     choice = response.choices[0]
     if choice.message.tool_calls:
         print(choice.message.tool_calls)
-        for tool_response in tools[0].run(
-            **json.loads(choice.message.tool_calls[0].function.arguments)
-        ):
-            print(tool_response)
+        tool_call = choice.message.tool_calls[0]
+        if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+            for tool_response in tools[0].run(
+                **json.loads(tool_call.function.arguments)
+            ):
+                print(tool_response)

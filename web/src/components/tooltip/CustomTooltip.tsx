@@ -45,7 +45,7 @@ export const CustomTooltip = ({
   medium,
   wrap,
   showTick = false,
-  delay = 500,
+  delay = 300,
   position = "bottom",
   disabled = false,
   className,
@@ -124,6 +124,8 @@ export const CustomTooltip = ({
         className={`relative inline-block ${className}`}
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
+        onMouseDown={hideTooltip}
+        onClick={hideTooltip}
       >
         {children}
       </span>
@@ -131,7 +133,7 @@ export const CustomTooltip = ({
         !disabled &&
         createPortal(
           <div
-            className={`z-[100] overflow-hidden rounded-md text-neutral-50 
+            className={`fixed z-[1000] overflow-hidden rounded-md text-neutral-50 
               ${className}
               ${citation ? "max-w-[350px]" : "max-w-40"} ${
                 large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
@@ -150,8 +152,8 @@ export const CustomTooltip = ({
           >
             {showTick && (
               <div
-                className={`absolute w-3 h-3 ${
-                  position === "top" ? "bottom-1.5" : "-top-1.5"
+                className={`absolute w-2 h-2 ${
+                  position === "top" ? "bottom-1" : "-top-1"
                 } left-1/2 transform -translate-x-1/2 rotate-45 
                 ${
                   light
@@ -163,7 +165,7 @@ export const CustomTooltip = ({
             <div
               className={`flex-wrap ${wrap && "w-full"} relative ${
                 line ? "" : "flex"
-              } p-2`}
+              } p-0`}
               style={
                 line || wrap
                   ? {

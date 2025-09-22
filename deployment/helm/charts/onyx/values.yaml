@@ -18,7 +18,7 @@ postgresql:
       sizeLimit: 2Gi
   enabled: true
   auth:
-    existingSecret: onyx-secrets
+    existingSecret: onyx-postgresql
     secretKeys:
       # overwriting as postgres typically expects 'postgres-password'
       adminPasswordKey: postgres_password
@@ -96,6 +96,11 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  nodeSelector: {}
 
 indexCapability:
   service:
@@ -125,6 +130,11 @@ indexCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  nodeSelector: {}
 config:
   envConfigMapName: env-configmap
 
@@ -203,6 +213,20 @@ webserver:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    # Example: customTriggers: []
+    #   - type: prometheus
+    #     metadata:
+    #       serverAddress: http://prometheus:9090
+    #       metricName: http_requests_per_second
+    #       threshold: '100'
+    customTriggers: []
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -270,6 +294,20 @@ api:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    # Example: customTriggers: []
+    #   - type: prometheus
+    #     metadata:
+    #       serverAddress: http://prometheus:9090
+    #       metricName: http_requests_per_second
+    #       threshold: '100'
+    customTriggers: []
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -318,6 +356,10 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 
 celery_beat:
   replicaCount: 1
@@ -327,11 +369,6 @@ celery_beat:
     app: celery-beat
   deploymentLabels:
     app: celery-beat
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -349,17 +386,24 @@ celery_worker_heavy:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -377,17 +421,24 @@ celery_worker_docprocessing:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-docprocessing
   deploymentLabels:
     app: celery-worker-docprocessing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -405,17 +456,24 @@ celery_worker_light:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -433,17 +491,24 @@ celery_worker_monitoring:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -461,17 +526,24 @@ celery_worker_primary:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -489,17 +561,24 @@ celery_worker_user_files_indexing:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-user-files-indexing
   deploymentLabels:
     app: celery-worker-user-files-indexing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 2000m
@@ -536,21 +615,30 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+  nodeSelector: {}
+
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
     enabled: false
+    minReplicas: 1
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
     app: celery-worker-docfetching
   deploymentLabels:
     app: celery-worker-docfetching
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -591,13 +679,13 @@ redis:
     type: ClusterIP
     port: 6379
   auth:
-    existingSecret: onyx-secrets
+    existingSecret: onyx-redis
     existingSecretPasswordKey: redis_password
 
 minio:
   enabled: true
   auth:
-    existingSecret: onyx-secrets
+    existingSecret: onyx-objectstorage
     rootUserSecretKey: s3_aws_access_key_id
     rootPasswordSecretKey: s3_aws_secret_access_key
   defaultBuckets: "onyx-file-store-bucket"
@@ -626,35 +714,79 @@ letsencrypt:
   enabled: false
   email: "abc@abc.com"
 
+# -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
-  # existingSecret onyx-secret for storing smtp, oauth, slack, and other secrets
-  # keys are lowercased version of env vars (e.g. SMTP_USER -> smtp_user)
-  existingSecret: ""
-  # optionally override the secret keys to reference in the secret
-  # this is used to populate the env vars in individual deployments
-  # the values here reference the keys in secrets below
-  secretKeys:
-    postgres_password: "postgres_password"
-    smtp_pass: ""
-    oauth_client_id: ""
-    oauth_client_secret: ""
-    oauth_cookie_secret: ""
-    redis_password: "redis_password"
-    s3_aws_access_key_id: "s3_aws_access_key_id"
-    s3_aws_secret_access_key: "s3_aws_secret_access_key"
-  # will be overridden by the existingSecret if set
-  secretName: "onyx-secrets"
-  # set values as strings, they will be base64 encoded
-  # this is used to populate the secrets yaml
-  secrets:
-    postgres_password: "postgres"
-    smtp_pass: ""
-    oauth_client_id: ""
-    oauth_client_secret: ""
-    oauth_cookie_secret: ""
-    redis_password: "password"
-    s3_aws_access_key_id: "minioadmin"
-    s3_aws_secret_access_key: "minioadmin"
+  postgresql:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: true
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-postgresql'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      POSTGRES_PASSWORD: "postgres_password"
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      postgres_password: "postgres"
+  redis:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: true
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-redis'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      REDIS_PASSWORD: redis_password
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      redis_password: "password"
+  objectstorage:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: true
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-objectstorage'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
+      S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+  oauth:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-oauth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      OAUTH_CLIENT_ID: "oauth_client_id"
+      OAUTH_CLIENT_SECRET: "oauth_client_secret"
+      OAUTH_COOKIE_SECRET: "oauth_cookie_secret"
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      oauth_client_id: ""
+      oauth_client_secret: ""
+      oauth_cookie_secret: ""
+  smtp:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-smtp'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      SMTP_PASS: "smtp_pass"
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      smtp_pass: ""
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
@@ -663,7 +795,9 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
-  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  # For sending verification emails, true or false
+  REQUIRE_EMAIL_VERIFICATION: ""
+  # If unspecified then defaults to 'smtp.gmail.com'
   SMTP_SERVER: ""
   # For sending verification emails, if unspecified then defaults to '587'
   SMTP_PORT: ""
@@ -711,7 +845,8 @@ configMap:
   CONTINUE_ON_CONNECTOR_FAILURE: ""
   EXPERIMENTAL_CHECKPOINTING_ENABLED: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
-  JIRA_API_VERSION: ""
+  JIRA_CLOUD_API_VERSION: ""
+  JIRA_SERVER_API_VERSION: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Worker Parallelism
@@ -726,7 +861,6 @@ configMap:
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
-  # https://docs.onyx.app/more/telemetry
   DISABLE_TELEMETRY: ""
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""

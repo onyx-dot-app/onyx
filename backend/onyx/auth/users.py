@@ -60,6 +60,7 @@ from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
@@ -241,7 +242,7 @@ def verify_email_domain(email: str) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email is not valid",
             )
-        domain = email.split("@")[-1]
+        domain = email.split("@")[-1].lower()
         if domain not in VALID_EMAIL_DOMAINS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -350,6 +351,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         role=user_create.role,
                     )
                     user = await self.update(user_update, user)
+                remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
@@ -527,7 +529,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             ):
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # type: ignore
-
+            remove_user_from_invited_users(user.email)
             if token:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -570,22 +572,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                if user_count == 1:
-                    create_milestone_and_report(
-                        user=user,
-                        distinct_id=user.email,
-                        event_type=MilestoneRecordType.USER_SIGNED_UP,
-                        properties=None,
-                        db_session=db_session,
-                    )
-                else:
-                    create_milestone_and_report(
-                        user=user,
-                        distinct_id=user.email,
-                        event_type=MilestoneRecordType.MULTIPLE_USERS,
-                        properties=None,
-                        db_session=db_session,
-                    )
+                event_type = (
+                    MilestoneRecordType.USER_SIGNED_UP
+                    if user_count == 1
+                    else MilestoneRecordType.MULTIPLE_USERS
+                )
+                create_milestone_and_report(
+                    user=user,
+                    distinct_id=user.email,
+                    event_type=event_type,
+                    properties=None,
+                    db_session=db_session,
+                )
+
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 

@@ -1,6 +1,5 @@
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_usergroup import RedisUserGroup
@@ -15,8 +14,6 @@ def is_fence(key_bytes: bytes) -> bool:
     if key_str.startswith(RedisConnectorDelete.FENCE_PREFIX):
         return True
     if key_str.startswith(RedisConnectorPrune.FENCE_PREFIX):
-        return True
-    if key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
         return True
     if key_str.startswith(RedisConnectorPermissionSync.FENCE_PREFIX):
         return True

@@ -47,7 +47,6 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.search_settings import get_current_search_settings
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.tag import delete_orphan_tags__no_commit
@@ -518,9 +517,6 @@ def connector_pruning_generator_task(
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
             )
-
-            search_settings = get_current_search_settings(db_session)
-            redis_connector.new_index(search_settings.id)
 
             callback = PruneCallback(
                 0,

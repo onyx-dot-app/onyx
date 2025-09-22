@@ -11,6 +11,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { FileResponse } from "../my-documents/DocumentsContext";
+import { BlinkingDot } from "./BlinkingDot";
 
 export const MemoizedAnchor = memo(
   ({
@@ -157,9 +158,7 @@ export const MemoizedLink = memo(
         : undefined;
 
     if (value?.toString().startsWith("*")) {
-      return (
-        <div className="flex-none bg-background-800 inline-block rounded-full h-3 w-3 ml-2" />
-      );
+      return <BlinkingDot addMargin />;
     } else if (value?.toString().startsWith("[")) {
       return (
         <>
@@ -206,7 +205,7 @@ export const MemoizedParagraph = memo(
   function MemoizedParagraph({ children, fontSize }: any) {
     return (
       <p
-        className={`text-neutral-900 dark:text-neutral-200 my-0 ${
+        className={`text-neutral-900 dark:text-neutral-200 my-2.5 last:mb-0 first:mt-0 ${
           fontSize === "sm" ? "leading-tight text-sm" : ""
         }`}
       >

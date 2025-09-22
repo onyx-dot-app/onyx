@@ -103,10 +103,10 @@ If using PowerShell, the command slightly differs:
 Install the required python dependencies:
 
 ```bash
-pip install -r onyx/backend/requirements/default.txt
-pip install -r onyx/backend/requirements/dev.txt
-pip install -r onyx/backend/requirements/ee.txt
-pip install -r onyx/backend/requirements/model_server.txt
+pip install -r backend/requirements/default.txt
+pip install -r backend/requirements/dev.txt
+pip install -r backend/requirements/ee.txt
+pip install -r backend/requirements/model_server.txt
 ```
 
 Install Playwright for Python (headless browser required by the Web Connector)

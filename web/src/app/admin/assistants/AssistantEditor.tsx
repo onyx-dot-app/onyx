@@ -25,7 +25,7 @@ import {
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 
 import {
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -53,8 +54,8 @@ import {
   SwapIcon,
   TrashIcon,
 } from "@/components/icons/icons";
-import { buildImgUrl } from "@/app/chat/files/images/utils";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -69,7 +70,7 @@ import {
   SearchMultiSelectDropdown,
   Option as DropdownOption,
 } from "@/components/Dropdown";
-import { SourceChip } from "@/app/chat/input/ChatInputBar";
+import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import {
   TagIcon,
   UserIcon,
@@ -86,21 +87,28 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import {
+  IMAGE_GENERATION_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/app/chat/components/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
+import { FormErrorFocus } from "@/components/FormErrorHelpers";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
+  return tools.find(
+    (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+  );
 }
 
-function findInternetSearchTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
+function findWebSearchTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -133,7 +141,7 @@ export function AssistantEditor({
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
 }) {
-  const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
+  const { refreshAssistants } = useAssistantsContext();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -159,19 +167,15 @@ export function AssistantEditor({
   const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
-  // state to persist across formik reformatting
+  // both `defautIconColor` and `defaultIconShape` are state so that they
+  // persist across formik reformatting
   const [defautIconColor, _setDeafultIconColor] = useState(
     colorOptions[Math.floor(Math.random() * colorOptions.length)]
   );
+  const [defaultIconShape] = useState<any>(
+    () => generateRandomIconShape().encodedGrid
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const [defaultIconShape, setDefaultIconShape] = useState<any>(null);
-
-  useEffect(() => {
-    if (defaultIconShape === null) {
-      setDefaultIconShape(generateRandomIconShape().encodedGrid);
-    }
-  }, [defaultIconShape]);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
@@ -180,7 +184,6 @@ export function AssistantEditor({
     [llmProviders.length]
   );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
-  const existingPrompt = existingPersona?.prompts[0] ?? null;
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
@@ -209,20 +212,85 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
-  const internetSearchTool = findInternetSearchTool(tools);
+  const webSearchTool = findWebSearchTool(tools);
 
-  const customTools = tools.filter(
+  // Separate MCP tools from regular custom tools
+  const allCustomTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
   );
+
+  const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
+  const customTools = allCustomTools.filter((tool) => !tool.mcp_server_id);
+
+  // Group MCP tools by server
+  const mcpToolsByServer = useMemo(() => {
+    const groups: { [serverId: number]: ToolSnapshot[] } = {};
+    mcpTools.forEach((tool) => {
+      if (tool.mcp_server_id) {
+        if (!groups[tool.mcp_server_id]) {
+          groups[tool.mcp_server_id] = [];
+        }
+        groups[tool.mcp_server_id]!.push(tool);
+      }
+    });
+    return groups;
+  }, [mcpTools]);
+
+  // Helper functions for MCP server checkbox state
+  const getMCPServerCheckboxState = (
+    serverId: number,
+    enabledToolsMap: { [key: number]: boolean }
+  ) => {
+    const serverTools = mcpToolsByServer[serverId] || [];
+    const enabledCount = serverTools.filter(
+      (tool) => enabledToolsMap[tool.id]
+    ).length;
+
+    if (enabledCount === 0) return false; // unchecked
+    if (enabledCount === serverTools.length) return true; // checked
+    return "indeterminate"; // partially checked
+  };
+
+  const toggleMCPServerTools = (
+    serverId: number,
+    enabledToolsMap: { [key: number]: boolean },
+    setFieldValue: any
+  ) => {
+    const serverTools = mcpToolsByServer[serverId] || [];
+    const currentState = getMCPServerCheckboxState(serverId, enabledToolsMap);
+    const shouldEnable = currentState !== true; // enable if not fully checked
+
+    const updatedMap = { ...enabledToolsMap };
+    serverTools.forEach((tool) => {
+      updatedMap[tool.id] = shouldEnable;
+    });
+
+    setFieldValue("enabled_tools_map", updatedMap);
+  };
+
+  const toggleServerCollapse = (serverId: number) => {
+    const newCollapsed = new Set(collapsedServers);
+    if (newCollapsed.has(serverId)) {
+      newCollapsed.delete(serverId);
+    } else {
+      newCollapsed.add(serverId);
+    }
+    setCollapsedServers(newCollapsed);
+  };
+
+  const getMCPServerInfo = (serverId: number): MCPServer | null => {
+    return mcpServers.find((server) => server.id === serverId) || null;
+  };
 
   const availableTools = [
     ...customTools,
+    ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
-    ...(internetSearchTool ? [internetSearchTool] : []),
+    ...(webSearchTool ? [webSearchTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -244,9 +312,9 @@ export function AssistantEditor({
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
-    datetime_aware: existingPrompt?.datetime_aware ?? false,
-    system_prompt: existingPrompt?.system_prompt ?? "",
-    task_prompt: existingPrompt?.task_prompt ?? "",
+    datetime_aware: existingPersona?.datetime_aware ?? false,
+    system_prompt: existingPersona?.system_prompt ?? "",
+    task_prompt: existingPersona?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
@@ -255,7 +323,6 @@ export function AssistantEditor({
     search_start_date: existingPersona?.search_start_date
       ? existingPersona?.search_start_date.toString().split("T")[0]
       : null,
-    include_citations: existingPersona?.prompts[0]?.include_citations ?? true,
     llm_relevance_filter: existingPersona?.llm_relevance_filter ?? false,
     llm_model_provider_override:
       existingPersona?.llm_model_provider_override ?? null,
@@ -342,6 +409,10 @@ export function AssistantEditor({
 
   const [labelToDelete, setLabelToDelete] = useState<PersonaLabel | null>(null);
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+  const [collapsedServers, setCollapsedServers] = useState<Set<number>>(
+    new Set()
+  );
 
   const { data: userGroups } = useUserGroups();
 
@@ -351,6 +422,19 @@ export function AssistantEditor({
   );
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Fetch MCP servers for URL display
+  useEffect(() => {
+    const fetchMcpServers = async () => {
+      const response = await fetch("/api/admin/mcp/servers");
+      if (response.ok) {
+        const data = await response.json();
+        setMcpServers(data.mcp_servers || []);
+      }
+    };
+
+    fetchMcpServers();
+  }, []);
 
   if (!labels) {
     return <></>;
@@ -454,7 +538,6 @@ export function AssistantEditor({
             is_public: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().nullable(),
-            include_citations: Yup.boolean().required(),
             llm_relevance_filter: Yup.boolean().required(),
             llm_model_version_override: Yup.string().nullable(),
             llm_model_provider_override: Yup.string().nullable(),
@@ -525,10 +608,7 @@ export function AssistantEditor({
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
 
-          if (
-            internetSearchTool &&
-            enabledTools.includes(internetSearchTool.id)
-          ) {
+          if (webSearchTool && enabledTools.includes(webSearchTool.id)) {
             // Internet searches should generally be datetime-aware
             formikHelpers.setFieldValue("datetime_aware", true);
           }
@@ -554,7 +634,6 @@ export function AssistantEditor({
           const submissionData: PersonaUpsertParameters = {
             ...values,
             icon_color: values.icon_color ?? null,
-            existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -602,6 +681,18 @@ export function AssistantEditor({
           } else {
             const assistant = await personaResponse.json();
             const assistantId = assistant.id;
+            // TODO: re-enable this once we figure out a way to better
+            // handle the `undefined` pinned_assistants case. `undefined` pinned assistants
+            // means the default ordering (admin specified)
+            // if (!isUpdate) {
+            //   const currentPinnedIds =
+            //     user?.preferences?.pinned_assistants || [];
+            //   await toggleAssistantPinnedStatus(
+            //     currentPinnedIds,
+            //     assistantId,
+            //     true
+            //   );
+            // }
             if (
               shouldAddAssistantToUserPreferences &&
               user?.preferences?.chosen_assistants
@@ -688,6 +779,7 @@ export function AssistantEditor({
                 />
               )}
               <Form className="w-full text-text-950 assistant-editor">
+                <FormErrorFocus />
                 {/* Refresh starter messages when name or description changes */}
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
@@ -888,7 +980,7 @@ export function AssistantEditor({
                                 Knowledge
                               </p>
                               <div className="flex items-center">
-                                <TooltipProvider delayDuration={0}>
+                                <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <div
@@ -1108,10 +1200,7 @@ export function AssistantEditor({
                               name={`enabled_tools_map.${imageGenerationTool.id}`}
                               label={imageGenerationTool.display_name}
                               subtext="Generate and manipulate images using AI-powered tools"
-                              disabled={
-                                !currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable
-                              }
+                              disabled={!currentLLMSupportsImageOutput}
                               disabledTooltip={
                                 !currentLLMSupportsImageOutput
                                   ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
@@ -1122,16 +1211,17 @@ export function AssistantEditor({
                         </>
                       )}
 
-                      {internetSearchTool && (
+                      {webSearchTool && (
                         <>
                           <BooleanFormField
-                            name={`enabled_tools_map.${internetSearchTool.id}`}
-                            label={internetSearchTool.display_name}
+                            name={`enabled_tools_map.${webSearchTool.id}`}
+                            label={webSearchTool.display_name}
                             subtext="Access real-time information and search the web for up-to-date results"
                           />
                         </>
                       )}
 
+                      {/* Regular Custom Tools */}
                       {customTools.length > 0 &&
                         customTools.map((tool) => (
                           <BooleanFormField
@@ -1141,6 +1231,98 @@ export function AssistantEditor({
                             subtext={tool.description}
                           />
                         ))}
+
+                      {/* MCP Server Tools - Hierarchical Structure */}
+                      {Object.keys(mcpToolsByServer).length > 0 &&
+                        Object.entries(mcpToolsByServer).map(
+                          ([serverId, serverTools]) => {
+                            const serverIdNum = parseInt(serverId);
+                            const serverInfo = getMCPServerInfo(serverIdNum);
+                            const isCollapsed =
+                              collapsedServers.has(serverIdNum);
+
+                            // Extract server name from tool name (format: "server_name_tool_name")
+                            const firstTool = serverTools[0];
+                            const serverName =
+                              serverInfo?.name ||
+                              firstTool?.name
+                                ?.split("_")
+                                .slice(0, -1)
+                                .join("_") ||
+                              `MCP Server ${serverId}`;
+
+                            const serverUrl =
+                              serverInfo?.server_url || "Unknown URL";
+
+                            const checkboxState = getMCPServerCheckboxState(
+                              serverIdNum,
+                              values.enabled_tools_map
+                            );
+
+                            return (
+                              <div
+                                key={`mcp-server-${serverId}`}
+                                className="border rounded-lg p-4 space-y-3 dark:border-gray-700"
+                              >
+                                {/* Server-level header with collapse button */}
+                                <div className="flex items-center space-x-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toggleServerCollapse(serverIdNum)
+                                    }
+                                    className="flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                  >
+                                    {isCollapsed ? (
+                                      <FiChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                    ) : (
+                                      <FiChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                    )}
+                                  </button>
+                                  <input
+                                    type="checkbox"
+                                    checked={checkboxState === true}
+                                    ref={(el) => {
+                                      if (el)
+                                        el.indeterminate =
+                                          checkboxState === "indeterminate";
+                                    }}
+                                    onChange={() =>
+                                      toggleMCPServerTools(
+                                        serverIdNum,
+                                        values.enabled_tools_map,
+                                        setFieldValue
+                                      )
+                                    }
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+                                  />
+                                  <div className="flex-grow">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                      {serverName}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                      {serverUrl} ({serverTools.length} tools)
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Individual tool checkboxes - only show when not collapsed */}
+                                {!isCollapsed && (
+                                  <div className="ml-7 space-y-2">
+                                    {serverTools.map((tool) => (
+                                      <BooleanFormField
+                                        key={tool.id}
+                                        name={`enabled_tools_map.${tool.id}`}
+                                        label={tool.display_name}
+                                        subtext={tool.description}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                        )}
                     </div>
                   </div>
                 </div>
@@ -1220,7 +1402,7 @@ export function AssistantEditor({
 
                       <div className="min-h-[100px]">
                         <div className="flex items-center mb-2">
-                          <TooltipProvider delayDuration={0}>
+                          <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div>
@@ -1567,14 +1749,6 @@ export function AssistantEditor({
                             label="AI Relevance Filter"
                             subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
                           />
-
-                          <BooleanFormField
-                            small
-                            removeIndent
-                            name="include_citations"
-                            label="Citations"
-                            subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
-                          />
                         </div>
                       </div>
                     </div>
@@ -1600,7 +1774,7 @@ export function AssistantEditor({
                         setFieldValue("task_prompt", e.target.value);
                       }}
                       explanationText="Learn about prompting in our docs!"
-                      explanationLink="https://docs.onyx.app/guides/assistants"
+                      explanationLink="https://docs.onyx.app/admin/agents/overview"
                       className="[&_textarea]:placeholder:text-text-muted/50"
                     />
                   </>
@@ -1618,7 +1792,7 @@ export function AssistantEditor({
                       </Button>
                     )}
                   </div>
-                  <div className="flex gap-x-2">
+                  <div className="flex gap-x-4 items-center">
                     <Button
                       type="submit"
                       disabled={isSubmitting || isRequestSuccessful}

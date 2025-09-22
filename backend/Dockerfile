@@ -12,7 +12,8 @@ ARG ONYX_VERSION=0.0.0-dev
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
-    DO_NOT_TRACK="true"
+    DO_NOT_TRACK="true" \
+    PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
@@ -115,6 +116,14 @@ COPY ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connect
 COPY ./assets /app/assets
 
 ENV PYTHONPATH=/app
+
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD

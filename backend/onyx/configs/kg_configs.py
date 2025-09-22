@@ -140,3 +140,5 @@ KG_MAX_SEARCH_DOCUMENTS: int = int(os.environ.get("KG_MAX_SEARCH_DOCUMENTS", "15
 KG_MAX_DECOMPOSITION_SEGMENTS: int = int(
     os.environ.get("KG_MAX_DECOMPOSITION_SEGMENTS", "10")
 )
+KG_BETA_ASSISTANT_DESCRIPTION = "The KG Beta assistant uses the Onyx Knowledge Graph (beta) structure \
+to answer questions"

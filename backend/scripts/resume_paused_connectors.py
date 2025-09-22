@@ -16,36 +16,39 @@ def resume_paused_connectors(
         headers["Authorization"] = f"Bearer {api_key}"
 
     # Get all paused connectors
-    response = requests.get(
+    response = requests.post(
         f"{api_server_url}/api/manage/admin/connector/indexing-status",
         headers=headers,
+        json={"get_all_connectors": True},
     )
     response.raise_for_status()
 
-    # Convert the response to a list of ConnectorIndexingStatus objects
-    connectors = [cc_pair for cc_pair in response.json()]
+    indexing_status_response = response.json()
 
-    # If a specific connector is provided, filter the connectors to only include that one
-    if specific_connector_sources:
-        connectors = [
-            connector
-            for connector in connectors
-            if connector["connector"]["source"] in specific_connector_sources
-        ]
-
-    for connector in connectors:
-        if connector["cc_pair_status"] == "PAUSED":
-            print(f"Resuming connector: {connector['name']}")
-            response = requests.put(
-                f"{api_server_url}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
-                json={"status": "ACTIVE"},
-                headers=headers,
-            )
-            response.raise_for_status()
-            print(f"Resumed connector: {connector['name']}")
-
-        else:
-            print(f"Connector {connector['name']} is not paused")
+    # Iterate over all connectors and resume paused ones
+    for connectors_by_source in indexing_status_response:
+        if (
+            specific_connector_sources
+            and connectors_by_source["source"] not in specific_connector_sources
+        ):
+            print(f"Skipping connector source: {connectors_by_source['source']}")
+            continue
+        connectors = connectors_by_source["indexing_statuses"]
+        for connector in connectors:
+            if connector.get("cc_pair_status"):
+                if connector["cc_pair_status"] == "PAUSED":
+                    print(f"Resuming connector: {connector['name']}")
+                    response = requests.put(
+                        f"{api_server_url}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
+                        json={"status": "ACTIVE"},
+                        headers=headers,
+                    )
+                    response.raise_for_status()
+                    print(f"Resumed connector: {connector['name']}")
+                else:
+                    print(f"Connector {connector['name']} is not paused")
+            else:
+                print(f"Connector {connector['name']} is a Federated Connector")
 
 
 def main() -> None:

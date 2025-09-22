@@ -462,7 +462,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
       {/* Main upload area */}
       <TooltipProvider>
-        <Tooltip delayDuration={0}>
+        <Tooltip>
           <TooltipTrigger
             className={`w-full ${uploadType === "url" ? "cursor-default" : ""}`}
           >

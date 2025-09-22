@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
 from onyx.db.models import FederatedConnector__DocumentSet
@@ -37,6 +38,11 @@ def fetch_all_federated_connectors(db_session: Session) -> list[FederatedConnect
     )
     result = db_session.execute(stmt)
     return list(result.scalars().all())
+
+
+def fetch_all_federated_connectors_parallel() -> list[FederatedConnector]:
+    with get_session_with_current_tenant() as db_session:
+        return fetch_all_federated_connectors(db_session)
 
 
 def validate_federated_connector_credentials(

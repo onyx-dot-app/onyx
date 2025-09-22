@@ -16,6 +16,11 @@ import {
   filterAssistants,
 } from "@/lib/assistants/utils";
 import { useUser } from "../user/UserProvider";
+import {
+  UserSpecificAssistantPreference,
+  UserSpecificAssistantPreferences,
+} from "@/lib/types";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 
 interface AssistantsContextProps {
   assistants: MinimalPersonaSnapshot[];
@@ -24,9 +29,19 @@ interface AssistantsContextProps {
   finalAssistants: MinimalPersonaSnapshot[];
   ownedButHiddenAssistants: MinimalPersonaSnapshot[];
   refreshAssistants: () => Promise<void>;
-  isImageGenerationAvailable: boolean;
+
+  // assistants that the user has explicitly pinned
   pinnedAssistants: MinimalPersonaSnapshot[];
   setPinnedAssistants: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
+
+  assistantPreferences: UserSpecificAssistantPreferences | null;
+  setSpecificAssistantPreferences: (
+    assistantId: number,
+    assistantPreferences: UserSpecificAssistantPreference
+  ) => void;
+
+  forcedToolIds: number[];
+  setForcedToolIds: Dispatch<SetStateAction<number[]>>;
 }
 
 const AssistantsContext = createContext<AssistantsContextProps | undefined>(
@@ -43,6 +58,9 @@ export const AssistantsProvider: React.FC<{
     initialAssistants || []
   );
   const { user } = useUser();
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
+  const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
 
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
@@ -52,10 +70,11 @@ export const AssistantsProvider: React.FC<{
         .map((id) => assistants.find((assistant) => assistant.id === id))
         .filter(
           (assistant): assistant is MinimalPersonaSnapshot =>
-            assistant !== undefined
+            assistant !== undefined && assistant.id !== 0
         );
     } else {
-      return assistants.filter((a) => a.is_default_persona);
+      // Filter out the unified assistant (ID 0) from the pinned list
+      return assistants.filter((a) => a.is_default_persona && a.id !== 0);
     }
   });
 
@@ -66,32 +85,14 @@ export const AssistantsProvider: React.FC<{
           .map((id) => assistants.find((assistant) => assistant.id === id))
           .filter(
             (assistant): assistant is MinimalPersonaSnapshot =>
-              assistant !== undefined
+              assistant !== undefined && assistant.id !== 0
           );
       } else {
-        return assistants.filter((a) => a.is_default_persona);
+        // Filter out the unified assistant (ID 0) from the pinned list
+        return assistants.filter((a) => a.is_default_persona && a.id !== 0);
       }
     });
   }, [user?.preferences?.pinned_assistants, assistants]);
-
-  const [isImageGenerationAvailable, setIsImageGenerationAvailable] =
-    useState<boolean>(false);
-
-  useEffect(() => {
-    const checkImageGenerationAvailability = async () => {
-      try {
-        const response = await fetch("/api/persona/image-generation-tool");
-        if (response.ok) {
-          const { is_available } = await response.json();
-          setIsImageGenerationAvailable(is_available);
-        }
-      } catch (error) {
-        console.error("Error checking image generation availability:", error);
-      }
-    };
-
-    checkImageGenerationAvailability();
-  }, []);
 
   const refreshAssistants = async () => {
     try {
@@ -117,7 +118,9 @@ export const AssistantsProvider: React.FC<{
   } = useMemo(() => {
     const { visibleAssistants, hiddenAssistants } = classifyAssistants(
       user,
-      assistants
+      // remove the unified assistant (ID 0) from the list of assistants, it should not be shown
+      // anywhere on the chat page
+      assistants.filter((assistant) => assistant.id !== 0)
     );
 
     const finalAssistants = user
@@ -146,9 +149,12 @@ export const AssistantsProvider: React.FC<{
         finalAssistants,
         ownedButHiddenAssistants,
         refreshAssistants,
-        isImageGenerationAvailable,
         setPinnedAssistants,
         pinnedAssistants,
+        assistantPreferences,
+        setSpecificAssistantPreferences,
+        forcedToolIds,
+        setForcedToolIds,
       }}
     >
       {children}
@@ -156,7 +162,7 @@ export const AssistantsProvider: React.FC<{
   );
 };
 
-export const useAssistants = (): AssistantsContextProps => {
+export const useAssistantsContext = (): AssistantsContextProps => {
   const context = useContext(AssistantsContext);
   if (!context) {
     throw new Error("useAssistants must be used within an AssistantsProvider");

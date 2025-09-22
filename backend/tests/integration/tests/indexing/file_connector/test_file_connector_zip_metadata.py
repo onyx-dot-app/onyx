@@ -76,6 +76,7 @@ def test_zip_metadata_handling(
         input_type=InputType.LOAD_STATE,
         connector_specific_config={
             "file_locations": file_paths,
+            "file_names": [os.path.basename(file_path) for file_path in file_paths],
             "zip_metadata": metadata,
         },
         access_type=AccessType.PUBLIC,

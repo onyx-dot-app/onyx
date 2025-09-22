@@ -24,6 +24,7 @@ from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 
@@ -72,6 +73,7 @@ def _process_file(
     file: IO[Any],
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
+    file_type: str | None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -148,9 +150,10 @@ def _process_file(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
+        content_type=file_type,
     )
 
-    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/connectors/file
+    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admin/connectors/official/file
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(
@@ -222,18 +225,25 @@ class LocalFileConnector(LoadConnector):
     """
     Connector that reads files from Postgres and yields Documents, including
     embedded image extraction without summarization.
+
+    file_locations are S3/Filestore UUIDs
+    file_names are the names of the files
     """
 
+    # Note: file_names is a required parameter, but should not break backwards compatibility.
+    # If add_file_names migration is not run, old file connector configs will not have file_names.
+    # file_names is only used for display purposes in the UI and file_locations is used as a fallback.
     def __init__(
         self,
         file_locations: list[Path | str],
-        zip_metadata: dict[str, Any],
+        file_names: list[str] | None = None,
+        zip_metadata: dict[str, Any] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
-        self.zip_metadata = zip_metadata
+        self.zip_metadata = zip_metadata or {}
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
@@ -268,6 +278,7 @@ class LocalFileConnector(LoadConnector):
                 file=file_io,
                 metadata=metadata,
                 pdf_pass=self.pdf_pass,
+                file_type=file_record.file_type,
             )
             documents.extend(new_docs)
 
@@ -282,7 +293,9 @@ class LocalFileConnector(LoadConnector):
 
 if __name__ == "__main__":
     connector = LocalFileConnector(
-        file_locations=[os.environ["TEST_FILE"]], zip_metadata={}
+        file_locations=[os.environ["TEST_FILE"]],
+        file_names=[os.environ["TEST_FILE"]],
+        zip_metadata={},
     )
     connector.load_credentials({"pdf_password": os.environ.get("PDF_PASSWORD")})
     doc_batches = connector.load_from_state()

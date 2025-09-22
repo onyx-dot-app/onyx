@@ -2,9 +2,12 @@ dependencies:
 - name: postgresql
   repository: https://charts.bitnami.com/bitnami
   version: 14.3.1
+- name: keda
+  repository: https://kedacore.github.io/charts
+  version: 2.17.2
 - name: vespa
   repository: https://onyx-dot-app.github.io/vespa-helm-charts
-  version: 0.2.23
+  version: 0.2.24
 - name: nginx
   repository: oci://registry-1.docker.io/bitnamicharts
   version: 15.14.0
@@ -14,5 +17,5 @@ dependencies:
 - name: minio
   repository: oci://registry-1.docker.io/bitnamicharts
   version: 17.0.4
-digest: sha256:4c938cf9138e4ff6f5ecac5c044324d508ef2b0e1a23ba3f2bc089015cb40ff6
-generated: "2025-06-16T18:53:19.63168-07:00"
+digest: sha256:65f817c945890803354d0c458f65c45c031d3578f724d35fd4b7ae54527db67a
+generated: "2025-09-16T16:50:26.180259-07:00"

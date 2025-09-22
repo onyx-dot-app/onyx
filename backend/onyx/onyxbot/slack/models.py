@@ -13,7 +13,7 @@ class SlackMessageInfo(BaseModel):
     sender_id: str | None
     email: str | None
     bypass_filters: bool  # User has tagged @OnyxBot
-    is_bot_msg: bool  # User is using /OnyxBot
+    is_slash_command: bool  # User is using /OnyxBot
     is_bot_dm: bool  # User is direct messaging to OnyxBot
 
 
@@ -25,7 +25,7 @@ class ActionValuesEphemeralMessageMessageInfo(BaseModel):
     email: str | None
     sender_id: str | None
     thread_messages: list[ThreadMessage] | None
-    is_bot_msg: bool | None
+    is_slash_command: bool | None
     is_bot_dm: bool | None
     thread_to_respond: str | None
 

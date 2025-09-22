@@ -1,6 +1,6 @@
 import { FiImage, FiSearch } from "react-icons/fi";
 import { Persona } from "../admin/assistants/interfaces";
-import { SEARCH_TOOL_ID } from "../chat/tools/constants";
+import { SEARCH_TOOL_ID } from "../chat/components/tools/constants";
 
 export function AssistantTools({
   assistant,

@@ -10,6 +10,7 @@ import {
   deleteCredential,
   swapCredential,
   updateCredential,
+  updateCredentialWithPrivateKey,
 } from "@/lib/credential";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CreateCredential from "./actions/CreateCredential";
@@ -34,6 +35,7 @@ import {
 import { Spinner } from "@/components/Spinner";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Card } from "../ui/card";
+import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 
 export default function CredentialSection({
   ccPair,
@@ -111,7 +113,23 @@ export default function CredentialSection({
     details: any,
     onSucces: () => void
   ) => {
-    const response = await updateCredential(selectedCredential.id, details);
+    let privateKey: TypedFile | null = null;
+    Object.entries(details).forEach(([key, value]) => {
+      if (isTypedFileField(key)) {
+        privateKey = value as TypedFile;
+        delete details[key];
+      }
+    });
+    let response;
+    if (privateKey) {
+      response = await updateCredentialWithPrivateKey(
+        selectedCredential.id,
+        details,
+        privateKey
+      );
+    } else {
+      response = await updateCredential(selectedCredential.id, details);
+    }
     if (response.ok) {
       setPopup({
         message: "Updated credential",

@@ -259,6 +259,10 @@ module.exports = {
         link: "var(--link)",
         "link-hover": "var(--link-hover)",
 
+        // blue highlight colors for light/dark mode
+        "blue-highlight": "var(--blue-highlight)",
+        "blue-text": "var(--blue-highlight-text)",
+
         // one offs
         error: "var(--error)",
         success: "var(--success)",
@@ -459,5 +463,6 @@ module.exports = {
   plugins: [
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
+    require("tailwindcss-animate"),
   ],
 };

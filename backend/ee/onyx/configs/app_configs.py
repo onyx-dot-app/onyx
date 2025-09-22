@@ -102,6 +102,19 @@ TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
+#####
+# SharePoint
+#####
+# In seconds, default is 30 minutes
+SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+# In seconds, default is 5 minutes
+SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
 
 ####
 # Celery Job Frequency

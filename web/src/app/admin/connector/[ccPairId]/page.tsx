@@ -23,7 +23,7 @@ import {
   ConfigDisplay,
 } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
-import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
+import { IndexAttemptsTable } from "./IndexAttemptsTable";
 
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -109,17 +109,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = usePaginatedFetch<IndexAttemptSnapshot>({
     itemsPerPage: ITEMS_PER_PAGE,
     pagesPerBatch: PAGES_PER_BATCH,
-    endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
-  });
-
-  // need to always have the most recent index attempts around
-  // so just kick off a separate fetch
-  const {
-    currentPageData: mostRecentIndexAttempts,
-    isLoading: isLoadingMostRecentIndexAttempts,
-  } = usePaginatedFetch<IndexAttemptSnapshot>({
-    itemsPerPage: ITEMS_PER_PAGE,
-    pagesPerBatch: 1,
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
@@ -351,11 +340,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     }
   };
 
-  if (
-    isLoadingCCPair ||
-    isLoadingIndexAttempts ||
-    isLoadingMostRecentIndexAttempts
-  ) {
+  if (isLoadingCCPair || isLoadingIndexAttempts) {
     return <ThreeDotsLoader />;
   }
 
@@ -728,7 +713,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               Indexing Attempts
             </Title>
             {indexAttempts && (
-              <IndexingAttemptsTable
+              <IndexAttemptsTable
                 ccPair={ccPair}
                 indexAttempts={indexAttempts}
                 currentPage={currentPage}

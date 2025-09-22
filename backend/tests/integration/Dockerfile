@@ -3,6 +3,9 @@ FROM python:3.11.7-slim-bookworm
 # Currently needs all dependencies, since the ITs use some of the Onyx
 # backend code.
 
+# Needed for playwright to work
+ENV PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
+
 # Install system dependencies
 # cmake needed for psycopg (postgres)
 # libpq-dev needed for psycopg (postgres)
@@ -84,6 +87,8 @@ COPY ./requirements/dev.txt /tmp/dev-requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         -r /tmp/dev-requirements.txt
 COPY ./tests/integration /app/tests/integration
+# copies all files, but not folders, in the tests directory
+COPY ./tests/* /app/tests/
 
 ENV PYTHONPATH=/app
 

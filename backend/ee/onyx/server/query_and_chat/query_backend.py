@@ -8,7 +8,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.chat.process_message import gather_stream_for_answer_api
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
@@ -20,8 +19,10 @@ from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import prepare_chat_message_request
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.process_message import ChatPacketStream
+from onyx.chat.models import QADocsResponse
+from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.models import SavedSearchDocWithContent
@@ -30,7 +31,6 @@ from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
-from onyx.db.chat import get_prompt_by_id
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -39,6 +39,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 
@@ -140,7 +141,7 @@ def get_answer_stream(
     query_request: OneShotQARequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> ChatPacketStream:
+) -> AnswerStream:
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
 
@@ -149,14 +150,6 @@ def get_answer_stream(
         and query_request.persona_id is None
     ):
         raise KeyError("Must provide persona ID or Persona Config")
-
-    prompt = None
-    if query_request.prompt_id is not None:
-        prompt = get_prompt_by_id(
-            prompt_id=query_request.prompt_id,
-            user=user,
-            db_session=db_session,
-        )
 
     persona_info: Persona | PersonaOverrideConfig | None = None
     if query_request.persona_override_config is not None:
@@ -192,7 +185,6 @@ def get_answer_stream(
         user=user,
         persona_id=query_request.persona_id,
         persona_override_config=query_request.persona_override_config,
-        prompt=prompt,
         message_ts_to_respond_to=None,
         retrieval_details=query_request.retrieval_options,
         rerank_settings=query_request.rerank_settings,
@@ -205,7 +197,6 @@ def get_answer_stream(
         new_msg_req=request,
         user=user,
         db_session=db_session,
-        include_contexts=query_request.return_contexts,
     )
 
     return packets
@@ -219,12 +210,28 @@ def get_answer_with_citation(
 ) -> OneShotQAResponse:
     try:
         packets = get_answer_stream(request, user, db_session)
-        answer = gather_stream_for_answer_api(packets)
+        answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
 
-        return answer
+        return OneShotQAResponse(
+            answer=answer.answer,
+            chat_message_id=answer.message_id,
+            error_msg=answer.error_msg,
+            citations=[
+                CitationInfo(citation_num=i, document_id=doc_id)
+                for i, doc_id in answer.cited_documents.items()
+            ],
+            docs=QADocsResponse(
+                top_documents=answer.top_documents,
+                predicted_flow=None,
+                predicted_search=None,
+                applied_source_filters=None,
+                applied_time_cutoff=None,
+                recency_bias_multiplier=0.0,
+            ),
+        )
     except Exception as e:
         logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")

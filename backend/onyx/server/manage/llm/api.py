@@ -1,7 +1,12 @@
+import os
 from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 
+import boto3
+from botocore.exceptions import BotoCoreError
+from botocore.exceptions import ClientError
+from botocore.exceptions import NoCredentialsError
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -22,12 +27,14 @@ from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
+from onyx.llm.llm_provider_options import BEDROCK_MODEL_NAMES
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -386,3 +393,84 @@ def get_provider_contextual_cost(
             )
 
     return costs
+
+
+@admin_router.post("/bedrock/available-models")
+def get_bedrock_available_models(
+    request: BedrockModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[str]:
+    """Fetch available Bedrock models for a specific region and credentials"""
+    try:
+        # Precedence: bearer → keys → IAM
+        if request.aws_bearer_token_bedrock:
+            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
+            session = boto3.Session(region_name=request.aws_region_name)
+        elif request.aws_access_key_id and request.aws_secret_access_key:
+            session = boto3.Session(
+                aws_access_key_id=request.aws_access_key_id,
+                aws_secret_access_key=request.aws_secret_access_key,
+                region_name=request.aws_region_name,
+            )
+        else:
+            session = boto3.Session(region_name=request.aws_region_name)
+
+        try:
+            bedrock = session.client("bedrock")
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
+            )
+
+        # Available Bedrock models: text-only, streaming supported
+        model_summaries = bedrock.list_foundation_models().get("modelSummaries", [])
+        available_models = {
+            model.get("modelId", "")
+            for model in model_summaries
+            if model.get("modelId")
+            and "embed" not in model.get("modelId", "").lower()
+            and model.get("responseStreamingSupported", False)
+        }
+
+        # Available inference profiles. Invoking these allows cross-region inference (preferred over base models).
+        profile_ids: set[str] = set()
+        cross_region_models: set[str] = set()
+        try:
+            inference_profiles = bedrock.list_inference_profiles(
+                typeEquals="SYSTEM_DEFINED"
+            ).get("inferenceProfileSummaries", [])
+            for profile in inference_profiles:
+                if profile_id := profile.get("inferenceProfileId"):
+                    profile_ids.add(profile_id)
+
+                    # The model id is everything after the first period in the profile id
+                    if "." in profile_id:
+                        model_id = profile_id.split(".", 1)[1]
+                        cross_region_models.add(model_id)
+        except Exception as e:
+            # Cross-region inference isn't guaranteed; ignore failures here.
+            logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
+
+        # Prefer profiles: de-dupe available models, then add profile IDs
+        candidates = (available_models - cross_region_models) | profile_ids
+
+        # Keep only models we support (compatibility with litellm)
+        filtered = sorted(
+            [model for model in candidates if model in BEDROCK_MODEL_NAMES],
+            reverse=True,
+        )
+
+        # Unset the environment variable, even though it is set again in DefaultMultiLLM init
+        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+
+        return filtered
+
+    except (ClientError, NoCredentialsError, BotoCoreError) as e:
+        raise HTTPException(
+            status_code=400, detail=f"Failed to connect to AWS Bedrock: {e}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected error fetching Bedrock models: {e}"
+        )

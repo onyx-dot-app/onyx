@@ -241,15 +241,9 @@ export function PersonasTable({
               <div
                 key="is_default_persona"
                 onClick={() => {
-                  if (isEditable) {
-                    openDefaultModal(persona);
-                  }
+                  openDefaultModal(persona);
                 }}
-                className={`px-1 py-0.5 rounded flex ${
-                  isEditable
-                    ? "hover:bg-accent-background-hovered cursor-pointer"
-                    : ""
-                } select-none w-fit`}
+                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
@@ -265,26 +259,20 @@ export function PersonasTable({
               <div
                 key="is_visible"
                 onClick={async () => {
-                  if (isEditable) {
-                    const response = await togglePersonaVisibility(
-                      persona.id,
-                      persona.is_visible
-                    );
-                    if (response.ok) {
-                      refreshPersonas();
-                    } else {
-                      setPopup({
-                        type: "error",
-                        message: `Failed to update persona - ${await response.text()}`,
-                      });
-                    }
+                  const response = await togglePersonaVisibility(
+                    persona.id,
+                    persona.is_visible
+                  );
+                  if (response.ok) {
+                    refreshPersonas();
+                  } else {
+                    setPopup({
+                      type: "error",
+                      message: `Failed to update persona - ${await response.text()}`,
+                    });
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex ${
-                  isEditable
-                    ? "hover:bg-accent-background-hovered cursor-pointer"
-                    : ""
-                } select-none w-fit`}
+                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (

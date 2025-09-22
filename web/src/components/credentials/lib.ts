@@ -6,6 +6,7 @@ import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
 export function createValidationSchema(json_values: Record<string, any>) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
@@ -16,7 +17,6 @@ export function createValidationSchema(json_values: Record<string, any>) {
     schemaFields["authentication_method"] = Yup.string().required(
       "Please select an authentication method"
     );
-
     // conditional rules per authMethod
     template.authMethods.forEach((method) => {
       Object.entries(method.fields).forEach(([key, def]) => {
@@ -26,6 +26,14 @@ export function createValidationSchema(json_values: Record<string, any>) {
             .nullable()
             .default(false)
             .transform((v, o) => (o === undefined ? false : v));
+        } else if (isTypedFileField(key)) {
+          //TypedFile fields - use mixed schema instead of string (check before null check)
+          schemaFields[key] = Yup.mixed().when("authentication_method", {
+            is: method.value,
+            then: () =>
+              Yup.mixed().required(`Please select a ${displayName} file`),
+            otherwise: () => Yup.mixed().notRequired(),
+          });
         } else if (def === null) {
           schemaFields[key] = Yup.string()
             .trim()
@@ -58,6 +66,11 @@ export function createValidationSchema(json_values: Record<string, any>) {
         .nullable()
         .default(false)
         .transform((v, o) => (o === undefined ? false : v));
+    } else if (isTypedFileField(key)) {
+      // TypedFile fields - use mixed schema instead of string (check before null check)
+      schemaFields[key] = Yup.mixed().required(
+        `Please select a ${displayName} file`
+      );
     } else if (def === null) {
       schemaFields[key] = Yup.string()
         .trim()
@@ -77,11 +90,16 @@ export function createValidationSchema(json_values: Record<string, any>) {
 }
 
 export function createEditingValidationSchema(json_values: dictionaryType) {
-  const schemaFields: { [key: string]: Yup.StringSchema } = {};
+  const schemaFields: { [key: string]: Yup.AnySchema } = {};
 
   for (const key in json_values) {
     if (Object.prototype.hasOwnProperty.call(json_values, key)) {
-      schemaFields[key] = Yup.string().optional();
+      if (isTypedFileField(key)) {
+        // TypedFile fields - use mixed schema for optional file uploads during editing
+        schemaFields[key] = Yup.mixed().optional();
+      } else {
+        schemaFields[key] = Yup.string().optional();
+      }
     }
   }
 
@@ -95,7 +113,12 @@ export function createInitialValues(credential: Credential<any>): formType {
   };
 
   for (const key in credential.credential_json) {
-    initialValues[key] = "";
+    // Initialize TypedFile fields as null, other fields as empty strings
+    if (isTypedFileField(key)) {
+      initialValues[key] = null as any; // TypedFile fields start as null
+    } else {
+      initialValues[key] = "";
+    }
   }
 
   return initialValues;

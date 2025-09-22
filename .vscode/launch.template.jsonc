@@ -31,14 +31,16 @@
         ],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       },
       {
         "name": "Web / Model / API",
         "configurations": ["Web Server", "Model Server", "API Server"],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       },
       {
         "name": "Celery (all)",
@@ -53,7 +55,8 @@
         ],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       }
     ],
     "configurations": [
@@ -189,7 +192,7 @@
           "--loglevel=INFO",
           "--hostname=light@%n",
           "-Q",
-          "vespa_metadata_sync,connector_deletion,doc_permissions_upsert"
+          "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup"
         ],
         "presentation": {
           "group": "2"
@@ -383,6 +386,28 @@
         }
       },
       {
+        "name": "Eval CLI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/backend/onyx/evals/eval_cli.py",
+        "cwd": "${workspaceFolder}/backend",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "envFile": "${workspaceFolder}/.vscode/.env",
+        "presentation": {
+          "group": "3"
+        },
+        "env": {
+          "LOG_LEVEL": "INFO",
+          "PYTHONUNBUFFERED": "1",
+          "PYTHONPATH": "."
+        },
+        "args": [
+            "--verbose"
+        ],
+        "consoleTitle": "Eval CLI Console"
+    },
+      {
         // Celery jobs launched through a single background script (legacy)
         // Recommend using the "Celery (all)" compound launch instead.
         "name": "Background Jobs",
@@ -463,4 +488,4 @@
       }
     ]
   }
-  
+ 
