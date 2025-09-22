@@ -77,6 +77,12 @@ def batch_delete(
             f"Failed to delete {len(failed_batches)} batches from {table_name}. "
             f"Total deleted: {total_deleted}/{total_count}"
         )
+        # Fail the migration to avoid silently succeeding on partial cleanup
+        raise RuntimeError(
+            f"Batch deletion failed for {table_name}: "
+            f"{len(failed_batches)} failed batches out of "
+            f"{(total_count + batch_size - 1) // batch_size}."
+        )
 
     return total_deleted
 
@@ -281,13 +287,6 @@ def downgrade() -> None:
 
     logger.error("CRITICAL: Downgrading data cleanup cannot restore deleted data!")
     logger.error("Data restoration requires backup files or database backup.")
-
-    # If you created archive tables in upgrade(), you could restore from them here
-    # Example:
-    # op.execute("""
-    #     INSERT INTO connector_credential_pair
-    #     SELECT * FROM archive_user_file_cc_pairs
-    # """)
 
     raise NotImplementedError(
         "Downgrade of legacy data cleanup is not supported. "
