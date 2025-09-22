@@ -20,7 +20,7 @@ class UserFileSnapshot(BaseModel):
     file_id: str
     created_at: datetime
     status: UserFileStatus
-    last_accessed_at: datetime
+    last_accessed_at: datetime | None
     file_type: str
     chat_file_type: ChatFileType
     token_count: int | None

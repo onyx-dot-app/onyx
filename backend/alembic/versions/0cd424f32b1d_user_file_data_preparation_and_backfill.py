@@ -259,7 +259,7 @@ def upgrade() -> None:
         )
         UPDATE user_file uf
         SET status = CASE
-            WHEN la.status = 'FAILED' THEN 'FAILED'
+            WHEN la.status = 'failed' THEN 'FAILED'
             ELSE 'COMPLETED'
         END
         FROM uf_to_ccp ufc
