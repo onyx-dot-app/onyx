@@ -124,17 +124,6 @@ export const CitedSourcesToggle = ({
         {uniqueIcons.map((icon, index) => (
           <div key={icon.id}>{icon.element}</div>
         ))}
-        {/* Show count for remaining items */}
-        {(() => {
-          const totalCount =
-            citations.length > 0 ? citations.length : documentMap.size;
-          const remainingCount = totalCount - uniqueIcons.length;
-          return remainingCount > 0 ? (
-            <span className="text-xs text-text-500 ml-1">
-              +{remainingCount}
-            </span>
-          ) : null;
-        })()}
       </div>
       <span className="text-sm text-text-700">Sources</span>
     </div>
