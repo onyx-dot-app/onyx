@@ -508,6 +508,7 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    USER_FILE_DOCID_MIGRATION = "user_file_docid_migration"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

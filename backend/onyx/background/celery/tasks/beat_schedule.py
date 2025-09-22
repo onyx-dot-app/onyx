@@ -37,6 +37,16 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "user-file-docid-migration",
+        "task": OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
+        "schedule": timedelta(minutes=15),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.USER_FILE_PROCESSING,
+        },
+    },
+    {
         "name": "check-for-kg-processing",
         "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
         "schedule": timedelta(seconds=60),
