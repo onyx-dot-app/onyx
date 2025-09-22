@@ -22,8 +22,7 @@ from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.onyxbot.slack.listener import process_message
 from onyx.onyxbot.slack.models import ChannelType
-from onyx.tools.built_in_tools import get_builtin_tool
-from onyx.tools.built_in_tools import load_builtin_tools
+from onyx.db.tools import get_builtin_tool
 from onyx.tools.built_in_tools import SearchTool
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -59,8 +58,7 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     db_session.add(persona_doc_set)
     db_session.commit()
 
-    # Ensure built-in tools are loaded
-    load_builtin_tools(db_session)
+    # Built-in tools are automatically seeded by migrations
 
     try:
         search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
