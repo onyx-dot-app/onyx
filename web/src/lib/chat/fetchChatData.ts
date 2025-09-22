@@ -99,7 +99,7 @@ export async function fetchChatData(searchParams: {
     console.log("Failed to fetch input prompts");
   }
 
-  const availableTools = (results[9] || []) as ToolSnapshot[];
+  const availableTools = (results[8] || []) as ToolSnapshot[];
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
 

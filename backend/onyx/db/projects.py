@@ -53,10 +53,12 @@ def create_user_files(
     for file_path, file in zip(
         upload_response.file_paths, categorized_files.acceptable
     ):
+        new_id = uuid.uuid4()
         new_file = UserFile(
-            id=uuid.uuid4(),
+            id=new_id,
             user_id=user.id if user else None,
             file_id=file_path,
+            document_id=str(new_id),
             name=file.filename,
             token_count=categorized_files.acceptable_file_to_token_count[
                 file.filename or ""
