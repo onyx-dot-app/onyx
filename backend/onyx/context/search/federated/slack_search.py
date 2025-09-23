@@ -144,12 +144,12 @@ def query_slack(
         logger.error(f"Slack API error in search_messages: {slack_error}")
         logger.error(
             f"Slack API error details: status={slack_error.response.status_code}, "
-            f"error={slack_error.response.get('error')}, response={slack_error.response}"
+            f"error={slack_error.response.get('error')}"
         )
         if "not_allowed_token_type" in str(slack_error):
-            logger.error(
-                f"TOKEN TYPE ERROR: access_token starts with: {access_token[:10]}..."
-            )
+            # Log token type prefix
+            token_prefix = access_token[:4] if len(access_token) >= 4 else "unknown"
+            logger.error(f"TOKEN TYPE ERROR: access_token type: {token_prefix}...")
         return []
 
     # convert matches to slack messages

@@ -75,7 +75,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         """
         ttl_ms: int | None = None
 
-        retry_after_value: list[str] | str | None = None
+        retry_after_value: str | None = None
         retry_after_header_name: Optional[str] = None
         duration_s: float = 1.0  # seconds
 
@@ -110,7 +110,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
                 )
 
             retry_after_value_int = int(
-                retry_after_value[0]
+                retry_after_value
             )  # will raise ValueError if somehow we can't convert to int
             jitter = retry_after_value_int * 0.25 * random.random()
             duration_s = retry_after_value_int + jitter
