@@ -65,19 +65,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_LOWERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_DIGIT = (
-    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_SPECIAL_CHAR = (
-    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "false").lower() == "true"
 )
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
