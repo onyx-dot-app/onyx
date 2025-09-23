@@ -238,7 +238,8 @@ def construct_tools(
                         db_session=db_session,
                         pipeline_id=persona.pipeline_id,
                         prompt_config=prompt_config,
-                        llm_config=llm.config
+                        llm_config=llm.config,
+                        chat_session_id=custom_tool_config.chat_session_id,
                     )
                 ]
             elif tool_cls.__name__ == KnowledgeMapTool.__name__:
