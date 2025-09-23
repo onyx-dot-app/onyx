@@ -32,6 +32,7 @@ from onyx.db.llm import fetch_existing_doc_sets
 from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
+from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -341,6 +342,45 @@ def reorganize_citations(
             new_citation_info[citation.citation_num] = citation
 
     return new_answer, list(new_citation_info.values())
+
+
+def build_citation_map_from_infos(
+    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
+) -> dict[int, int]:
+    """Translate a list of streaming CitationInfo objects into a mapping of
+    citation number -> saved search doc DB id.
+
+    Always cites the first instance of a document_id and assumes db_docs are
+    ordered as shown to the user (display order).
+    """
+    doc_id_to_saved_doc_id_map: dict[str, int] = {}
+    for db_doc in db_docs:
+        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
+            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
+
+    citation_to_saved_doc_id_map: dict[int, int] = {}
+    for citation in citations_list:
+        if citation.citation_num not in citation_to_saved_doc_id_map:
+            saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
+            if saved_id is not None:
+                citation_to_saved_doc_id_map[citation.citation_num] = saved_id
+
+    return citation_to_saved_doc_id_map
+
+
+def build_citation_map_from_numbers(
+    cited_numbers: list[int] | set[int], db_docs: list[DbSearchDoc]
+) -> dict[int, int]:
+    """Translate parsed citation numbers (e.g., from [[n]]) into a mapping of
+    citation number -> saved search doc DB id by positional index.
+    """
+    citation_to_saved_doc_id_map: dict[int, int] = {}
+    for num in sorted(set(cited_numbers)):
+        idx = num - 1
+        if 0 <= idx < len(db_docs):
+            citation_to_saved_doc_id_map[num] = db_docs[idx].id
+
+    return citation_to_saved_doc_id_map
 
 
 def extract_headers(

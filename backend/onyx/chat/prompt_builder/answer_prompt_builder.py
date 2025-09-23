@@ -7,6 +7,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
+from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
@@ -132,6 +133,10 @@ class AnswerPromptBuilder:
         self.raw_user_query = raw_user_query
         self.raw_user_uploaded_files = raw_user_uploaded_files
         self.single_message_history = single_message_history
+
+        # Optional: if the prompt includes explicit context documents (e.g., project files),
+        # store them here so downstream streaming can reference them for citation mapping.
+        self.context_llm_docs: list[LlmDoc] | None = None
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:

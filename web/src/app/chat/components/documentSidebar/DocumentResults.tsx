@@ -15,7 +15,6 @@ import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
-import type { ProjectFile } from "@/app/chat/projects/projectsService";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -53,7 +52,6 @@ interface DocumentResultsProps {
   isSharedChat?: boolean;
   modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
-  projectFiles?: ProjectFile[];
 }
 
 const DocumentResultsComponent = (
@@ -69,7 +67,6 @@ const DocumentResultsComponent = (
     isSharedChat,
     isOpen,
     setPresentingDocument,
-    projectFiles = [],
   }: DocumentResultsProps,
   ref: ForwardedRef<HTMLDivElement>
 ) => {
@@ -133,10 +130,7 @@ const DocumentResultsComponent = (
   const hasCited = citedDocuments.length > 0;
   const hasOther = otherDocuments.length > 0;
   const hasHumanFiles = (humanFileDescriptors?.length || 0) > 0;
-  const hasProjectFiles = (projectFiles?.length || 0) > 0;
   const showCloseInUserFiles = !hasCited && !hasOther && hasHumanFiles;
-  const showCloseInProjectFiles =
-    !hasCited && !hasOther && !hasHumanFiles && hasProjectFiles;
 
   return (
     <>
@@ -289,50 +283,6 @@ const DocumentResultsComponent = (
                       />
                     </div>
                   ))}
-                </div>
-              )}
-
-              {/* Project Files Section */}
-              {projectFiles && projectFiles.length > 0 && (
-                <div className="mt-4">
-                  <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
-                    <h3 className="text-base font-semibold text-text-700">
-                      Project Files
-                    </h3>
-                    {showCloseInProjectFiles && (
-                      <button
-                        aria-label="Close sidebar"
-                        title="Close"
-                        className="my-auto p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                        onClick={closeSidebar}
-                      >
-                        <XIcon size={16} />
-                      </button>
-                    )}
-                  </div>
-                  {projectFiles.slice(0, 20).map((f) => (
-                    <div key={f.id} className={`desktop:px-2 w-full mb-2`}>
-                      <ChatDocumentDisplay
-                        setPresentingDocument={setPresentingDocument}
-                        closeSidebar={closeSidebar}
-                        modal={modal}
-                        document={buildOnyxDocumentFromFile(
-                          f.file_id,
-                          f.name,
-                          true
-                        )}
-                        isSelected={false}
-                        handleSelect={() => {}}
-                        hideSelection={true}
-                        tokenLimitReached={false}
-                      />
-                    </div>
-                  ))}
-                  {projectFiles.length > 20 && (
-                    <div className="text-text-500 px-4 py-2 text-xs">
-                      +{projectFiles.length - 20} more
-                    </div>
-                  )}
                 </div>
               )}
             </div>

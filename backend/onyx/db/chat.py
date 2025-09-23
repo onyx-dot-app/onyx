@@ -1145,12 +1145,29 @@ def create_search_doc_from_inference_section(
 def create_search_doc_from_saved_search_doc(
     saved_search_doc: SavedSearchDoc,
 ) -> SearchDoc:
-    """Convert SavedSearchDoc to SearchDoc by excluding the additional fields"""
-    data = saved_search_doc.model_dump()
-    # Remove the fields that are specific to SavedSearchDoc
-    data.pop("db_doc_id", None)
-    # Keep score since SearchDoc has it as an optional field
-    return SearchDoc(**data)
+    """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
+    return SearchDoc(
+        document_id=saved_search_doc.document_id,
+        chunk_ind=saved_search_doc.chunk_ind,
+        # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null
+        semantic_id=saved_search_doc.semantic_identifier or "Unknown",
+        link=saved_search_doc.link,
+        blurb=saved_search_doc.blurb,
+        source_type=saved_search_doc.source_type,
+        boost=saved_search_doc.boost,
+        hidden=saved_search_doc.hidden,
+        # Map metadata -> doc_metadata (DB column name)
+        doc_metadata=saved_search_doc.metadata,
+        # SavedSearchDoc.score exists and defaults to 0.0
+        score=saved_search_doc.score or 0.0,
+        match_highlights=saved_search_doc.match_highlights,
+        updated_at=saved_search_doc.updated_at,
+        primary_owners=saved_search_doc.primary_owners,
+        secondary_owners=saved_search_doc.secondary_owners,
+        is_internet=saved_search_doc.is_internet,
+        is_relevant=saved_search_doc.is_relevant,
+        relevance_explanation=saved_search_doc.relevance_explanation,
+    )
 
 
 def update_db_session_with_messages(

@@ -35,14 +35,24 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import run_with_timeout
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.chat.chat_utils import build_citation_map_from_numbers
+from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.models import PromptConfig
+from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
+from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
+from onyx.chat.stream_processing.citation_processing import (
+    normalize_square_bracket_citations_to_double_with_links,
+)
 from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
 from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.db.chat import create_search_doc_from_saved_search_doc
 from onyx.db.chat import update_db_session_with_messages
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.models import SearchDoc
 from onyx.db.models import Tool
 from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
@@ -311,6 +321,52 @@ def _get_existing_clarification_request(
     return clarification, original_question, chat_history_string
 
 
+def _persist_final_docs_and_citations(
+    db_session: Session,
+    context_llm_docs: list[Any] | None,
+    full_answer: str | None,
+) -> tuple[list[SearchDoc], dict[int, int] | None]:
+    """Persist final documents from in-context docs and derive citation mapping.
+
+    Returns the list of persisted `SearchDoc` records and an optional
+    citation map translating inline [[n]] references to DB doc indices.
+    """
+    final_documents_db: list[SearchDoc] = []
+    citations_map: dict[int, int] | None = None
+
+    if not context_llm_docs:
+        return final_documents_db, citations_map
+
+    saved_search_docs = saved_search_docs_from_llm_docs(context_llm_docs)
+    for saved_doc in saved_search_docs:
+        db_doc = create_search_doc_from_saved_search_doc(saved_doc)
+        db_session.add(db_doc)
+        final_documents_db.append(db_doc)
+    db_session.flush()
+
+    cited_numbers: set[int] = set()
+    try:
+        # Match [[1]] or [[1, 2]] optionally followed by a link like ([[1]](http...))
+        matches = re.findall(
+            r"\[\[(\d+(?:,\s*\d+)*)\]\](?:\([^)]*\))?", full_answer or ""
+        )
+        for match in matches:
+            for num_str in match.split(","):
+                num = int(num_str.strip())
+                cited_numbers.add(num)
+    except Exception:
+        cited_numbers = set()
+
+    if cited_numbers and final_documents_db:
+        translations = build_citation_map_from_numbers(
+            cited_numbers=cited_numbers,
+            db_docs=final_documents_db,
+        )
+        citations_map = translations or None
+
+    return final_documents_db, citations_map
+
+
 _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
     "type": "function",
     "function": {
@@ -457,6 +513,11 @@ def clarifier(
         graph_config.inputs.files
     )
 
+    # Use project/search context docs if available to enable citation mapping
+    context_llm_docs = getattr(
+        graph_config.inputs.prompt_builder, "context_llm_docs", None
+    )
+
     if not (force_use_tool and force_use_tool.force_use):
 
         if not use_tool_calling_llm or len(available_tools) == 1:
@@ -571,10 +632,28 @@ def clarifier(
                 active_source_type_descriptions_str=active_source_type_descriptions_str,
             )
 
+            if context_llm_docs:
+                prompt_config = PromptConfig.from_model(graph_config.inputs.persona)
+                system_prompt_to_use = build_citations_system_message(
+                    prompt_config
+                ).content
+                user_prompt_to_use = build_citations_user_message(
+                    user_query=original_question,
+                    files=[],
+                    prompt_config=prompt_config,
+                    context_docs=context_llm_docs,
+                    all_doc_useful=False,
+                    history_message=chat_history_string,
+                    context_type="user files",
+                ).content
+            else:
+                system_prompt_to_use = assistant_system_prompt
+                user_prompt_to_use = decision_prompt + assistant_task_prompt
+
             stream = graph_config.tooling.primary_llm.stream(
                 prompt=create_question_prompt(
-                    assistant_system_prompt,
-                    decision_prompt + assistant_task_prompt,
+                    system_prompt_to_use,
+                    user_prompt_to_use,
                     uploaded_image_context=uploaded_image_context,
                 ),
                 tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
@@ -587,6 +666,8 @@ def clarifier(
                 should_stream_answer=True,
                 writer=writer,
                 ind=0,
+                final_search_results=context_llm_docs,
+                displayed_search_results=context_llm_docs,
                 generate_final_answer=True,
                 chat_message_id=str(graph_config.persistence.chat_session_id),
             )
@@ -594,9 +675,20 @@ def clarifier(
             if len(full_response.ai_message_chunk.tool_calls) == 0:
 
                 if isinstance(full_response.full_answer, str):
-                    full_answer = full_response.full_answer
+                    full_answer = (
+                        normalize_square_bracket_citations_to_double_with_links(
+                            full_response.full_answer
+                        )
+                    )
                 else:
                     full_answer = None
+
+                # Persist final documents and derive citations when using in-context docs
+                final_documents_db, citations_map = _persist_final_docs_and_citations(
+                    db_session=db_session,
+                    context_llm_docs=context_llm_docs,
+                    full_answer=full_answer,
+                )
 
                 update_db_session_with_messages(
                     db_session=db_session,
@@ -604,9 +696,11 @@ def clarifier(
                     chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=full_answer,
+                    token_count=len(llm_tokenizer.encode(full_answer or "")),
+                    citations=citations_map,
+                    final_documents=final_documents_db or None,
                     update_parent_message=True,
                     research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                    token_count=len(llm_tokenizer.encode(full_answer or "")),
                 )
 
                 db_session.commit()

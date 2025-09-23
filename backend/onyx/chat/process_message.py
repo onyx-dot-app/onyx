@@ -18,6 +18,7 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
+from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import PromptConfig
@@ -35,6 +36,7 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
@@ -68,6 +70,8 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
@@ -103,6 +107,7 @@ from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
+
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
@@ -119,6 +124,55 @@ class PartialResponse(Protocol):
         error: str | None,
         tool_call: ToolCall | None,
     ) -> ChatMessage: ...
+
+
+def _build_project_llm_docs(
+    project_file_ids: list[str] | None,
+    in_memory_user_files: list[InMemoryChatFile] | None,
+) -> list[LlmDoc]:
+    """Construct `LlmDoc` objects for project-scoped user files for citation flow."""
+    project_llm_docs: list[LlmDoc] = []
+    if not project_file_ids or not in_memory_user_files:
+        return project_llm_docs
+
+    project_file_id_set = set(project_file_ids)
+    for f in in_memory_user_files:
+        # Only include files that belong to the project (not ad-hoc uploads)
+        if project_file_id_set and (f.file_id in project_file_id_set):
+            try:
+                text_content = f.content.decode("utf-8", errors="ignore")
+            except Exception:
+                text_content = ""
+
+            # Build a short blurb from the file content for better UI display
+            blurb = (
+                (text_content[:200] + "...")
+                if len(text_content) > 200
+                else text_content
+            )
+
+            # Provide basic metadata to improve SavedSearchDoc display
+            file_metadata: dict[str, str | list[str]] = {
+                "filename": f.filename or str(f.file_id),
+                "file_type": f.file_type.value,
+            }
+
+            project_llm_docs.append(
+                LlmDoc(
+                    document_id=str(f.file_id),
+                    content=text_content,
+                    blurb=blurb,
+                    semantic_identifier=f.filename or str(f.file_id),
+                    source_type=DocumentSource.USER_FILE,
+                    metadata=file_metadata,
+                    updated_at=None,
+                    link=build_frontend_file_url(str(f.file_id)),
+                    source_links=None,
+                    match_highlights=None,
+                )
+            )
+
+    return project_llm_docs
 
 
 def _translate_citations(
@@ -492,6 +546,12 @@ def stream_chat_message_objects(
                 commit=False,
             )
 
+        # Build project context docs for citation flow if project files are present
+        project_llm_docs: list[LlmDoc] = _build_project_llm_docs(
+            project_file_ids=project_file_ids,
+            in_memory_user_files=in_memory_user_files,
+        )
+
         selected_db_search_docs = None
         selected_sections: list[InferenceSection] | None = None
         if reference_doc_ids:
@@ -681,6 +741,10 @@ def stream_chat_message_objects(
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
+
+        if project_llm_docs and not search_tool_override_kwargs_for_user_files:
+            # Store for downstream streaming to wire citations and final_documents
+            prompt_builder.context_llm_docs = project_llm_docs
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(

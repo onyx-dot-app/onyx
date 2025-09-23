@@ -201,23 +201,6 @@ export function AIMessage({
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
-  // For counting files from the parent human message
-  const messageTree = useCurrentMessageTree();
-  const { totalFileCount } = useMemo(() => {
-    let parentFilesCount = 0;
-    try {
-      const currentMsg = messageTree?.get(nodeId);
-      const parentNodeId = currentMsg?.parentNodeId ?? null;
-      const parentMsg =
-        parentNodeId != null ? messageTree?.get(parentNodeId) : null;
-      parentFilesCount = parentMsg?.files?.length ?? 0;
-    } catch (_) {
-      parentFilesCount = 0;
-    }
-    const projectFilesCount = chatState.userFiles?.length ?? 0;
-    return { totalFileCount: parentFilesCount + projectFilesCount };
-  }, [messageTree, nodeId, chatState.userFiles?.length]);
-
   // Calculate unique source count
   const uniqueSourceCount = useMemo(() => {
     const uniqueDocIds = new Set<string>();
@@ -470,58 +453,6 @@ export function AIMessage({
                                       }}
                                     />
                                   </CustomTooltip>
-                                </>
-                              )}
-
-                            {/* Files citation toggle - opens the document sidebar for this message */}
-                            {nodeId &&
-                              citations.length === 0 &&
-                              documentMap.size === 0 && (
-                                <>
-                                  <div className="h-4 w-px bg-border mx-2" />
-                                  {totalFileCount > 0 && (
-                                    <CustomTooltip
-                                      showTick
-                                      line
-                                      content={`+${totalFileCount} Sources`}
-                                    >
-                                      <div
-                                        className="hover:bg-background-chat-hover text-text-600 p-1.5 rounded h-fit cursor-pointer flex items-center gap-1"
-                                        onClick={() => {
-                                          if (
-                                            selectedMessageForDocDisplay ===
-                                              nodeId &&
-                                            documentSidebarVisible
-                                          ) {
-                                            updateCurrentDocumentSidebarVisible(
-                                              false
-                                            );
-                                            updateCurrentSelectedNodeForDocDisplay(
-                                              null
-                                            );
-                                          } else {
-                                            updateCurrentSelectedNodeForDocDisplay(
-                                              nodeId
-                                            );
-                                            updateCurrentDocumentSidebarVisible(
-                                              true
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        <FiFileText
-                                          size={16}
-                                          className="text-blue-600 dark:text-blue-400"
-                                        />
-                                        <span className="text-xs text-text-500">
-                                          +{totalFileCount}
-                                        </span>
-                                        <span className="text-sm text-text-700">
-                                          Sources
-                                        </span>
-                                      </div>
-                                    </CustomTooltip>
-                                  )}
                                 </>
                               )}
                           </div>
