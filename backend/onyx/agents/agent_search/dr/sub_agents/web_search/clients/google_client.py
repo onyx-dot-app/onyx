@@ -1,13 +1,7 @@
-import asyncio
 from datetime import datetime
-from typing import cast, List, Optional
-
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import httpx
-from bs4 import BeautifulSoup
-
-from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     InternetSearchProvider,
     InternetSearchResult,
     InternetContent,
@@ -16,10 +10,10 @@ from onyx.configs.chat_configs import GOOGLE_API_KEY, GOOGLE_CSE_ID
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.logger import setup_logger
 
-logger = setup_logger()
+import requests
+from bs4 import BeautifulSoup
 
-# Use a global async client for efficiency across requests
-async_client = httpx.AsyncClient(timeout=5.0)
+logger = setup_logger()
 
 class GoogleClient(InternetSearchProvider):
     def __init__(
@@ -37,7 +31,7 @@ class GoogleClient(InternetSearchProvider):
             raise ValueError("Failed to initialize Google search client.")
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def search(self, query: str) -> List[InternetSearchResult]:
+    def search(self, query: str) -> list[InternetSearchResult]:
         try:
             response = (
                 self.service.cse()
@@ -53,51 +47,32 @@ class GoogleClient(InternetSearchProvider):
                 )
                 for result in results
             ]
-        except Exception as e:
+        except HttpError as e:
             logger.error(f"Google Search API call failed: {e}")
             return []
 
-    # Correction: La méthode `contents` doit être asynchrone pour utiliser `httpx.AsyncClient`.
-    async def contents(self, urls: List[str]) -> List[InternetContent]:
-        """
-        Récupère le contenu de plusieurs URLs de manière asynchrone.
-        """
-        tasks = [self._fetch_url_content(url) for url in urls]
-        # asyncio.gather permet d'exécuter toutes les requêtes en parallèle
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+    def contents(self, urls: list[str]) -> list[InternetContent]:
+        contents_list: list[InternetContent] = []
+        for url in urls:
+            try:
+                response = requests.get(url, timeout=5)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, 'html.parser')
+                title = soup.title.string if soup.title else ""
+                
+                full_content = ' '.join(soup.stripped_strings)
+
+                contents_list.append(
+                    InternetContent(
+                        title=title,
+                        link=url,
+                        full_content=full_content,
+                    )
+                )
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to fetch content from {url}: {e}")
+            except Exception as e:
+                logger.error(f"Error parsing content from {url}: {e}")
         
-        contents_list: List[InternetContent] = []
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Error during content fetch: {result}")
-                continue
-            if result:
-                contents_list.append(result)
-
         return contents_list
-
-    async def _fetch_url_content(self, url: str) -> Optional[InternetContent]:
-        """
-        Méthode helper asynchrone pour la récupération et l'analyse d'une seule URL.
-        """
-        try:
-            response = await async_client.get(url, timeout=5)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.title.string if soup.title else ""
-            
-            # Utiliser .get_text() pour une extraction de texte plus propre
-            full_content = soup.get_text(separator=' ', strip=True)
-
-            return InternetContent(
-                title=title,
-                link=url,
-                full_content=full_content,
-            )
-        except httpx.RequestError as e:
-            logger.error(f"Failed to fetch content from {url}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Error parsing content from {url}: {e}")
-            return None
