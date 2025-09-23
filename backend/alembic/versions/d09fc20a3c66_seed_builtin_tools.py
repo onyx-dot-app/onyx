@@ -84,7 +84,34 @@ def upgrade() -> None:
 
         # Insert or update built-in tools
         for tool in BUILT_IN_TOOLS:
-            if tool["in_code_tool_id"] in existing_tool_ids:
+            in_code_id = tool["in_code_tool_id"]
+
+            # Handle historical rename: InternetSearchTool -> WebSearchTool
+            if (
+                in_code_id == "WebSearchTool"
+                and "WebSearchTool" not in existing_tool_ids
+                and "InternetSearchTool" in existing_tool_ids
+            ):
+                # Rename the existing InternetSearchTool row in place and update fields
+                conn.execute(
+                    sa.text(
+                        """
+                        UPDATE tool
+                        SET name = :name,
+                            display_name = :display_name,
+                            description = :description,
+                            in_code_tool_id = :in_code_tool_id
+                        WHERE in_code_tool_id = 'InternetSearchTool'
+                        """
+                    ),
+                    tool,
+                )
+                # Keep the local view of existing ids in sync to avoid duplicate insert
+                existing_tool_ids.discard("InternetSearchTool")
+                existing_tool_ids.add("WebSearchTool")
+                continue
+
+            if in_code_id in existing_tool_ids:
                 # Update existing tool
                 conn.execute(
                     sa.text(

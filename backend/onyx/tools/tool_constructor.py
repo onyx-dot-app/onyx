@@ -193,7 +193,9 @@ def construct_tools(
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
 ) -> dict[int, list[Tool]]:
-    """Constructs tools based on persona configuration and available APIs"""
+    """Constructs tools based on persona configuration and available APIs.
+
+    Will simply skip tools that are not allowed/available."""
     tool_dict: dict[int, list[Tool]] = {}
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
@@ -209,6 +211,21 @@ def construct_tools(
 
         if db_tool_model.in_code_tool_id:
             tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
+
+            try:
+                tool_is_available = tool_cls.is_available(db_session)
+            except Exception:
+                logger.exception(
+                    "Failed checking availability for tool %s", tool_cls.__name__
+                )
+                tool_is_available = False
+
+            if not tool_is_available:
+                logger.debug(
+                    "Skipping tool %s because it is not available",
+                    tool_cls.__name__,
+                )
+                continue
 
             # Handle Search Tool
             if (

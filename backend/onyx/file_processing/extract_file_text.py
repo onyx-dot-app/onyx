@@ -242,7 +242,10 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
 
 def read_pdf_file(
-    file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
+    file: IO[Any],
+    pdf_pass: str | None = None,
+    extract_images: bool = False,
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
@@ -292,7 +295,11 @@ def read_pdf_file(
                         f"page_{page_num + 1}_image_{image_file_object.name}."
                         f"{image.format.lower() if image.format else 'png'}"
                     )
-                    extracted_images.append((img_bytes, image_name))
+                    if image_callback is not None:
+                        # Stream image out immediately
+                        image_callback(img_bytes, image_name)
+                    else:
+                        extracted_images.append((img_bytes, image_name))
 
         return text, metadata, extracted_images
 
@@ -304,28 +311,32 @@ def read_pdf_file(
     return "", metadata, []
 
 
-def extract_docx_images(docx_bytes: IO[Any]) -> list[tuple[bytes, str]]:
+def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
     """
     Given the bytes of a docx file, extract all the images.
     Returns a list of tuples (image_bytes, image_name).
     """
-    out = []
     try:
         with zipfile.ZipFile(docx_bytes) as z:
             for name in z.namelist():
                 if name.startswith("word/media/"):
-                    out.append((z.read(name), name.split("/")[-1]))
+                    yield (z.read(name), name.split("/")[-1])
     except Exception:
         logger.exception("Failed to extract all docx images")
-    return out
 
 
 def docx_to_text_and_images(
-    file: IO[Any], file_name: str = ""
+    file: IO[Any],
+    file_name: str = "",
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx.
     Return (text_content, list_of_images).
+
+    The caller can choose to provide a callback to handle images with the intent
+    of avoiding materializing the list of images in memory.
+    The images list returned is empty in this case.
     """
     md = MarkItDown(enable_plugins=False)
     try:
@@ -349,7 +360,15 @@ def docx_to_text_and_images(
         return text_content_raw or "", []
 
     file.seek(0)
-    return doc.markdown, extract_docx_images(to_bytesio(file))
+    if image_callback is None:
+        return doc.markdown, list(extract_docx_images(to_bytesio(file)))
+    # If a callback is provided, iterate and stream images without accumulating
+    try:
+        for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
+            image_callback(img_file_bytes, img_file_name)
+    except Exception:
+        logger.exception("Failed to stream docx images")
+    return doc.markdown, []
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
@@ -506,6 +525,7 @@ def extract_text_and_images(
     file_name: str,
     pdf_pass: str | None = None,
     content_type: str | None = None,
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> ExtractionResult:
     """
     Primary new function for the updated connector.
@@ -539,7 +559,9 @@ def extract_text_and_images(
 
         # docx example for embedded images
         if extension == ".docx":
-            text_content, images = docx_to_text_and_images(file, file_name)
+            text_content, images = docx_to_text_and_images(
+                file, file_name, image_callback=image_callback
+            )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
@@ -551,6 +573,7 @@ def extract_text_and_images(
                 file,
                 pdf_pass,
                 extract_images=get_image_extraction_and_analysis_enabled(),
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
