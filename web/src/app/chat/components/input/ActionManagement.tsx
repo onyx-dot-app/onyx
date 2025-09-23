@@ -268,6 +268,11 @@ function MCPToolsList({
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
     });
+
+    // If we're disabling a tool that is currently forced, remove it from forced tools
+    if (!disabled && forcedToolIds.includes(toolId)) {
+      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+    }
   };
 
   const toggleForcedTool = (toolId: number) => {
@@ -427,6 +432,11 @@ export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
     });
+
+    // If we're disabling a tool that is currently forced, remove it from forced tools
+    if (!disabled && forcedToolIds.includes(toolId)) {
+      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+    }
   };
 
   const toggleForcedTool = (toolId: number) => {
