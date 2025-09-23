@@ -22,6 +22,7 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
+  OnyxSparkleIcon,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -192,6 +193,15 @@ const collections = (
         {
           name: "Configuration",
           items: [
+            {
+              name: (
+                <div className="flex">
+                  <OnyxSparkleIcon className="text-text-700" size={18} />
+                  <div className="ml-1">Default Assistant</div>
+                </div>
+              ),
+              link: "/admin/configuration/default-assistant",
+            },
             {
               name: (
                 <div className="flex">

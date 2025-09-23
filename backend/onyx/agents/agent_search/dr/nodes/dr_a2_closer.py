@@ -33,6 +33,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
@@ -276,7 +277,7 @@ def closer(
                 test_info_complete_prompt + (assistant_task_prompt or ""),
             ),
             schema=TestInfoCompleteResponse,
-            timeout_override=40,
+            timeout_override=TF_DR_TIMEOUT_LONG,
             # max_tokens=1000,
         )
 
@@ -311,10 +312,12 @@ def closer(
         writer,
     )
 
-    if research_type == ResearchType.THOUGHTFUL:
+    if research_type in [ResearchType.THOUGHTFUL, ResearchType.FAST]:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
-    else:
+    elif research_type == ResearchType.DEEP:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
+    else:
+        raise ValueError(f"Invalid research type: {research_type}")
 
     estimated_final_answer_prompt_tokens = check_number_of_tokens(
         final_answer_base_prompt.build(
@@ -353,7 +356,7 @@ def closer(
 
     try:
         streamed_output, _, citation_infos = run_with_timeout(
-            240,
+            int(3 * TF_DR_TIMEOUT_LONG),
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=create_question_prompt(
@@ -365,7 +368,7 @@ def closer(
                 agent_answer_level=0,
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
-                timeout_override=60,
+                timeout_override=int(2 * TF_DR_TIMEOUT_LONG),
                 answer_piece=StreamingType.MESSAGE_DELTA.value,
                 ind=current_step_nr,
                 context_docs=all_context_llmdocs,

@@ -15,21 +15,14 @@ test("Chat workflow", async ({ page }) => {
   // Navigate to the chat page
   await page.goto("http://localhost:3000/chat");
 
-  // Test interaction with the Art assistant
-  await navigateToAssistantInHistorySidebar(page, "[-3]", "Art");
+  // Test interaction with the Default assistant
   await sendMessage(page, "Hi");
 
   // Start a new chat session
   await startNewChat(page);
 
   // Verify the presence of the expected text
-  await verifyAssistantIsChosen(page, "Art");
-
-  // Test interaction with the General assistant
-  await navigateToAssistantInHistorySidebar(page, "[-1]", "General");
-
-  // Verify the URL after selecting the General assistant
-  await expect(page).toHaveURL("http://localhost:3000/chat?assistantId=-1");
+  await verifyAssistantIsChosen(page, "Onyx");
 
   // Test creation of a new assistant
   await page.getByRole("button", { name: "Explore Assistants" }).click();
@@ -50,7 +43,7 @@ test("Chat workflow", async ({ page }) => {
 
   // Verify the presence of the default assistant text
   try {
-    await verifyAssistantIsChosen(page, "Search");
+    await verifyAssistantIsChosen(page, "Onyx");
   } catch (error) {
     console.error("Live Assistant final page content:");
     console.error(await page.content());

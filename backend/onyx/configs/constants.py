@@ -7,6 +7,8 @@ from enum import Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+SLACK_USER_TOKEN_PREFIX = "xoxp-"
+SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 SOURCE_TYPE = "source_type"
@@ -200,6 +202,7 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
 
     IMAP = "imap"
+    BITBUCKET = "bitbucket"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -497,6 +500,8 @@ class OnyxCeleryTask:
 
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
+    EVAL_RUN_TASK = "eval_run_task"
+
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 
@@ -542,6 +547,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
+    DocumentSource.BITBUCKET: "bitbucket data",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
     DocumentSource.GITHUB_PAGES: "github_pages data",

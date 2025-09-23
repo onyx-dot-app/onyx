@@ -6,7 +6,6 @@ import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { getSourceDocLink } from "@/lib/sources";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
@@ -24,6 +23,7 @@ import { useUser } from "@/components/user/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
+import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 
 const CreateButton = ({
   onClick,
@@ -213,20 +213,7 @@ export default function CreateCredential({
 
         return (
           <Form className="w-full flex items-stretch">
-            {!hideSource && (
-              <p className="text-sm">
-                Check our
-                <a
-                  className="text-blue-600 hover:underline"
-                  target="_blank"
-                  href={getSourceDocLink(sourceType) || ""}
-                >
-                  {" "}
-                  docs{" "}
-                </a>
-                for information on setting up this connector.
-              </p>
-            )}
+            {!hideSource && <ConnectorDocsLink sourceType={sourceType} />}
             <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
               <TextFormField
                 name="name"

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import * as dotenv from "dotenv";
+
+dotenv.config({ path: ".vscode/.env" });
 
 export default defineConfig({
   globalSetup: require.resolve("./tests/e2e/global-setup"),

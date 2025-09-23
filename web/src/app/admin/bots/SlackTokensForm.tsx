@@ -40,6 +40,7 @@ export const SlackTokensForm = ({
         bot_token: Yup.string().required(),
         app_token: Yup.string().required(),
         name: Yup.string().required(),
+        user_token: Yup.string().optional(),
       })}
       onSubmit={async (values, formikHelpers) => {
         formikHelpers.setSubmitting(true);
@@ -119,6 +120,12 @@ export const SlackTokensForm = ({
             name="app_token"
             label="Slack App Token"
             type="password"
+          />
+          <TextFormField
+            name="user_token"
+            label="Slack User Token (Optional)"
+            type="password"
+            subtext="Optional: User OAuth token for enhanced private channel access"
           />
           <div className="flex justify-end w-full mt-4">
             <Button

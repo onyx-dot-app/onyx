@@ -7,6 +7,7 @@ import {
 } from "../../services/streamingModels";
 import { FullChatState } from "./interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { Logo } from "@/components/logo/Logo";
 import { CopyButton } from "@/components/CopyButton";
 import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
 import { HoverableIcon } from "@/components/Hoverable";
@@ -237,11 +238,15 @@ export function AIMessage({
       <div className="mx-auto w-[90%] max-w-message-max">
         <div className="lg:mr-12 mobile:ml-0 md:ml-8">
           <div className="flex items-start">
-            <AssistantIcon
-              className="mobile:hidden"
-              size={24}
-              assistant={chatState.assistant}
-            />
+            {chatState.assistant?.id === 0 ? (
+              <Logo className="mobile:hidden" size="small" />
+            ) : (
+              <AssistantIcon
+                className="mobile:hidden"
+                size={24}
+                assistant={chatState.assistant}
+              />
+            )}
             <div className="w-full">
               <div className="max-w-message-max break-words">
                 <div className="w-full desktop:ml-4">

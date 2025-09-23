@@ -56,7 +56,6 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
-import { useUser } from "@/components/user/UserProvider";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -88,7 +87,11 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import {
+  IMAGE_GENERATION_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/app/chat/components/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
@@ -99,11 +102,13 @@ function findSearchTool(tools: ToolSnapshot[]) {
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
+  return tools.find(
+    (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+  );
 }
 
-function findInternetSearchTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
+function findWebSearchTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -136,10 +141,8 @@ export function AssistantEditor({
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
 }) {
-  const { refreshAssistants, isImageGenerationAvailable } =
-    useAssistantsContext();
+  const { refreshAssistants } = useAssistantsContext();
 
-  const { toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -164,19 +167,15 @@ export function AssistantEditor({
   const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
-  // state to persist across formik reformatting
+  // both `defautIconColor` and `defaultIconShape` are state so that they
+  // persist across formik reformatting
   const [defautIconColor, _setDeafultIconColor] = useState(
     colorOptions[Math.floor(Math.random() * colorOptions.length)]
   );
+  const [defaultIconShape] = useState<any>(
+    () => generateRandomIconShape().encodedGrid
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const [defaultIconShape, setDefaultIconShape] = useState<any>(null);
-
-  useEffect(() => {
-    if (defaultIconShape === null) {
-      setDefaultIconShape(generateRandomIconShape().encodedGrid);
-    }
-  }, [defaultIconShape]);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
@@ -185,7 +184,6 @@ export function AssistantEditor({
     [llmProviders.length]
   );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
-  const existingPrompt = existingPersona?.prompts[0] ?? null;
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
@@ -214,14 +212,14 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
-  const internetSearchTool = findInternetSearchTool(tools);
+  const webSearchTool = findWebSearchTool(tools);
 
   // Separate MCP tools from regular custom tools
   const allCustomTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
   );
 
   const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
@@ -292,7 +290,7 @@ export function AssistantEditor({
     ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
-    ...(internetSearchTool ? [internetSearchTool] : []),
+    ...(webSearchTool ? [webSearchTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -314,9 +312,9 @@ export function AssistantEditor({
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
-    datetime_aware: existingPrompt?.datetime_aware ?? false,
-    system_prompt: existingPrompt?.system_prompt ?? "",
-    task_prompt: existingPrompt?.task_prompt ?? "",
+    datetime_aware: existingPersona?.datetime_aware ?? false,
+    system_prompt: existingPersona?.system_prompt ?? "",
+    task_prompt: existingPersona?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
@@ -610,10 +608,7 @@ export function AssistantEditor({
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
 
-          if (
-            internetSearchTool &&
-            enabledTools.includes(internetSearchTool.id)
-          ) {
+          if (webSearchTool && enabledTools.includes(webSearchTool.id)) {
             // Internet searches should generally be datetime-aware
             formikHelpers.setFieldValue("datetime_aware", true);
           }
@@ -639,7 +634,6 @@ export function AssistantEditor({
           const submissionData: PersonaUpsertParameters = {
             ...values,
             icon_color: values.icon_color ?? null,
-            existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -1206,10 +1200,7 @@ export function AssistantEditor({
                               name={`enabled_tools_map.${imageGenerationTool.id}`}
                               label={imageGenerationTool.display_name}
                               subtext="Generate and manipulate images using AI-powered tools"
-                              disabled={
-                                !currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable
-                              }
+                              disabled={!currentLLMSupportsImageOutput}
                               disabledTooltip={
                                 !currentLLMSupportsImageOutput
                                   ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
@@ -1220,11 +1211,11 @@ export function AssistantEditor({
                         </>
                       )}
 
-                      {internetSearchTool && (
+                      {webSearchTool && (
                         <>
                           <BooleanFormField
-                            name={`enabled_tools_map.${internetSearchTool.id}`}
-                            label={internetSearchTool.display_name}
+                            name={`enabled_tools_map.${webSearchTool.id}`}
+                            label={webSearchTool.display_name}
                             subtext="Access real-time information and search the web for up-to-date results"
                           />
                         </>

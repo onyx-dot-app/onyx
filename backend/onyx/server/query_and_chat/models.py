@@ -22,6 +22,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolCallFinalResult
 
@@ -96,10 +97,7 @@ class CreateChatMessageRequest(ChunkContext):
     user_file_ids: list[int] = []
     user_folder_ids: list[int] = []
 
-    # If no prompt provided, uses the largest prompt of the chat session
-    # but really this should be explicitly specified, only in the simplified APIs is this inferred
-    # Use prompt_id 0 to use the system default prompt which is Answer-Question
-    prompt_id: int | None
+    # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, then retrieval options are unused
     search_doc_ids: list[int] | None
     retrieval_options: RetrievalDetails | None
@@ -140,9 +138,12 @@ class CreateChatMessageRequest(ChunkContext):
 
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search
+    # TODO: Deprecate this in favor of research_type
     use_agentic_search: bool = False
 
     skip_gen_ai_answer_generation: bool = False
+    # Slack context for federated search
+    slack_context: SlackContext | None = None
 
     # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
     allowed_tool_ids: list[int] | None = None

@@ -35,7 +35,7 @@ def consolidate_research(
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     # Populate prompt
-    instructions = graph_config.inputs.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.system_prompt or ""
 
     try:
         agent_5_instructions = extract_section(

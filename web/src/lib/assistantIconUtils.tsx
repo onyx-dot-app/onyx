@@ -224,6 +224,9 @@ export const constructMiniFiedPersona = (
     groups: [],
     user_file_ids: [],
     user_folder_ids: [],
+    system_prompt: null,
+    task_prompt: null,
+    datetime_aware: true,
   };
 };
 

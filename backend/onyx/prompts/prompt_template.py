@@ -1,5 +1,7 @@
 import re
 
+from onyx.prompts.prompt_utils import replace_current_datetime_tag
+
 
 class PromptTemplate:
     """
@@ -25,7 +27,8 @@ class PromptTemplate:
         missing = self._fields - set(kwargs.keys())
         if missing:
             raise ValueError(f"Missing required fields: {missing}.")
-        return self._replace_fields(kwargs)
+        built = self._replace_fields(kwargs)
+        return self._postprocess(built)
 
     def partial_build(self, **kwargs: str) -> "PromptTemplate":
         """
@@ -41,3 +44,14 @@ class PromptTemplate:
             return field_vals.get(key, match.group(0))
 
         return self._pattern.sub(repl, self._template)
+
+    def _postprocess(self, text: str) -> str:
+        """Apply global replacements such as [[CURRENT_DATETIME]]."""
+        if not text:
+            return text
+        # Ensure [[CURRENT_DATETIME]] matches shared prompt formatting
+        return replace_current_datetime_tag(
+            text,
+            full_sentence=True,
+            include_day_of_week=True,
+        )

@@ -1,3 +1,4 @@
+{{- if gt (int .Values.webserver.replicaCount) 0 }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -6,20 +7,30 @@ metadata:
     {{- include "onyx-stack.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 spec:
   containers:
-    - name: wget
-      image: busybox
+    - name: curl
+      image: curlimages/curl:8.10.1
       command:
         - /bin/sh
         - -c
       args:
         - |
+          SVC="{{ include "onyx-stack.fullname" . }}-webserver"
+          PORT="{{ .Values.webserver.service.servicePort }}"
+          URL="http://${SVC}:${PORT}/"
           for i in $(seq 1 40); do
-            echo "Attempt $i: wget {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }}"
-            wget {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} && exit 0
-            sleep 15
+            echo "Attempt $i: curl ${URL}"
+            # Treat any successful TCP/HTTP response as success (even 5xx).
+            # curl exits 0 on HTTP 4xx/5xx if -f is not used; non-zero indicates connection error.
+            if curl --connect-timeout 3 --max-time 5 -sS -o /dev/null "$${URL}"; then
+              echo "Connection succeeded"
+              exit 0
+            fi
+            sleep 10
           done
-          echo "Service unavailable after 40 attempts"
+          echo "Service not reachable after 40 attempts"
           exit 1
   restartPolicy: Never
+{{- end }}

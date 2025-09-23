@@ -27,9 +27,7 @@ def test_image_generation_heartbeat_streaming(
     This test uses the actual API without any mocking.
     """
     # Create a chat session with this persona
-    chat_session = ChatSessionManager.create(
-        persona_id=ART_PERSONA_ID, user_performing_action=basic_user
-    )
+    chat_session = ChatSessionManager.create(user_performing_action=basic_user)
 
     # Send a message that should trigger image generation
     # Use explicit instructions to ensure the image generation tool is used

@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
+from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -19,7 +20,6 @@ from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSI
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -28,7 +28,6 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -223,11 +222,6 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        all_prompt_ids = create_persona_request.prompt_ids
-
-        if not all_prompt_ids:
-            raise ValueError("No prompt IDs provided")
-
         # Default persona validation
         if create_persona_request.is_default_persona:
             if not create_persona_request.is_public:
@@ -249,7 +243,6 @@ def create_update_persona(
             db_session=db_session,
             description=create_persona_request.description,
             name=create_persona_request.name,
-            prompt_ids=all_prompt_ids,
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
@@ -257,6 +250,9 @@ def create_update_persona(
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
+            system_prompt=create_persona_request.system_prompt,
+            task_prompt=create_persona_request.task_prompt,
+            datetime_aware=create_persona_request.datetime_aware,
             icon_color=create_persona_request.icon_color,
             icon_shape=create_persona_request.icon_shape,
             uploaded_image_id=create_persona_request.uploaded_image_id,
@@ -488,9 +484,12 @@ def upsert_persona(
     llm_model_provider_override: str | None,
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
+    # Embedded prompt fields
+    system_prompt: str | None,
+    task_prompt: str | None,
+    datetime_aware: bool | None,
     is_public: bool,
     db_session: Session,
-    prompt_ids: list[int] | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
@@ -578,17 +577,6 @@ def upsert_persona(
         if not user_folders and user_folder_ids:
             raise ValueError("user_folders not found")
 
-    # Fetch and attach prompts by IDs
-    prompts = None
-    if prompt_ids is not None:
-        prompts = db_session.query(Prompt).filter(Prompt.id.in_(prompt_ids)).all()
-
-    if prompts is not None and len(prompts) == 0:
-        raise ValueError(
-            f"Invalid Persona config, no valid prompts "
-            f"specified. Specified IDs were: '{prompt_ids}'"
-        )
-
     labels = None
     if label_ids is not None:
         labels = (
@@ -597,7 +585,7 @@ def upsert_persona(
 
     # ensure all specified tools are valid
     if tools:
-        validate_persona_tools(tools)
+        validate_persona_tools(tools, db_session)
 
     if existing_persona:
         # Built-in personas can only be updated through YAML configuration.
@@ -633,6 +621,13 @@ def upsert_persona(
             if is_default_persona is not None
             else existing_persona.is_default_persona
         )
+        # Update embedded prompt fields if provided
+        if system_prompt is not None:
+            existing_persona.system_prompt = system_prompt
+        if task_prompt is not None:
+            existing_persona.task_prompt = task_prompt
+        if datetime_aware is not None:
+            existing_persona.datetime_aware = datetime_aware
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -640,9 +635,7 @@ def upsert_persona(
             existing_persona.document_sets.clear()
             existing_persona.document_sets = document_sets or []
 
-        if prompts is not None:
-            existing_persona.prompts.clear()
-            existing_persona.prompts = prompts
+        # Note: prompts are now embedded in personas - no separate prompts relationship
 
         if tools is not None:
             existing_persona.tools = tools or []
@@ -662,12 +655,7 @@ def upsert_persona(
         persona = existing_persona
 
     else:
-        if not prompts:
-            raise ValueError(
-                "Invalid Persona config. "
-                "Must specify at least one prompt for a new persona."
-            )
-
+        # Create new persona - prompt configuration will be set separately if needed
         new_persona = Persona(
             id=persona_id,
             user_id=user.id if user else None,
@@ -681,7 +669,9 @@ def upsert_persona(
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
             builtin_persona=builtin_persona,
-            prompts=prompts,
+            system_prompt=system_prompt or "",
+            task_prompt=task_prompt or "",
+            datetime_aware=(datetime_aware if datetime_aware is not None else True),
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
@@ -715,11 +705,22 @@ def delete_old_default_personas(
     db_session: Session,
 ) -> None:
     """Note, this locks out the Summarize and Paraphrase personas for now
-    Need a more graceful fix later or those need to never have IDs"""
+    Need a more graceful fix later or those need to never have IDs.
+
+    This function is idempotent, so it can be run multiple times without issue.
+    """
+    OLD_SUFFIX = "_old"
     stmt = (
         update(Persona)
-        .where(Persona.builtin_persona, Persona.id > 0)
-        .values(deleted=True, name=func.concat(Persona.name, "_old"))
+        .where(
+            Persona.builtin_persona,
+            Persona.id > 0,
+            or_(
+                Persona.deleted.is_(False),
+                not_(Persona.name.endswith(OLD_SUFFIX)),
+            ),
+        )
+        .values(deleted=True, name=func.concat(Persona.name, OLD_SUFFIX))
     )
 
     db_session.execute(stmt)
@@ -757,12 +758,15 @@ def update_persona_visibility(
     db_session.commit()
 
 
-def validate_persona_tools(tools: list[Tool]) -> None:
+def validate_persona_tools(tools: list[Tool], db_session: Session) -> None:
+    # local import to avoid circular import. DB layer should not depend on tools layer.
+    from onyx.tools.built_in_tools import get_built_in_tool_by_id
+
     for tool in tools:
-        if tool.in_code_tool_id == "InternetSearchTool" and not EXA_API_KEY:
-            raise ValueError(
-                "Internet Search API key not found, please contact your Onyx admin to get it added!"
-            )
+        if tool.in_code_tool_id is not None:
+            tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
+            if not tool_cls.is_available(db_session):
+                raise ValueError(f"Tool {tool.in_code_tool_id} is not available")
 
 
 # TODO: since this gets called with every chat message, could it be more efficient to pregenerate
@@ -889,3 +893,62 @@ def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
     if persona is None:
         raise ValueError(f"Persona with ID {persona_id} does not exist")
     return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)
+
+
+def get_default_assistant(db_session: Session) -> Persona | None:
+    """Fetch the default assistant (persona with builtin_persona=True)."""
+    return (
+        db_session.query(Persona)
+        .options(selectinload(Persona.tools))
+        .filter(Persona.builtin_persona.is_(True))
+        # NOTE: need to add this since we had prior builtin personas
+        # that have since been deleted
+        .filter(Persona.deleted.is_(False))
+        .one_or_none()
+    )
+
+
+def update_default_assistant_configuration(
+    db_session: Session,
+    tool_ids: list[int] | None = None,
+    system_prompt: str | None = None,
+) -> Persona:
+    """Update only tools and system_prompt for the default assistant.
+
+    Args:
+        db_session: Database session
+        tool_ids: List of tool IDs to enable (if None, tools are not updated)
+        system_prompt: New system prompt (if None, system prompt is not updated)
+
+    Returns:
+        Updated Persona object
+
+    Raises:
+        ValueError: If default assistant not found or invalid tool IDs provided
+    """
+    # Get the default assistant
+    persona = get_default_assistant(db_session)
+    if not persona:
+        raise ValueError("Default assistant not found")
+
+    # Update system prompt if provided
+    if system_prompt is not None:
+        persona.system_prompt = system_prompt
+
+    # Update tools if provided
+    if tool_ids is not None:
+        # Clear existing tool associations
+        persona.tools = []
+
+        # Add new tool associations
+        for tool_id in tool_ids:
+            tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
+            if not tool:
+                raise ValueError(f"Tool with ID {tool_id} not found")
+            if tool.in_code_tool_id is None:
+                raise ValueError(f"Tool with ID {tool_id} is not a built-in tool")
+
+            persona.tools.append(tool)
+
+    db_session.commit()
+    return persona

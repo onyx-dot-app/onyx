@@ -85,6 +85,7 @@ import cohereIcon from "../../../public/Cohere.svg";
 import googleIcon from "../../../public/Google.png";
 import xenforoIcon from "../../../public/Xenforo.svg";
 import highspotIcon from "../../../public/Highspot.png";
+import bitbucketIcon from "../../../public/Bitbucket.svg";
 import { FaGithub, FaRobot } from "react-icons/fa";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -1080,6 +1081,30 @@ export const ChatIcon = ({
   );
 };
 
+export const OnyxSparkleIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 16 16`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <path
+        d="M4 2L8 4L12 2M12 14L8 12L4 14M2 12L4 7.99999L2 3.99999M14 3.99999L12 7.99999L14 12"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
 export const SendIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1212,6 +1237,13 @@ export const GithubIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <FaGithub size={size} className={cn(className, "text-black")} />
+);
+
+export const BitbucketIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={bitbucketIcon} />
 );
 
 export const GlobeIcon = ({

@@ -35,6 +35,7 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
@@ -51,6 +52,7 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.evals.tracing import setup_braintrust
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -59,6 +61,9 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
+from onyx.server.features.default_assistant.api import (
+    router as default_assistant_router,
+)
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.folder.api import router as folder_router
 from onyx.server.features.input_prompt.api import (
@@ -249,6 +254,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if DISABLE_GENERATIVE_AI:
         logger.notice("Generative AI Q&A disabled")
 
+    if BRAINTRUST_ENABLED:
+        setup_braintrust()
+        logger.notice("Braintrust tracing initialized")
+
     # fill up Postgres connection pools
     await warm_up_connections()
 
@@ -353,6 +362,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
     include_router_with_global_prefix_prepended(application, persona_router)
     include_router_with_global_prefix_prepended(application, admin_persona_router)
+    include_router_with_global_prefix_prepended(application, default_assistant_router)
     include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)

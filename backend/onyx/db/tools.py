@@ -1,5 +1,7 @@
 from typing import Any
 from typing import cast
+from typing import Type
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,8 +9,12 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Tool
 from onyx.server.features.tool.models import Header
+from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    pass
 
 logger = setup_logger()
 
@@ -104,3 +110,37 @@ def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
 
     db_session.delete(tool)
     db_session.flush()  # Don't commit yet, let caller decide when to commit
+
+
+def get_builtin_tool(
+    db_session: Session,
+    tool_type: Type[BUILT_IN_TOOL_TYPES],
+) -> Tool:
+    """
+    Retrieves a built-in tool from the database based on the tool type.
+    """
+    # local import to avoid circular import. DB layer should not depend on tools layer.
+    from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+
+    tool_id = next(
+        (
+            in_code_tool_id
+            for in_code_tool_id, tool_cls in BUILT_IN_TOOL_MAP.items()
+            if tool_cls.__name__ == tool_type.__name__
+        ),
+        None,
+    )
+
+    if not tool_id:
+        raise RuntimeError(
+            f"Tool type {tool_type.__name__} not found in the BUILT_IN_TOOLS list."
+        )
+
+    db_tool = db_session.execute(
+        select(Tool).where(Tool.in_code_tool_id == tool_id)
+    ).scalar_one_or_none()
+
+    if not db_tool:
+        raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
+
+    return db_tool

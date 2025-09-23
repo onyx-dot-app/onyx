@@ -39,6 +39,7 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
@@ -48,9 +49,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
@@ -59,6 +57,9 @@ from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
@@ -85,7 +86,7 @@ class SearchToolConfig(BaseModel):
     bypass_acl: bool = False
 
 
-class InternetSearchToolConfig(BaseModel):
+class WebSearchToolConfig(BaseModel):
     answer_style_config: AnswerStyleConfig = Field(
         default_factory=lambda: AnswerStyleConfig(
             citation_config=CitationConfig(all_docs_useful=True)
@@ -160,7 +161,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 # Note: this is not very clear / not the way things should generally be done. (+impure function)
 # TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
-    tool_config: SearchToolConfig | InternetSearchToolConfig,
+    tool_config: SearchToolConfig | WebSearchToolConfig,
     tools: list[Tool],
     llm: LLM,
 ) -> None:
@@ -188,12 +189,15 @@ def construct_tools(
     fast_llm: LLM,
     run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
-    internet_search_tool_config: InternetSearchToolConfig | None = None,
+    internet_search_tool_config: WebSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
+    slack_context: SlackContext | None = None,
 ) -> dict[int, list[Tool]]:
-    """Constructs tools based on persona configuration and available APIs"""
+    """Constructs tools based on persona configuration and available APIs.
+
+    Will simply skip tools that are not allowed/available."""
     tool_dict: dict[int, list[Tool]] = {}
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
@@ -208,9 +212,22 @@ def construct_tools(
             continue
 
         if db_tool_model.in_code_tool_id:
-            tool_cls = get_built_in_tool_by_id(
-                db_tool_model.in_code_tool_id, db_session
-            )
+            tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
+
+            try:
+                tool_is_available = tool_cls.is_available(db_session)
+            except Exception:
+                logger.exception(
+                    "Failed checking availability for tool %s", tool_cls.__name__
+                )
+                tool_is_available = False
+
+            if not tool_is_available:
+                logger.debug(
+                    "Skipping tool %s because it is not available",
+                    tool_cls.__name__,
+                )
+                continue
 
             # Handle Search Tool
             if (
@@ -242,6 +259,7 @@ def construct_tools(
                     ),
                     rerank_settings=search_tool_config.rerank_settings,
                     bypass_acl=search_tool_config.bypass_acl,
+                    slack_context=slack_context,  # Pass the Slack context
                 )
                 tool_dict[db_tool_model.id] = [search_tool]
 
@@ -266,13 +284,13 @@ def construct_tools(
                 ]
 
             # Handle Internet Search Tool
-            elif tool_cls.__name__ == InternetSearchTool.__name__:
+            elif tool_cls.__name__ == WebSearchTool.__name__:
                 if not internet_search_tool_config:
-                    internet_search_tool_config = InternetSearchToolConfig()
+                    internet_search_tool_config = WebSearchToolConfig()
 
                 try:
                     tool_dict[db_tool_model.id] = [
-                        InternetSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")

@@ -1,3 +1,4 @@
+import copy
 import re
 
 from langchain.schema.messages import BaseMessage
@@ -13,8 +14,8 @@ from onyx.agents.agent_search.shared_graph_utils.operators import (
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
 )
 
 
@@ -72,7 +73,7 @@ def aggregate_context(
     ):
 
         iteration_tool = iteration_response.tool
-        is_internet = iteration_tool == InternetSearchTool._NAME
+        is_internet = iteration_tool == WebSearchTool._NAME
 
         for cited_doc in iteration_response.cited_documents.values():
             unrolled_inference_sections.append(cited_doc)
@@ -179,11 +180,40 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
     Get the chat history (up to max_messages) as a string.
     """
     # get past max_messages USER, ASSISTANT message pairs
+
     past_messages = chat_history[-max_messages * 2 :]
-    return ("...\n" if len(chat_history) > len(past_messages) else "") + "\n".join(
+    filtered_past_messages = copy.deepcopy(past_messages)
+
+    for past_message_number, past_message in enumerate(past_messages):
+
+        if isinstance(past_message.content, list):
+            removal_indices = []
+            for content_piece_number, content_piece in enumerate(past_message.content):
+                if (
+                    isinstance(content_piece, dict)
+                    and content_piece.get("type") != "text"
+                ):
+                    removal_indices.append(content_piece_number)
+
+            # Only rebuild the content list if there are items to remove
+            if removal_indices:
+                filtered_past_messages[past_message_number].content = [
+                    content_piece
+                    for content_piece_number, content_piece in enumerate(
+                        past_message.content
+                    )
+                    if content_piece_number not in removal_indices
+                ]
+
+        else:
+            continue
+
+    return (
+        "...\n" if len(chat_history) > len(filtered_past_messages) else ""
+    ) + "\n".join(
         ("user" if isinstance(msg, HumanMessage) else "you")
         + f": {str(msg.content).strip()}"
-        for msg in past_messages
+        for msg in filtered_past_messages
     )
 
 

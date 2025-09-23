@@ -1,4 +1,3 @@
-import re
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
@@ -22,15 +21,11 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImage,
-)
 from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
 from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
 )
 from onyx.agents.agent_search.utils import create_citation_format_list
-from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
@@ -47,7 +42,6 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Prompt
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
@@ -55,7 +49,6 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
-from onyx.db.tools import get_tool_by_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
@@ -64,23 +57,6 @@ from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import SubQueryDetail
 from onyx.server.query_and_chat.models import SubQuestionDetail
-from onyx.server.query_and_chat.streaming_models import CitationDelta
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import EndStepPacketList
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -88,277 +64,8 @@ from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
-_CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
-
-def _adjust_message_text_for_agent_search_results(
-    adjusted_message_text: str, final_documents: list[SavedSearchDoc]
-) -> str:
-    """
-    Adjust the message text for agent search results.
-    """
-    # Remove all [Q<integer>] patterns (sub-question citations)
-    adjusted_message_text = re.sub(r"\[Q\d+\]", "", adjusted_message_text)
-
-    return adjusted_message_text
-
-
-def _replace_d_citations_with_links(
-    message_text: str, final_documents: list[SavedSearchDoc]
-) -> str:
-    """
-    Replace [D<integer>] patterns with [<integer>](<link from final document with index <integer>-1>).
-    """
-
-    def replace_citation(match: re.Match[str]) -> str:
-        # Extract the number from the match (e.g., "D1" -> "1")
-        d_number = match.group(1)
-        try:
-            # Convert to 0-based index
-            doc_index = int(d_number) - 1
-
-            # Check if index is valid
-            if 0 <= doc_index < len(final_documents):
-                doc = final_documents[doc_index]
-                link = doc.link if doc.link else ""
-                return f"[[{d_number}]]({link})"
-            else:
-                # If index is out of range, return original text
-                return match.group(0)
-        except (ValueError, IndexError):
-            # If conversion fails, return original text
-            return match.group(0)
-
-    # Replace all [D<integer>] patterns
-    return re.sub(r"\[D(\d+)\]", replace_citation, message_text)
-
-
-def create_message_packets(
-    message_text: str,
-    final_documents: list[SavedSearchDoc] | None,
-    step_nr: int,
-    is_legacy_agentic: bool = False,
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=MessageStart(
-                content="",
-                final_documents=final_documents,
-            ),
-        )
-    )
-
-    # adjust citations for previous agent_search answers
-    adjusted_message_text = message_text
-    if is_legacy_agentic:
-        if final_documents is not None:
-            adjusted_message_text = _adjust_message_text_for_agent_search_results(
-                message_text, final_documents
-            )
-            # Replace [D<integer>] patterns with [<integer>](<link>)
-            adjusted_message_text = _replace_d_citations_with_links(
-                adjusted_message_text, final_documents
-            )
-        else:
-            # Remove all [Q<integer>] patterns (sub-question citations) even if no final_documents
-            adjusted_message_text = re.sub(r"\[Q\d+\]", "", message_text)
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=MessageDelta(
-                content=adjusted_message_text,
-            ),
-        ),
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-
-    return packets
-
-
-def create_citation_packets(
-    citation_info_list: list[CitationInfo], step_nr: int
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CitationStart(),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CitationDelta(
-                citations=citation_info_list,
-            ),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-
-    return packets
-
-
-def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=ReasoningStart(),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=ReasoningDelta(
-                reasoning=reasoning_text,
-            ),
-        ),
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-
-    return packets
-
-
-def create_image_generation_packets(
-    images: list[GeneratedImage], step_nr: int
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=ImageGenerationToolStart(),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=ImageGenerationToolDelta(images=images),
-        ),
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-
-    return packets
-
-
-def create_custom_tool_packets(
-    tool_name: str,
-    response_type: str,
-    step_nr: int,
-    data: dict | list | str | int | float | bool | None = None,
-    file_ids: list[str] | None = None,
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CustomToolStart(tool_name=tool_name),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CustomToolDelta(
-                tool_name=tool_name,
-                response_type=response_type,
-                # For non-file responses
-                data=data,
-                # For file-based responses like image/csv
-                file_ids=file_ids,
-            ),
-        ),
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-
-    return packets
-
-
-def create_search_packets(
-    search_queries: list[str],
-    saved_search_docs: list[SavedSearchDoc] | None,
-    is_internet_search: bool,
-    step_nr: int,
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SearchToolStart(
-                is_internet_search=is_internet_search,
-            ),
-        )
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SearchToolDelta(
-                queries=search_queries,
-                documents=saved_search_docs,
-            ),
-        ),
-    )
-
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SectionEnd(),
-        )
-    )
-
-    return packets
+# Note: search/streaming packet helpers moved to streaming_utils.py
 
 
 def get_chat_session_by_id(
@@ -807,7 +514,6 @@ def add_chats_to_session_from_slack_thread(
             citations=chat_message.citations,
             reference_docs=chat_message.search_docs,
             tool_call=chat_message.tool_call,
-            prompt_id=chat_message.prompt_id,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
             alternate_assistant_id=chat_message.alternate_assistant_id,
@@ -897,7 +603,6 @@ def get_or_create_root_message(
     else:
         new_root_message = ChatMessage(
             chat_session_id=chat_session_id,
-            prompt_id=None,
             parent_message=None,
             latest_child_message=None,
             message="",
@@ -941,7 +646,6 @@ def create_new_chat_message(
     chat_session_id: UUID,
     parent_message: ChatMessage,
     message: str,
-    prompt_id: int | None,
     token_count: int,
     message_type: MessageType,
     db_session: Session,
@@ -970,7 +674,6 @@ def create_new_chat_message(
         existing_message.parent_message = parent_message.id
         existing_message.message = message
         existing_message.rephrased_query = rephrased_query
-        existing_message.prompt_id = prompt_id
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.citations = citations
@@ -991,7 +694,6 @@ def create_new_chat_message(
             latest_child_message=None,
             message=message,
             rephrased_query=rephrased_query,
-            prompt_id=prompt_id,
             token_count=token_count,
             message_type=message_type,
             citations=citations,
@@ -1050,33 +752,6 @@ def attach_files_to_chat_message(
     chat_message.files = files
     if commit:
         db_session.commit()
-
-
-def get_prompt_by_id(
-    prompt_id: int,
-    user: User | None,
-    db_session: Session,
-    include_deleted: bool = False,
-) -> Prompt:
-    stmt = select(Prompt).where(Prompt.id == prompt_id)
-
-    # if user is not specified OR they are an admin, they should
-    # have access to all prompts, so this where clause is not needed
-    if user and user.role != UserRole.ADMIN:
-        stmt = stmt.where(or_(Prompt.user_id == user.id, Prompt.user_id.is_(None)))
-
-    if not include_deleted:
-        stmt = stmt.where(Prompt.deleted.is_(False))
-
-    result = db_session.execute(stmt)
-    prompt = result.scalar_one_or_none()
-
-    if prompt is None:
-        raise ValueError(
-            f"Prompt with ID {prompt_id} does not exist or does not belong to user"
-        )
-
-    return prompt
 
 
 def get_doc_query_identifiers_from_model(
@@ -1356,225 +1031,7 @@ def get_retrieval_docs_from_search_docs(
     return RetrievalDocs(top_documents=top_documents)
 
 
-def translate_db_message_to_packets(
-    chat_message: ChatMessage,
-    db_session: Session,
-    remove_doc_content: bool = False,
-    start_step_nr: int = 1,
-) -> EndStepPacketList:
-
-    step_nr = start_step_nr
-    packet_list: list[Packet] = []
-
-    # only stream out packets for assistant messages
-    if chat_message.message_type == MessageType.ASSISTANT:
-
-        citations = chat_message.citations
-
-        # Get document IDs from SearchDoc table using citation mapping
-        citation_info_list = []
-        if citations:
-            for citation_num, search_doc_id in citations.items():
-                search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
-                if search_doc:
-                    citation_info_list.append(
-                        CitationInfo(
-                            citation_num=citation_num,
-                            document_id=search_doc.document_id,
-                        )
-                    )
-        elif chat_message.search_docs:
-            for i, search_doc in enumerate(chat_message.search_docs):
-                citation_info_list.append(
-                    CitationInfo(
-                        citation_num=i,
-                        document_id=search_doc.document_id,
-                    )
-                )
-
-        research_iterations = []
-        if chat_message.research_type in [
-            ResearchType.THOUGHTFUL,
-            ResearchType.DEEP,
-            ResearchType.LEGACY_AGENTIC,
-        ]:
-            research_iterations = sorted(
-                chat_message.research_iterations, key=lambda x: x.iteration_nr
-            )  # sorted iterations
-            for research_iteration in research_iterations:
-
-                if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
-                    # first iteration does not need to be reasoned for
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.reasoning, step_nr)
-                    )
-                    step_nr += 1
-
-                if research_iteration.purpose:
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.purpose, step_nr)
-                    )
-                    step_nr += 1
-
-                sub_steps = research_iteration.sub_steps
-                tasks: list[str] = []
-                tool_call_ids: list[int | None] = []
-                cited_docs: list[SavedSearchDoc] = []
-
-                for sub_step in sub_steps:
-
-                    tasks.append(sub_step.sub_step_instructions or "")
-                    tool_call_ids.append(sub_step.sub_step_tool_id)
-
-                    sub_step_cited_docs = sub_step.cited_doc_results
-                    if isinstance(sub_step_cited_docs, list):
-                        # Convert serialized dict data back to SavedSearchDoc objects
-                        saved_search_docs = []
-                        for doc_data in sub_step_cited_docs:
-                            doc_data["db_doc_id"] = 1
-                            doc_data["boost"] = 1
-                            doc_data["hidden"] = False
-                            doc_data["chunk_ind"] = 0
-
-                            if (
-                                doc_data["updated_at"] is None
-                                or doc_data["updated_at"] == "None"
-                            ):
-                                doc_data["updated_at"] = datetime.now()
-
-                            saved_search_docs.append(
-                                SavedSearchDoc.from_dict(doc_data)
-                                if isinstance(doc_data, dict)
-                                else doc_data
-                            )
-
-                        cited_docs.extend(saved_search_docs)
-                    else:
-                        # @Joachim what is this?
-                        packet_list.extend(
-                            create_reasoning_packets(
-                                _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                            )
-                        )
-                    step_nr += 1
-
-                if len(set(tool_call_ids)) > 1:
-                    packet_list.extend(
-                        create_reasoning_packets(_CANNOT_SHOW_STEP_RESULTS_STR, step_nr)
-                    )
-                    step_nr += 1
-
-                elif (
-                    len(sub_steps) == 0
-                ):  # no sub steps, no tool calls. But iteration can have reasoning or purpose
-                    continue
-
-                else:
-                    # TODO: replace with isinstance, resolving circular imports
-                    # @Joachim what is this?
-                    tool_id = tool_call_ids[0]
-                    if not tool_id:
-                        raise ValueError("Tool ID is required")
-                    tool = get_tool_by_id(tool_id, db_session)
-                    tool_name = tool.name
-
-                    if tool_name in ["SearchTool", "KnowledgeGraphTool"]:
-
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, False, step_nr)
-                        )
-                        step_nr += 1
-
-                    elif tool_name == "InternetSearchTool":
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, True, step_nr)
-                        )
-                        step_nr += 1
-
-                    elif tool_name == "ImageGenerationTool":
-
-                        if sub_step.generated_images is None:
-                            raise ValueError("No generated images found")
-
-                        packet_list.extend(
-                            create_image_generation_packets(
-                                sub_step.generated_images.images, step_nr
-                            )
-                        )
-                        step_nr += 1
-
-                    elif tool_name == "OktaProfileTool":
-                        # TODO: convert all response types to enums
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
-
-                    else:
-                        # TODO: convert all response types to enums
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
-
-        # Only create message packets if there's actual message content
-        if chat_message.message:
-            packet_list.extend(
-                create_message_packets(
-                    message_text=chat_message.message,
-                    final_documents=[
-                        translate_db_search_doc_to_server_search_doc(doc)
-                        for doc in chat_message.search_docs
-                    ],
-                    step_nr=step_nr,
-                    is_legacy_agentic=chat_message.research_type
-                    == ResearchType.LEGACY_AGENTIC,
-                )
-            )
-            step_nr += 1
-
-        # Stream Search results in case there were no substeps (example: legacy agentic and legacy search)
-        if len(citation_info_list) > 0 and len(research_iterations) == 0:
-
-            saved_search_docs = []
-            for citation_info in citation_info_list:
-                cited_doc = get_db_search_doc_by_document_id(
-                    citation_info.document_id, db_session
-                )
-                if cited_doc:
-                    saved_search_docs.append(
-                        translate_db_search_doc_to_server_search_doc(cited_doc)
-                    )
-
-            packet_list.extend(
-                create_search_packets([], saved_search_docs, False, step_nr)
-            )
-
-            step_nr += 1
-
-        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
-
-        step_nr += 1
-
-    packet_list.append(Packet(ind=step_nr, obj=OverallStop()))
-
-    return EndStepPacketList(
-        end_step_nr=step_nr,
-        packet_list=packet_list,
-    )
+# Note: translate_db_message_to_packets moved to onyx.server.query_and_chat.streaming_utils
 
 
 def translate_db_message_to_chat_message_detail(
@@ -1783,7 +1240,6 @@ def update_db_session_with_messages(
     message_type: str | None = None,
     token_count: int | None = None,
     rephrased_query: str | None = None,
-    prompt_id: int | None = None,
     citations: dict[int, int] | None = None,
     error: str | None = None,
     alternate_assistant_id: int | None = None,
@@ -1795,7 +1251,6 @@ def update_db_session_with_messages(
     research_answer_purpose: ResearchAnswerPurpose | None = None,
     commit: bool = False,
 ) -> ChatMessage:
-
     chat_message = (
         db_session.query(ChatMessage)
         .filter(
@@ -1815,8 +1270,6 @@ def update_db_session_with_messages(
         chat_message.token_count = token_count
     if rephrased_query:
         chat_message.rephrased_query = rephrased_query
-    if prompt_id:
-        chat_message.prompt_id = prompt_id
     if citations:
         # Convert string keys to integers to match database field type
         chat_message.citations = {int(k): v for k, v in citations.items()}

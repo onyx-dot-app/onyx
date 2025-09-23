@@ -31,12 +31,14 @@ jobs:
         cache-dependency-path: |
           backend/requirements/default.txt
           backend/requirements/dev.txt
+          backend/requirements/model_server.txt
 
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
         pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
+        pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

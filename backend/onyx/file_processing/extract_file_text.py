@@ -1,3 +1,4 @@
+import gc
 import io
 import json
 import os
@@ -17,8 +18,10 @@ from typing import NamedTuple
 from zipfile import BadZipFile
 
 import chardet
+import openpyxl
 from markitdown import FileConversionException
 from markitdown import MarkItDown
+from markitdown import StreamInfo
 from markitdown import UnsupportedFormatException
 from PIL import Image
 from pypdf import PdfReader
@@ -30,6 +33,8 @@ from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
+from onyx.utils.file_types import PRESENTATION_MIME_TYPE
+from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -79,6 +84,20 @@ IMAGE_MEDIA_TYPES = [
     "image/jpeg",
     "image/webp",
 ]
+
+_MARKITDOWN_CONVERTER: MarkItDown | None = None
+
+KNOWN_OPENPYXL_BUGS = [
+    "Value must be either numerical or a string containing a wildcard",
+    "File contains no valid workbook part",
+]
+
+
+def get_markitdown_converter() -> MarkItDown:
+    global _MARKITDOWN_CONVERTER
+    if _MARKITDOWN_CONVERTER is None:
+        _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
+    return _MARKITDOWN_CONVERTER
 
 
 class OnyxExtensionType(IntFlag):
@@ -242,7 +261,10 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
 
 def read_pdf_file(
-    file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
+    file: IO[Any],
+    pdf_pass: str | None = None,
+    extract_images: bool = False,
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
@@ -292,7 +314,11 @@ def read_pdf_file(
                         f"page_{page_num + 1}_image_{image_file_object.name}."
                         f"{image.format.lower() if image.format else 'png'}"
                     )
-                    extracted_images.append((img_bytes, image_name))
+                    if image_callback is not None:
+                        # Stream image out immediately
+                        image_callback(img_bytes, image_name)
+                    else:
+                        extracted_images.append((img_bytes, image_name))
 
         return text, metadata, extracted_images
 
@@ -304,32 +330,38 @@ def read_pdf_file(
     return "", metadata, []
 
 
-def extract_docx_images(docx_bytes: IO[Any]) -> list[tuple[bytes, str]]:
+def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
     """
     Given the bytes of a docx file, extract all the images.
     Returns a list of tuples (image_bytes, image_name).
     """
-    out = []
     try:
         with zipfile.ZipFile(docx_bytes) as z:
             for name in z.namelist():
                 if name.startswith("word/media/"):
-                    out.append((z.read(name), name.split("/")[-1]))
+                    yield (z.read(name), name.split("/")[-1])
     except Exception:
         logger.exception("Failed to extract all docx images")
-    return out
 
 
 def docx_to_text_and_images(
-    file: IO[Any], file_name: str = ""
+    file: IO[Any],
+    file_name: str = "",
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx.
     Return (text_content, list_of_images).
+
+    The caller can choose to provide a callback to handle images with the intent
+    of avoiding materializing the list of images in memory.
+    The images list returned is empty in this case.
     """
-    md = MarkItDown(enable_plugins=False)
+    md = get_markitdown_converter()
     try:
-        doc = md.convert(to_bytesio(file))
+        doc = md.convert(
+            to_bytesio(file), stream_info=StreamInfo(mimetype=WORD_PROCESSING_MIME_TYPE)
+        )
     except (
         BadZipFile,
         ValueError,
@@ -349,13 +381,24 @@ def docx_to_text_and_images(
         return text_content_raw or "", []
 
     file.seek(0)
-    return doc.markdown, extract_docx_images(to_bytesio(file))
+    if image_callback is None:
+        return doc.markdown, list(extract_docx_images(to_bytesio(file)))
+    # If a callback is provided, iterate and stream images without accumulating
+    try:
+        for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
+            image_callback(img_file_bytes, img_file_name)
+    except Exception:
+        logger.exception("Failed to stream docx images")
+    return doc.markdown, []
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
-    md = MarkItDown(enable_plugins=False)
+    md = get_markitdown_converter()
+    stream_info = StreamInfo(
+        mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
+    )
     try:
-        presentation = md.convert(to_bytesio(file))
+        presentation = md.convert(to_bytesio(file), stream_info=stream_info)
     except (
         BadZipFile,
         ValueError,
@@ -369,23 +412,69 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    md = MarkItDown(enable_plugins=False)
+    # TODO: switch back to this approach in a few months when markitdown
+    # fixes their handling of excel files
+
+    # md = get_markitdown_converter()
+    # stream_info = StreamInfo(
+    #     mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
+    # )
+    # try:
+    #     workbook = md.convert(to_bytesio(file), stream_info=stream_info)
+    # except (
+    #     BadZipFile,
+    #     ValueError,
+    #     FileConversionException,
+    #     UnsupportedFormatException,
+    # ) as e:
+    #     error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+    #     if file_name.startswith("~"):
+    #         logger.debug(error_str + " (this is expected for files with ~)")
+    #     else:
+    #         logger.warning(error_str)
+    #     return ""
+    # return workbook.markdown
     try:
-        workbook = md.convert(to_bytesio(file))
-    except (
-        BadZipFile,
-        ValueError,
-        FileConversionException,
-        UnsupportedFormatException,
-    ) as e:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
         return ""
+    except Exception as e:
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
+            logger.error(
+                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            )
+            return ""
+        raise e
 
-    return workbook.markdown
+    text_content = []
+    for sheet in workbook.worksheets:
+        rows = []
+        num_empty_consecutive_rows = 0
+        for row in sheet.iter_rows(min_row=1, values_only=True):
+            row_str = ",".join(str(cell or "") for cell in row)
+
+            # Only add the row if there are any values in the cells
+            if len(row_str) >= len(row):
+                rows.append(row_str)
+                num_empty_consecutive_rows = 0
+            else:
+                num_empty_consecutive_rows += 1
+
+            if num_empty_consecutive_rows > 100:
+                # handle massive excel sheets with mostly empty cells
+                logger.warning(
+                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
+                    " skipping rest of file"
+                )
+                break
+        sheet_str = "\n".join(rows)
+        text_content.append(sheet_str)
+    return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -506,11 +595,29 @@ def extract_text_and_images(
     file_name: str,
     pdf_pass: str | None = None,
     content_type: str | None = None,
+    image_callback: Callable[[bytes, str], None] | None = None,
 ) -> ExtractionResult:
     """
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
     """
+    res = _extract_text_and_images(
+        file, file_name, pdf_pass, content_type, image_callback
+    )
+    # Clean up any temporary objects and force garbage collection
+    unreachable = gc.collect()
+    logger.info(f"Unreachable objects: {unreachable}")
+
+    return res
+
+
+def _extract_text_and_images(
+    file: IO[Any],
+    file_name: str,
+    pdf_pass: str | None = None,
+    content_type: str | None = None,
+    image_callback: Callable[[bytes, str], None] | None = None,
+) -> ExtractionResult:
     file.seek(0)
 
     if get_unstructured_api_key():
@@ -536,10 +643,11 @@ def extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
-
         # docx example for embedded images
         if extension == ".docx":
-            text_content, images = docx_to_text_and_images(file, file_name)
+            text_content, images = docx_to_text_and_images(
+                file, file_name, image_callback=image_callback
+            )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
@@ -551,6 +659,7 @@ def extract_text_and_images(
                 file,
                 pdf_pass,
                 extract_images=get_image_extraction_and_analysis_enabled(),
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata

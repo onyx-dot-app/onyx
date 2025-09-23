@@ -88,12 +88,12 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import ImageGenerationToolConfig
-from onyx.tools.tool_constructor import InternetSearchToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
+from onyx.tools.tool_constructor import WebSearchToolConfig
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -159,12 +159,10 @@ def _get_force_search_settings(
             override_kwargs=search_tool_override_kwargs,
         )
 
-    internet_search_available = any(
-        isinstance(tool, InternetSearchTool) for tool in tools
-    )
+    web_search_available = any(isinstance(tool, WebSearchTool) for tool in tools)
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
-    if not internet_search_available and not search_tool_available:
+    if not web_search_available and not search_tool_available:
         # Does not matter much which tool is set here as force is false and neither tool is available
         return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
     # Currently, the internet search tool does not support query override
@@ -199,9 +197,7 @@ def _get_force_search_settings(
 
     return ForceUseTool(
         force_use=False,
-        tool_name=(
-            SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
-        ),
+        tool_name=(SearchTool._NAME if search_tool_available else WebSearchTool._NAME),
         args=args,
         override_kwargs=None,
     )
@@ -335,11 +331,8 @@ def stream_chat_message_objects(
                 properties=None,
             )
 
-        # If a prompt override is specified via the API, use that with highest priority
-        # but for saving it, we are just mapping it to an existing prompt
-        prompt_id = new_msg_req.prompt_id
-        if prompt_id is None and persona.prompts:
-            prompt_id = sorted(persona.prompts, key=lambda x: x.id)[-1].id
+        # Note: prompt configuration is now embedded in the persona
+        # No need for separate prompt_id handling
 
         if reference_doc_ids is None and retrieval_options is None:
             raise RuntimeError(
@@ -399,7 +392,6 @@ def stream_chat_message_objects(
             user_message = create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=parent_message,
-                prompt_id=prompt_id,
                 message=message_text,
                 token_count=len(llm_tokenizer_encode_func(message_text)),
                 message_type=MessageType.USER,
@@ -559,18 +551,13 @@ def stream_chat_message_objects(
                 ].datetime_aware,
             )
         elif prompt_override:
-            if not final_msg.prompt:
-                raise ValueError(
-                    "Prompt override cannot be applied, no base prompt found."
-                )
+            # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
-                final_msg.prompt,
+                persona,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(
-                final_msg.prompt or persona.prompts[0]
-            )
+            prompt_config = PromptConfig.from_model(persona)
 
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
@@ -603,7 +590,7 @@ def stream_chat_message_objects(
                 latest_query_files=latest_query_files,
                 bypass_acl=bypass_acl,
             ),
-            internet_search_tool_config=InternetSearchToolConfig(
+            internet_search_tool_config=WebSearchToolConfig(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
             ),
@@ -616,6 +603,7 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
+            slack_context=new_msg_req.slack_context,  # Pass Slack context from request
         )
 
         tools: list[Tool] = []

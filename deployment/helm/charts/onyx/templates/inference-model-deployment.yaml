@@ -1,3 +1,4 @@
+{{- if gt (int .Values.inferenceCapability.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,6 +16,8 @@ spec:
       {{- end }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- range .Values.inferenceCapability.podLabels }}
         {{ .key }}: {{ .value }}
@@ -23,6 +26,10 @@ spec:
       {{- if .Values.inferenceCapability.podSecurityContext }}
       securityContext:
         {{- toYaml .Values.inferenceCapability.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inferenceCapability.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
       - name: model-server-inference
@@ -46,4 +53,4 @@ spec:
         resources:
           {{- toYaml .Values.inferenceCapability.resources | nindent 10 }}
         {{- end }}
-
+{{- end }}

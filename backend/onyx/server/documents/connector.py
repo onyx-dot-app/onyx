@@ -91,7 +91,7 @@ from onyx.db.credentials import create_credential
 from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
-from onyx.db.document import get_document_counts_for_cc_pairs
+from onyx.db.document import get_document_counts_for_cc_pairs_batched_parallel
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -803,15 +803,14 @@ def get_connector_indexing_status(
         list[IndexAttempt], latest_finished_index_attempts
     )
 
-    document_count_info = get_document_counts_for_cc_pairs(
-        db_session=db_session,
+    document_count_info = get_document_counts_for_cc_pairs_batched_parallel(
         cc_pairs=[
             ConnectorCredentialPairIdentifier(
                 connector_id=cc_pair.connector_id,
                 credential_id=cc_pair.credential_id,
             )
             for cc_pair in non_editable_cc_pairs + editable_cc_pairs
-        ],
+        ]
     )
 
     # Create lookup dictionaries for efficient access

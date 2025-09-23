@@ -1,3 +1,4 @@
+{{- if gt (int .Values.indexCapability.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,8 +15,9 @@ spec:
       {{- end }}
   template:
     metadata:
-      {{- with .Values.indexCapability.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.indexCapability.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -27,6 +29,10 @@ spec:
       {{- if .Values.indexCapability.podSecurityContext }}
       securityContext:
         {{- toYaml .Values.indexCapability.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexCapability.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
       - name: {{ .Values.indexCapability.name }}
@@ -52,3 +58,4 @@ spec:
         resources:
           {{- toYaml .Values.indexCapability.resources | nindent 10 }}
         {{- end }}
+{{- end }}

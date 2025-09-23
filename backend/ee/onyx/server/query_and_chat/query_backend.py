@@ -31,7 +31,6 @@ from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
-from onyx.db.chat import get_prompt_by_id
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -152,14 +151,6 @@ def get_answer_stream(
     ):
         raise KeyError("Must provide persona ID or Persona Config")
 
-    prompt = None
-    if query_request.prompt_id is not None:
-        prompt = get_prompt_by_id(
-            prompt_id=query_request.prompt_id,
-            user=user,
-            db_session=db_session,
-        )
-
     persona_info: Persona | PersonaOverrideConfig | None = None
     if query_request.persona_override_config is not None:
         persona_info = query_request.persona_override_config
@@ -194,7 +185,6 @@ def get_answer_stream(
         user=user,
         persona_id=query_request.persona_id,
         persona_override_config=query_request.persona_override_config,
-        prompt=prompt,
         message_ts_to_respond_to=None,
         retrieval_details=query_request.retrieval_options,
         rerank_settings=query_request.rerank_settings,
