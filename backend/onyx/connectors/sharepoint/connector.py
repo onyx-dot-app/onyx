@@ -59,6 +59,7 @@ from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_validation import EXCLUDED_IMAGE_TYPES
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -395,6 +396,25 @@ def _convert_driveitem_to_document_with_permissions(
     else:
         # Note: we don't process Onyx metadata for connectors like Drive & Sharepoint, but could
         def _store_embedded_image(img_data: bytes, img_name: str) -> None:
+            try:
+                mime_type = get_image_type_from_bytes(img_data)
+            except ValueError:
+                logger.debug(
+                    "Skipping embedded image with unknown format for %s",
+                    driveitem.name,
+                )
+                return
+
+            # The only mime type that would be returned by get_image_type_from_bytes that is in
+            # EXCLUDED_IMAGE_TYPES is image/gif.
+            if mime_type in EXCLUDED_IMAGE_TYPES:
+                logger.debug(
+                    "Skipping embedded image of excluded type %s for %s",
+                    mime_type,
+                    driveitem.name,
+                )
+                return
+
             image_section, _ = store_image_and_create_section(
                 image_data=img_data,
                 file_id=f"{driveitem.id}_img_{len(sections)}",
