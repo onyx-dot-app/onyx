@@ -35,6 +35,16 @@ inputs:
   cache-to:
     description: 'Cache destinations'
     required: false
+  outputs:
+    description: 'Output destinations'
+    required: false
+  provenance:
+    description: 'Generate provenance attestation'
+    required: false
+    default: 'false'
+  build-args:
+    description: 'Build arguments'
+    required: false
   retry-wait-time:
     description: 'Time to wait before attempt 2 in seconds'
     required: false
@@ -62,6 +72,9 @@ runs:
         no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        outputs: ${{ inputs.outputs }}
+        provenance: ${{ inputs.provenance }}
+        build-args: ${{ inputs.build-args }}
 
     - name: Wait before attempt 2
       if: steps.buildx1.outcome != 'success'
@@ -85,6 +98,9 @@ runs:
         no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        outputs: ${{ inputs.outputs }}
+        provenance: ${{ inputs.provenance }}
+        build-args: ${{ inputs.build-args }}
 
     - name: Wait before attempt 3
       if: steps.buildx1.outcome != 'success' && steps.buildx2.outcome != 'success'
@@ -108,6 +124,9 @@ runs:
         no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        outputs: ${{ inputs.outputs }}
+        provenance: ${{ inputs.provenance }}
+        build-args: ${{ inputs.build-args }}
 
     - name: Report failure
       if: steps.buildx1.outcome != 'success' && steps.buildx2.outcome != 'success' && steps.buildx3.outcome != 'success'

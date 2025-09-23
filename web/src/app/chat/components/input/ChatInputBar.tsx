@@ -22,7 +22,7 @@ import {
   SendIcon,
   StopGeneratingIcon,
 } from "@/components/icons/icons";
-import { OnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
@@ -37,7 +37,6 @@ import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmPr
 import { DeepResearchToggle } from "./DeepResearchToggle";
 import { ActionToggle } from "./ActionManagement";
 import { SelectedTool } from "./SelectedTool";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -437,7 +436,9 @@ export const ChatInputBar = React.memo(function ChatInputBar({
               aria-multiline
               placeholder={
                 placeholder ||
-                `How can ${selectedAssistant.name} help you today`
+                (selectedAssistant.id === 0
+                  ? `How can ${settings?.enterpriseSettings?.application_name || "Onyx"} help you today`
+                  : `How can ${selectedAssistant.name} help you today`)
               }
               value={message}
               onKeyDown={(event) => {
@@ -661,7 +662,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 <LLMPopover
                   llmProviders={llmProviders}
                   llmManager={llmManager}
-                  requiresImageGeneration={true}
+                  requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
                 />
 

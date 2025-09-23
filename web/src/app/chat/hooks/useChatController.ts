@@ -819,6 +819,10 @@ export function useChatController({
       currentMessageTree,
       currentChatState,
       llmProviders,
+      // Ensure latest forced tools are used when submitting
+      forcedToolIds,
+      // Keep tool preference-derived values fresh
+      assistantPreferences,
     ]
   );
 
@@ -878,7 +882,7 @@ export function useChatController({
 
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [llmProviders, liveAssistant, llmManager]
+    [llmProviders, liveAssistant, llmManager, forcedToolIds]
   );
 
   useEffect(() => {

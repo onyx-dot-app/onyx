@@ -35,6 +35,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import run_with_timeout
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
+from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
@@ -54,10 +56,9 @@ from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
-from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_W_TOOL_CALLING
-from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
+from onyx.prompts.prompt_template import PromptTemplate
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -65,13 +66,13 @@ from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    WebSearchTool,
+)
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -108,19 +109,24 @@ def _get_available_tools(
 
     for tool in graph_config.tooling.tools:
 
+        if not tool.is_available(db_session):
+            logger.info(f"Tool {tool.name} is not available, skipping")
+            continue
+
         tool_db_info = tool_dict.get(tool.id)
         if tool_db_info:
             incode_tool_id = tool_db_info.in_code_tool_id
         else:
             raise ValueError(f"Tool {tool.name} is not found in the database")
 
-        if isinstance(tool, InternetSearchTool):
+        if isinstance(tool, WebSearchTool):
             llm_path = DRPath.WEB_SEARCH.value
             path = DRPath.WEB_SEARCH
         elif isinstance(tool, SearchTool):
             llm_path = DRPath.INTERNAL_SEARCH.value
             path = DRPath.INTERNAL_SEARCH
         elif isinstance(tool, KnowledgeGraphTool) and include_kg:
+            # TODO (chris): move this into the `is_available` check
             if len(active_source_types) == 0:
                 logger.error(
                     "No active source types found, skipping Knowledge Graph tool"
@@ -399,21 +405,20 @@ def clarifier(
     else:
         active_source_type_descriptions_str = ""
 
-    if graph_config.inputs.persona and len(graph_config.inputs.persona.prompts) > 0:
-        assistant_system_prompt = (
-            graph_config.inputs.persona.prompts[0].system_prompt
-            or DEFAULT_DR_SYSTEM_PROMPT
-        ) + "\n\n"
-        if graph_config.inputs.persona.prompts[0].task_prompt:
+    if graph_config.inputs.persona:
+        assistant_system_prompt = PromptTemplate(
+            graph_config.inputs.persona.system_prompt or DEFAULT_DR_SYSTEM_PROMPT
+        ).build()
+        if graph_config.inputs.persona.task_prompt:
             assistant_task_prompt = (
                 "\n\nHere are more specifications from the user:\n\n"
-                + graph_config.inputs.persona.prompts[0].task_prompt
+                + PromptTemplate(graph_config.inputs.persona.task_prompt).build()
             )
         else:
             assistant_task_prompt = ""
 
     else:
-        assistant_system_prompt = DEFAULT_DR_SYSTEM_PROMPT + "\n\n"
+        assistant_system_prompt = PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build()
         assistant_task_prompt = ""
 
     chat_history_string = (
@@ -459,8 +464,9 @@ def clarifier(
                 llm_decision = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
+                        assistant_system_prompt,
                         decision_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     schema=DecisionResponse,
                 )
@@ -488,12 +494,13 @@ def clarifier(
                 )
 
                 answer_tokens, _, _ = run_with_timeout(
-                    80,
+                    TF_DR_TIMEOUT_LONG,
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=create_question_prompt(
                             assistant_system_prompt,
                             answer_prompt + assistant_task_prompt,
+                            uploaded_image_context=uploaded_image_context,
                         ),
                         event_name="basic_response",
                         writer=writer,
@@ -501,7 +508,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=60,
+                        timeout_override=TF_DR_TIMEOUT_LONG,
                         ind=current_step_nr,
                         context_docs=None,
                         replace_citations=True,
@@ -558,7 +565,7 @@ def clarifier(
 
             stream = graph_config.tooling.primary_llm.stream(
                 prompt=create_question_prompt(
-                    assistant_system_prompt + EVAL_SYSTEM_PROMPT_W_TOOL_CALLING,
+                    assistant_system_prompt,
                     decision_prompt + assistant_task_prompt,
                     uploaded_image_context=uploaded_image_context,
                 ),
@@ -612,7 +619,7 @@ def clarifier(
 
     clarification = None
 
-    if research_type != ResearchType.THOUGHTFUL:
+    if research_type == ResearchType.DEEP:
         result = _get_existing_clarification_request(graph_config)
         if result is not None:
             clarification, original_question, chat_history_string = result
@@ -642,10 +649,12 @@ def clarifier(
                 clarification_response = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt, clarification_prompt
+                        assistant_system_prompt,
+                        clarification_prompt,
+                        uploaded_image_context=uploaded_image_context,
                     ),
                     schema=ClarificationGenerationResponse,
-                    timeout_override=25,
+                    timeout_override=TF_DR_TIMEOUT_SHORT,
                     # max_tokens=1500,
                 )
             except Exception as e:
@@ -674,7 +683,7 @@ def clarifier(
                 )
 
                 _, _, _ = run_with_timeout(
-                    80,
+                    TF_DR_TIMEOUT_LONG,
                     lambda: stream_llm_answer(
                         llm=graph_config.tooling.primary_llm,
                         prompt=repeat_prompt,
@@ -683,7 +692,7 @@ def clarifier(
                         agent_answer_level=0,
                         agent_answer_question_num=0,
                         agent_answer_type="agent_level_answer",
-                        timeout_override=60,
+                        timeout_override=TF_DR_TIMEOUT_LONG,
                         answer_piece=StreamingType.MESSAGE_DELTA.value,
                         ind=current_step_nr,
                         # max_tokens=None,

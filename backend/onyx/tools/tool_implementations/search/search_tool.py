@@ -37,6 +37,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
@@ -106,6 +107,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         full_doc: bool = False,
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
+        slack_context: SlackContext | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -120,6 +122,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.full_doc = full_doc
         self.bypass_acl = bypass_acl
         self.db_session = db_session
+        self.slack_context = slack_context
+
+        # Log Slack context in SearchTool constructor
+        if slack_context:
+            logger.info(f"SearchTool: Slack context captured: {slack_context}")
+        else:
+            logger.info("SearchTool: No Slack context provided")
 
         # Only used via API
         self.rerank_settings = rerank_settings
@@ -293,7 +302,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
-        original_query = None
+        original_query = query
         precomputed_query_embedding = None
         precomputed_is_keyword = None
         precomputed_keywords = None
@@ -312,7 +321,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         kg_sources = None
         kg_chunk_id_zero_only = False
         if override_kwargs:
-            original_query = override_kwargs.original_query
+            original_query = override_kwargs.original_query or query
             precomputed_is_keyword = override_kwargs.precomputed_is_keyword
             precomputed_keywords = override_kwargs.precomputed_keywords
             precomputed_query_embedding = override_kwargs.precomputed_query_embedding
@@ -419,6 +428,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             prompt_config=self.prompt_config,
             retrieved_sections_callback=retrieved_sections_callback,
             contextual_pruning_config=self.contextual_pruning_config,
+            slack_context=self.slack_context,  # Pass Slack context
         )
 
         search_query_info = SearchQueryInfo(

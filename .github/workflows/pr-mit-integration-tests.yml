@@ -5,12 +5,15 @@ concurrency:
 
 on:
   merge_group:
-  pull_request:
-    branches:
-      - main
-      - "release/**"
+    types: [checks_requested]
 
 env:
+  # Private Registry Configuration
+  PRIVATE_REGISTRY: experimental-registry.blacksmith.sh:5000
+  PRIVATE_REGISTRY_USERNAME: ${{ secrets.PRIVATE_REGISTRY_USERNAME }}
+  PRIVATE_REGISTRY_PASSWORD: ${{ secrets.PRIVATE_REGISTRY_PASSWORD }}
+
+  # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
@@ -23,21 +26,42 @@ env:
   PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
-  PLATFORM_PAIR: linux-amd64
+
 jobs:
-  integration-tests-mit:
-    # See https://runs-on.com/runners/linux/
-    runs-on:
-      [
-        runs-on,
-        runner=32cpu-linux-x64,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+  discover-test-dirs:
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    outputs:
+      test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
+      - name: Discover test directories
+        id: set-matrix
+        run: |
+          # Find all leaf-level directories in both test directories
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+
+          # Create JSON array with directory info
+          all_dirs=""
+          for dir in $tests_dirs; do
+            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+          done
+          for dir in $connector_dirs; do
+            all_dirs="$all_dirs{\"path\":\"connector_job_tests/$dir\",\"name\":\"connector-$dir\"},"
+          done
+
+          # Remove trailing comma and wrap in array
+          all_dirs="[${all_dirs%,}]"
+          echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
+
+  prepare-build:
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -46,7 +70,9 @@ jobs:
           cache-dependency-path: |
             backend/requirements/default.txt
             backend/requirements/dev.txt
-      - run: |
+
+      - name: Install Python dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
@@ -70,71 +96,153 @@ jobs:
             --package-name onyx_openapi_client \
             --skip-validate-spec \
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-            
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
+      - name: Upload OpenAPI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-artifacts
+          path: backend/generated/
+
+  build-backend-image:
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push Backend Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
+          push: true
+
+  build-model-server-image:
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push Model Server Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
+          push: true
+          outputs: type=registry
+          provenance: false
+
+  build-integration-image:
+    needs: prepare-build
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+
+      - name: Download OpenAPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-artifacts
+          path: backend/generated/
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push integration test Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/tests/integration/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
+          push: true
+
+  integration-tests-mit:
+    needs:
+      [
+        discover-test-dirs,
+        build-backend-image,
+        build-model-server-image,
+        build-integration-image,
+      ]
+    # See https://docs.blacksmith.sh/blacksmith-runners/overview
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+
+    strategy:
+      fail-fast: false
+      matrix:
+        test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRIVATE_REGISTRY }}
+          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
+          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # tag every docker image with "test" so that we can spin up the correct set
-      # of images during testing
-
-      # We don't need to build the Web Docker image since it's not yet used
-      # in the integration tests. We have a separate action to verify that it builds
-      # successfully.
-      - name: Pull Web Docker image
+      - name: Pull Docker images
         run: |
-          docker pull onyxdotapp/onyx-web-server:latest
-          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
+          # Pull all images from registry in parallel
+          echo "Pulling Docker images in parallel..."
+          # Pull images from private registry
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
-      # we use the runs-on cache for docker builds
-      # in conjunction with runs-on runners, it has better speed and unlimited caching
-      # https://runs-on.com/caching/s3-cache-for-github-actions/
-      # https://runs-on.com/caching/docker/
-      # https://github.com/moby/buildkit#s3-cache-experimental
+          # Wait for all background jobs to complete
+          wait
+          echo "All Docker images pulled successfully"
 
-      # images are built and run locally for testing purposes. Not pushed.
-      - name: Build Backend Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-backend:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-
-      - name: Build Model Server Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-model-server:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-
-      - name: Build integration test Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./backend
-          file: ./backend/tests/integration/Dockerfile
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-integration:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          # Re-tag to remove registry prefix for docker-compose
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
+      # NOTE: don't need web server for integration tests
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -145,7 +253,16 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d
+          docker compose -f docker-compose.dev.yml -p onyx-stack up \
+            relational_db \
+            index \
+            cache \
+            minio \
+            api_server \
+            inference_model_server \
+            indexing_model_server \
+            background \
+            -d
         id: start_docker
 
       - name: Wait for service to be ready
@@ -189,51 +306,44 @@ jobs:
             -p mock-it-services-stack up -d
 
       # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
-      - name: Run Standard Integration Tests
-        run: |
-          echo "Running integration tests..."
-          docker run --rm --network onyx-stack_default \
-            --name test-runner \
-            -e POSTGRES_HOST=relational_db \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=password \
-            -e POSTGRES_DB=postgres \
-            -e DB_READONLY_USER=db_readonly_user \
-            -e DB_READONLY_PASSWORD=password \
-            -e POSTGRES_POOL_PRE_PING=true \
-            -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e REDIS_HOST=cache \
-            -e API_SERVER_HOST=api_server \
-            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
-            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
-            -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
-            -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
-            -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
-            -e JIRA_BASE_URL=${JIRA_BASE_URL} \
-            -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
-            -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
-            -e PERM_SYNC_SHAREPOINT_CLIENT_ID=${PERM_SYNC_SHAREPOINT_CLIENT_ID} \
-            -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
-            -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
-            -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
-            -e TEST_WEB_HOSTNAME=test-runner \
-            -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
-            -e MOCK_CONNECTOR_SERVER_PORT=8001 \
-            onyxdotapp/onyx-integration:test \
-            /app/tests/integration/tests \
-            /app/tests/integration/connector_job_tests
-        continue-on-error: true
-        id: run_tests
-
-      - name: Check test results
-        run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
-            echo "Integration tests failed. Exiting with error."
-            exit 1
-          else
-            echo "All integration tests passed successfully."
-          fi
+      - name: Run Integration Tests for ${{ matrix.test-dir.name }}
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            echo "Running integration tests for ${{ matrix.test-dir.path }}..."
+            docker run --rm --network onyx-stack_default \
+              --name test-runner \
+              -e POSTGRES_HOST=relational_db \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=password \
+              -e POSTGRES_DB=postgres \
+              -e DB_READONLY_USER=db_readonly_user \
+              -e DB_READONLY_PASSWORD=password \
+              -e POSTGRES_POOL_PRE_PING=true \
+              -e POSTGRES_USE_NULL_POOL=true \
+              -e VESPA_HOST=index \
+              -e REDIS_HOST=cache \
+              -e API_SERVER_HOST=api_server \
+              -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+              -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
+              -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
+              -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+              -e JIRA_BASE_URL=${JIRA_BASE_URL} \
+              -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
+              -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
+              -e PERM_SYNC_SHAREPOINT_CLIENT_ID=${PERM_SYNC_SHAREPOINT_CLIENT_ID} \
+              -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
+              -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
+              -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e TEST_WEB_HOSTNAME=test-runner \
+              -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
+              -e MOCK_CONNECTOR_SERVER_PORT=8001 \
+              onyxdotapp/onyx-integration:test \
+              /app/tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down":
@@ -253,7 +363,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: docker-all-logs
+          name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
@@ -262,3 +372,20 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+
+  
+  required: 
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    needs: [integration-tests-mit]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const needs = ${{ toJSON(needs) }};
+            const failed = Object.values(needs).some(n => n.result !== 'success');
+            if (failed) {
+              core.setFailed('One or more upstream jobs failed or were cancelled.');
+            } else {
+              core.notice('All required jobs succeeded.');
+            }

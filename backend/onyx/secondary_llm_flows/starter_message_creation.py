@@ -14,7 +14,7 @@ from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.db.document_set import get_document_sets_by_ids
-from onyx.db.models import StarterMessageModel as StarterMessage
+from onyx.db.models import StarterMessage
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index

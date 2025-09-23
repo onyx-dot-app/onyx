@@ -14,6 +14,10 @@ module = "alembic.versions.*"
 disable_error_code = ["var-annotated"]
 
 [[tool.mypy.overrides]]
+module = "braintrust_langchain.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "alembic_tenants.versions.*"
 disable_error_code = ["var-annotated"]
 
@@ -24,7 +28,6 @@ ignore_errors = true
 
 [tool.ruff]
 line-length = 130
-target-version = "py311"
 
 [tool.ruff.lint]
 ignore = []

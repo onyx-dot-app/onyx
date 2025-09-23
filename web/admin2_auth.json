@@ -2,10 +2,10 @@
   "cookies": [
     {
       "name": "fastapiusersauth",
-      "value": "h3qhacpHbE4_09HcOLlVW4lSee48m1UbjYTUiKYwNiw",
+      "value": "KVqTmRTo2M5RFgew_p_sC0GXc_w0JxgCA7QJCZDTIr0",
       "domain": "localhost",
       "path": "/",
-      "expires": 1745624493.119168,
+      "expires": 1758416337.424351,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"

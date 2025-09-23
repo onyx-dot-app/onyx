@@ -94,7 +94,6 @@ def create_message(
         chat_session_id=chat_session.id,
         parent_message=latest_message,
         message=message.content,
-        prompt_id=chat_session.persona.prompts[0].id,
         token_count=check_number_of_tokens(message.content),
         message_type=(
             MessageType.USER if message.role == "user" else MessageType.ASSISTANT

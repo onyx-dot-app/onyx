@@ -76,7 +76,6 @@ def parse_user_files(
 
     # Calculate available tokens for documents based on prompt, user input, etc.
     available_tokens = compute_max_document_tokens_for_persona(
-        db_session=db_session,
         persona=persona,
         actual_user_input=actual_user_input,
     )

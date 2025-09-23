@@ -65,19 +65,23 @@ Create the name of the service account to use
 Set secret name
 */}}
 {{- define "onyx-stack.secretName" -}}
-{{- default (default "onyx-secrets" .Values.auth.secretName) .Values.auth.existingSecret }}
+{{- default .secretName .existingSecret }}
 {{- end }}
 
 {{/*
 Create env vars from secrets
 */}}
 {{- define "onyx-stack.envSecrets" -}}
-    {{- range $name, $key := .Values.auth.secretKeys }}
+    {{- range $secretSuffix, $secretContent := .Values.auth }}
+    {{- if and (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+    {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
     secretKeyRef:
-      name: {{ include "onyx-stack.secretName" $ }}
+      name: {{ include "onyx-stack.secretName" $secretContent }}
       key: {{ default $name $key }}
+    {{- end }}
+    {{- end }}
     {{- end }}
 {{- end }}
 

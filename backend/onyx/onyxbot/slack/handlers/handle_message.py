@@ -138,12 +138,10 @@ def handle_message(
 
     document_set_names: list[str] | None = None
     persona = slack_channel_config.persona if slack_channel_config else None
-    prompt = None
     if persona:
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
-        prompt = persona.prompts[0] if persona.prompts else None
 
     respond_tag_only = False
     respond_member_group_list = None
@@ -222,7 +220,6 @@ def handle_message(
             message_info=message_info,
             receiver_ids=send_to,
             slack_channel_config=slack_channel_config,
-            prompt=prompt,
             logger=logger,
             client=client,
             db_session=db_session,

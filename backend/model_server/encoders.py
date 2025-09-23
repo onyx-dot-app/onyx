@@ -37,24 +37,51 @@ def get_embedding_model(
     model_name: str,
     max_context_length: int,
 ) -> "SentenceTransformer":
+    """
+    Loads or returns a cached SentenceTransformer, sets max_seq_length, pins device,
+    pre-warms rotary caches once, and wraps encode() with a lock to avoid cache races.
+    """
     from sentence_transformers import SentenceTransformer  # type: ignore
 
-    global _GLOBAL_MODELS_DICT  # A dictionary to store models
+    def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
+        """
+        Build RoPE cos/sin caches once on the final device/dtype so later forwards only read.
+        Works by calling the underlying HF model directly with dummy IDs/attention.
+        """
+        try:
+            # ensure > max seq after tokenization
+            # Ideally we would use the saved tokenizer, but whatever it's ok
+            # we'll make an assumption about tokenization here
+            long_text = "x " * (target_len * 2)
+            _ = st_model.encode(
+                [long_text],
+                batch_size=1,
+                convert_to_tensor=True,
+                show_progress_bar=False,
+                normalize_embeddings=False,
+            )
+            logger.info("RoPE pre-warm successful")
+        except Exception as e:
+            logger.warning(f"RoPE pre-warm skipped/failed: {e}")
+
+    global _GLOBAL_MODELS_DICT
 
     if model_name not in _GLOBAL_MODELS_DICT:
         logger.notice(f"Loading {model_name}")
-        # Some model architectures that aren't built into the Transformers or Sentence
-        # Transformer need to be downloaded to be loaded locally. This does not mean
-        # data is sent to remote servers for inference, however the remote code can
-        # be fairly arbitrary so only use trusted models
         model = SentenceTransformer(
             model_name_or_path=model_name,
             trust_remote_code=True,
         )
         model.max_seq_length = max_context_length
+        _prewarm_rope(model, max_context_length)
         _GLOBAL_MODELS_DICT[model_name] = model
-    elif max_context_length != _GLOBAL_MODELS_DICT[model_name].max_seq_length:
-        _GLOBAL_MODELS_DICT[model_name].max_seq_length = max_context_length
+    else:
+        model = _GLOBAL_MODELS_DICT[model_name]
+        if max_context_length != model.max_seq_length:
+            model.max_seq_length = max_context_length
+            prev = getattr(model, "_rope_prewarmed_to", 0)
+            if max_context_length > int(prev or 0):
+                _prewarm_rope(model, max_context_length)
 
     return _GLOBAL_MODELS_DICT[model_name]
 

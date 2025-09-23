@@ -49,9 +49,9 @@ export function UserSettingsModal({
   updateCurrentLlm?: (newOverride: LlmDescriptor) => void;
   onClose: () => void;
   defaultModel: string | null;
-  ccPairs?: CCPairBasicInfo[];
-  federatedConnectors?: FederatedConnectorOAuthStatus[];
-  refetchFederatedConnectors?: () => void;
+  ccPairs: CCPairBasicInfo[];
+  federatedConnectors: FederatedConnectorOAuthStatus[];
+  refetchFederatedConnectors: () => void;
 }) {
   const {
     refreshUser,

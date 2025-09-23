@@ -26,7 +26,7 @@ import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../../admin/settings/interfaces";
 import {
   IMAGE_GENERATION_TOOL_ID,
-  INTERNET_SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { Packet } from "./streamingModels";
@@ -205,7 +205,7 @@ export async function* sendMessage({
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
-  const body = JSON.stringify({
+  const payload = {
     alternate_assistant_id: alternateAssistantId,
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
@@ -244,7 +244,9 @@ export async function* sendMessage({
     use_agentic_search: useAgentSearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_ids: forcedToolIds,
-  });
+  };
+
+  const body = JSON.stringify(payload);
 
   const response = await fetch(`/api/chat/send-message`, {
     method: "POST",
@@ -573,7 +575,7 @@ export function personaIncludesRetrieval(
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+      [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
   );
 }
 

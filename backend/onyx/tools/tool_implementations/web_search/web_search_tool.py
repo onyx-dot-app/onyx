@@ -1,7 +1,11 @@
 from collections.abc import Generator
 from typing import Any
 
+from sqlalchemy.orm import Session
+from typing_extensions import override
+
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -15,11 +19,11 @@ logger = setup_logger()
 
 # TODO: Align on separation of Tools and SubAgents. Right now, we're only keeping this around for backwards compatibility.
 QUERY_FIELD = "query"
-_GENERIC_ERROR_MESSAGE = "InternetSearchTool should only be used by the Deep Research Agent, not via tool calling."
+_GENERIC_ERROR_MESSAGE = "WebSearchTool should only be used by the Deep Research Agent, not via tool calling."
 
 
-class InternetSearchTool(Tool[None]):
-    _NAME = "run_internet_search"  # TODO: change to run_web_search along with the remaning changes to 'web'
+class WebSearchTool(Tool[None]):
+    _NAME = "run_web_search"
     _DESCRIPTION = "Search the web for information. Never call this tool."
     _DISPLAY_NAME = "Web Search"
 
@@ -41,6 +45,12 @@ class InternetSearchTool(Tool[None]):
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @override
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        """Available only if EXA API key is configured."""
+        return bool(EXA_API_KEY)
 
     def tool_definition(self) -> dict:
         return {

@@ -87,6 +87,8 @@ COPY ./requirements/dev.txt /tmp/dev-requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         -r /tmp/dev-requirements.txt
 COPY ./tests/integration /app/tests/integration
+# copies all files, but not folders, in the tests directory
+COPY ./tests/* /app/tests/
 
 ENV PYTHONPATH=/app
 

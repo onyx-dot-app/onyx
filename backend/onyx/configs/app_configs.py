@@ -65,19 +65,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_LOWERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_DIGIT = (
-    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_SPECIAL_CHAR = (
-    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "false").lower() == "true"
 )
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
@@ -353,6 +353,14 @@ except ValueError:
 
 CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_PRIMARY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
@@ -677,6 +685,17 @@ LOG_POSTGRES_CONN_COUNTS = (
 # Anonymous usage telemetry
 DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 
+#####
+# Braintrust Configuration
+#####
+# Enable Braintrust tracing for LangGraph/LangChain applications
+BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
+# Braintrust project name
+BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Maximum concurrency for Braintrust evaluations
+BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
 )
@@ -842,12 +861,12 @@ S3_FILE_STORE_BUCKET_NAME = (
 )
 S3_FILE_STORE_PREFIX = os.environ.get("S3_FILE_STORE_PREFIX") or "onyx-files"
 # S3_ENDPOINT_URL is for MinIO and other S3-compatible storage. Leave blank for AWS S3.
-S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or "http://localhost:9004"
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
 S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 
 # S3/MinIO Access Keys
-S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID") or "minioadmin"
-S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY") or "minioadmin"
+S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
+S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
