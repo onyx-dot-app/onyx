@@ -103,11 +103,18 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
                     "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: retry-after header name is None"
                 )
 
-            retry_after_value = response.headers.get(retry_after_header_name)
-            if not retry_after_value:
+            retry_after_header_value = response.headers.get(retry_after_header_name)
+            if not retry_after_header_value:
                 raise ValueError(
                     "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: retry-after header value is None"
                 )
+
+            # Handle case where header value might be a list
+            retry_after_value = (
+                retry_after_header_value[0]
+                if isinstance(retry_after_header_value, list)
+                else retry_after_header_value
+            )
 
             retry_after_value_int = int(
                 retry_after_value
