@@ -1,5 +1,3 @@
-<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/README.md"} -->
-
 <a name="readme-top"></a>
 
 <h2 align="center">
@@ -7,7 +5,7 @@
 </h2>
 
 <p align="center">
-<p align="center">Open Source Gen-AI + Enterprise Search.</p>
+<p align="center">Open Source AI Platform</p>
 
 <p align="center">
 <a href="https://docs.onyx.app/" target="_blank">
@@ -24,34 +22,25 @@
 </a>
 </p>
 
-<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI platform connected to your company's docs, apps, and people.
-Onyx provides a feature rich Chat interface and plugs into any LLM of your choice.
-Keep knowledge and access controls sync-ed across over 40 connectors like Google Drive, Slack, Confluence, Salesforce, etc.
-Create custom AI agents with unique prompts, knowledge, and actions that the agents can take.
-Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
+**Onyx** is a feature-rich, self-hostable Chat UI that works with any LLM. Onyx is easy to deploy and can run in a completely airgapped environment.
+
+Deploy Onyx with a single command (or see deployment section below for other options):
+```
+curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
+```
 
 
-<h3>Feature Highlights</h3>
 
-**Deep research over your team's knowledge:**
+<h2>Features</h2>
+- **Agents:** Build custom AI Agents with unique instructions, knowledge and actions.
+- **Web Search:** Supporting Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
+- **RAG:**
+- **Connectors**
+- **Actions & MCP:**
+- **Code Interpreter**
+- **Image Generation**
 
-https://private-user-images.githubusercontent.com/32520769/414509312-48392e83-95d0-4fb5-8650-a396e05e0a32.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mzk5Mjg2MzYsIm5iZiI6MTczOTkyODMzNiwicGF0aCI6Ii8zMjUyMDc2OS80MTQ1MDkzMTItNDgzOTJlODMtOTVkMC00ZmI1LTg2NTAtYTM5NmUwNWUwYTMyLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTAyMTklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwMjE5VDAxMjUzNlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFhMzk5Njg2Y2Y5YjFmNDNiYTQ2YzM5ZTg5YWJiYTU2NWMyY2YwNmUyODE2NWUxMDRiMWQxZWJmODI4YTA0MTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.a9D8A0sgKE9AoaoE-mfFbJ6_OKYeqaf7TZ4Han2JfW8
-
-
-**Use Onyx as a secure AI Chat with any LLM:**
-
-![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
-
-
-**Easily set up connectors to your apps:**
-
-![Onyx Connector Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxConnectorSilentDemo.gif)
-
-
-**Access Onyx where your team already works:**
-
-![Onyx Bot Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxBot.png)
-
+Works with any LLM provider (like OpenAI, Anthropic, Gemini, AWS Bedrock, Azure OpenAI, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
 
 ## Deployment
 **To try it out for free and get started in seconds, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
