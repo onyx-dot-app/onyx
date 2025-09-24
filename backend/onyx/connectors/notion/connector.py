@@ -210,8 +210,145 @@ class NotionConnector(LoadConnector, PollConnector):
             logger.exception(f"Error fetching database - {res.json()}")
             raise e
         return res.json()
+    
+    @retry(tries=3, delay=1, backoff=2)
+    def _search_notion(self, query: dict[str, Any]) -> NotionSearchResponse:
+        logger.debug(f"Searching Notion with query: {query}")
+        try:
+            res = rl_requests.post(
+                "https://api.notion.com/v1/search",
+                headers=self.headers,
+                json=query,
+                timeout=_NOTION_CALL_TIMEOUT,
+            )
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            logger.warning(f"HTTP error during Notion search: {http_err}")
+            if http_err.response.status_code == 400 and (
+                "sort" in http_err.response.json().get("message", "")
+                or "filter" in http_err.response.json().get("message", "")
+            ):
+                logger.warning(
+                    "Invalid search parameters, removing sort/filter and trying again."
+                )
+                query.pop("sort", None)
+                query.pop("filter", None)
+                return self._search_notion(query)
+            raise http_err
+        except Exception as e:
+            logger.exception(f"Error searching Notion: {e}")
+            raise e
+        return NotionSearchResponse(**res.json())
 
-    # ... Keep _properties_to_str, _read_blocks, _read_page_title unchanged ...
+    def _properties_to_str(self, properties: dict[str, Any]) -> str:
+        text_parts = []
+        for prop_name, prop_data in properties.items():
+            prop_type = prop_data.get("type")
+            if prop_type == "title":
+                if "title" in prop_data and prop_data["title"]:
+                    text_parts.append(
+                        f"Title: {''.join([t.get('plain_text', '') for t in prop_data['title']])}\n"
+                    )
+            elif prop_type == "rich_text":
+                if "rich_text" in prop_data and prop_data["rich_text"]:
+                    text_parts.append(
+                        f"{prop_name}: {''.join([t.get('plain_text', '') for t in prop_data['rich_text']])}\n"
+                    )
+            elif prop_type == "url":
+                if prop_data.get("url"):
+                    text_parts.append(f"{prop_name}: {prop_data['url']}\n")
+            elif prop_type == "multi_select":
+                if prop_data.get("multi_select"):
+                    options = [o.get("name", "") for o in prop_data["multi_select"]]
+                    text_parts.append(f"{prop_name}: {', '.join(options)}\n")
+            elif prop_type == "select":
+                if prop_data.get("select"):
+                    text_parts.append(f"{prop_name}: {prop_data['select']['name']}\n")
+            # Add more property types as needed
+        return "".join(text_parts)
+
+    def _read_blocks(self, block_id: str) -> tuple[list[NotionBlock], list[str]]:
+        blocks = []
+        child_pages = []
+        cursor = None
+        while True:
+            data = self._fetch_child_blocks(block_id, cursor)
+            if not data or not data["results"]:
+                break
+            for result in data["results"]:
+                block_type = result["type"]
+                result_id = result["id"]
+                prefix = ""
+                text_content = ""
+
+                if block_type in ["paragraph", "heading_1", "heading_2", "heading_3"]:
+                    prefix = " "
+                    rich_text_list = result[block_type].get("rich_text", [])
+                    text_content = "".join([t["plain_text"] for t in rich_text_list])
+                elif block_type == "bulleted_list_item":
+                    prefix = "- "
+                    rich_text_list = result[block_type].get("rich_text", [])
+                    text_content = "".join([t["plain_text"] for t in rich_text_list])
+                elif block_type == "numbered_list_item":
+                    prefix = "1. "
+                    rich_text_list = result[block_type].get("rich_text", [])
+                    text_content = "".join([t["plain_text"] for t in rich_text_list])
+                elif block_type == "page" or block_type == "child_page":
+                    if self.recursive_index_enabled:
+                        child_pages.append(result_id)
+                    title = result["child_page"].get("title", "")
+                    text_content = f"Page: {title}"
+                elif block_type == "to_do":
+                    prefix = "- [ ] "
+                    rich_text_list = result[block_type].get("rich_text", [])
+                    text_content = "".join([t["plain_text"] for t in rich_text_list])
+                elif block_type == "toggle":
+                    prefix = " "
+                    rich_text_list = result[block_type].get("rich_text", [])
+                    text_content = "".join([t["plain_text"] for t in rich_text_list])
+
+                if text_content:
+                    blocks.append(
+                        NotionBlock(id=result_id, text=text_content, prefix=prefix)
+                    )
+
+            if not data["has_more"]:
+                break
+            cursor = data["next_cursor"]
+        return blocks, child_pages
+
+    def _read_page_title(self, page: NotionPage) -> str:
+        if page.database_name:
+            return page.database_name
+        title = page.properties.get("title")
+        if title and "title" in title and title["title"]:
+            return "".join([t["plain_text"] for t in title["title"]])
+        return ""
+
+    def _filter_pages_by_time(
+        self,
+        pages: list[dict[str, Any]],
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        filter_field: str,
+    ) -> list[NotionPage]:
+        """Filters a list of Notion pages by a given time range."""
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        filtered_pages = []
+        for page_data in pages:
+            try:
+                page = NotionPage(**page_data)
+                last_edited_dt = datetime.fromisoformat(page.last_edited_time).replace(
+                    tzinfo=timezone.utc
+                )
+                if start_dt <= last_edited_dt <= end_dt:
+                    filtered_pages.append(page)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to parse page data or timestamp during filtering: {e}"
+                )
+        return filtered_pages
 
     def _read_pages_from_database(
         self, database_id: str
@@ -259,10 +396,6 @@ class NotionConnector(LoadConnector, PollConnector):
                 ds_cursor = data["next_cursor"]
 
         return result_blocks, result_pages
-
-    # ... Keep _read_blocks and _read_pages unchanged (they call _read_pages_from_database) ...
-
-    # Keep other methods unchanged except update headers "Notion-Version" to "2025-09-03"
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.headers["Authorization"] = (
@@ -314,7 +447,6 @@ class NotionConnector(LoadConnector, PollConnector):
             else:
                 break
 
-    # Keep validate_connector_settings unchanged except update header version
     def validate_connector_settings(self) -> None:
         if not self.headers.get("Authorization"):
             raise ConnectorMissingCredentialError("Notion credentials not loaded.")
@@ -368,7 +500,7 @@ class NotionConnector(LoadConnector, PollConnector):
             raise UnexpectedValidationError(
                 f"Unexpected error during Notion settings validation: {exc}"
             )
-            
+
     def _recursive_load(self) -> Generator[list[Document], None, None]:
         if self.root_page_id is None or not self.recursive_index_enabled:
             raise RuntimeError(
@@ -381,7 +513,45 @@ class NotionConnector(LoadConnector, PollConnector):
             f"ID: {self.root_page_id}"
         )
         root_page = self._fetch_page(page_id=self.root_page_id)
+        # BUG FIX: Calling the newly defined _read_pages method
         yield from batch_generator(self._read_pages([root_page]), self.batch_size)
+
+    def _read_pages(self, pages: list[NotionPage]) -> Generator[Document, None, None]:
+        """Reads content from a list of Notion pages and returns a generator of Documents."""
+        for page in pages:
+            if page.id in self.indexed_pages:
+                continue
+            self.indexed_pages.add(page.id)
+
+            title = self._read_page_title(page)
+            page_blocks, child_pages = self._read_blocks(page.id)
+
+            content = self._properties_to_str(page.properties) + " " + " ".join(
+                block.text for block in page_blocks
+            )
+            sections = [TextSection(text=content)]
+
+            document = Document(
+                source=DocumentSource.NOTION,
+                document_id=page.id,
+                title=title,
+                content=content,
+                source_url=page.url,
+                created_at=datetime.fromisoformat(page.created_time).replace(
+                    tzinfo=timezone.utc
+                ),
+                last_edited_at=datetime.fromisoformat(
+                    page.last_edited_time
+                ).replace(tzinfo=timezone.utc),
+                sections=sections,
+            )
+            yield document
+
+            if self.recursive_index_enabled and child_pages:
+                # Recursively process child pages by fetching them first
+                child_page_objects = [self._fetch_page(page_id) for page_id in child_pages]
+                yield from self._read_pages(child_page_objects)
+
 
 if __name__ == "__main__":
     import os
