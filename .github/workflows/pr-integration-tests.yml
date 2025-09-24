@@ -245,6 +245,15 @@ jobs:
           docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
           docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "Job failed! Sleeping for 15 minutes to allow SSH debugging..."
+          echo "SSH into this runner to debug using the connection details shown at the job start"
+          echo "Time: $(date)"
+          sleep 900
+          echo "Sleep complete, continuing with failure..."
+
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
       - name: Start Docker containers
