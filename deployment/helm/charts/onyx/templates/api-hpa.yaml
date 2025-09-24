@@ -1,4 +1,4 @@
-{{- if and (.Values.api.autoscaling.enabled) (ne (include "onyx-stack.autoscaling.engine" .) "keda") }}
+{{- if and (.Values.api.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -9,11 +9,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-<<<<<<< HEAD:deployment/helm/charts/onyx/templates_disabled/api-hpa.yaml
     name: {{ include "onyx.fullname" . }}
-=======
-    name: {{ include "onyx-stack.fullname" . }}-api-server
->>>>>>> 59a5dc26a (feat(infra): Defaul to HPA w/ KEDA option):deployment/helm/charts/onyx/templates/api-hpa.yaml
   minReplicas: {{ .Values.api.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}
   metrics:

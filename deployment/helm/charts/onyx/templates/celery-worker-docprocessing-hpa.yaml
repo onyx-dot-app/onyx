@@ -1,15 +1,15 @@
-{{- if and (.Values.celery_worker_docprocessing.autoscaling.enabled) (ne (include "onyx-stack.autoscaling.engine" .) "keda") }}
+{{- if and (.Values.celery_worker_docprocessing.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-worker-docprocessing
+  name: {{ include "onyx.fullname" . }}-celery-worker-docprocessing
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx-stack.fullname" . }}-celery-worker-docprocessing
+    name: {{ include "onyx.fullname" . }}-celery-worker-docprocessing
   minReplicas: {{ .Values.celery_worker_docprocessing.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.celery_worker_docprocessing.autoscaling.maxReplicas }}
   metrics:
