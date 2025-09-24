@@ -2,7 +2,7 @@ from collections.abc import Generator
 from typing import Any
 from typing import cast
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
 from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
