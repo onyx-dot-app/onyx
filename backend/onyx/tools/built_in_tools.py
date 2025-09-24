@@ -1,6 +1,6 @@
 import os
 from typing import Type
-
+from onyx.server.models.tool import ToolDBModel
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
