@@ -346,12 +346,18 @@ celery_shared:
   readinessProbe:
     # readinessProbe fails after 15s + 2m of inactivity
     # it's ok to see the readinessProbe fail transiently while the container starts
+    #NOTE(subash): I can't able to run the pod in the local without this line - so added it here. (justin)Please verify if it is required.
+    exec:
+      command: ["test", "-f", "/app/onyx/main.py"]
     initialDelaySeconds: 15
     periodSeconds: 5
     failureThreshold: 24
     timeoutSeconds: 3
   livenessProbe:
     # livenessProbe fails after 5m of inactivity
+    #NOTE(subash): I can't able to run the pod in the local without this line - so added it here. (justin)Please verify if it is required.
+    exec:
+      command: ["test", "-f", "/app/onyx/main.py"]
     initialDelaySeconds: 60
     periodSeconds: 60
     failureThreshold: 5
@@ -579,6 +585,41 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   deploymentLabels:
     app: celery-worker-user-files-indexing
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 6Gi
+    limits:
+      cpu: 4000m
+      memory: 12Gi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+celery_worker_user_file_processing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    idleReplicaCount: 1  # minimum replicas when idle
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-user-file-processing
+  deploymentLabels:
+    app: celery-worker-user-file-processing
   resources:
     requests:
       cpu: 2000m
@@ -852,6 +893,7 @@ configMap:
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
+  CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
