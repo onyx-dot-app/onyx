@@ -40,6 +40,7 @@ import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
+import { useChatContext } from "@/components/context/ChatContext";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
