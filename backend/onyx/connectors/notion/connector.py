@@ -46,13 +46,13 @@ class NotionPage(BaseModel):
     properties: dict[str, Any]
     url: str
 
-    database_name: str | None = None  # Only applicable to the database type page (wiki)
+    database_name: str | None = None
 
 
 class NotionBlock(BaseModel):
     """Represents a Notion Block object"""
 
-    id: str  # Used for the URL
+    id: str
     text: str
     prefix: str
 
@@ -75,7 +75,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.headers = {
             "Content-Type": "application/json",
-            "Notion-Version": "2025-09-03",  # Updated API version
+            "Notion-Version": "2025-09-03",
         }
         self.indexed_pages: set[str] = set()
         self.root_page_id = root_page_id
@@ -165,10 +165,8 @@ class NotionConnector(LoadConnector, PollConnector):
             logger.exception(f"Error fetching data sources for database - {res.json()}")
             raise e
         json_data = res.json()
-        # New field data_sources is a list of data source objects
         data_sources = json_data.get("data_sources")
         if not data_sources:
-            # Fallback: treat the database itself as a single data source with its id
             logger.debug(f"No data_sources field, treating database ID as single data source")
             return [{"id": database_id}]
         return data_sources
@@ -264,7 +262,6 @@ class NotionConnector(LoadConnector, PollConnector):
             elif prop_type == "select":
                 if prop_data.get("select"):
                     text_parts.append(f"{prop_name}: {prop_data['select']['name']}\n")
-            # Add more property types as needed
         return "".join(text_parts)
 
     def _read_blocks(self, block_id: str) -> tuple[list[NotionBlock], list[str]]:
@@ -361,7 +358,6 @@ class NotionConnector(LoadConnector, PollConnector):
 
         data_sources = self._fetch_data_sources(database_id)
         if not data_sources:
-            # fallback single query with no data_source_id
             data_sources = [{"id": database_id}]
 
         for data_source in data_sources:
@@ -507,13 +503,11 @@ class NotionConnector(LoadConnector, PollConnector):
                 "Recursive page lookup is not enabled, but we are trying to "
                 "recursively load pages. This should never happen."
             )
-
         logger.info(
             "Recursively loading pages from Notion based on root page with "
             f"ID: {self.root_page_id}"
         )
         root_page = self._fetch_page(page_id=self.root_page_id)
-        # BUG FIX: Calling the newly defined _read_pages method
         yield from batch_generator(self._read_pages([root_page]), self.batch_size)
 
     def _read_pages(self, pages: list[NotionPage]) -> Generator[Document, None, None]:
@@ -530,25 +524,24 @@ class NotionConnector(LoadConnector, PollConnector):
                 block.text for block in page_blocks
             )
             sections = [TextSection(text=content)]
-
+            
+            # Pydantic validation fix: Pass 'id', 'semantic_identifier', and 'metadata'
             document = Document(
                 source=DocumentSource.NOTION,
-                document_id=page.id,
-                title=title,
+                id=page.id,
+                semantic_identifier=page.url,
                 content=content,
-                source_url=page.url,
-                created_at=datetime.fromisoformat(page.created_time).replace(
-                    tzinfo=timezone.utc
-                ),
-                last_edited_at=datetime.fromisoformat(
-                    page.last_edited_time
-                ).replace(tzinfo=timezone.utc),
+                title=title,
+                metadata={
+                    "source_url": page.url,
+                    "created_at": datetime.fromisoformat(page.created_time).replace(tzinfo=timezone.utc),
+                    "last_edited_at": datetime.fromisoformat(page.last_edited_time).replace(tzinfo=timezone.utc),
+                },
                 sections=sections,
             )
             yield document
 
             if self.recursive_index_enabled and child_pages:
-                # Recursively process child pages by fetching them first
                 child_page_objects = [self._fetch_page(page_id) for page_id in child_pages]
                 yield from self._read_pages(child_page_objects)
 
