@@ -196,6 +196,15 @@ export const ChatInputBar = React.memo(function ChatInputBar({
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
+  // Memoize availableSources to prevent unnecessary re-renders
+  const memoizedAvailableSources = useMemo(
+    () => [
+      ...ccPairs.map((ccPair) => ccPair.source),
+      ...(federatedConnectorsData?.map((connector) => connector.source) || []),
+    ],
+    [ccPairs, federatedConnectorsData]
+  );
+
   const hidePrompts = () => {
     setTimeout(() => {
       setShowPrompts(false);
@@ -631,15 +640,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 {selectedAssistant.tools.length > 0 && (
                   <ActionToggle
                     selectedAssistant={selectedAssistant}
-                    availableSources={useMemo(
-                      () => [
-                        ...ccPairs.map((ccPair) => ccPair.source),
-                        ...(federatedConnectorsData?.map(
-                          (connector) => connector.source
-                        ) || []),
-                      ],
-                      [ccPairs, federatedConnectorsData]
-                    )}
+                    availableSources={memoizedAvailableSources}
                   />
                 )}
 
