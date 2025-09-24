@@ -2,6 +2,10 @@
 
 set -e
 
+# Expected resource requirements
+EXPECTED_DOCKER_RAM_GB=10
+EXPECTED_DISK_GB=32
+
 # Parse command line arguments
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
@@ -292,19 +296,21 @@ print_info "Available disk space: ${DISK_AVAILABLE}GB"
 
 # Resource requirements check
 RESOURCE_WARNING=false
-if [ "$MEMORY_MB" -gt 0 ] && [ "$MEMORY_MB" -lt 16384 ]; then
-    print_warning "Docker has less than 16GB RAM allocated (found: ~${MEMORY_GB}GB)"
+EXPECTED_RAM_MB=$((EXPECTED_DOCKER_RAM_GB * 1024))
+
+if [ "$MEMORY_MB" -gt 0 ] && [ "$MEMORY_MB" -lt "$EXPECTED_RAM_MB" ]; then
+    print_warning "Docker has less than ${EXPECTED_DOCKER_RAM_GB}GB RAM allocated (found: ~${MEMORY_GB}GB)"
     RESOURCE_WARNING=true
 fi
 
-if [ "$DISK_AVAILABLE" -lt 50 ]; then
-    print_warning "Less than 50GB disk space available (found: ${DISK_AVAILABLE}GB)"
+if [ "$DISK_AVAILABLE" -lt "$EXPECTED_DISK_GB" ]; then
+    print_warning "Less than ${EXPECTED_DISK_GB}GB disk space available (found: ${DISK_AVAILABLE}GB)"
     RESOURCE_WARNING=true
 fi
 
 if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
-    print_warning "Onyx recommends at least 16GB RAM and 50GB disk space for optimal performance."
+    print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance."
     echo ""
     read -p "Do you want to continue anyway? (y/N): " -n 1 -r
     echo ""
