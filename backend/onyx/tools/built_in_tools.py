@@ -16,6 +16,7 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
 from onyx.utils.logger import setup_logger
+from sqlalchemy.orm import Session
 
 logger = setup_logger()
 
