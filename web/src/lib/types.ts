@@ -519,6 +519,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.NotApplicable
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
+  | ValidSources.UserFile
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

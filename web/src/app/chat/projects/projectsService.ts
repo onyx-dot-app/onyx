@@ -32,11 +32,11 @@ export interface ProjectFile {
 }
 
 export enum UserFileStatus {
-  UPLOADING = "uploading",
-  PROCESSING = "processing",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  CANCELED = "canceled",
+  UPLOADING = "UPLOADING", //UI only
+  PROCESSING = "PROCESSING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  CANCELED = "CANCELED",
 }
 
 export type ProjectDetails = {

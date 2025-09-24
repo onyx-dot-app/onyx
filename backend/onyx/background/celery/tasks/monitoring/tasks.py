@@ -889,6 +889,12 @@ def monitor_celery_queues_helper(
     n_user_files_indexing = celery_get_queue_length(
         OnyxCeleryQueues.USER_FILES_INDEXING, r_celery
     )
+    n_user_file_processing = celery_get_queue_length(
+        OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
+    )
+    n_user_file_project_sync = celery_get_queue_length(
+        OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, r_celery
+    )
     n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
     n_deletion = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_DELETION, r_celery)
     n_pruning = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery)
@@ -916,6 +922,8 @@ def monitor_celery_queues_helper(
         f"docprocessing={n_docprocessing} "
         f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
         f"user_files_indexing={n_user_files_indexing} "
+        f"user_file_processing={n_user_file_processing} "
+        f"user_file_project_sync={n_user_file_project_sync} "
         f"sync={n_sync} "
         f"deletion={n_deletion} "
         f"pruning={n_pruning} "
