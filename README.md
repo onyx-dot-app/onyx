@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/d
 
 
 
-<h2>Features</h2>
+## Features
 - **Agents:** Build custom AI Agents with unique instructions, knowledge and actions.
 - **Web Search:** Supporting Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
 - **RAG:**
