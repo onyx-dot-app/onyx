@@ -24,6 +24,8 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         return END
     elif next_tool_name == DRPath.LOGGER.value:
         return DRPath.LOGGER
+    elif next_tool_name == DRPath.CLOSER.value:
+        return DRPath.CLOSER
     else:
         return DRPath.ORCHESTRATOR
 

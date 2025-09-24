@@ -21,6 +21,7 @@ from mcp.client.streamable_http import streamablehttp_client  # or use stdio_cli
 from mcp.types import CallToolResult
 from mcp.types import InitializeResult
 from mcp.types import ListResourcesResult
+from mcp.types import TextResourceContents
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
@@ -241,9 +242,17 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
             parts.append(content_block.text or "")
+        if content_block.type == ContentBlockTypes.RESOURCE.value:
+            if isinstance(content_block.resource, TextResourceContents):
+                parts.append(content_block.resource.text or "")
+            # TODO: handle blob resource content
+        if content_block.type == ContentBlockTypes.RESOURCE_LINK.value:
+            parts.append(
+                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
+            )
         # TODO: handle other content block types
 
-    return "\n".join(p for p in parts if p) or str(call_tool_result.structuredContent)
+    return "\n\n".join(p for p in parts if p) or str(call_tool_result.structuredContent)
 
 
 def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> MCPClientFunction[str]:
