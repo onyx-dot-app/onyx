@@ -1845,4 +1845,10 @@ module.exports = {
   [k.ADMIN_PANEL]: `夙兑己伏予引朮伶反勻兑`,
   [k.CURATOR_PANEL]: `井名二戌乞元住再丑吆耒只火`,
   [k.NOTIFICATIONS]: `佝乓卵冶乙大穴你江立瓜凸十`,
+
+  // Langfuse monitoring page
+  [k.LANGFUSE_MONITORING]: `Langfuse 监控`,
+  [k.LANGFUSE_DESCRIPTION]: `Langfuse 是一个开源 LLM 工程平台，提供可观测性、分析、评估、提示管理和实验功能，帮助管理员调试、分析和改进数字助手性能。`,
+  [k.LANGFUSE_DOCUMENTATION]: `Langfuse 文档`,
+  [k.OPEN_LANGFUSE]: `打开 Langfuse`,
 };

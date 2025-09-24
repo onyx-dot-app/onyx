@@ -3329,6 +3329,12 @@ module.exports = {
   [k.PROCESSING]: `Processing`,
   [k.FAILED_TO_CREATE_PROMPT]: `Failed to create prompt`,
 
+  // Langfuse monitoring page
+  [k.LANGFUSE_MONITORING]: `Langfuse Monitoring`,
+  [k.LANGFUSE_DESCRIPTION]: `Langfuse is an open-source LLM engineering platform that provides observability, analytics, evaluations, prompt management, and experimentation features to help administrators debug, analyze, and improve digital assistant performance.`,
+  [k.LANGFUSE_DOCUMENTATION]: `Langfuse Documentation`,
+  [k.OPEN_LANGFUSE]: `Open Langfuse`,
+
   // PersonaTable.tsx missing keys
   [k.TYPE]: `Type`,
   [k.VISIBILITY]: `Visibility`,

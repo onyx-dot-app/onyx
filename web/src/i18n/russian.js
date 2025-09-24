@@ -3030,6 +3030,12 @@ module.exports = {
   [k.PROCESSING]: `Обработка`,
   [k.FAILED_TO_CREATE_PROMPT]: `Не удалось создать промпт`,
 
+  // Langfuse monitoring page
+  [k.LANGFUSE_MONITORING]: `Мониторинг Langfuse`,
+  [k.LANGFUSE_DESCRIPTION]: `Langfuse - это платформа инженерии LLM с открытым исходным кодом, которая предоставляет функции наблюдаемости, аналитики, оценок, управления промптами и экспериментов, чтобы помочь администраторам отлаживать, анализировать и улучшать работу цифровых помощников.`,
+  [k.LANGFUSE_DOCUMENTATION]: `Документация Langfuse`,
+  [k.OPEN_LANGFUSE]: `Открыть Langfuse`,
+
   // PersonaTable.tsx missing keys
   [k.TYPE]: `Тип`,
   [k.VISIBILITY]: `Видимость`,

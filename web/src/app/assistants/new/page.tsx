@@ -6,7 +6,7 @@ import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorI
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LargeBackButton } from "../LargeBackButton";
 import { BackButton } from "@/components/BackButton";
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "@/i18n/keys";
 
 export default async function Page() {
