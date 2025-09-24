@@ -77,7 +77,7 @@ def load_builtin_tools(db_session: Session) -> None:
 def get_builtin_tool(
     db_session: Session,
     tool_type: Type[
-        SearchTool | ImageGenerationTool | InternetSearchTool | KnowledgeGraphTool
+        SearchTool | ImageGenerationTool | WebSearchTool | KnowledgeGraphTool
     ],
 ) -> ToolDBModel:
     """
