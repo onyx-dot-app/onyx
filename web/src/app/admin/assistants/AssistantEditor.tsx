@@ -12,9 +12,27 @@ import {
 } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
+import {
+  ArrayHelpers,
+  FieldArray,
+  Form,
+  Formik,
+  FormikProps,
+  FastField,
+} from "formik";
 
 import { BooleanFormField, Label, TextFormField } from "@/components/Field";
+import {
+  MemoizedToolList,
+  MemoizedMCPServerTools,
+} from "@/components/admin/assistants/MemoizedToolCheckboxes";
+import {
+  NameField,
+  DescriptionField,
+  SystemPromptField,
+  TaskPromptField,
+  MCPServerSection,
+} from "@/components/admin/assistants/FormSections";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
@@ -37,7 +55,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
@@ -220,76 +238,89 @@ export function AssistantEditor({
   const imageGenerationTool = findImageGenerationTool(tools);
   const webSearchTool = findWebSearchTool(tools);
 
-  // Separate MCP tools from regular custom tools
-  const allCustomTools = tools.filter(
-    (tool) =>
-      tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
+  // Separate MCP tools from regular custom tools - memoize to prevent re-renders
+  const { allCustomTools, mcpTools, customTools, mcpToolsByServer } =
+    useMemo(() => {
+      const allCustom = tools.filter(
+        (tool) =>
+          tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
+          tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
+          tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
+      );
+
+      const mcp = allCustom.filter((tool) => tool.mcp_server_id);
+      const custom = allCustom.filter((tool) => !tool.mcp_server_id);
+
+      // Group MCP tools by server
+      const groups: { [serverId: number]: ToolSnapshot[] } = {};
+      mcp.forEach((tool) => {
+        if (tool.mcp_server_id) {
+          if (!groups[tool.mcp_server_id]) {
+            groups[tool.mcp_server_id] = [];
+          }
+          groups[tool.mcp_server_id]!.push(tool);
+        }
+      });
+
+      return {
+        allCustomTools: allCustom,
+        mcpTools: mcp,
+        customTools: custom,
+        mcpToolsByServer: groups,
+      };
+    }, [
+      tools,
+      searchTool?.in_code_tool_id,
+      imageGenerationTool?.in_code_tool_id,
+      webSearchTool?.in_code_tool_id,
+    ]);
+
+  // Helper functions for MCP server checkbox state - memoize to prevent re-renders
+  const getMCPServerCheckboxState = useCallback(
+    (serverId: number, enabledToolsMap: { [key: number]: boolean }) => {
+      const serverTools = mcpToolsByServer[serverId] || [];
+      const enabledCount = serverTools.filter(
+        (tool) => enabledToolsMap[tool.id]
+      ).length;
+
+      if (enabledCount === 0) return false; // unchecked
+      if (enabledCount === serverTools.length) return true; // checked
+      return "indeterminate"; // partially checked
+    },
+    [mcpToolsByServer]
   );
 
-  const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
-  const customTools = allCustomTools.filter((tool) => !tool.mcp_server_id);
+  const toggleMCPServerTools = useCallback(
+    (
+      serverId: number,
+      enabledToolsMap: { [key: number]: boolean },
+      setFieldValue: any
+    ) => {
+      const serverTools = mcpToolsByServer[serverId] || [];
+      const currentState = getMCPServerCheckboxState(serverId, enabledToolsMap);
+      const shouldEnable = currentState !== true; // enable if not fully checked
 
-  // Group MCP tools by server
-  const mcpToolsByServer = useMemo(() => {
-    const groups: { [serverId: number]: ToolSnapshot[] } = {};
-    mcpTools.forEach((tool) => {
-      if (tool.mcp_server_id) {
-        if (!groups[tool.mcp_server_id]) {
-          groups[tool.mcp_server_id] = [];
-        }
-        groups[tool.mcp_server_id]!.push(tool);
+      const updatedMap = { ...enabledToolsMap };
+      serverTools.forEach((tool) => {
+        updatedMap[tool.id] = shouldEnable;
+      });
+
+      setFieldValue("enabled_tools_map", updatedMap);
+    },
+    [mcpToolsByServer, getMCPServerCheckboxState]
+  );
+
+  const toggleServerCollapse = useCallback((serverId: number) => {
+    setCollapsedServers((prev) => {
+      const newCollapsed = new Set(prev);
+      if (newCollapsed.has(serverId)) {
+        newCollapsed.delete(serverId);
+      } else {
+        newCollapsed.add(serverId);
       }
+      return newCollapsed;
     });
-    return groups;
-  }, [mcpTools]);
-
-  // Helper functions for MCP server checkbox state
-  const getMCPServerCheckboxState = (
-    serverId: number,
-    enabledToolsMap: { [key: number]: boolean }
-  ) => {
-    const serverTools = mcpToolsByServer[serverId] || [];
-    const enabledCount = serverTools.filter(
-      (tool) => enabledToolsMap[tool.id]
-    ).length;
-
-    if (enabledCount === 0) return false; // unchecked
-    if (enabledCount === serverTools.length) return true; // checked
-    return "indeterminate"; // partially checked
-  };
-
-  const toggleMCPServerTools = (
-    serverId: number,
-    enabledToolsMap: { [key: number]: boolean },
-    setFieldValue: any
-  ) => {
-    const serverTools = mcpToolsByServer[serverId] || [];
-    const currentState = getMCPServerCheckboxState(serverId, enabledToolsMap);
-    const shouldEnable = currentState !== true; // enable if not fully checked
-
-    const updatedMap = { ...enabledToolsMap };
-    serverTools.forEach((tool) => {
-      updatedMap[tool.id] = shouldEnable;
-    });
-
-    setFieldValue("enabled_tools_map", updatedMap);
-  };
-
-  const toggleServerCollapse = (serverId: number) => {
-    const newCollapsed = new Set(collapsedServers);
-    if (newCollapsed.has(serverId)) {
-      newCollapsed.delete(serverId);
-    } else {
-      newCollapsed.add(serverId);
-    }
-    setCollapsedServers(newCollapsed);
-  };
-
-  const getMCPServerInfo = (serverId: number): MCPServer | null => {
-    return mcpServers.find((server) => server.id === serverId) || null;
-  };
+  }, []);
 
   const availableTools = [
     ...customTools,
@@ -521,8 +552,10 @@ export function AssistantEditor({
       )}
       {popup}
       <Formik
-        enableReinitialize={true}
+        // enableReinitialize={true}
         initialValues={initialValues}
+        validateOnChange={false}
+        validateOnBlur={false}
         validationSchema={Yup.object()
           .shape({
             name: Yup.string().required(
@@ -748,6 +781,37 @@ export function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
+          // Memoize icon to avoid regenerating on every render
+          const iconElement = useMemo(() => {
+            if (values.uploaded_image) {
+              return (
+                <img
+                  src={URL.createObjectURL(values.uploaded_image)}
+                  alt="Uploaded assistant icon"
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              );
+            } else if (
+              existingPersona?.uploaded_image_id &&
+              !removePersonaImage
+            ) {
+              return (
+                <img
+                  src={buildImgUrl(existingPersona?.uploaded_image_id)}
+                  alt="Uploaded assistant icon"
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              );
+            } else {
+              return generateIdenticon((values.icon_shape || 0).toString(), 36);
+            }
+          }, [
+            values.uploaded_image,
+            values.icon_shape,
+            existingPersona?.uploaded_image_id,
+            removePersonaImage,
+          ]);
+
           return (
             <>
               <Form className="w-full text-text-950 assistant-editor">
@@ -781,25 +845,7 @@ export function AssistantEditor({
                         borderSpacing: "4px",
                       }}
                     >
-                      {values.uploaded_image ? (
-                        <img
-                          src={URL.createObjectURL(values.uploaded_image)}
-                          alt="Uploaded assistant icon"
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : existingPersona?.uploaded_image_id &&
-                        !removePersonaImage ? (
-                        <img
-                          src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                          alt="Uploaded assistant icon"
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        generateIdenticon(
-                          (values.icon_shape || 0).toString(),
-                          36
-                        )
-                      )}
+                      {iconElement}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -911,34 +957,13 @@ export function AssistantEditor({
                   </div>
                 </div>
 
-                <TextFormField
-                  maxWidth="max-w-lg"
-                  name="name"
-                  label="Name"
-                  placeholder="Email Assistant"
-                  aria-label="assistant-name-input"
-                  className="[&_input]:placeholder:text-text-muted/50"
-                />
+                <NameField />
 
-                <TextFormField
-                  maxWidth="max-w-lg"
-                  name="description"
-                  label="Description"
-                  placeholder="Use this Assistant to help draft professional emails"
-                  className="[&_input]:placeholder:text-text-muted/50"
-                />
+                <DescriptionField />
 
                 <Separator />
 
-                <TextFormField
-                  maxWidth="max-w-4xl"
-                  name="system_prompt"
-                  label="Instructions"
-                  isTextArea={true}
-                  placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
-                  data-testid="assistant-instructions-input"
-                  className="[&_textarea]:placeholder:text-text-muted/50"
-                />
+                <SystemPromptField />
 
                 <div className="w-full max-w-4xl">
                   <div className="flex flex-col">
@@ -962,15 +987,28 @@ export function AssistantEditor({
                                             : ""
                                         }`}
                                       >
-                                        <SwitchField
-                                          size="sm"
-                                          onCheckedChange={(checked) => {
-                                            setFieldValue("num_chunks", null);
-                                            toggleToolInValues(searchTool.id);
-                                          }}
+                                        <FastField
                                           name={`enabled_tools_map.${searchTool.id}`}
-                                          disabled={ccPairs.length === 0}
-                                        />
+                                        >
+                                          {({ form }: any) => (
+                                            <SwitchField
+                                              size="sm"
+                                              onCheckedChange={(
+                                                checked: boolean
+                                              ) => {
+                                                form.setFieldValue(
+                                                  "num_chunks",
+                                                  null
+                                                );
+                                                toggleToolInValues(
+                                                  searchTool.id
+                                                );
+                                              }}
+                                              name={`enabled_tools_map.${searchTool.id}`}
+                                              disabled={ccPairs.length === 0}
+                                            />
+                                          )}
+                                        </FastField>
                                       </div>
                                     </TooltipTrigger>
 
@@ -1231,48 +1269,57 @@ export function AssistantEditor({
                       {imageGenerationTool && (
                         <>
                           <div className="flex items-center content-start mb-2">
-                            <BooleanFormField
+                            <FastField
                               name={`enabled_tools_map.${imageGenerationTool.id}`}
-                              label={imageGenerationTool.display_name}
-                              subtext="Generate and manipulate images using AI-powered tools"
-                              disabled={!currentLLMSupportsImageOutput}
-                              disabledTooltip={
-                                !currentLLMSupportsImageOutput
-                                  ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                  : "Image Generation requires an OpenAI or Azure Dall-E configuration."
-                              }
-                            />
+                            >
+                              {() => (
+                                <BooleanFormField
+                                  name={`enabled_tools_map.${imageGenerationTool.id}`}
+                                  label={imageGenerationTool.display_name}
+                                  subtext="Generate and manipulate images using AI-powered tools"
+                                  disabled={!currentLLMSupportsImageOutput}
+                                  disabledTooltip={
+                                    !currentLLMSupportsImageOutput
+                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
+                                      : "Image Generation requires an OpenAI or Azure Dall-E configuration."
+                                  }
+                                />
+                              )}
+                            </FastField>
                           </div>
                         </>
                       )}
 
                       {webSearchTool && (
                         <>
-                          <BooleanFormField
+                          <FastField
                             name={`enabled_tools_map.${webSearchTool.id}`}
-                            label={webSearchTool.display_name}
-                            subtext="Access real-time information and search the web for up-to-date results"
-                          />
+                          >
+                            {() => (
+                              <BooleanFormField
+                                name={`enabled_tools_map.${webSearchTool.id}`}
+                                label={webSearchTool.display_name}
+                                subtext="Access real-time information and search the web for up-to-date results"
+                              />
+                            )}
+                          </FastField>
                         </>
                       )}
 
                       {/* Regular Custom Tools */}
-                      {customTools.length > 0 &&
-                        customTools.map((tool) => (
-                          <BooleanFormField
-                            key={tool.id}
-                            name={`enabled_tools_map.${tool.id}`}
-                            label={tool.display_name}
-                            subtext={tool.description}
-                          />
-                        ))}
+                      {customTools.length > 0 && (
+                        <MemoizedToolList tools={customTools} />
+                      )}
 
                       {/* MCP Server Tools - Hierarchical Structure */}
                       {Object.keys(mcpToolsByServer).length > 0 &&
                         Object.entries(mcpToolsByServer).map(
                           ([serverId, serverTools]) => {
                             const serverIdNum = parseInt(serverId);
-                            const serverInfo = getMCPServerInfo(serverIdNum);
+                            const serverInfo =
+                              mcpServers.find(
+                                (server) => server.id === serverIdNum
+                              ) || null;
                             const isCollapsed =
                               collapsedServers.has(serverIdNum);
 
@@ -1289,72 +1336,23 @@ export function AssistantEditor({
                             const serverUrl =
                               serverInfo?.server_url || "Unknown URL";
 
-                            const checkboxState = getMCPServerCheckboxState(
-                              serverIdNum,
-                              values.enabled_tools_map
-                            );
-
                             return (
-                              <div
+                              <MCPServerSection
                                 key={`mcp-server-${serverId}`}
-                                className="border rounded-lg p-4 space-y-3 dark:border-gray-700"
-                              >
-                                {/* Server-level header with collapse button */}
-                                <div className="flex items-center space-x-3">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      toggleServerCollapse(serverIdNum)
-                                    }
-                                    className="flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                                  >
-                                    {isCollapsed ? (
-                                      <FiChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                                    ) : (
-                                      <FiChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                                    )}
-                                  </button>
-                                  <input
-                                    type="checkbox"
-                                    checked={checkboxState === true}
-                                    ref={(el) => {
-                                      if (el)
-                                        el.indeterminate =
-                                          checkboxState === "indeterminate";
-                                    }}
-                                    onChange={() =>
-                                      toggleMCPServerTools(
-                                        serverIdNum,
-                                        values.enabled_tools_map,
-                                        setFieldValue
-                                      )
-                                    }
-                                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
-                                  />
-                                  <div className="flex-grow">
-                                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
-                                      {serverName}
-                                    </div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400">
-                                      {serverUrl} ({serverTools.length} tools)
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Individual tool checkboxes - only show when not collapsed */}
-                                {!isCollapsed && (
-                                  <div className="ml-7 space-y-2">
-                                    {serverTools.map((tool) => (
-                                      <BooleanFormField
-                                        key={tool.id}
-                                        name={`enabled_tools_map.${tool.id}`}
-                                        label={tool.display_name}
-                                        subtext={tool.description}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                                serverId={serverIdNum}
+                                serverTools={serverTools}
+                                serverName={serverName}
+                                serverUrl={serverUrl}
+                                isCollapsed={isCollapsed}
+                                onToggleCollapse={toggleServerCollapse}
+                                onToggleServerTools={() => {
+                                  toggleMCPServerTools(
+                                    serverIdNum,
+                                    values.enabled_tools_map,
+                                    setFieldValue
+                                  );
+                                }}
+                              />
                             );
                           }
                         )}
@@ -1799,19 +1797,7 @@ export function AssistantEditor({
 
                     <Separator />
 
-                    <TextFormField
-                      maxWidth="max-w-4xl"
-                      name="task_prompt"
-                      label="[Optional] Reminders"
-                      isTextArea={true}
-                      placeholder="Remember to reference all of the points mentioned in my message to you and focus on identifying action items that can move things forward"
-                      onChange={(e) => {
-                        setFieldValue("task_prompt", e.target.value);
-                      }}
-                      explanationText="Learn about prompting in our docs!"
-                      explanationLink="https://docs.onyx.app/admin/agents/overview"
-                      className="[&_textarea]:placeholder:text-text-muted/50"
-                    />
+                    <TaskPromptField />
                   </>
                 )}
 

@@ -416,7 +416,7 @@ def construct_tools(
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
-                if saved_tool.name == expected_tool_name:
+                if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
             if db_tool_model.id not in tool_dict:
                 logger.warning(

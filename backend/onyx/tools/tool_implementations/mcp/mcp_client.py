@@ -128,23 +128,26 @@ def _create_mcp_client_function_runner(
     **kwargs: Any,
 ) -> Callable[[], Awaitable[T]]:
     auth_headers = connection_headers or {}
-    # Normalize URL to include a trailing slash to avoid 404s on servers
-    # that differentiate between "/path" and "/path/" for the MCP endpoint.
+    # Normalize URL
     normalized_url = server_url.rstrip("/")
-    # Only append transportType for Streamable HTTP; SSE endpoints typically
-    # do not require or expect this query parameter and may 404 otherwise.
-    # if transport == MCPTransport.STREAMABLE_HTTP:
-    sep = "?" if "?" not in normalized_url else "&"
-    server_url = (
-        normalized_url
-        + sep
-        + urlencode({"transportType": transport.value.lower().replace("_", "-")})
-    )
-    # else:
-    #     # For SSE transport, use the base URL without appending /sse/
-    #     # The MCP library will handle the SSE connection internally
-    #     server_url = server_url.rstrip("/")
+    # WARNING: httpx.Auth with requires_response_body=True (as in the MCP OAuth
+    # provider) forces httpx to fully read the response body. That is incompatible
+    # with SSE (infinite stream). Avoid passing auth for SSE; rely on headers.
+    auth_for_request = None
+    if transport == MCPTransport.STREAMABLE_HTTP:
+        # Only append transportType for Streamable HTTP; SSE endpoints typically do not
+        # expect this parameter and some servers may misbehave when it is present.
+        sep = "?" if "?" not in normalized_url else "&"
+        server_url = (
+            normalized_url
+            + sep
+            + urlencode({"transportType": transport.value.lower().replace("_", "-")})
+        )
+        auth_for_request = auth
+    else:
+        server_url = normalized_url
 
+    # doing this here for mypy
     client_func = (
         streamablehttp_client
         if transport == MCPTransport.STREAMABLE_HTTP
@@ -153,7 +156,7 @@ def _create_mcp_client_function_runner(
 
     async def run_client_function() -> T:
         async with client_func(
-            server_url, headers=auth_headers, auth=auth
+            server_url, headers=auth_headers, auth=auth_for_request
         ) as client_tuple:
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple

@@ -6,6 +6,7 @@ from collections.abc import Awaitable
 from secrets import token_urlsafe
 from typing import Any
 from typing import cast
+from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter
@@ -75,7 +76,7 @@ logger = setup_logger()
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 15  # 15 minutes
-OAUTH_WAIT_SECONDS = 60  # Give the user 1 minute to complete the OAuth flow
+OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
 
 
@@ -117,7 +118,7 @@ class OnyxTokenStorage(TokenStorage):
     async def get_tokens(self) -> OAuthToken | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            tokens_raw = config.config.get("tokens")
+            tokens_raw = config.config.get(MCPOAuthKeys.TOKENS.value)
             if tokens_raw:
                 return OAuthToken.model_validate(tokens_raw)
             return None
@@ -125,7 +126,7 @@ class OnyxTokenStorage(TokenStorage):
     async def set_tokens(self, tokens: OAuthToken) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config["tokens"] = tokens.model_dump(mode="json")
+            config.config[MCPOAuthKeys.TOKENS.value] = tokens.model_dump(mode="json")
             cfg_headers = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
@@ -142,7 +143,7 @@ class OnyxTokenStorage(TokenStorage):
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            client_info_raw = config.config.get("client_info")
+            client_info_raw = config.config.get(MCPOAuthKeys.CLIENT_INFO.value)
             if client_info_raw:
                 return OAuthClientInformationFull.model_validate(client_info_raw)
             return None
@@ -150,7 +151,7 @@ class OnyxTokenStorage(TokenStorage):
     async def set_client_info(self, info: OAuthClientInformationFull) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config["client_info"] = info.model_dump(mode="json")
+            config.config[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
             update_connection_config(config.id, db_session, config.config)
             if self.alt_config_id:
                 update_connection_config(self.alt_config_id, db_session, config.config)
@@ -231,67 +232,12 @@ def make_oauth_provider(
             redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
-            scope="user",  # TODO: do we need to pass this in?
+            # scope="user",  # TODO: do we need to pass this in? maybe make configurable
         ),
         storage=OnyxTokenStorage(connection_config_id, admin_config_id),
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
     )
-
-
-# def sse_connect(server_url: str, headers: dict[str, str]) -> str:
-#     oauth_auth = make_oauth_provider()
-#     async def run_client_function() -> str:
-#         async with sse_client(server_url, headers=headers, auth=oauth_auth) as (
-#             read,
-#             write,
-#             _,
-#         ):
-#             async with ClientSession(read, write) as session:
-#                 resp = await session.initialize()
-#                 print(resp)
-#                 return str(resp.capabilities.tools)
-
-#     try:
-#         # Run the async function in a new event loop
-#         # TODO: We should use asyncio.get_event_loop() instead,
-#         # but not sure whether closing the loop is safe
-#         loop = asyncio.new_event_loop()
-#         asyncio.set_event_loop(loop)
-#         try:
-#             return loop.run_until_complete(run_client_function())
-#         finally:
-#             loop.close()
-#     except Exception as e:
-#         logger.error(f"Failed to call MCP client function: {e}")
-#         if isinstance(e, ExceptionGroup):
-#             original_exception = e
-#             for err in e.exceptions:
-#                 logger.error(err)
-#             raise original_exception
-#         raise e
-
-# def read_sse(resp: Response) -> tuple[str, list[str]]:
-#     auth_url = ""
-#     for line in resp.iter_lines():
-#         if line is None:
-#             continue
-#         if line.startswith("data:"):
-#             payload = line[len("data:"):].strip()
-#             try:
-#                 msg = json.loads(payload)
-#             except json.JSONDecodeError as e:
-#                 logger.exception(f"Failed to parse SSE message: {payload}")
-#                 continue
-
-#             # --- 3) minimal router for server->client JSON-RPC
-#             if msg.get("method") in ("oauth/authorize", "oauth/open", "auth/open"):
-#                 auth_url = msg["params"]["url"]
-#             else:
-#                 logger.info("[server]", json.dumps(msg, indent=2))
-#         # SSE events end with a blank line; we could handle 'event:' or 'id:' too,
-#         # but MCP servers generally only require 'data:' frames.
-#     return auth_url, []
 
 
 def _build_headers_from_template(
@@ -407,13 +353,8 @@ async def _connect_oauth(
             detail=f"Server was configured with authentication type {mcp_server.auth_type.value}",
         )
 
-    # Step 1: make unauthenticated request and parse returned www authenticate header
-    # Ensure we have a trailing slash for the MCP endpoint
-    transport = mcp_server.transport
-    probe_url = mcp_server.server_url.rstrip("/") + "/"
-    logger.info(f"Probing OAuth server at: {probe_url}")
-
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
+
     if connection_config is None:
         connection_config = create_connection_config(
             config_data=MCPConnectionData(
@@ -424,10 +365,26 @@ async def _connect_oauth(
             db_session=db,
         )
     if mcp_server.admin_connection_config_id is None:
+        # Create admin config with client info if provided
+        config_data = MCPConnectionData(headers={})
+        if request.oauth_client_id and request.oauth_client_secret:
+            from mcp.shared.auth import OAuthClientInformationFull
+            from pydantic import AnyUrl
+
+            client_info = OAuthClientInformationFull(
+                client_id=request.oauth_client_id,
+                client_secret=request.oauth_client_secret,
+                redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
+                grant_types=["authorization_code", "refresh_token"],
+                response_types=["code"],
+                # scope="user", # TODO: allow specifying scopes?
+            )
+            config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
+                mode="json"
+            )
+
         admin_config = create_connection_config(
-            config_data=MCPConnectionData(
-                headers={},
-            ),
+            config_data=config_data,
             mcp_server_id=mcp_server.id,
             user_email="",
             db_session=db,
@@ -437,6 +394,16 @@ async def _connect_oauth(
             admin_config.id
         )  # might not have to do this
     db.commit()
+
+    is_connected = (
+        MCPOAuthKeys.CLIENT_INFO.value in connection_config.config
+        and connection_config.config.get("headers")
+    )
+    # Step 1: make unauthenticated request and parse returned www authenticate header
+    # Ensure we have a trailing slash for the MCP endpoint
+    transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
+    probe_url = mcp_server.server_url.rstrip("/") + "/"
+    logger.info(f"Probing OAuth server at: {probe_url}")
 
     oauth_auth = make_oauth_provider(
         mcp_server,
@@ -459,7 +426,10 @@ async def _connect_oauth(
     async def tmp_func() -> InitializeResult:
         try:
             x = await initialize_mcp_client(
-                probe_url, transport=transport, auth=oauth_auth
+                probe_url,
+                connection_headers=connection_config.config.get("headers", {}),
+                transport=transport,
+                auth=oauth_auth,
             )
             logger.info(f"OAuth initialization completed successfully: {x}")
             return x
@@ -478,9 +448,7 @@ async def _connect_oauth(
     async def wait_auth_url() -> str | None:
         raw = await loop.run_in_executor(
             None,
-            lambda: r.blpop(
-                [key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS * 10
-            ),
+            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
         )
         if raw is None:
             return None
@@ -516,9 +484,6 @@ async def _connect_oauth(
                     )
             raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
 
-        # Cancel the init task if still running
-        for t in pending:
-            t.cancel()
         logger.info(
             f"Connected to auth url: {oauth_url} for mcp server: {mcp_server.name}"
         )
@@ -547,63 +512,6 @@ async def _connect_oauth(
         server_id=int(request.server_id),
         oauth_url=request.return_path,
     )
-
-    # client_info = oauth_auth.context.client_info
-    # authz_ep = client_info.
-
-    # logger.info(f"Authorization endpoint: {authz_ep}")
-    # logger.info(f"Token endpoint: {token_ep}")
-
-    # if not authz_ep or not token_ep:
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail="No authorization or token endpoint found in authorization server metadata",
-    #     )
-
-    # verifier, challenge = make_pkce_pair()
-    # state = token_urlsafe(24)
-    # scope_str = " ".join(scopes)
-    # redis_client = get_redis_client()
-    # state_data = MCPOauthState(
-    #     server_id=int(request.server_id),
-    #     verifier=verifier,
-    #     return_path=request.return_path,
-    #     token_endpoint=token_ep,
-    #     is_admin=is_admin,
-    # )
-    # redis_client.set(
-    #     redis_state_key(state),
-    #     state_data.model_dump_json(),
-    #     ex=_OAUTH_STATE_EXPIRATION_SECONDS,
-    # )
-
-    # redirect_uri = f"{WEB_DOMAIN}/mcp/oauth/callback"
-
-    # # Build authorization URL
-    # authz_params = {
-    #     "response_type": "code",
-    #     "client_id": mcp_server.admin_connection_config.config.get("client_id"),
-    #     "redirect_uri": redirect_uri,
-    #     "state": state,
-    #     "code_challenge": challenge,
-    #     "code_challenge_method": "S256",
-    # }
-    # if scope_str:
-    #     authz_params["scope"] = scope_str
-    # # Many AS’s (and the MCP OAuth guser_idance) support binding tokens to the resource URL.
-    # if request.include_resource_param:
-    #     authz_params["resource"] = (
-    #         mcp_server.server_url
-    #     )  # ignored if server doesn’t support RFC 8707
-
-    # authz_url = f"{authz_ep}?{urlencode(authz_params)}"
-
-    # logger.info(f"Generated OAuth URL: {authz_url}")
-
-    # Unreachable due to early returns above
-
-
-# TODO: move code over to the async callback above
 
 
 @router.post("/oauth/callback", response_model=MCPOAuthCallbackResponse)
@@ -811,8 +719,11 @@ def save_user_credentials(
                 ),
             )
             for oauth_field_key in MCPOAuthKeys:
-                if field_val := auth_template.config.get(oauth_field_key):
-                    config_data[oauth_field_key] = field_val
+                field_key: Literal["client_info", "tokens", "metadata"] = (
+                    oauth_field_key.value
+                )
+                if field_val := auth_template.config.get(field_key):
+                    config_data[field_key] = field_val
 
         except Exception as e:
             logger.error(f"Failed to process authentication template: {e}")
@@ -835,10 +746,16 @@ def save_user_credentials(
                 request.server_id,
                 mcp_server.admin_connection_config_id,
             )
+
+        if "header_substitutions" in config_data:
+            for key, value in config_data["header_substitutions"].items():
+                for k, v in config_data["headers"].items():
+                    config_data["headers"][k] = v.replace(f"{{{key}}}", value)
+
         is_valid, test_message = test_mcp_server_credentials(
             mcp_server.server_url,
             config_data["headers"],
-            transport=MCPTransport(request.transport),
+            transport=MCPTransport(request.transport.replace("-", "_").upper()),
             auth=auth,
         )
         validation_tested = True
@@ -928,7 +845,7 @@ def _db_mcp_server_to_api_mcp_server(
                 user_authenticated = False
                 client_info = None
                 client_info_raw = db_server.admin_connection_config.config.get(
-                    "client_info"
+                    MCPOAuthKeys.CLIENT_INFO.value
                 )
                 if client_info_raw:
                     client_info = OAuthClientInformationFull.model_validate(
@@ -977,7 +894,7 @@ def _db_mcp_server_to_api_mcp_server(
         ):
             client_info = None
             client_info_raw = db_server.admin_connection_config.config.get(
-                "client_info"
+                MCPOAuthKeys.CLIENT_INFO.value
             )
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
@@ -1180,6 +1097,7 @@ def _list_mcp_tools_by_id(
     # Discover tools from the MCP server
     auth = None
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
+        # TODO: just pass this in, but should work when auth is set already
         assert connection_config  # for mypy
         auth = make_oauth_provider(
             mcp_server,
@@ -1238,7 +1156,7 @@ def _upsert_mcp_server(
         client_info = None
         if mcp_server.admin_connection_config:
             client_info_raw = mcp_server.admin_connection_config.config.get(
-                "client_info"
+                MCPOAuthKeys.CLIENT_INFO.value
             )
             if client_info_raw:
                 from mcp.shared.auth import (
@@ -1258,6 +1176,7 @@ def _upsert_mcp_server(
                 )
             )
             or (request.auth_type == MCPAuthenticationType.API_TOKEN)
+            or (request.transport != mcp_server.transport)
         )
 
         # Cleanup: Delete existing connection configs
@@ -1383,10 +1302,12 @@ def _upsert_mcp_server(
                     redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
                     grant_types=["authorization_code", "refresh_token"],
                     response_types=["code"],
-                    scope="user",
+                    # scope="user", # TODO: allow specifying scopes?
                     # default token_endpoint_auth_method is client_secret_post
                 )
-                cfg["client_info"] = client_info.model_dump()
+                cfg[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
+                    mode="json"
+                )
 
             admin_config = create_connection_config(
                 config_data=cfg,
@@ -1395,6 +1316,14 @@ def _upsert_mcp_server(
                 db_session=db_session,
             )
             admin_connection_config_id = admin_config.id
+
+            # create user connection config
+            create_connection_config(
+                config_data=cfg,
+                mcp_server_id=mcp_server.id,
+                user_email=user.email if user else "",
+                db_session=db_session,
+            )
     elif request.auth_performer == MCPAuthenticationPerformer.ADMIN:
         raise HTTPException(
             status_code=400,

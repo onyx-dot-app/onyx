@@ -1,6 +1,6 @@
+from enum import Enum
 from typing import Any
 from typing import List
-from typing import Literal
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
@@ -14,9 +14,14 @@ from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 
+
 # This should be updated along with MCPConnectionData
-MCPOAuthKeysType = Literal["client_info", "tokens", "metadata"]
-MCPOAuthKeys: list[MCPOAuthKeysType] = ["client_info", "tokens", "metadata"]
+class MCPOAuthKeys(str, Enum):
+    """MCP OAuth keys types"""
+
+    CLIENT_INFO = "client_info"
+    TOKENS = "tokens"
+    METADATA = "metadata"
 
 
 class MCPConnectionData(TypedDict):
@@ -171,6 +176,12 @@ class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
     include_resource_param: bool = Field(..., description="Include resource parameter")
+    oauth_client_id: str | None = Field(
+        None, description="OAuth client ID (optional for DCR)"
+    )
+    oauth_client_secret: str | None = Field(
+        None, description="OAuth client secret (optional for DCR)"
+    )
 
     @model_validator(mode="after")
     def validate_return_path(self) -> "MCPUserOAuthConnectRequest":

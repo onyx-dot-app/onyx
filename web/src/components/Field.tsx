@@ -5,6 +5,7 @@ import {
   ErrorMessage,
   Field,
   FieldArray,
+  FastField,
   useField,
   useFormikContext,
 } from "formik";
@@ -28,10 +29,10 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, memo, useRef } from "react";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
-import { CheckboxField } from "@/components/ui/checkbox";
+import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
@@ -273,9 +274,10 @@ export function TextFormField({
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setValue(e.target.value);
     if (onChange) {
       onChange(e as React.ChangeEvent<HTMLInputElement>);
+    } else {
+      setValue(e.target.value);
     }
   };
   const textSizeClasses = {
@@ -681,7 +683,7 @@ interface BooleanFormFieldProps {
   onChange?: (checked: boolean) => void;
 }
 
-export const BooleanFormField = ({
+export const BooleanFormField = memo(function BooleanFormField({
   name,
   label,
   subtext,
@@ -693,20 +695,9 @@ export const BooleanFormField = ({
   tooltip,
   disabledTooltip,
   onChange,
-}: BooleanFormFieldProps) => {
-  const { setFieldValue } = useFormikContext<any>();
-
-  const handleChange = useCallback(
-    (checked: CheckedState) => {
-      if (!disabled) {
-        setFieldValue(name, checked);
-      }
-      if (onChange) {
-        onChange(checked === true);
-      }
-    },
-    [disabled, name, setFieldValue, onChange]
-  );
+}: BooleanFormFieldProps) {
+  console.log("yikes3");
+  // Debug logging removed after investigation
 
   // Generate a stable, valid id from the field name for label association
   const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -717,15 +708,22 @@ export const BooleanFormField = ({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <CheckboxField
-                name={name}
-                id={checkboxId}
-                size="sm"
-                className={`
-                  ${disabled ? "opacity-50" : ""}
-                  ${removeIndent ? "mr-2" : "mx-3"}`}
-                onCheckedChange={handleChange}
-              />
+              <FastField name={name} type="checkbox">
+                {({ field, form }: any) => (
+                  <Checkbox
+                    id={checkboxId}
+                    size="sm"
+                    className={`
+                      ${disabled ? "opacity-50" : ""}
+                      ${removeIndent ? "mr-2" : "mx-3"}`}
+                    checked={Boolean(field.value)}
+                    onCheckedChange={(checked) => {
+                      if (!disabled) form.setFieldValue(name, checked === true);
+                      if (onChange) onChange(checked === true);
+                    }}
+                  />
+                )}
+              </FastField>
             </TooltipTrigger>
             {disabled && disabledTooltip && (
               <TooltipContent side="top" align="center">
@@ -762,7 +760,7 @@ export const BooleanFormField = ({
       />
     </div>
   );
-};
+});
 
 interface TextArrayFieldProps<T extends Yup.AnyObject> {
   name: string;

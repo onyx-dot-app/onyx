@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   MCPFormValues,
@@ -40,6 +40,20 @@ export function ToolList({
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
+
+  // Auto-trigger tool listing when page loads with listing_tools=true query param
+  useEffect(() => {
+    if (
+      searchParams.get("listing_tools") === "true" &&
+      serverId &&
+      !showToolList &&
+      values.name.trim() &&
+      values.server_url.trim()
+    ) {
+      // Only auto-trigger for servers that have required form values and a serverId
+      handleListActions(values);
+    }
+  }, [searchParams, serverId, showToolList, values.name, values.server_url]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -102,8 +116,10 @@ export function ToolList({
         // Update serverId for subsequent operations
         newServerId = serverResult.server_id;
         setCurrentServerId(newServerId);
-        // Ensure URL reflects the created server to avoid duplicate creation (409)
-        router.replace(`/admin/actions/edit-mcp?server_id=${newServerId}`);
+        // Ensure URL reflects the created server and listing state to avoid duplicate creation (409)
+        router.replace(
+          `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
+        );
       } else {
         // For OAuth servers, use the existing serverId
         if (!serverId) {
@@ -141,7 +157,6 @@ export function ToolList({
       } catch (e) {
         // If body isn't JSON, ignore; we'll fall back to text below
       }
-      console.log(toolResponse);
 
       // Check if list-tools request failed
       if (!toolsResp?.ok) {
@@ -165,6 +180,14 @@ export function ToolList({
 
       setShowToolList(true);
       setCurrentPage(1);
+
+      // // Update URL to include listing_tools=true for page reload persistence
+      // const currentUrl = new URL(window.location.href);
+      // if (!currentUrl.searchParams.has("listing_tools")) {
+      //   currentUrl.searchParams.set("listing_tools", "true");
+      //   router.replace(currentUrl.toString());
+      // }
+
       // Process available tools
       const toolsData: ToolListResponse = toolResponse;
       setTools(toolsData.tools);
@@ -301,7 +324,6 @@ export function ToolList({
       handleSelectAllFiltered();
     }
   };
-  console.log(filteredTools);
 
   return !showToolList ? (
     <div className="flex gap-2">
@@ -473,7 +495,13 @@ export function ToolList({
         <Button
           type="button"
           variant="outline"
-          onClick={() => setShowToolList(false)}
+          onClick={() => {
+            // Remove listing_tools query parameter when going back to form
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete("listing_tools");
+            router.replace(currentUrl.toString());
+            setShowToolList(false);
+          }}
         >
           Back
         </Button>
