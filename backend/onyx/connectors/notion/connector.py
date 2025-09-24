@@ -525,7 +525,10 @@ class NotionConnector(LoadConnector, PollConnector):
             )
             sections = [TextSection(text=content)]
             
-            # Pydantic validation fix: Pass 'id', 'semantic_identifier', and 'metadata'
+            # Pydantic validation fix: Convert datetime objects to ISO 8601 strings
+            created_at_str = datetime.fromisoformat(page.created_time).replace(tzinfo=timezone.utc).isoformat()
+            last_edited_at_str = datetime.fromisoformat(page.last_edited_time).replace(tzinfo=timezone.utc).isoformat()
+
             document = Document(
                 source=DocumentSource.NOTION,
                 id=page.id,
@@ -534,8 +537,8 @@ class NotionConnector(LoadConnector, PollConnector):
                 title=title,
                 metadata={
                     "source_url": page.url,
-                    "created_at": datetime.fromisoformat(page.created_time).replace(tzinfo=timezone.utc),
-                    "last_edited_at": datetime.fromisoformat(page.last_edited_time).replace(tzinfo=timezone.utc),
+                    "created_at": created_at_str,
+                    "last_edited_at": last_edited_at_str,
                 },
                 sections=sections,
             )
