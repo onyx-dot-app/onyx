@@ -87,6 +87,7 @@ class OnyxConfluence:
         url: str,
         credentials_provider: CredentialsProviderInterface,
         timeout: int | None = None,
+        scoped_token: bool = False,
         # should generally not be passed in, but making it overridable for
         # easier testing
         confluence_user_profiles_override: list[dict[str, str]] | None = (

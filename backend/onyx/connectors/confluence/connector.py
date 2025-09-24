@@ -108,6 +108,7 @@ class ConfluenceConnector(
         # pages.
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
+        scoped_token: bool = False,
     ) -> None:
         self.wiki_base = wiki_base
         self.is_cloud = is_cloud
@@ -118,6 +119,7 @@ class ConfluenceConnector(
         self.batch_size = batch_size
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
+        self.scoped_token = scoped_token
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
@@ -195,6 +197,7 @@ class ConfluenceConnector(
             is_cloud=self.is_cloud,
             url=self.wiki_base,
             credentials_provider=credentials_provider,
+            scoped_token=self.scoped_token,
         )
         confluence_client._probe_connection(**self.probe_kwargs)
         confluence_client._initialize_connection(**self.final_kwargs)
@@ -207,6 +210,7 @@ class ConfluenceConnector(
             url=self.wiki_base,
             credentials_provider=credentials_provider,
             timeout=3,
+            scoped_token=self.scoped_token,
         )
         low_timeout_confluence_client._probe_connection(**self.probe_kwargs)
         low_timeout_confluence_client._initialize_connection(**self.final_kwargs)
