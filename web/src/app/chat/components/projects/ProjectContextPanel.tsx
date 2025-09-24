@@ -360,9 +360,9 @@ export default function ProjectContextPanel({
             </div>
             {projectTokenCount > availableContextTokens && (
               <p className="text-onyx-muted text-base">
-                This project exceeds the model's context limits. Sessions will
-                automatically search for relevant files first before generating
-                response.
+                This project exceeds the model&apos;s context limits. Sessions
+                will automatically search for relevant files first before
+                generating response.
               </p>
             )}
           </>

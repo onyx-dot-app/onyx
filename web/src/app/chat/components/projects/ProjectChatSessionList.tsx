@@ -115,7 +115,7 @@ export default function ProjectChatSessionList() {
                                   </TooltipTrigger>
                                   <TooltipContent side="top" align="center">
                                     <p className="max-w-[220px] text-sm">
-                                      Project files and instructions aren't
+                                      Project files and instructions aren&apos;t
                                       applied here because this chat uses a
                                       custom assistant.
                                     </p>

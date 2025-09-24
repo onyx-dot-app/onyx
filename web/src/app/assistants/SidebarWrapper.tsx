@@ -42,7 +42,7 @@ export default function SidebarWrapper<T extends object>({
   }, [sidebarVisible]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
-  const {chatSessions, ccPairs } = useChatContext();
+  const { chatSessions, ccPairs } = useChatContext();
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
