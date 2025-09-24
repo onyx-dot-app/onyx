@@ -1,7 +1,7 @@
 """Migration 1: User file schema additions
 
 Revision ID: 9b66d3156fc6
-Revises: 505c488f6662
+Revises: b4ef3ae0bf6e
 Create Date: 2025-09-22 09:42:06.086732
 
 This migration adds new columns and tables without modifying existing data.
@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger("alembic.runtime.migration")
 # revision identifiers, used by Alembic.
 revision = "9b66d3156fc6"
-down_revision = "505c488f6662"
+down_revision = "b4ef3ae0bf6e"
 branch_labels = None
 depends_on = None
 
