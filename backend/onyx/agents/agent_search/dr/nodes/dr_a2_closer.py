@@ -226,7 +226,7 @@ def closer(
 
     research_type = graph_config.behavior.research_type
 
-    assistant_system_prompt = state.assistant_system_prompt
+    assistant_system_prompt: str = state.assistant_system_prompt or ""
     assistant_task_prompt = state.assistant_task_prompt
 
     uploaded_context = state.uploaded_test_context or ""
@@ -354,7 +354,7 @@ def closer(
         assistant_system_prompt = (
             assistant_system_prompt
             + PROJECT_INSTRUCTIONS_SEPARATOR
-            + graph_config.inputs.project_instructions
+            + (graph_config.inputs.project_instructions or "")
         )
 
     all_context_llmdocs = [

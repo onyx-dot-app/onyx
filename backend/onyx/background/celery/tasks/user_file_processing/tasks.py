@@ -1,5 +1,6 @@
 import datetime
 import time
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -59,11 +60,11 @@ def _as_uuid(value: str | UUID) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
 
 
-def _user_file_lock_key(user_file_id: int) -> str:
+def _user_file_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_PROCESSING_LOCK_PREFIX}:{user_file_id}"
 
 
-def _user_file_project_sync_lock_key(user_file_id: int) -> str:
+def _user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_PROJECT_SYNC_LOCK_PREFIX}:{user_file_id}"
 
 
@@ -462,7 +463,7 @@ def _update_document_id_in_vespa(
                     continue
                 vespa_doc_uuid = vespa_full_id.split("::")[-1]
                 vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_uuid}"
-                update_request = {
+                update_request: dict[str, Any] = {
                     "fields": {"document_id": {"assign": clean_new_doc_id}}
                 }
                 if user_project_ids is not None:
@@ -585,7 +586,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     s3_client = store._get_s3_client()
                     bucket_name = store._get_bucket_name()
 
-                    plaintext_records: list[FileRecord] = (
+                    plaintext_records: Sequence[FileRecord] = (
                         db_session.execute(
                             sa.select(FileRecord).where(
                                 FileRecord.file_origin == FileOrigin.PLAINTEXT_CACHE,

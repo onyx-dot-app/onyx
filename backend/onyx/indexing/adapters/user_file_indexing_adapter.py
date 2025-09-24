@@ -2,6 +2,7 @@ import contextlib
 import datetime
 import time
 from collections.abc import Generator
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
@@ -32,11 +33,13 @@ _NUM_LOCK_ATTEMPTS = 3
 retry_delay = 0.5
 
 
-def _acquire_user_file_locks(db_session: Session, user_file_ids: list[int]) -> bool:
+def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> bool:
     """Acquire locks for the specified user files."""
+    # Convert to UUIDs for the DB comparison
+    user_file_uuid_list = [UUID(user_file_id) for user_file_id in user_file_ids]
     stmt = (
         select(UserFile.id)
-        .where(UserFile.id.in_(user_file_ids))
+        .where(UserFile.id.in_(user_file_uuid_list))
         .with_for_update(nowait=True)
     )
     # will raise exception if any of the documents are already locked
@@ -219,6 +222,6 @@ class UserFileIndexingAdapter:
         # transaction.
         for user_file_id, raw_text in result.user_file_id_to_raw_text.items():
             store_user_file_plaintext(
-                user_file_id=user_file_id,
+                user_file_id=UUID(user_file_id),
                 plaintext_content=raw_text,
             )

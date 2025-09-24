@@ -173,4 +173,4 @@ class ProjectManager:
             headers=user_performing_action.headers or GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return (response.json() or {}).get("instructions")
+        return (response.json() or {}).get("instructions") or ""

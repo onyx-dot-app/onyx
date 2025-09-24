@@ -1,4 +1,5 @@
 import datetime
+from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -33,7 +34,7 @@ def fetch_chunk_counts_for_user_files(
     ]
 
 
-def calculate_user_files_token_count(file_ids: list[str], db_session: Session) -> int:
+def calculate_user_files_token_count(file_ids: list[UUID], db_session: Session) -> int:
     """Calculate total token count for specified files"""
     total_tokens = 0
 
@@ -64,7 +65,7 @@ def fetch_user_project_ids_for_user_files(
 
 
 def update_last_accessed_at_for_user_files(
-    user_file_ids: list[str],
+    user_file_ids: list[UUID],
     db_session: Session,
 ) -> None:
     """Update `last_accessed_at` to now (UTC) for the given user files."""

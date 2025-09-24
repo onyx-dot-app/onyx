@@ -94,7 +94,6 @@ def generate_dummy_chunk(
 
     return DocMetadataAwareIndexChunk.from_index_chunk(
         index_chunk=chunk,
-        user_file=None,
         user_project=[],
         access=DocumentAccess.build(
             user_emails=user_emails,

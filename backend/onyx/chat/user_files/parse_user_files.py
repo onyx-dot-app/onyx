@@ -21,7 +21,7 @@ def parse_user_files(
     db_session: Session,
     persona: Persona,
     actual_user_input: str,
-    project_id: int,
+    project_id: int | None,
     # should only be None if auth is disabled
     user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
@@ -59,22 +59,26 @@ def parse_user_files(
             ]
         )
 
+    # Combine user-provided and project-derived user file IDs
+    combined_user_file_ids = user_file_ids + project_user_file_ids or []
+
     # Load user files from the database into memory
     user_files = load_in_memory_chat_files(
-        user_file_ids + project_user_file_ids or [],
+        combined_user_file_ids,
         db_session,
     )
 
     user_file_models = get_user_files_as_user(
-        user_file_ids + project_user_file_ids or [],
+        combined_user_file_ids,
         user_id,
         db_session,
     )
 
     # Update last accessed at for the user files which are used in the chat
     if user_file_ids or project_user_file_ids:
+        # update_last_accessed_at_for_user_files expects list[UUID]
         update_last_accessed_at_for_user_files(
-            user_file_ids + project_user_file_ids or [],
+            combined_user_file_ids,
             db_session,
         )
 
@@ -85,8 +89,9 @@ def parse_user_files(
         compute_max_document_tokens_for_persona,
     )
 
+    # calculate_user_files_token_count now expects list[UUID]
     total_tokens = calculate_user_files_token_count(
-        user_file_ids + project_user_file_ids or [],
+        combined_user_file_ids,
         db_session,
     )
 

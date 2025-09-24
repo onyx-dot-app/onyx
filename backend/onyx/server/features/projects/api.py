@@ -174,7 +174,7 @@ def link_user_file_to_project(
     file_id: UUID,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-):
+) -> UserFileSnapshot:
     """Link an existing user file to a specific project for the current user.
 
     Creates the association in the Project__UserFile join table if it does not exist.
@@ -249,7 +249,7 @@ def upsert_project_instructions(
     body: UpsertProjectInstructionsRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-):
+) -> ProjectInstructionsResponse:
     """Create or update this project's instructions stored on the project itself."""
     # Ensure the project exists and belongs to the user
     user_id = user.id if user is not None else None
@@ -308,7 +308,7 @@ def update_project(
     body: UpdateProjectRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-):
+) -> UserProjectSnapshot:
     user_id = user.id if user is not None else None
     project = (
         db_session.query(UserProject)

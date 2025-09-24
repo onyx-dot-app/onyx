@@ -1,6 +1,7 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from uuid import UUID
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
@@ -10,13 +11,13 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.document_index.vespa_constants import USER_PROJECT
 from shared_configs.configs import MULTI_TENANT
 
 # Import the function under test
@@ -154,16 +155,21 @@ class TestBuildVespaFilters:
 
     def test_user_file_ids_filter(self) -> None:
         """Test user file IDs filtering."""
-        # Single user file ID
-        filters = IndexFilters(access_control_list=[], user_file_ids=[123])
-        result = build_vespa_filters(filters)
-        assert f"!({HIDDEN}=true) and ({USER_FILE} = 123) and " == result
+        id1 = UUID("00000000-0000-0000-0000-000000000123")
+        id2 = UUID("00000000-0000-0000-0000-000000000456")
 
-        # Multiple user file IDs
-        filters = IndexFilters(access_control_list=[], user_file_ids=[123, 456])
+        # Single user file ID (UUID)
+        filters = IndexFilters(access_control_list=[], user_file_ids=[id1])
         result = build_vespa_filters(filters)
         assert (
-            f"!({HIDDEN}=true) and ({USER_FILE} = 123 or {USER_FILE} = 456) and "
+            f'!({HIDDEN}=true) and ({DOCUMENT_ID} contains "{str(id1)}") and ' == result
+        )
+
+        # Multiple user file IDs (UUIDs)
+        filters = IndexFilters(access_control_list=[], user_file_ids=[id1, id2])
+        result = build_vespa_filters(filters)
+        assert (
+            f'!({HIDDEN}=true) and ({DOCUMENT_ID} contains "{str(id1)}" or {DOCUMENT_ID} contains "{str(id2)}") and '
             == result
         )
 
@@ -172,23 +178,15 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
-    def test_user_folder_ids_filter(self) -> None:
-        """Test user folder IDs filtering."""
-        # Single user folder ID
-        filters = IndexFilters(access_control_list=[], user_folder_ids=[789])
+    def test_user_project_filter(self) -> None:
+        """Test user project filtering (replacement for user folder IDs)."""
+        # Single project id
+        filters = IndexFilters(access_control_list=[], project_id=789)
         result = build_vespa_filters(filters)
-        assert f"!({HIDDEN}=true) and ({USER_FOLDER} = 789) and " == result
+        assert f'!({HIDDEN}=true) and ({USER_PROJECT} contains "789") and ' == result
 
-        # Multiple user folder IDs
-        filters = IndexFilters(access_control_list=[], user_folder_ids=[789, 101])
-        result = build_vespa_filters(filters)
-        assert (
-            f"!({HIDDEN}=true) and ({USER_FOLDER} = 789 or {USER_FOLDER} = 101) and "
-            == result
-        )
-
-        # Empty user folder IDs
-        filters = IndexFilters(access_control_list=[], user_folder_ids=[])
+        # No project id
+        filters = IndexFilters(access_control_list=[], project_id=None)
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
@@ -220,13 +218,14 @@ class TestBuildVespaFilters:
 
     def test_combined_filters(self) -> None:
         """Test combining multiple filter types."""
+        id1 = UUID("00000000-0000-0000-0000-000000000123")
         filters = IndexFilters(
             access_control_list=["user1", "group1"],
             source_type=[DocumentSource.WEB],
             tags=[Tag(tag_key="color", tag_value="red")],
             document_set=["set1"],
-            user_file_ids=[123],
-            user_folder_ids=[789],
+            user_file_ids=[id1],
+            project_id=789,
             time_cutoff=datetime(2023, 1, 1, tzinfo=timezone.utc),
         )
 
@@ -241,8 +240,8 @@ class TestBuildVespaFilters:
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
         expected += f'({DOCUMENT_SETS} contains "set1") and '
-        expected += f"({USER_FILE} = 123) and "
-        expected += f"({USER_FOLDER} = 789) and "
+        expected += f'({DOCUMENT_ID} contains "{str(id1)}") and '
+        expected += f'({USER_PROJECT} contains "789") and '
         cutoff_secs = int(datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp())
         expected += f"!({DOC_UPDATED_AT} < {cutoff_secs}) and "
 

@@ -311,6 +311,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         retrieved_sections_callback = None
         skip_query_analysis = False
         user_file_ids = None
+        project_id = None
         document_sources = None
         time_cutoff = None
         expanded_queries = None

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -492,16 +493,17 @@ def stream_chat_message_objects(
         files = load_all_chat_files(history_msgs, new_msg_req.file_descriptors)
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
-        user_file_ids = []
+        user_file_ids: list[UUID] = []
 
         if persona.user_files:
-            for file in persona.user_files:
-                user_file_ids.append(file.id)
+            for uf in persona.user_files:
+                user_file_ids.append(uf.id)
 
         if new_msg_req.current_message_files:
-            for file in new_msg_req.current_message_files:
-                if file["user_file_id"]:
-                    user_file_ids.append(file["user_file_id"])
+            for fd in new_msg_req.current_message_files:
+                uid = fd.get("user_file_id")
+                if uid is not None:
+                    user_file_ids.append(uid)
 
         # Load in user files into memory and create search tool override kwargs if needed
         # if we have enough tokens, we don't need to use search

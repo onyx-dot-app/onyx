@@ -58,5 +58,5 @@ class InMemoryChatFile(BaseModel):
             "id": str(self.file_id),
             "type": self.file_type,
             "name": self.filename,
-            "user_file_id": str(self.file_id),
+            "user_file_id": UUID(str(self.file_id)) if self.file_id else None,
         }

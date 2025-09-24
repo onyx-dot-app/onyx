@@ -633,7 +633,16 @@ def clarifier(
             )
 
             if context_llm_docs:
-                prompt_config = PromptConfig.from_model(graph_config.inputs.persona)
+                persona = graph_config.inputs.persona
+                if persona is not None:
+                    prompt_config = PromptConfig.from_model(persona)
+                else:
+                    prompt_config = PromptConfig(
+                        system_prompt=assistant_system_prompt,
+                        task_prompt="",
+                        datetime_aware=True,
+                    )
+
                 system_prompt_to_use = build_citations_system_message(
                     prompt_config
                 ).content
@@ -652,8 +661,8 @@ def clarifier(
 
             stream = graph_config.tooling.primary_llm.stream(
                 prompt=create_question_prompt(
-                    system_prompt_to_use,
-                    user_prompt_to_use,
+                    cast(str, system_prompt_to_use),
+                    cast(str, user_prompt_to_use),
                     uploaded_image_context=uploaded_image_context,
                 ),
                 tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),

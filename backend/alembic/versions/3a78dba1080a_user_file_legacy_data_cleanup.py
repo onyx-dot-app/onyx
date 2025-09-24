@@ -14,6 +14,7 @@ from sqlalchemy.dialects import postgresql as psql
 from sqlalchemy import text
 import logging
 from typing import List
+import uuid
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -25,10 +26,10 @@ depends_on = None
 
 
 def batch_delete(
-    bind,
+    bind: sa.engine.Connection,
     table_name: str,
     id_column: str,
-    ids: List,
+    ids: List[str | int | uuid.UUID],
     batch_size: int = 1000,
     id_type: str = "int",
 ) -> int:
