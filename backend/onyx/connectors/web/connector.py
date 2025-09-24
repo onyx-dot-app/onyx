@@ -543,6 +543,23 @@ class WebConnector(LoadConnector):
 
         is_pdf = is_pdf_content(head_response)
 
+        if not is_pdf and "@@download/file" in initial_url:
+            response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
+            page_text = response.text
+            last_modified = response.headers.get("Last-Modified")
+            result.doc = Document(
+                id=initial_url,
+                sections=[TextSection(link=initial_url, text=page_text)],
+                source=DocumentSource.WEB,
+                semantic_identifier=initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
+                metadata={},
+                doc_updated_at=(_get_datetime_from_last_modified_header(
+                    last_modified) if last_modified else None),
+            )
+
+
+            return result
+
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
             response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
