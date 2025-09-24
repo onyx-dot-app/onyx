@@ -85,3 +85,10 @@ Create env vars from secrets
     {{- end }}
 {{- end }}
 
+{{/*
+Return the configured autoscaling engine; defaults to HPA when unset.
+*/}}
+{{- define "onyx-stack.autoscaling.engine" -}}
+{{- $engine := default "hpa" .Values.autoscaling.engine -}}
+{{- $engine | lower -}}
+{{- end }}

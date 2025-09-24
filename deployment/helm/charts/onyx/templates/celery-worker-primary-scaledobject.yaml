@@ -1,4 +1,4 @@
-{{- if .Values.celery_worker_primary.autoscaling.enabled }}
+{{- if and (.Values.celery_worker_primary.autoscaling.enabled) (eq (include "onyx-stack.autoscaling.engine" .) "keda") }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
