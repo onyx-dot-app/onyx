@@ -573,8 +573,8 @@ export function ActionToggle({
   useEffect(() => {
     if (showSourceManagement) {
       const timer = setTimeout(() => {
-        const scrollContainer = document.querySelector(
-          ".flex-1.overflow-y-auto.min-h-0.relative"
+        const scrollContainer = document.getElementById(
+          "chat-scroll-container"
         ) as HTMLElement;
         if (scrollContainer) {
           checkScrollState(scrollContainer);
@@ -1036,6 +1036,7 @@ export function ActionToggle({
 
                 {/* Scrollable Content */}
                 <div
+                  id="chat-scroll-container"
                   className="flex-1 overflow-y-auto min-h-0 relative"
                   onScroll={(e) => checkScrollState(e.currentTarget)}
                   onLoad={(e) => checkScrollState(e.currentTarget)}

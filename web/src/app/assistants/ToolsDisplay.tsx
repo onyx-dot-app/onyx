@@ -1,4 +1,4 @@
-import { FiImage, FiSearch, FiChevronRight } from "react-icons/fi";
+import { FiImage, FiSearch } from "react-icons/fi";
 import { Persona } from "../admin/assistants/interfaces";
 import { SEARCH_TOOL_ID } from "../chat/components/tools/constants";
 
@@ -43,7 +43,6 @@ export function AssistantTools({
                   <div className="flex gap-x-1">
                     <FiSearch key={ind} className="ml-1 h-3 w-3 my-auto" />
                     Search
-                    <FiChevronRight className="h-3 w-3 my-auto text-gray-500" />
                   </div>
                 </div>
               );

@@ -629,17 +629,18 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 />
 
                 {selectedAssistant.tools.length > 0 && (
-                  <>
-                    <ActionToggle
-                      selectedAssistant={selectedAssistant}
-                      availableSources={[
+                  <ActionToggle
+                    selectedAssistant={selectedAssistant}
+                    availableSources={useMemo(
+                      () => [
                         ...ccPairs.map((ccPair) => ccPair.source),
                         ...(federatedConnectorsData?.map(
                           (connector) => connector.source
                         ) || []),
-                      ]}
-                    />
-                  </>
+                      ],
+                      [ccPairs, federatedConnectorsData]
+                    )}
+                  />
                 )}
 
                 {retrievalEnabled &&
