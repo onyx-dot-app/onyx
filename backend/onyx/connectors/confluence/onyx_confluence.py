@@ -67,6 +67,12 @@ class ConfluenceRateLimitError(Exception):
     pass
 
 
+# TODO: given a url that looks like https://<your-domain>.atlassian.net/{api},
+# convert it to  url that looks like https://api.atlassian.com/ex/confluence/<your-domain>
+def scoped_url(url: str) -> str:
+    return url
+
+
 class OnyxConfluence:
     """
     This is a custom Confluence class that:
@@ -94,6 +100,8 @@ class OnyxConfluence:
             CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
         ),
     ) -> None:
+        url = scoped_url(url) if scoped_token else url
+
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
