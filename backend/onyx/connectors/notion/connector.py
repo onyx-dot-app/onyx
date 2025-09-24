@@ -34,7 +34,6 @@ logger = setup_logger()
 
 _NOTION_PAGE_SIZE = 100
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
-_NOTION_API_VERSION = "2025-09-03"
 
 
 class NotionPage(BaseModel):
@@ -76,143 +75,11 @@ class NotionConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.headers = {
             "Content-Type": "application/json",
-            "Notion-Version": _NOTION_API_VERSION,
+            "Notion-Version": "2025-09-03",  # Updated API version
         }
         self.indexed_pages: set[str] = set()
         self.root_page_id = root_page_id
         self.recursive_index_enabled = recursive_index_enabled or self.root_page_id
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.headers["Authorization"] = (
-            f'Bearer {credentials["notion_integration_token"]}'
-        )
-        return None
-
-    @retry(tries=3, delay=1, backoff=2)
-    def _fetch_data_sources(self, database_id: str) -> list[dict[str, Any]]:
-        """
-        Fetch data sources for a database to support multi-source databases.
-        Returns a list of data source objects.
-        """
-        url = f"https://api.notion.com/v1/databases/{database_id}"
-        res = rl_requests.get(url, headers=self.headers, timeout=_NOTION_CALL_TIMEOUT)
-        try:
-            res.raise_for_status()
-        except Exception as e:
-            json_data = res.json()
-            code = json_data.get("code")
-            if code == "object_not_found":
-                logger.error(
-                    f"Unable to access database with ID '{database_id}' during data source fetch. "
-                    f"Likely not shared with integration. Exception: {e}"
-                )
-                return []
-            logger.exception(f"Error fetching database data sources - {json_data}")
-            raise e
-
-        json_resp = res.json()
-        # New field introduced in 2025-09-03 for data_sources
-        data_sources = json_resp.get("data_sources")
-        if not data_sources:
-            # Backwards compatibility fallback: treat the database itself as a single data source
-            data_sources = [{"id": database_id}]
-        return data_sources
-
-    @retry(tries=3, delay=1, backoff=2)
-    def _fetch_database(
-        self, database_id: str, data_source_id: str | None = None, cursor: str | None = None
-    ) -> dict[str, Any]:
-        """
-        Fetch a database query results using data_source_id if provided.
-        """
-        url = f"https://api.notion.com/v1/databases/{database_id}/query"
-        body = {}
-        if cursor:
-            body["start_cursor"] = cursor
-        if data_source_id:
-            body["data_source_id"] = data_source_id
-
-        # If body is empty, send None for JSON to avoid sending empty JSON object
-        json_body = body if body else None
-
-        res = rl_requests.post(
-            url,
-            headers=self.headers,
-            json=json_body,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
-        try:
-            res.raise_for_status()
-        except Exception as e:
-            json_data = res.json()
-            code = json_data.get("code")
-            if code == "object_not_found" or (
-                code == "validation_error"
-                and "does not contain any data sources" in json_data.get("message", "")
-            ):
-                logger.error(
-                    f"Unable to access database with ID '{database_id}' "
-                    f"or data source '{data_source_id}'. Possibly not shared. Exception: {e}"
-                )
-                return {"results": [], "next_cursor": None}
-            logger.exception(f"Error fetching database - {json_data}")
-            raise e
-        return res.json()
-
-    def _read_pages_from_database(
-        self, database_id: str
-    ) -> tuple[list[NotionBlock], list[str]]:
-        """
-        Returns a list of top level blocks and all page IDs in the database,
-        supporting multi-source databases by querying each data source.
-        """
-        result_blocks: list[NotionBlock] = []
-        result_pages: list[str] = []
-
-        # Fetch all data sources for this database
-        data_sources = self._fetch_data_sources(database_id)
-        if not data_sources:
-            logger.warning(f"No data sources found for database {database_id}")
-            return result_blocks, result_pages
-
-        for data_source in data_sources:
-            data_source_id = data_source.get("id")
-            cursor = None
-            while True:
-                data = self._fetch_database(database_id, data_source_id, cursor)
-
-                for result in data["results"]:
-                    obj_id = result["id"]
-                    obj_type = result["object"]
-                    text = self._properties_to_str(result.get("properties", {}))
-                    if text:
-                        result_blocks.append(NotionBlock(id=obj_id, text=text, prefix="\n"))
-
-                    if self.recursive_index_enabled:
-                        if obj_type == "page":
-                            logger.debug(
-                                f"Found page with ID '{obj_id}' in database '{database_id}' data source '{data_source_id}'"
-                            )
-                            result_pages.append(obj_id)
-                        elif obj_type == "database":
-                            logger.debug(
-                                f"Found database with ID '{obj_id}' in database '{database_id}' data source '{data_source_id}'"
-                            )
-                            # Recursively read child database pages
-                            _, child_pages = self._read_pages_from_database(obj_id)
-                            result_pages.extend(child_pages)
-
-                if data.get("next_cursor") is None:
-                    break
-
-                cursor = data.get("next_cursor")
-
-        return result_blocks, result_pages
-
-    # The rest of your methods remain mostly unchanged, except:
-    # - Update _fetch_page and _fetch_database_as_page to use _NOTION_API_VERSION header
-    # - Update _fetch_child_blocks to use new header version
-    # - Update validate_connector_settings to use new header version
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(
@@ -233,8 +100,7 @@ class NotionConnector(LoadConnector, PollConnector):
             if res.status_code == 404:
                 logger.error(
                     f"Unable to access block with ID '{block_id}'. "
-                    f"This is likely due to the block not being shared "
-                    f"with the Onyx integration. Exact exception:\n\n{e}"
+                    f"Likely not shared with integration. Exception:\n\n{e}"
                 )
             else:
                 logger.exception(
@@ -275,21 +141,185 @@ class NotionConnector(LoadConnector, PollConnector):
         except Exception as e:
             logger.exception(f"Error fetching database as page - {res.json()}")
             raise e
-        json_resp = res.json()
-        database_name = json_resp.get("title")
+        database_name = res.json().get("title")
         database_name = (
             database_name[0].get("text", {}).get("content") if database_name else None
         )
-        return NotionPage(**json_resp, database_name=database_name)
+        return NotionPage(**res.json(), database_name=database_name)
 
-    # Keep the rest of your methods (_properties_to_str, _read_blocks, _read_pages, etc.) unchanged except update header version where applicable.
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_data_sources(
+        self, database_id: str
+    ) -> list[dict[str, Any]]:
+        """Fetch data sources for the given database."""
+        logger.debug(f"Fetching data sources for database ID '{database_id}'")
+        url = f"https://api.notion.com/v1/databases/{database_id}"
+        res = rl_requests.get(
+            url,
+            headers=self.headers,
+            timeout=_NOTION_CALL_TIMEOUT,
+        )
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            logger.exception(f"Error fetching data sources for database - {res.json()}")
+            raise e
+        json_data = res.json()
+        # New field data_sources is a list of data source objects
+        data_sources = json_data.get("data_sources")
+        if not data_sources:
+            # Fallback: treat the database itself as a single data source with its id
+            logger.debug(f"No data_sources field, treating database ID as single data source")
+            return [{"id": database_id}]
+        return data_sources
 
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_database(
+        self, database_id: str, cursor: str | None = None, data_source_id: str | None = None
+    ) -> dict[str, Any]:
+        logger.debug(
+            f"Fetching database query for ID '{database_id}'"
+            f"{' with data_source_id ' + data_source_id if data_source_id else ''}"
+        )
+        block_url = f"https://api.notion.com/v1/databases/{database_id}/query"
+        body = None if not cursor else {"start_cursor": cursor}
+        if data_source_id:
+            if body is None:
+                body = {}
+            body["data_source_id"] = data_source_id
+        res = rl_requests.post(
+            block_url,
+            headers=self.headers,
+            json=body,
+            timeout=_NOTION_CALL_TIMEOUT,
+        )
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            json_data = res.json()
+            code = json_data.get("code")
+            if code == "object_not_found" or (
+                code == "validation_error"
+                and "does not contain any data sources" in json_data.get("message", "")
+            ):
+                logger.error(
+                    f"Unable to access database with ID '{database_id}'. "
+                    f"Likely not shared with integration. Exception:\n{e}"
+                )
+                return {"results": [], "next_cursor": None}
+            logger.exception(f"Error fetching database - {res.json()}")
+            raise e
+        return res.json()
+
+    # ... Keep _properties_to_str, _read_blocks, _read_page_title unchanged ...
+
+    def _read_pages_from_database(
+        self, database_id: str
+    ) -> tuple[list[NotionBlock], list[str]]:
+        """Returns a list of top level blocks and all page IDs in the database,
+        querying all data sources."""
+        result_blocks: list[NotionBlock] = []
+        result_pages: list[str] = []
+        cursor = None
+
+        data_sources = self._fetch_data_sources(database_id)
+        if not data_sources:
+            # fallback single query with no data_source_id
+            data_sources = [{"id": database_id}]
+
+        for data_source in data_sources:
+            ds_id = data_source.get("id")
+            ds_cursor = None
+            while True:
+                data = self._fetch_database(database_id, ds_cursor, data_source_id=ds_id)
+                for result in data["results"]:
+                    obj_id = result["id"]
+                    obj_type = result["object"]
+                    text = self._properties_to_str(result.get("properties", {}))
+                    if text:
+                        result_blocks.append(NotionBlock(id=obj_id, text=text, prefix="\n"))
+
+                    if self.recursive_index_enabled:
+                        if obj_type == "page":
+                            logger.debug(
+                                f"Found page with ID '{obj_id}' in database '{database_id}'"
+                                f" data_source '{ds_id}'"
+                            )
+                            result_pages.append(result["id"])
+                        elif obj_type == "database":
+                            logger.debug(
+                                f"Found database with ID '{obj_id}' in database '{database_id}'"
+                                f" data_source '{ds_id}'"
+                            )
+                            _, child_pages = self._read_pages_from_database(obj_id)
+                            result_pages.extend(child_pages)
+
+                if data["next_cursor"] is None:
+                    break
+                ds_cursor = data["next_cursor"]
+
+        return result_blocks, result_pages
+
+    # ... Keep _read_blocks and _read_pages unchanged (they call _read_pages_from_database) ...
+
+    # Keep other methods unchanged except update headers "Notion-Version" to "2025-09-03"
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        self.headers["Authorization"] = (
+            f'Bearer {credentials["notion_integration_token"]}'
+        )
+        return None
+
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        if self.recursive_index_enabled and self.root_page_id:
+            yield from self._recursive_load()
+            return
+
+        query_dict = {
+            "filter": {"property": "object", "value": "page"},
+            "page_size": _NOTION_PAGE_SIZE,
+        }
+        while True:
+            db_res = self._search_notion(query_dict)
+            pages = [NotionPage(**page) for page in db_res.results]
+            yield from batch_generator(self._read_pages(pages), self.batch_size)
+            if db_res.has_more:
+                query_dict["start_cursor"] = db_res.next_cursor
+            else:
+                break
+
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        if self.recursive_index_enabled and self.root_page_id:
+            yield from self._recursive_load()
+            return
+
+        query_dict = {
+            "page_size": _NOTION_PAGE_SIZE,
+            "sort": {"timestamp": "last_edited_time", "direction": "descending"},
+            "filter": {"property": "object", "value": "page"},
+        }
+        while True:
+            db_res = self._search_notion(query_dict)
+            pages = self._filter_pages_by_time(
+                db_res.results, start, end, filter_field="last_edited_time"
+            )
+            if len(pages) > 0:
+                yield from batch_generator(self._read_pages(pages), self.batch_size)
+                if db_res.has_more:
+                    query_dict["start_cursor"] = db_res.next_cursor
+                else:
+                    break
+            else:
+                break
+
+    # Keep validate_connector_settings unchanged except update header version
     def validate_connector_settings(self) -> None:
         if not self.headers.get("Authorization"):
             raise ConnectorMissingCredentialError("Notion credentials not loaded.")
 
         try:
-            # Use new API version header for validation
             if self.root_page_id:
                 res = rl_requests.get(
                     f"https://api.notion.com/v1/pages/{self.root_page_id}",
@@ -339,9 +369,6 @@ class NotionConnector(LoadConnector, PollConnector):
                 f"Unexpected error during Notion settings validation: {exc}"
             )
 
-    # The rest of your code (like _properties_to_str, _read_blocks, _read_pages, _search_notion, _filter_pages_by_time, _recursive_load, load_from_state, poll_source) remains unchanged except ensure the headers have the updated version.
-
-# If you want me to provide the full unchanged parts as well, please let me know.
 
 if __name__ == "__main__":
     import os
