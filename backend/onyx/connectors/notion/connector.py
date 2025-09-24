@@ -368,7 +368,20 @@ class NotionConnector(LoadConnector, PollConnector):
             raise UnexpectedValidationError(
                 f"Unexpected error during Notion settings validation: {exc}"
             )
+            
+    def _recursive_load(self) -> Generator[list[Document], None, None]:
+        if self.root_page_id is None or not self.recursive_index_enabled:
+            raise RuntimeError(
+                "Recursive page lookup is not enabled, but we are trying to "
+                "recursively load pages. This should never happen."
+            )
 
+        logger.info(
+            "Recursively loading pages from Notion based on root page with "
+            f"ID: {self.root_page_id}"
+        )
+        root_page = self._fetch_page(page_id=self.root_page_id)
+        yield from batch_generator(self._read_pages([root_page]), self.batch_size)
 
 if __name__ == "__main__":
     import os
