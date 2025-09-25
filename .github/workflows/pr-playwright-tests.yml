@@ -189,7 +189,7 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
         id: start_docker
 
       - name: Wait for service to be ready
