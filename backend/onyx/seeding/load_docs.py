@@ -178,7 +178,7 @@ def seed_initial_documents(
     # Create a connector so the user can delete it if they want
     # or reindex it with a new search model if they want
     connector_data = ConnectorBase(
-        name="Sample Use Cases",
+        name="Onyx Docs Overview",
         source=DocumentSource.WEB,
         input_type=InputType.LOAD_STATE,
         connector_specific_config={
