@@ -29,6 +29,7 @@ export function ChatSessionDisplay({
   parentFolderName,
   showDragHandle = true,
   projectId,
+  isCustomAssistant,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -40,6 +41,7 @@ export function ChatSessionDisplay({
   parentFolderName?: string;
   showDragHandle?: boolean;
   projectId?: number;
+  isCustomAssistant?: boolean;
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
