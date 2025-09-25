@@ -33,7 +33,7 @@ import {
   FiLoader,
 } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/components-2/context/ChatContext";
 
 interface ActionItemProps {
   tool?: ToolSnapshot;

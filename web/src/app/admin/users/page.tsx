@@ -1,19 +1,19 @@
 "use client";
+
 import { useState } from "react";
+import { FiPlusSquare } from "react-icons/fi";
+import useSWR, { mutate } from "swr";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-
-import { FiPlusSquare } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
 import { UsersIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/components/ui/text";
@@ -22,13 +22,13 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
-const UsersTables = ({
-  q,
-  setPopup,
-}: {
+
+interface UsersTablesProps {
   q: string;
   setPopup: (spec: PopupSpec) => void;
-}) => {
+}
+
+function UsersTables({ q, setPopup }: UsersTablesProps) {
   const {
     data: invitedUsers,
     error: invitedUsersError,
@@ -130,9 +130,9 @@ const UsersTables = ({
       )}
     </Tabs>
   );
-};
+}
 
-const SearchableTables = () => {
+function SearchableTables() {
   const { popup, setPopup } = usePopup();
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
@@ -155,13 +155,13 @@ const SearchableTables = () => {
       </div>
     </div>
   );
-};
+}
 
-const AddUserButton = ({
-  setPopup,
-}: {
+interface AddUserButtonProps {
   setPopup: (spec: PopupSpec) => void;
-}) => {
+}
+
+function AddUserButton({ setPopup }: AddUserButtonProps) {
   const [modal, setModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -241,15 +241,13 @@ const AddUserButton = ({
       )}
     </>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle title="Manage Users" icon={<UsersIcon size={32} />} />
       <SearchableTables />
     </div>
   );
-};
-
-export default Page;
+}

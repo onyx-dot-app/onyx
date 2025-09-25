@@ -5,16 +5,20 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { ClientLayout } from "./ClientLayout";
+import { ClientLayout } from "@/components/admin/ClientLayout";
 import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
-import { AnnouncementBanner } from "../header/AnnouncementBanner";
+import { AnnouncementBanner } from "@/components/header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "../context/ChatContext";
+import { ChatProvider } from "@/components-2/context/ChatContext";
 
-export async function Layout({ children }: { children: React.ReactNode }) {
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+export async function Layout({ children }: LayoutProps) {
   const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
 
   // catch cases where the backend is completely unreachable here
@@ -45,6 +49,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const data = await fetchChatData({});
+
   if ("redirect" in data) {
     redirect(data.redirect);
   }
@@ -55,8 +60,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     documentSets,
     tags,
     llmProviders,
-    folders,
-    openedFolders,
     sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
@@ -68,24 +71,20 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <ChatProvider
-      value={{
-        inputPrompts,
-        chatSessions,
-        proSearchToggled,
-        sidebarInitiallyVisible,
-        availableSources,
-        ccPairs,
-        documentSets,
-        availableTools,
-        tags,
-        availableDocumentSets: documentSets,
-        availableTags: tags,
-        llmProviders,
-        folders,
-        openedFolders,
-        shouldShowWelcomeModal,
-        defaultAssistantId,
-      }}
+      inputPrompts={inputPrompts}
+      chatSessions={chatSessions}
+      proSearchToggled={proSearchToggled}
+      sidebarInitiallyVisible={sidebarInitiallyVisible}
+      availableSources={availableSources}
+      ccPairs={ccPairs}
+      documentSets={documentSets}
+      availableTools={availableTools}
+      tags={tags}
+      availableDocumentSets={documentSets}
+      availableTags={tags}
+      llmProviders={llmProviders}
+      shouldShowWelcomeModal={shouldShowWelcomeModal}
+      defaultAssistantId={defaultAssistantId}
     >
       <ClientLayout
         enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}

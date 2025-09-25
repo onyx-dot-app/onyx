@@ -4,7 +4,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { cookies } from "next/headers";
-import { ChatProvider } from "@/components/context/ChatContext";
+import { ChatProvider } from "@/components-2/context/ChatContext";
 import { AssistantStats } from "./AssistantStats";
 import { BackButton } from "@/components/BackButton";
 
@@ -24,8 +24,6 @@ export default async function GalleryPage(props: {
   const {
     user,
     chatSessions,
-    folders,
-    openedFolders,
     sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     availableSources,
@@ -41,24 +39,20 @@ export default async function GalleryPage(props: {
 
   return (
     <ChatProvider
-      value={{
-        inputPrompts,
-        chatSessions,
-        proSearchToggled,
-        sidebarInitiallyVisible,
-        availableSources,
-        ccPairs,
-        documentSets,
-        availableTools,
-        tags,
-        availableDocumentSets: documentSets,
-        availableTags: tags,
-        llmProviders,
-        folders,
-        openedFolders,
-        shouldShowWelcomeModal,
-        defaultAssistantId,
-      }}
+      inputPrompts={inputPrompts}
+      chatSessions={chatSessions}
+      proSearchToggled={proSearchToggled}
+      sidebarInitiallyVisible={sidebarInitiallyVisible}
+      availableSources={availableSources}
+      ccPairs={ccPairs}
+      documentSets={documentSets}
+      availableTools={availableTools}
+      tags={tags}
+      availableDocumentSets={documentSets}
+      availableTags={tags}
+      llmProviders={llmProviders}
+      shouldShowWelcomeModal={shouldShowWelcomeModal}
+      defaultAssistantId={defaultAssistantId}
     >
       {shouldShowWelcomeModal && (
         <WelcomeModal user={user} requestCookies={requestCookies} />

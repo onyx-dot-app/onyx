@@ -8,7 +8,6 @@ import Link from "next/link";
 import { pageType } from "@/components/sidebar/types";
 import { useRouter } from "next/navigation";
 import { ChatBanner } from "@/app/chat/components/ChatBanner";
-import LogoWithText from "../header/LogoWithText";
 import { NewChatIcon } from "../icons/icons";
 import { SettingsContext } from "../settings/SettingsProvider";
 
@@ -54,13 +53,13 @@ const FunctionalHeader = React.memo(function FunctionalHeader({
       }`}
     >
       <div className="items-end flex mt-2 text-text-700 relative flex w-full">
-        <LogoWithText
+        {/* <LogoWithText
           assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
           toggled={false}
           handleNewChat={handleNewChat}
-        />
+        /> */}
         <div className="mt-1 items-center flex w-full h-8">
           <div
             style={{ transition: "width 0.30s ease-out" }}
@@ -113,12 +112,12 @@ const FunctionalHeader = React.memo(function FunctionalHeader({
           )}
 
           <div className="invisible">
-            <LogoWithText
+            {/* <LogoWithText
               page={page}
               toggled={sidebarToggled}
               toggleSidebar={toggleSidebar}
               handleNewChat={handleNewChat}
-            />
+            /> */}
           </div>
 
           <div className="absolute right-2 mobile:top-1 desktop:top-1 h-8  flex">

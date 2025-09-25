@@ -12,7 +12,7 @@ import {
   FileStatus,
   FolderResponse,
   useDocumentsContext,
-} from "../DocumentsContext";
+} from "@/app/chat/my-documents/DocumentsContext";
 import {
   Tooltip,
   TooltipContent,
@@ -29,7 +29,7 @@ import {
 } from "react-icons/fi";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
-import { AnimatedDots } from "../[id]/components/DocumentList";
+import { AnimatedDots } from "@/app/chat/my-documents/[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
 import { truncateString } from "@/lib/utils";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -52,7 +52,7 @@ interface FileListItemProps {
   status: FileStatus;
 }
 
-export const FileListItem: React.FC<FileListItemProps> = ({
+export function FileListItem({
   file,
   isSelected,
   onSelect,
@@ -62,7 +62,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
   onMove,
   folders,
   status,
-}) => {
+}: FileListItemProps) {
   const { setPopup, popup } = usePopup();
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
@@ -108,7 +108,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             <FiAlertTriangle className="h-4 w-4" />
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-56 p-3 shadow-lg rounded-md border border-neutral-200 dark:border-neutral-800">
+        <PopoverContent className="w-56 p-3 shadow-lg rounded-md border">
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <p className="text-xs font-medium text-red-500">
@@ -122,7 +122,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-start text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                className="w-full justify-start text-sm font-medium hover:bg-background-tint-02 transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -160,7 +160,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-start text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors"
+                className="w-full justify-start text-sm font-medium text-status-error-05 hover:bg-status-error-00 hover:text-status-error-05 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPopoverOpen(false);
@@ -187,7 +187,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 
   return (
     <div
-      className="group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-3 px-4 transition-all ease-in-out"
+      className="group relative flex cursor-pointer items-center border-b border hover:bg-background-tint-02 py-3 px-4 transition-all ease-in-out"
       onClick={(e) => {
         if (!(e.target as HTMLElement).closest(".action-menu")) {
           onSelect && onSelect(file);
@@ -208,7 +208,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="truncate text-sm text-text-dark dark:text-text-dark">
+                  <span className="truncate text-sm">
                     {truncateString(file.name, 50)}
                   </span>
                 </TooltipTrigger>
@@ -218,20 +218,18 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               </Tooltip>
             </TooltipProvider>
           ) : (
-            <span className="truncate text-sm text-text-dark dark:text-text-dark">
-              {file.name}
-            </span>
+            <span className="truncate text-sm">{file.name}</span>
           )}
         </div>
 
-        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
+        <div className="w-[30%] text-sm">
           {file.created_at &&
             getFormattedDateTime(
               new Date(new Date(file.created_at).getTime() - 8 * 60 * 60 * 1000)
             )}
         </div>
 
-        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
+        <div className="w-[30%] text-sm">
           {file.status == FileStatus.INDEXING ||
           file.status == FileStatus.REINDEXING ? (
             <>
@@ -294,7 +292,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                 </Button>
               </div>
             ) : (
-              <div className="p-2 text-text-dark space-y-2">
+              <div className="p-2 space-y-2">
                 <div className="flex items-center space-x-2 mb-4">
                   <h3 className="text-sm  px-2 font-semibold">Move to </h3>
                 </div>
@@ -319,7 +317,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                       (folder) =>
                         folder.id !== -1 && folder.id !== file.folder_id
                     ).length === 0 && (
-                      <div className="text-sm text-gray-500 px-2 text-center">
+                      <div className="text-sm px-2 text-center">
                         No folders available to move this file to.
                       </div>
                     )}
@@ -332,23 +330,4 @@ export const FileListItem: React.FC<FileListItemProps> = ({
       </div>
     </div>
   );
-};
-
-export const SkeletonFileListItem: React.FC<{ view: "grid" | "list" }> = () => {
-  return (
-    <div className="group relative flex items-center border-b border-border dark:border-border-200 py-3 px-4">
-      <div className="flex items-center flex-1 min-w-0">
-        <div className="flex items-center gap-3 w-[40%]">
-          <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse" />
-          <div className="h-4 w-48 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse" />
-        </div>
-        <div className="w-[30%]">
-          <div className="h-4 w-24 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse" />
-        </div>
-        <div className="w-[30%]">
-          <div className="h-4 w-24 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse" />
-        </div>
-      </div>
-    </div>
-  );
-};
+}

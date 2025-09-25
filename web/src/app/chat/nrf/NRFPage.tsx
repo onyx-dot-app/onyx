@@ -24,7 +24,7 @@ import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/components-2/context/ChatContext";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";

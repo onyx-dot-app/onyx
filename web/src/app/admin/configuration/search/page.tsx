@@ -3,11 +3,11 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Text from "@/components/ui/text";
+import Text from "@/components-2/Text";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import useSWR from "swr";
-import { ModelPreview } from "../../../../components/embedding/ModelSelector";
+import { ModelPreview } from "@/components/embedding/ModelSelector";
 import {
   HostedEmbeddingModel,
   CloudEmbeddingModel,
@@ -84,104 +84,102 @@ function Main() {
   }
 
   return (
-    <div className="h-screen">
+    <div className="py-padding-content">
       {searchSettingsPopup}
-      {!futureEmbeddingModel ? (
-        <>
+
+      {futureEmbeddingModel ? (
+        <UpgradingPage futureEmbeddingModel={futureEmbeddingModel} />
+      ) : (
+        <div className="flex flex-col gap-padding-content">
           {settings?.settings.needs_reindexing && (
-            <p className="max-w-3xl">
+            <Text>
               Your search settings are currently out of date! We recommend
               updating your search settings and re-indexing.
-            </p>
-          )}
-          <Title className="mb-6 mt-8 !text-2xl">Embedding Model</Title>
-
-          {currentEmeddingModel ? (
-            <ModelPreview model={currentEmeddingModel} display showDetails />
-          ) : (
-            <Title className="mt-8 mb-4">Choose your Embedding Model</Title>
+            </Text>
           )}
 
-          <Title className="mb-2 mt-8 !text-2xl">Post-processing</Title>
+          <div className="flex flex-col gap-padding-button">
+            <Text headingH2>Embedding Model</Text>
+            {currentEmeddingModel ? (
+              <ModelPreview model={currentEmeddingModel} />
+            ) : (
+              <Text>Choose your Embedding Model</Text>
+            )}
+          </div>
 
-          <CardSection className="!mr-auto mt-8 !w-96">
-            {searchSettings && (
-              <>
-                <div className="px-1 w-full rounded-lg">
-                  <div className="space-y-4">
-                    <div>
-                      <Text className="font-semibold">Reranking Model</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.rerank_model_name || "Not set"}
-                      </Text>
-                    </div>
+          <div className="flex flex-col gap-padding-button">
+            <Text headingH2>Post-processing</Text>
+            <CardSection className="!w-96">
+              {searchSettings && (
+                <>
+                  <div className="px-1 w-full rounded-lg">
+                    <div className="space-y-4">
+                      <div>
+                        <Text>Reranking Model</Text>
+                        <Text text04>
+                          {searchSettings.rerank_model_name || "Not set"}
+                        </Text>
+                      </div>
 
-                    <div>
-                      <Text className="font-semibold">Results to Rerank</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.num_rerank}
-                      </Text>
-                    </div>
+                      <div>
+                        <Text>Results to Rerank</Text>
+                        <Text text04>{searchSettings.num_rerank}</Text>
+                      </div>
 
-                    <div>
-                      <Text className="font-semibold">
-                        Multilingual Expansion
-                      </Text>
-                      <Text className="text-text-700">
-                        {searchSettings.multilingual_expansion.length > 0
-                          ? searchSettings.multilingual_expansion.join(", ")
-                          : "None"}
-                      </Text>
-                    </div>
+                      <div>
+                        <Text>Multilingual Expansion</Text>
+                        <Text text04>
+                          {searchSettings.multilingual_expansion.length > 0
+                            ? searchSettings.multilingual_expansion.join(", ")
+                            : "None"}
+                        </Text>
+                      </div>
 
-                    <div>
-                      <Text className="font-semibold">Multipass Indexing</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.multipass_indexing
-                          ? "Enabled"
-                          : "Disabled"}
-                      </Text>
-                    </div>
+                      <div>
+                        <Text>Multipass Indexing</Text>
+                        <Text text04>
+                          {searchSettings.multipass_indexing
+                            ? "Enabled"
+                            : "Disabled"}
+                        </Text>
+                      </div>
 
-                    <div>
-                      <Text className="font-semibold">Contextual RAG</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.enable_contextual_rag
-                          ? "Enabled"
-                          : "Disabled"}
-                      </Text>
-                    </div>
+                      <div>
+                        <Text>Contextual RAG</Text>
+                        <Text text04>
+                          {searchSettings.enable_contextual_rag
+                            ? "Enabled"
+                            : "Disabled"}
+                        </Text>
+                      </div>
 
-                    <div>
-                      <Text className="font-semibold">
-                        Disable Reranking for Streaming
-                      </Text>
-                      <Text className="text-text-700">
-                        {searchSettings.disable_rerank_for_streaming
-                          ? "Yes"
-                          : "No"}
-                      </Text>
+                      <div>
+                        <Text>Disable Reranking for Streaming</Text>
+                        <Text text04>
+                          {searchSettings.disable_rerank_for_streaming
+                            ? "Yes"
+                            : "No"}
+                        </Text>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </>
-            )}
-          </CardSection>
+                </>
+              )}
+            </CardSection>
+          </div>
 
           <Link href="/admin/embeddings">
-            <Button variant="navigate" className="mt-8">
+            <Button variant="navigate" className="mt-spacing-paragraph">
               Update Search Settings
             </Button>
           </Link>
-        </>
-      ) : (
-        <UpgradingPage futureEmbeddingModel={futureEmbeddingModel} />
+        </div>
       )}
     </div>
   );
 }
 
-function Page() {
+export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
@@ -192,5 +190,3 @@ function Page() {
     </div>
   );
 }
-
-export default Page;

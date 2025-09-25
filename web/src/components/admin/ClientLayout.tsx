@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
+import { AdminSidebar } from "@/sections/sidebar/AdminSidebar";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
@@ -26,15 +26,10 @@ import {
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
-import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
-import { SettingsContext } from "../settings/SettingsProvider";
-import { useContext, useState } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MdOutlineCreditCard } from "react-icons/md";
-import { UserSettingsModal } from "@/app/chat/components/modal/UserSettingsModal";
-import { usePopup } from "./connectors/Popup";
-import { useChatContext } from "../context/ChatContext";
 import {
   ApplicationStatus,
   CombinedSettings,
@@ -42,56 +37,35 @@ import {
 import Link from "next/link";
 import { Button } from "../ui/button";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 
 const connectors_items = () => [
   {
-    name: (
-      <div className="flex">
-        <NotebookIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Existing Connectors</div>
-      </div>
-    ),
+    name: "Existing Connectors",
+    icon: NotebookIconSkeleton,
     link: "/admin/indexing/status",
   },
   {
-    name: (
-      <div className="flex">
-        <ConnectorIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1.5">Add Connector</div>
-      </div>
-    ),
+    name: "Add Connector",
+    icon: ConnectorIconSkeleton,
     link: "/admin/add-connector",
   },
 ];
 
 const document_management_items = () => [
   {
-    name: (
-      <div className="flex">
-        <DocumentSetIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Document Sets</div>
-      </div>
-    ),
+    name: "Document Sets",
+    icon: DocumentSetIconSkeleton,
     link: "/admin/documents/sets",
   },
   {
-    name: (
-      <div className="flex">
-        <ZoomInIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Explorer</div>
-      </div>
-    ),
+    name: "Explorer",
+    icon: ZoomInIconSkeleton,
     link: "/admin/documents/explorer",
   },
   {
-    name: (
-      <div className="flex">
-        <ThumbsUpIconSkeleton className="text-text-700" size={18} />
-        <div className="ml-1">Feedback</div>
-      </div>
-    ),
+    name: "Feedback",
+    icon: ThumbsUpIconSkeleton,
     link: "/admin/documents/feedback",
   },
 ];
@@ -102,12 +76,8 @@ const custom_assistants_items = (
 ) => {
   const items = [
     {
-      name: (
-        <div className="flex">
-          <AssistantsIconSkeleton className="text-text-700" size={18} />
-          <div className="ml-1">Assistants</div>
-        </div>
-      ),
+      name: "Assistants",
+      icon: AssistantsIconSkeleton,
       link: "/admin/assistants",
     },
   ];
@@ -115,21 +85,13 @@ const custom_assistants_items = (
   if (!isCurator) {
     items.push(
       {
-        name: (
-          <div className="flex">
-            <SlackIconSkeleton className="text-text-700" />
-            <div className="ml-1">Slack Bots</div>
-          </div>
-        ),
+        name: "Slack Bots",
+        icon: SlackIconSkeleton,
         link: "/admin/bots",
       },
       {
-        name: (
-          <div className="flex">
-            <ToolIconSkeleton className="text-text-700" size={18} />
-            <div className="ml-1">Actions</div>
-          </div>
-        ),
+        name: "Actions",
+        icon: ToolIconSkeleton,
         link: "/admin/actions",
       }
     );
@@ -137,12 +99,8 @@ const custom_assistants_items = (
 
   if (enableEnterprise) {
     items.push({
-      name: (
-        <div className="flex">
-          <ClipboardIcon className="text-text-700" size={18} />
-          <div className="ml-1">Standard Answers</div>
-        </div>
-      ),
+      name: "Standard Answers",
+      icon: ClipboardIcon,
       link: "/admin/standard-answer",
     });
   }
@@ -176,12 +134,8 @@ const collections = (
           name: "User Management",
           items: [
             {
-              name: (
-                <div className="flex">
-                  <GroupsIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">Groups</div>
-                </div>
-              ),
+              name: "Groups",
+              icon: GroupsIconSkeleton,
               link: "/admin/groups",
             },
           ],
@@ -194,51 +148,31 @@ const collections = (
           name: "Configuration",
           items: [
             {
-              name: (
-                <div className="flex">
-                  <OnyxSparkleIcon className="text-text-700" size={18} />
-                  <div className="ml-1">Default Assistant</div>
-                </div>
-              ),
+              name: "Default Assistant",
+              icon: OnyxSparkleIcon,
               link: "/admin/configuration/default-assistant",
             },
             {
-              name: (
-                <div className="flex">
-                  <CpuIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">LLM</div>
-                </div>
-              ),
+              name: "LLM",
+              icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
             },
             {
               error: settings?.settings.needs_reindexing,
-              name: (
-                <div className="flex">
-                  <SearchIcon className="text-text-700" />
-                  <div className="ml-1">Search Settings</div>
-                </div>
-              ),
+              name: "Search Settings",
+              icon: SearchIcon,
               link: "/admin/configuration/search",
             },
             {
-              name: (
-                <div className="flex">
-                  <DocumentIcon2 className="text-text-700" />
-                  <div className="ml-1">Document Processing</div>
-                </div>
-              ),
+              name: "Document Processing",
+              icon: DocumentIcon2,
               link: "/admin/configuration/document-processing",
             },
             ...(kgExposed
               ? [
                   {
-                    name: (
-                      <div className="flex">
-                        <BrainIcon className="text-text-700" />
-                        <div className="ml-1">Knowledge Graph</div>
-                      </div>
-                    ),
+                    name: "Knowledge Graph",
+                    icon: BrainIcon,
                     link: "/admin/kg",
                   },
                 ]
@@ -249,46 +183,27 @@ const collections = (
           name: "User Management",
           items: [
             {
-              name: (
-                <div className="flex">
-                  <UsersIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">Users</div>
-                </div>
-              ),
+              name: "Users",
+              icon: UsersIconSkeleton,
               link: "/admin/users",
             },
             ...(enableEnterprise
               ? [
                   {
-                    name: (
-                      <div className="flex">
-                        <GroupsIconSkeleton
-                          className="text-text-700"
-                          size={18}
-                        />
-                        <div className="ml-1">Groups</div>
-                      </div>
-                    ),
+                    name: "Groups",
+                    icon: GroupsIconSkeleton,
                     link: "/admin/groups",
                   },
                 ]
               : []),
             {
-              name: (
-                <div className="flex">
-                  <KeyIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">API Keys</div>
-                </div>
-              ),
+              name: "API Keys",
+              icon: KeyIconSkeleton,
               link: "/admin/api-key",
             },
             {
-              name: (
-                <div className="flex">
-                  <ShieldIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">Token Rate Limits</div>
-                </div>
-              ),
+              name: "Token Rate Limits",
+              icon: ShieldIconSkeleton,
               link: "/admin/token-rate-limits",
             },
           ],
@@ -299,26 +214,15 @@ const collections = (
                 name: "Performance",
                 items: [
                   {
-                    name: (
-                      <div className="flex">
-                        <FiActivity className="text-text-700" size={18} />
-                        <div className="ml-1">Usage Statistics</div>
-                      </div>
-                    ),
+                    name: "Usage Statistics",
+                    icon: FiActivity,
                     link: "/admin/performance/usage",
                   },
                   ...(settings?.settings.query_history_type !== "disabled"
                     ? [
                         {
-                          name: (
-                            <div className="flex">
-                              <DatabaseIconSkeleton
-                                className="text-text-700"
-                                size={18}
-                              />
-                              <div className="ml-1">Query History</div>
-                            </div>
-                          ),
+                          name: "Query History",
+                          icon: DatabaseIconSkeleton,
                           link: "/admin/performance/query-history",
                         },
                       ]
@@ -326,15 +230,8 @@ const collections = (
                   ...(!enableCloud && customAnalyticsEnabled
                     ? [
                         {
-                          name: (
-                            <div className="flex">
-                              <FiBarChart2
-                                className="text-text-700"
-                                size={18}
-                              />
-                              <div className="ml-1">Custom Analytics</div>
-                            </div>
-                          ),
+                          name: "Custom Analytics",
+                          icon: FiBarChart2,
                           link: "/admin/performance/custom-analytics",
                         },
                       ]
@@ -347,26 +244,15 @@ const collections = (
           name: "Settings",
           items: [
             {
-              name: (
-                <div className="flex">
-                  <SettingsIconSkeleton className="text-text-700" size={18} />
-                  <div className="ml-1">Workspace Settings</div>
-                </div>
-              ),
+              name: "Workspace Settings",
+              icon: SettingsIconSkeleton,
               link: "/admin/settings",
             },
             ...(enableEnterprise
               ? [
                   {
-                    name: (
-                      <div className="flex">
-                        <PaintingIconSkeleton
-                          className="text-text-700"
-                          size={18}
-                        />
-                        <div className="ml-1">Whitelabeling</div>
-                      </div>
-                    ),
+                    name: "Whitelabeling",
+                    icon: PaintingIconSkeleton,
                     link: "/admin/whitelabeling",
                   },
                 ]
@@ -374,15 +260,8 @@ const collections = (
             ...(enableCloud
               ? [
                   {
-                    name: (
-                      <div className="flex">
-                        <MdOutlineCreditCard
-                          className="text-text-700"
-                          size={18}
-                        />
-                        <div className="ml-1">Billing</div>
-                      </div>
-                    ),
+                    name: "Billing",
+                    icon: MdOutlineCreditCard,
                     link: "/admin/billing",
                   },
                 ]
@@ -411,19 +290,7 @@ export function ClientLayout({
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
   const pathname = usePathname();
-  const settings = useContext(SettingsContext);
-  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
-  const toggleUserSettings = () => {
-    setUserSettingsOpen(!userSettingsOpen);
-  };
-  const { llmProviders, ccPairs } = useChatContext();
-  const { popup, setPopup } = usePopup();
-
-  // Fetch federated-connector info so the modal can list/refresh them
-  const {
-    connectors: federatedConnectors,
-    refetch: refetchFederatedConnectors,
-  } = useFederatedOAuthStatus();
+  const settings = useSettingsContext();
 
   if (isLoading) {
     return <></>;
@@ -438,20 +305,6 @@ export function ClientLayout({
 
   return (
     <div className="h-screen w-screen flex overflow-y-hidden">
-      {popup}
-
-      {userSettingsOpen && (
-        <UserSettingsModal
-          llmProviders={llmProviders}
-          setPopup={setPopup}
-          onClose={() => setUserSettingsOpen(false)}
-          defaultModel={user?.preferences?.default_model!}
-          ccPairs={ccPairs}
-          federatedConnectors={federatedConnectors}
-          refetchFederatedConnectors={refetchFederatedConnectors}
-        />
-      )}
-
       {settings?.settings.application_status ===
         ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
@@ -470,25 +323,20 @@ export function ClientLayout({
         </div>
       )}
 
-      <div className="default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto">
-        <AdminSidebar
-          collections={collections(
-            isCurator,
-            enableCloud,
-            enableEnterprise,
-            settings,
-            kgExposed,
-            customAnalyticsEnabled
-          )}
-        />
-      </div>
-      <div className="overflow-y-scroll w-full">
-        <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 mb-auto w-full items-start flex justify-end">
-          <UserDropdown toggleUserSettings={toggleUserSettings} />
-        </div>
-        <div className="flex pt-10 pb-4 px-4 md:px-12">{children}</div>
+      <AdminSidebar
+        collections={collections(
+          isCurator,
+          enableCloud,
+          enableEnterprise,
+          settings,
+          kgExposed,
+          customAnalyticsEnabled
+        )}
+      />
+
+      <div className="overflow-y-scroll w-full flex pt-10 pb-4 px-4 md:px-12">
+        {children}
       </div>
     </div>
   );
-  // Is there a clean way to add this to some piece of text where we need to enbale for copy-paste in a react app?
 }

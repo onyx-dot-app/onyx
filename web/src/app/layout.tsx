@@ -1,5 +1,4 @@
 import "./globals.css";
-
 import {
   fetchEnterpriseSettingsSS,
   fetchSettingsSS,
@@ -9,6 +8,7 @@ import {
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
+  MODAL_ROOT_ID,
 } from "@/lib/constants";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
@@ -17,7 +17,7 @@ import {
   EnterpriseSettings,
   ApplicationStatus,
 } from "./admin/settings/interfaces";
-import { AppProvider } from "@/components/context/AppProvider";
+import { AppProvider } from "@/components-2/context/AppContext";
 import { PHProvider } from "./providers";
 import { getAuthTypeMetadataSS, getCurrentUserSS } from "@/lib/userSS";
 import { Suspense } from "react";
@@ -30,7 +30,7 @@ import { DocumentsProvider } from "./chat/my-documents/DocumentsContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
+import { fetchAssistantData as fetchAgentsData } from "@/lib/chat/fetchAssistantdata";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({
@@ -67,18 +67,17 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = "force-dynamic";
 
-export default async function RootLayout({
-  children,
-}: {
+interface LayoutProps {
   children: React.ReactNode;
-}) {
-  const [combinedSettings, assistants, user, authTypeMetadata] =
-    await Promise.all([
-      fetchSettingsSS(),
-      fetchAssistantData(),
-      getCurrentUserSS(),
-      getAuthTypeMetadataSS(),
-    ]);
+}
+
+export default async function Layout({ children }: LayoutProps) {
+  const [combinedSettings, agents, user, authTypeMetadata] = await Promise.all([
+    fetchSettingsSS(),
+    fetchAgentsData(),
+    getCurrentUserSS(),
+    getAuthTypeMetadataSS(),
+  ]);
 
   const productGating =
     combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;
@@ -128,7 +127,7 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="text-text min-h-screen bg-background">
+          <div className="text-text min-h-screen bg-background-tint-01">
             <TooltipProvider>
               <PHProvider>{content}</PHProvider>
             </TooltipProvider>
@@ -153,13 +152,13 @@ export default async function RootLayout({
       authTypeMetadata={authTypeMetadata}
       user={user}
       settings={combinedSettings}
-      assistants={assistants}
+      agents={agents}
     >
       <DocumentsProvider>
         <Suspense fallback={null}>
           <PostHogPageView />
         </Suspense>
-        {children}
+        <div id={MODAL_ROOT_ID} className="w-screen h-screen">{children}</div>
         {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
       </DocumentsProvider>
     </AppProvider>

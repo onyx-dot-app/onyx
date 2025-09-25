@@ -59,7 +59,7 @@ import {
   FolderResponse,
   useDocumentsContext,
 } from "../my-documents/DocumentsContext";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/components-2/context/ChatContext";
 import Prism from "prismjs";
 import {
   useChatSessionStore,

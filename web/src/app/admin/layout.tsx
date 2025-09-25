@@ -1,9 +1,9 @@
-import { Layout } from "@/components/admin/Layout";
+import { Layout as GenericLayout } from "@/components/admin/Layout";
 
-export default async function AdminLayout({
-  children,
-}: {
+interface LayoutProps {
   children: React.ReactNode;
-}) {
-  return await Layout({ children });
+}
+
+export default async function Layout({ children }: LayoutProps) {
+  return await GenericLayout({ children });
 }

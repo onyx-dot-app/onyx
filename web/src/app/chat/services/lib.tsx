@@ -311,6 +311,7 @@ export async function handleChatFeedback(
   });
   return response;
 }
+
 export async function renameChatSession(
   chatSessionId: string,
   newName: string

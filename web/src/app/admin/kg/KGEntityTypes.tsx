@@ -2,7 +2,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import React, { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
-import { EntityType, SourceAndEntityTypeView } from "./interfaces";
+import { EntityType, SourceAndEntityTypeView } from "@/app/admin/kg/interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
@@ -29,7 +29,7 @@ function snakeToHumanReadable(str: string): string {
 // Custom Header Component
 function TableHeader() {
   return (
-    <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
+    <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b border-border font-semibold text-sm bg-background-50 text-text-600">
       <div className="col-span-1">Entity Name</div>
       <div className="col-span-10">Description</div>
       <div className="col-span-1 flex flex-1 justify-center">Active</div>
@@ -38,7 +38,11 @@ function TableHeader() {
 }
 
 // Custom Row Component
-function TableRow({ entityType }: { entityType: EntityType }) {
+interface TableRowProps {
+  entityType: EntityType;
+}
+
+function TableRow({ entityType }: TableRowProps) {
   const [entityTypeState, setEntityTypeState] = useState(entityType);
   const [descriptionSavingState, setDescriptionSavingState] = useState<
     "saving" | "saved" | "failed" | undefined
@@ -153,7 +157,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
                 }`}
                 style={{ zIndex: 1 }}
               >
-                <span className="inline-block w-4 h-4 align-middle border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="inline-block w-4 h-4 align-middle border-2 border-status-info-05 border-t-transparent rounded-full animate-spin" />
               </span>
               <span
                 className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
@@ -161,7 +165,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
                 }`}
                 style={{ zIndex: 2 }}
               >
-                <CheckmarkIcon size={16} className="text-green-400" />
+                <CheckmarkIcon size={16} className="text-status-success-05" />
               </span>
             </span>
           </div>
@@ -278,18 +282,18 @@ export default function KGEntityTypes({
                         {snakeToHumanReadable(key)}
                         <span className="ml-auto flex flex-row gap-x-16 items-center pr-16">
                           <span className="flex flex-col items-end">
-                            <span className="text-sm text-neutral-400 mb-0.5">
+                            <span className="text-sm text-text-600 mb-0.5">
                               Entities Count
                             </span>
-                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
+                            <span className="text-xl text-text font-semibold flex w-full">
                               {stats.entities_count}
                             </span>
                           </span>
                           <span className="flex flex-col items-end">
-                            <span className="text-sm text-neutral-400 mb-0.5">
+                            <span className="text-sm text-text-600 mb-0.5">
                               Last Updated
                             </span>
-                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
+                            <span className="text-xl text-text font-semibold flex w-full">
                               {stats.last_updated
                                 ? new Date(stats.last_updated).toLocaleString()
                                 : "N/A"}

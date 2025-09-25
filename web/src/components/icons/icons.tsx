@@ -3152,6 +3152,7 @@ export const PinnedIcon = ({
     </svg>
   );
 };
+
 export const OnyxLogoTypeIcon = ({
   size = 16,
   className = defaultTailwindCSS,

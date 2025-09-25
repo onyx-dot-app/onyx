@@ -13,7 +13,6 @@ module.exports = {
     // tremor
     "./node_modules/@tremor/**/*.{js,ts,jsx,tsx}",
   ],
-
   theme: {
     transparent: "transparent",
     current: "currentColor",
@@ -46,7 +45,6 @@ module.exports = {
         "fade-in-scale": "fade-in-scale 0.2s ease-out forwards",
         "fade-out-scale": "fade-out-scale 0.2s ease-in forwards",
       },
-
       gradientColorStops: {
         "neutral-10": "var(--neutral-10) 5%",
       },
@@ -82,7 +80,98 @@ module.exports = {
         "searchbar-max": "800px",
       },
       colors: {
-        // code styling
+        // New and updated Figma stylings
+        "text-05": "var(--text-05)",
+        "text-04": "var(--text-04)",
+        "text-03": "var(--text-03)",
+        "text-02": "var(--text-02)",
+        "text-01": "var(--text-01)",
+        "text-inverted-01": "var(--text-inverted-01)",
+        "text-inverted-02": "var(--text-inverted-02)",
+        "text-inverted-03": "var(--text-inverted-03)",
+        "text-inverted-04": "var(--text-inverted-04)",
+        "text-inverted-05": "var(--text-inverted-05)",
+        "text-light-05": "var(--text-light-05)",
+        "background-neutral-00": "var(--background-neutral-00)",
+        "background-neutral-01": "var(--background-neutral-01)",
+        "background-neutral-02": "var(--background-neutral-02)",
+        "background-neutral-03": "var(--background-neutral-03)",
+        "background-neutral-04": "var(--background-neutral-04)",
+        "background-neutral-inverted-04":
+          "var(--background-neutral-inverted-04)",
+        "background-neutral-inverted-03":
+          "var(--background-neutral-inverted-03)",
+        "background-neutral-inverted-02":
+          "var(--background-neutral-inverted-02)",
+        "background-neutral-inverted-01":
+          "var(--background-neutral-inverted-01)",
+        "background-neutral-inverted-00":
+          "var(--background-neutral-inverted-00)",
+        "background-tint-00": "var(--background-tint-00)",
+        "background-tint-01": "var(--background-tint-01)",
+        "background-tint-02": "var(--background-tint-02)",
+        "background-tint-03": "var(--background-tint-03)",
+        "background-tint-04": "var(--background-tint-04)",
+        "background-tint-inverted-04": "var(--background-tint-inverted-04)",
+        "background-tint-inverted-03": "var(--background-tint-inverted-03)",
+        "background-tint-inverted-02": "var(--background-tint-inverted-02)",
+        "background-tint-inverted-01": "var(--background-tint-inverted-01)",
+        "background-tint-inverted-00": "var(--background-tint-inverted-00)",
+        "border-01": "var(--border-01)",
+        "border-02": "var(--border-02)",
+        "border-03": "var(--border-03)",
+        "border-05": "var(--border-05)",
+        "border-inverted-05": "var(--border-inverted-05)",
+        "border-inverted-03": "var(--border-inverted-03)",
+        "border-inverted-02": "var(--border-inverted-02)",
+        "border-inverted-01": "var(--border-inverted-01)",
+        "action-link-05": "var(--action-link-05)",
+        "action-link-04": "var(--action-link-04)",
+        "action-link-03": "var(--action-link-03)",
+        "action-link-02": "var(--action-link-02)",
+        "action-link-01": "var(--action-link-01)",
+        "action-danger-06": "var(--action-danger-06)",
+        "action-danger-05": "var(--action-danger-05)",
+        "action-danger-04": "var(--action-danger-04)",
+        "action-danger-03": "var(--action-danger-03)",
+        "action-danger-02": "var(--action-danger-02)",
+        "action-danger-01": "var(--action-danger-01)",
+        "highlight-match": "var(--highlight-match)",
+        "highlight-selection": "var(--highlight-selection)",
+        "highlight-active": "var(--highlight-active)",
+        "theme-primary-06": "var(--theme-primary-06)",
+        "theme-primary-05": "var(--theme-primary-05)",
+        "theme-primary-04": "var(--theme-primary-04)",
+        "shadow-01": "var(--shadow-01)",
+        "shadow-02": "var(--shadow-02)",
+        "shadow-03": "var(--shadow-03)",
+        "mask-01": "var(--mask-01)",
+        "mask-02": "var(--mask-02)",
+        "mask-03": "var(--mask-03)",
+        "status-info-05": "var(--status-info-05)",
+        "status-info-02": "var(--status-info-02)",
+        "status-info-01": "var(--status-info-01)",
+        "status-info-00": "var(--status-info-00)",
+        "status-success-05": "var(--status-success-05)",
+        "status-success-02": "var(--status-success-02)",
+        "status-success-01": "var(--status-success-01)",
+        "status-success-00": "var(--status-success-00)",
+        "status-warning-05": "var(--status-warning-05)",
+        "status-warning-02": "var(--status-warning-02)",
+        "status-warning-01": "var(--status-warning-01)",
+        "status-warning-00": "var(--status-warning-00)",
+        "status-error-05": "var(--status-error-05)",
+        "status-error-02": "var(--status-error-02)",
+        "status-error-01": "var(--status-error-01)",
+        "status-error-00": "var(--status-error-00)",
+
+        // Tailwind defaults
+        background: "var(--background-tint-01)",
+        foreground: "var(--background-tint-inverted-01)",
+        border: "var(--border-01)",
+        text: "var(--text-04)",
+
+        // (OLD) code styling
         "code-bg": "#000",
         "code-text": "var(--code-text)",
         "token-comment": "var(--token-comment)",
@@ -93,274 +182,7 @@ module.exports = {
         "token-function": "var(--token-function)",
         "token-regex": "var(--token-regex)",
         "token-attr-name": "var(--token-attr-name)",
-        "non-selectable": "var(--non-selectable)",
-
-        "gray-background": "var(--gray-background)",
-
-        "new-background": "var(--new-background)",
-        "new-background-light": "var(--new-background-light)",
-        warning: "hsl(var(--warning))",
-        "warning-foreground": "hsl(var(--warning-foreground))",
-
-        "input-text": "var(--input-text)",
-
-        // background
-        background: "var(--background-input-background)",
-        "input-border": "var(--input-border)",
-        "input-background": "var(--input-background)",
-        "input-option": "var(--input-option)",
-        "input-option-hover": "var(--input-option-hover)",
-        "accent-background": "var(--accent-background)",
-        "accent-background-hovered": "var(--accent-background-hovered)",
-        "accent-background-selected": "var(--accent-background-selected)",
-        "background-50": "var(--background-50)",
-        "background-dark": "var(--off-white)",
-        "background-100": "var(--neutral-100-border-light)",
-        "background-125": "var(--neutral-125)",
-        "background-150": "var(--neutral-150)",
-        "background-200": "var(--neutral-200-border)",
-        "background-300": "var(--neutral-300-border-medium)",
-        "background-400": "var(--neutral-400-border-strong)",
-        "background-500": "var(--neutral-500)",
-        "background-600": "var(--neutral-600-border-dark)",
-        "background-700": "var(--neutral-700)",
-        "background-800": "var(--neutral-800)",
-        "background-900": "var(--neutral-900)",
-
-        "gray-background": "var(--neutral-100-border-light)",
-        "gray-background-dark": "var(--neutral-200-border)",
-        "gray-background-100": "var(--neutral-100-border-light)",
-        "gray-background-125": "var(--neutral-125)",
-        "gray-background-150": "var(--neutral-150)",
-        "gray-background-200": "var(--neutral-200-border)",
-        "gray-background-300": "var(--neutral-300-border-medium)",
-        "gray-background-400": "var(--neutral-400-border-strong)",
-        "gray-background-500": "var(--neutral-500)",
-        "gray-background-600": "var(--neutral-600-border-dark)",
-        "gray-background-700": "var(--neutral-700)",
-        "gray-background-800": "var(--neutral-800)",
-        "gray-background-900": "var(--neutral-900)",
-
-        "text-history-sidebar-button": "var(--text-800)",
-
-        "background-inverted": "var(--background-inverted)",
-        "background-emphasis": "var(--background-emphasis)",
-        "background-strong": "var(--background-strong)",
-        "background-search": "var(--white-card-popover)",
-
-        "background-history-sidebar-button-hover": "var(--neutral-200-border)",
-        "divider-history-sidebar-bar": "var(--neutral-200-border)",
-        "text-mobile-sidebar": "var(--text-800)",
-        "background-search-filter": "var(--neutral-100-border-light)",
-        "background-search-filter-dropdown": "var(--neutral-100-border-light)",
-
-        "user-bubble": "var(--off-white)",
-
-        // colors for sidebar in chat, search, and manage settings
-
-        "background-chatbar": "var(--background-chatbar-sidebar)",
-        "text-sidebar": "var(--text-500)",
-
-        "toggled-background": "var(--neutral-400-border-strong)",
-        "untoggled-background": "var(--neutral-200-border)",
-        "background-starter-message": "var(--background-input-background)",
-        "background-starter-message-hover": "var(--neutral-100-border-light)",
-
-        "text-sidebar-toggled-header": "var(--text-800)",
-        "text-sidebar-header": "var(--text-800)",
-
-        "background-back-button": "var(--neutral-200-border)",
-        "text-back-button": "var(--neutral-800)",
-
-        // Settings
-        "text-sidebar-subtle": "var(--neutral-500)",
-        "icon-settings-sidebar": "var(--neutral-600-border-dark)",
-        "text-settings-sidebar": "var(--neutral-600-border-dark)",
-        "text-settings-sidebar-strong": "var(--neutral-900)",
-        "background-settings-hover": "var(--neutral-200-border)",
-
-        "text-application-toggled": "var(--text-800)",
-        "text-application-untoggled": "var(--text-500)",
-        "text-application-untoggled-hover": "var(--text-700)",
-
-        "background-chat-hover": "var(--background-chat-hover-selected)",
-        "background-chat-selected": "var(--background-chat-hover-selected)",
-        black: "var(--black)",
-        white: "var(--white-card-popover)",
-
-        // Background for chat messages (user bubbles)
-        user: "var(--off-white)",
-
-        "userdropdown-background": "var(--neutral-800)",
-        "text-mobile-sidebar-toggled": "var(--neutral-800)",
-        "text-mobile-sidebar-untoggled": "var(--neutral-500)",
-        "text-editing-message": "var(--neutral-800)",
-        "background-sidebar": "var(--background-chatbar-sidebar)",
-        "background-search-filter": "var(--neutral-100-border-light)",
-        "background-search-filter-dropdown": "var(--background-hover)",
-
-        "background-toggle": "var(--neutral-100-border-light)",
-
-        // Colors for the search toggle buttons
-        "background-agentic-toggled": "var(--light-success)",
-        "background-agentic-untoggled": "var(--undo)",
-        "text-agentic-toggled": "var(--neutral-800)",
-        "text-agentic-untoggled": "var(--white-card-popover)",
-        "text-chatbar-subtle": "var(--text-chatbar-subtle)",
-        "text-chatbar": "var(--neutral-800)",
-
-        // Color for the star indicator on high quality search results.
-        "star-indicator": "var(--neutral-100-border-light)",
-
-        // Backgrounds for submit buttons on search and chat
-        "submit-background": "var(--neutral-800)",
-        "disabled-submit-background": "var(--neutral-400-border-strong)",
-
-        input: "var(--white-card-popover)",
-
-        text: "var(--neutral-950)",
-        "text-darker": "var(--text-darker)",
-        "text-dark": "var(--text-dark)",
-        "sidebar-border": "var(--neutral-200-border)",
-        "text-gray": "var(--text-gray)",
-
-        "text-light": "var(--text-light)",
-
-        "text-50": "var(--neutral-50)",
-        "text-100": "var(--neutral-100-border-light)",
-        "text-200": "var(--neutral-200-border)",
-        "text-300": "var(--neutral-300-border-medium)",
-        "text-400": "var(--neutral-400-border-strong)",
-        "text-500": "var(--neutral-500)",
-        "text-600": "var(--neutral-600-border-dark)",
-        "text-700": "var(--neutral-700)",
-        "text-800": "var(--neutral-800)",
-        "text-900": "var(--neutral-900)",
-        "text-950": "var(--neutral-950)",
-        "text-muted": "var(--p)",
-
-        "user-text": "var(--text-800)",
-
-        description: "var(--text-400)",
-        subtle: "var(--neutral-600-border-dark)",
-        default: "var(--text-600)",
-        emphasis: "var(--text-700)",
-        strong: "var(--text-900)",
-
-        // borders
-        border: "var(--neutral-200-border)",
-        "border-light": "var(--neutral-100-border-light)",
-        "border-medium": "var(--neutral-300-border-medium)",
-        "border-strong": "var(--neutral-400-border-strong)",
-        "border-dark": "var(--neutral-600-border-dark)",
-        "non-selectable-border": "var(--non-selectable-border)",
-
-        inverted: "var(--white-card-popover)",
-        link: "var(--link)",
-        "link-hover": "var(--link-hover)",
-
-        // blue highlight colors for light/dark mode
-        "blue-highlight": "var(--blue-highlight)",
-        "blue-text": "var(--blue-highlight-text)",
-
-        // one offs
-        error: "var(--error)",
-        success: "var(--success)",
-        alert: "var(--alert)",
-        accent: "var(--accent)",
-        "agent-sidebar": "var(--agent-sidebar)",
-        agent: "var(--agent)",
-        "lighter-agent": "var(--lighter-agent)",
-        "agent-hovered": "var(--agent-hovered)",
-        // hover
-        "hover-light": "var(--hover-light)",
-        "hover-lightish": "var(--neutral-125)",
-
-        hover: "var(--hover)",
-        "hover-emphasis": "var(--neutral-300-border-medium)",
-        "accent-hover": "var(--accent-hover)",
-
-        // keyword highlighting
-        highlight: {
-          text: "var(--highlight-text)",
-        },
-
-        // scrollbar
-        scrollbar: {
-          track: "var(--scrollbar-track)",
-          thumb: "var(--scrollbar-thumb)",
-          "thumb-hover": "var(--scrollbar-thumb-hover)",
-
-          dark: {
-            thumb: "var(--scrollbar-dark-thumb)",
-            "thumb-hover": "var(--scrollbar-dark-thumb-hover)",
-          },
-        },
-
-        // for display documents
-        document: "var(--document-color)",
-
-        // light mode
-        tremor: {
-          brand: {
-            faint: "var(--tremor-brand-faint)",
-            muted: "var(--tremor-brand-muted)",
-            subtle: "var(--tremor-brand-subtle)",
-            DEFAULT: "var(--tremor-brand-default)",
-            emphasis: "var(--tremor-brand-emphasis)",
-            inverted: "var(--tremor-brand-inverted)",
-          },
-          background: {
-            muted: "var(--tremor-background-muted)",
-            subtle: "var(--tremor-background-subtle)",
-            DEFAULT: "var(--tremor-background-default)",
-            emphasis: "var(--tremor-background-emphasis)",
-          },
-          border: {
-            DEFAULT: "var(--tremor-border-default)",
-          },
-          ring: {
-            DEFAULT: "var(--tremor-ring-default)",
-          },
-          content: {
-            subtle: "var(--tremor-content-subtle)",
-            DEFAULT: "var(--tremor-content-default)",
-            emphasis: "var(--tremor-content-emphasis)",
-            strong: "var(--tremor-content-strong)",
-            inverted: "var(--tremor-content-inverted)",
-          },
-        },
-        // dark mode
-        "dark-tremor": {
-          brand: {
-            faint: "var(--dark-tremor-brand-faint)",
-            muted: "var(--dark-tremor-brand-muted)",
-            subtle: "var(--dark-tremor-brand-subtle)",
-            DEFAULT: "var(--dark-tremor-brand-default)",
-            emphasis: "var(--dark-tremor-brand-emphasis)",
-            inverted: "var(--dark-tremor-brand-inverted)",
-          },
-          background: {
-            muted: "var(--dark-tremor-background-muted)",
-            subtle: "var(--dark-tremor-background-subtle)",
-            DEFAULT: "var(--dark-tremor-background-default)",
-            emphasis: "var(--dark-tremor-background-emphasis)",
-          },
-          border: {
-            DEFAULT: "var(--dark-tremor-border-default)",
-          },
-          ring: {
-            DEFAULT: "var(--dark-tremor-ring-default)",
-          },
-          content: {
-            subtle: "var(--dark-tremor-content-subtle)",
-            DEFAULT: "var(--dark-tremor-content-default)",
-            emphasis: "var(--dark-tremor-content-emphasis)",
-            strong: "var(--dark-tremor-content-strong)",
-            inverted: "var(--dark-tremor-content-inverted)",
-          },
-        },
-        foreground: "var(--foreground)",
+        // "non-selectable": "var(--non-selectable)",
       },
       boxShadow: {
         // light
@@ -377,9 +199,12 @@ module.exports = {
           "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
       },
       borderRadius: {
-        "tremor-small": "0.375rem",
-        "tremor-default": "0.5rem",
-        "tremor-full": "9999px",
+        "02": "var(--border-radius-02)",
+        "04": "var(--border-radius-04)",
+        "08": "var(--border-radius-08)",
+        12: "var(--border-radius-12)",
+        16: "var(--border-radius-16)",
+        full: "var(--border-radius-full)",
       },
       fontSize: {
         "2xs": "0.625rem",
@@ -395,6 +220,20 @@ module.exports = {
       },
       fontStyle: {
         "token-italic": "italic",
+      },
+      spacing: {
+        "spacing-inline": "var(--spacing-inline)",
+        "spacing-interline": "var(--spacing-interline)",
+        "spacing-paragraph": "var(--spacing-paragraph)",
+        "spacing-headline": "var(--spacing-headline)",
+        "spacing-headline-large": "var(--spacing-headline-large)",
+        "spacing-block": "var(--spacing-block)",
+        "spacing-section": "var(--spacing-section)",
+        "padding-button": "var(--padding-button)",
+        "padding-content": "var(--padding-content)",
+        "padding-block-end": "var(--padding-block-end)",
+        "padding-body-main": "var(--padding-body-main)",
+        "padding-section": "var(--padding-section)",
       },
       calendar: {
         // Light mode

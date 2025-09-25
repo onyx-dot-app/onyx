@@ -39,3 +39,27 @@ export function isSubset(parent: string[], child: string[]): boolean {
   const parentSet = new Set(parent);
   return Array.from(new Set(child)).every((item) => parentSet.has(item));
 }
+
+export function trinaryLogic<T>(
+  a: boolean | undefined,
+  b: boolean,
+  ifTrue: T,
+  ifFalse: T
+): T {
+  const condition = a !== undefined ? a : b;
+  return condition ? ifTrue : ifFalse;
+}
+
+// A convenience function to prevent propagation of click events to items higher up in the DOM tree.
+//
+// # Note:
+// This is a desired behaviour in MANY locations, since we have buttons nested within buttons.
+// When the nested button is pressed, the click event that triggered it should (in most scenarios) NOT trigger its parent button!
+export function noProp(
+  f?: () => void
+): React.MouseEventHandler<HTMLDivElement> {
+  return (event) => {
+    event.stopPropagation();
+    f?.();
+  };
+}

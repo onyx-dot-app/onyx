@@ -1,8 +1,8 @@
 import React, { RefObject, useCallback, useMemo } from "react";
-import { Message } from "../interfaces";
+import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { MemoizedHumanMessage } from "../message/MemoizedHumanMessage";
-import { ErrorBanner } from "../message/Resubmit";
+import { MemoizedHumanMessage } from "@/app/chat/message/MemoizedHumanMessage";
+import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor } from "@/lib/hooks";
@@ -12,7 +12,8 @@ import {
 } from "@/app/chat/my-documents/DocumentsContext";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
-import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
+import { MemoizedAIMessage } from "@/app/chat/message/messageComponents/MemoizedAIMessage";
+import { cn } from "@/lib/utils";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];
@@ -58,7 +59,7 @@ interface MessagesDisplayProps {
   enterpriseSettings?: EnterpriseSettings | null;
 }
 
-export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
+export function MessagesDisplay({
   messageHistory,
   completeMessageTree,
   liveAssistant,
@@ -75,15 +76,11 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   uncaughtError,
   loadingError,
   handleResubmitLastMessage,
-  autoScrollEnabled,
-  getContainerHeight,
   lastMessageRef,
-  endPaddingRef,
   endDivRef,
   hasPerformedInitialScroll,
   chatSessionId,
-  enterpriseSettings,
-}) => {
+}: MessagesDisplayProps) {
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -93,7 +90,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       parentMessage: Message;
       forceSearch?: boolean;
     }) => {
-      return async function (modelOverride: LlmDescriptor) {
+      return async (modelOverride: LlmDescriptor) => {
         return await onSubmit({
           message: regenerationRequest.parentMessage.message,
           selectedFiles,
@@ -141,12 +138,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     <div
       style={{ overflowAnchor: "none" }}
       key={chatSessionId}
-      className={
-        (hasPerformedInitialScroll ? "" : " hidden ") +
-        "desktop:-ml-4 w-full mx-auto " +
-        "absolute mobile:top-0 desktop:top-0 left-0 " +
-        (enterpriseSettings?.two_lines_for_chat_header ? "pt-20 " : "pt-4 ")
-      }
+      className={cn(
+        "w-full mx-auto dbg-red",
+        !hasPerformedInitialScroll && "hidden",
+      )}
     >
       {messageHistory.map((message, i) => {
         const messageTree = completeMessageTree;
@@ -202,7 +197,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
           return (
             <div
-              className="text-text"
               id={`message-${message.nodeId}`}
               key={messageReactComponentKey}
               ref={i === messageHistory.length - 1 ? lastMessageRef : null}
@@ -240,16 +234,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           </div>
         ))}
 
-      {messageHistory.length > 0 && (
-        <div
-          style={{
-            height: !autoScrollEnabled ? getContainerHeight() : undefined,
-          }}
-        />
-      )}
-
-      <div ref={endPaddingRef} className="h-[95px]" />
       <div ref={endDivRef} />
     </div>
   );
-};
+}

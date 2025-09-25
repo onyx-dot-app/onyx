@@ -76,7 +76,7 @@ interface FileUploadSectionProps {
   onUploadProgress?: (fileName: string, progress: number) => void;
 }
 
-export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
+export function FileUploadSection({
   onUpload,
   onUrlUpload,
   disabledMessage,
@@ -84,7 +84,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   isUploading = false,
   onUploadComplete,
   onUploadProgress,
-}) => {
+}: FileUploadSectionProps) {
   const [uploadType, setUploadType] = useState<"file" | "url">("file");
   const [fileUrl, setFileUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -431,7 +431,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     <div className="mt-4 max-w-xl w-full">
       {/* Invalid file message */}
       {showInvalidFileMessage && invalidFiles.length > 0 && (
-        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm flex items-start">
+        <div className="mb-4 p-3 bg-status-warning-00 border border-status-warning-02 rounded-md text-status-warning-05 text-sm flex items-start">
           <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium">
@@ -451,7 +451,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           </div>
           <button
             onClick={() => setShowInvalidFileMessage(false)}
-            className="flex-shrink-0 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100"
+            className="flex-shrink-0 text-status-warning-05 hover:text-status-warning-05"
           >
             <X className="w-4 h-4" />
           </button>
@@ -467,10 +467,9 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             className={`w-full ${uploadType === "url" ? "cursor-default" : ""}`}
           >
             <div
-              className={`border  bg-transparent border-neutral-200 dark:border-neutral-700 bg- rounded-lg  shadow-sm 
+              className={`border bg-transparent rounded-lg shadow-sm 
                 ${
-                  uploadType === "file" &&
-                  "hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                  uploadType === "file" && "hover:bg-background-tint-02"
                 } transition-colors duration-200 
                 ${uploadType === "file" ? "cursor-pointer" : "cursor-default"}
                  h-[160px] flex items-center justify-center`}
@@ -483,7 +482,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     htmlFor="file-upload"
                     className={`w-full p-4  h-full cursor-pointer flex flex-col items-center justify-center ${
                       isDragging
-                        ? "border-2 border-dashed border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-md"
+                        ? "border-2 border-dashed border-action-link-05 bg-action-link-00 rounded-md"
                         : ""
                     } transition-all duration-150 ease-in-out`}
                     onDragEnter={handleDragEnter}
@@ -495,14 +494,12 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     <div className="h-[40px] flex items-center justify-center">
                       <Upload
                         className={`w-6 h-6 ${
-                          isDragging
-                            ? "text-blue-500 dark:text-blue-400"
-                            : "text-neutral-400 dark:text-neutral-500"
+                          isDragging ? "text-action-link-05" : "text-text-03"
                         }`}
                       />
                     </div>
                     <div className="mt-2">
-                      <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">
+                      <p className="text-center text-sm">
                         {isDragging
                           ? "Drop files here..."
                           : "Drag & drop or click to upload files"}
@@ -520,7 +517,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                   <>
                     {/* Icon container - fixed position for both modes */}
                     <div className="h-[40px] flex items-center justify-center mt-6">
-                      <Link className="w-6 h-6 text-neutral-400 dark:text-neutral-500" />
+                      <Link className="w-6 h-6" />
                     </div>
 
                     {/* Content area - different for each mode but with consistent spacing */}
@@ -533,8 +530,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                           className={`w-full text-sm py-2 px-3 border rounded-md bg-transparent focus:outline-none focus:ring-1 
                             ${
                               urlError
-                                ? "border-red-400 dark:border-red-600 focus:ring-red-400 dark:focus:ring-red-600"
-                                : "border-neutral-200 dark:border-neutral-700 focus:ring-neutral-300 dark:focus:ring-neutral-600"
+                                ? "border-status-error-05 focus:ring-status-error-05"
+                                : "border focus:ring-border-03"
                             }`}
                           value={fileUrl}
                           onChange={handleUrlChange}
@@ -546,8 +543,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                           disabled={!fileUrl || isProcessing}
                           className={`p-2 rounded-md ${
                             !fileUrl || isProcessing
-                              ? "text-neutral-400 cursor-not-allowed"
-                              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                              ? "text-text-03 cursor-not-allowed"
+                              : "text-text-01 hover:bg-background-tint-02"
                           }`}
                         >
                           {isProcessing ? (
@@ -558,7 +555,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         </button>
                       </div>
                       {urlError && (
-                        <p className="text-red-500 dark:text-red-400 text-xs mt-1 max-w-md px-1">
+                        <p className="text-status-error-05 text-xs mt-1 max-w-md px-1">
                           {urlError}
                         </p>
                       )}
@@ -570,14 +567,10 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           </TooltipTrigger>
         </Tooltip>
       </TooltipProvider>
-      <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto">
+      <div className="flex bg-background-tint-01 p-1 rounded-lg self-center mt-2 w-fit mx-auto">
         <button
           type="button"
-          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
-            uploadType === "file"
-              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
-              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-          }`}
+          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all hover:bg-background-tint-03 ${uploadType === "file" && "bg-background-tint-02 shadow-md"}`}
           onClick={() => setUploadType("file")}
         >
           <Upload className="w-3.5 h-3.5" />
@@ -585,11 +578,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         </button>
         <button
           type="button"
-          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
-            uploadType === "url"
-              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
-              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-          }`}
+          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all hover:bg-background-tint-03 ${uploadType === "url" && "bg-background-tint-02 shadow-md"}`}
           onClick={() => setUploadType("url")}
         >
           <Link className="w-3.5 h-3.5" />
@@ -598,4 +587,4 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       </div>
     </div>
   );
-};
+}

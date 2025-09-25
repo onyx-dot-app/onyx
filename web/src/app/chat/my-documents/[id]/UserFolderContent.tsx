@@ -8,7 +8,7 @@ import {
   Trash,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/components-2/context/ChatContext";
 import { Button } from "@/components/ui/button";
 import { DocumentList } from "./components/DocumentList";
 import { usePopup } from "@/components/admin/connectors/Popup";

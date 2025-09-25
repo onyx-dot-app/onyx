@@ -5,40 +5,24 @@ import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { SettingsContext } from "../settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
 
-interface UserContextType {
+interface UserProviderProps {
+  authTypeMetadata: AuthTypeMetadata;
+  children: React.ReactNode;
   user: User | null;
-  isAdmin: boolean;
-  isCurator: boolean;
-  refreshUser: () => Promise<void>;
-  isCloudSuperuser: boolean;
-  updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
-  updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  toggleAssistantPinnedStatus: (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
-    isPinned: boolean
-  ) => Promise<boolean>;
-  updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+  settings: CombinedSettings;
 }
-
-const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({
   authTypeMetadata,
   children,
   user,
   settings,
-}: {
-  authTypeMetadata: AuthTypeMetadata;
-  children: React.ReactNode;
-  user: User | null;
-  settings: CombinedSettings;
-}) {
-  const updatedSettings = useContext(SettingsContext);
+}: UserProviderProps) {
+  const updatedSettings = useSettingsContext();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
@@ -277,6 +261,24 @@ export function UserProvider({
     </UserContext.Provider>
   );
 }
+
+interface UserContextType {
+  user: User | null;
+  isAdmin: boolean;
+  isCurator: boolean;
+  refreshUser: () => Promise<void>;
+  isCloudSuperuser: boolean;
+  updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
+  updateUserShortcuts: (enabled: boolean) => Promise<void>;
+  toggleAssistantPinnedStatus: (
+    currentPinnedAssistantIDs: number[],
+    assistantId: number,
+    isPinned: boolean
+  ) => Promise<boolean>;
+  updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+}
+
+const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function useUser() {
   const context = useContext(UserContext);

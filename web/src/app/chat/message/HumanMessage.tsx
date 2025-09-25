@@ -5,8 +5,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
-import { DocumentPreview } from "../components/files/documents/DocumentPreview";
-import { InMessageImage } from "../components/files/images/InMessageImage";
+import { DocumentPreview } from "@/app/chat/components/files/documents/DocumentPreview";
+import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
 import "prismjs/themes/prism-tomorrow.css";
 import "./custom-code-styles.css";
 import {
@@ -15,20 +15,23 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import ToolResult from "../../../components/tools/ToolResult";
-import CsvContent from "../../../components/tools/CSVContent";
+import ToolResult from "@/components/tools/ToolResult";
+import CsvContent from "@/components/tools/CSVContent";
 import "katex/dist/katex.min.css";
-import { MessageSwitcher } from "./MessageSwitcher";
+import { MessageSwitcher } from "@/app/chat/message/MessageSwitcher";
+import Button from "@/components-2/buttons/Button";
+
+interface FileDisplayProps {
+  files: FileDescriptor[];
+  alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+}
 
 function FileDisplay({
   files,
   alignBubble,
   setPresentingDocument,
-}: {
-  files: FileDescriptor[];
-  alignBubble?: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
-}) {
+}: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const textFiles = files.filter(
@@ -103,18 +106,7 @@ function FileDisplay({
   );
 }
 
-export const HumanMessage = ({
-  content,
-  files,
-  messageId,
-  otherMessagesCanSwitchTo,
-  onEdit,
-  onMessageSelection,
-  shared,
-  stopGenerating = () => null,
-  disableSwitchingForStreaming = false,
-  setPresentingDocument,
-}: {
+interface HumanMessageProps {
   shared?: boolean;
   content: string;
   files?: FileDescriptor[];
@@ -125,19 +117,84 @@ export const HumanMessage = ({
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
-}) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+}
 
+interface EditingAreaProps {
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  editedContent: string;
+  setEditedContent: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  originalContent: string;
+}
+
+function EditingArea({
+  textareaRef,
+  editedContent,
+  setEditedContent,
+  onSubmit,
+  onCancel,
+  originalContent,
+}: EditingAreaProps) {
+  return (
+    <div className="w-full flex flex-col border rounded-08 p-spacing-interline bg-background-tint-02">
+      <textarea
+        ref={textareaRef}
+        className="w-full h-full overflow-y-hidden whitespace-normal break-word overscroll-contain resize-none overflow-y-auto bg-background-tint-02 outline-none p-padding-button"
+        aria-multiline
+        role="textarea"
+        value={editedContent}
+        style={{ scrollbarWidth: "thin" }}
+        onChange={(event) => {
+          setEditedContent(event.target.value);
+          textareaRef.current!.style.height = "auto";
+          event.target.style.height = `${event.target.scrollHeight}px`;
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setEditedContent(originalContent);
+            onCancel();
+          }
+          // Submit edit if "Command Enter" is pressed, like in ChatGPT
+          else if (event.key === "Enter" && event.metaKey) {
+            onSubmit();
+          }
+        }}
+      />
+      <div className="flex flex-row justify-end gap-spacing-inline">
+        <Button onClick={onSubmit}>Submit</Button>
+        <Button
+          secondary
+          onClick={() => {
+            setEditedContent(originalContent);
+            onCancel();
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function HumanMessage({
+  content,
+  files,
+  messageId,
+  otherMessagesCanSwitchTo,
+  onEdit,
+  onMessageSelection,
+  shared,
+  stopGenerating = () => null,
+  disableSwitchingForStreaming = false,
+  setPresentingDocument,
+}: HumanMessageProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setEditedContent(content);
-    }
-  }, [content, isEditing]);
-
+  useEffect(() => setEditedContent(content), [content]);
   useEffect(() => {
     if (textareaRef.current) {
       // Focus the textarea
@@ -187,11 +244,7 @@ export const HumanMessage = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className={`text-user-text mx-auto ${
-          shared ? "w-full" : "w-[90%]"
-        } max-w-[790px]`}
-      >
+      <div className={`mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-[790px]`}>
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
             <FileDisplay
@@ -203,112 +256,14 @@ export const HumanMessage = ({
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
                 {isEditing ? (
-                  <div className="w-full">
-                    <div
-                      className={`
-                      opacity-100
-                      w-full
-                      flex
-                      flex-col
-                      border 
-                      border-border 
-                      rounded-lg 
-                      pb-2
-                      [&:has(textarea:focus)]::ring-1
-                      [&:has(textarea:focus)]::ring-black
-                    `}
-                    >
-                      <textarea
-                        ref={textareaRef}
-                        className={`
-                        m-0 
-                        w-full 
-                        h-auto
-                        shrink
-                        border-0
-                        rounded-lg 
-                        overflow-y-hidden
-                        whitespace-normal 
-                        break-word
-                        overscroll-contain
-                        outline-none 
-                        placeholder-text-400 
-                        resize-none
-                        text-text-editing-message
-                        pl-4
-                        overflow-y-auto
-                        bg-background
-                        pr-12 
-                        py-4`}
-                        aria-multiline
-                        role="textarea"
-                        value={editedContent}
-                        style={{ scrollbarWidth: "thin" }}
-                        onChange={(e) => {
-                          setEditedContent(e.target.value);
-                          textareaRef.current!.style.height = "auto";
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            e.preventDefault();
-                            setEditedContent(content);
-                            setIsEditing(false);
-                          }
-                          // Submit edit if "Command Enter" is pressed, like in ChatGPT
-                          if (e.key === "Enter" && e.metaKey) {
-                            handleEditSubmit();
-                          }
-                        }}
-                      />
-                      <div className="flex justify-end mt-2 gap-2 pr-4">
-                        <button
-                          className={`
-                          w-fit
-                          bg-agent 
-                          text-inverted 
-                          text-sm
-                          rounded-lg 
-                          inline-flex 
-                          items-center 
-                          justify-center 
-                          flex-shrink-0 
-                          font-medium 
-                          min-h-[38px]
-                          py-2
-                          px-3
-                          hover:bg-agent-hovered
-                        `}
-                          onClick={handleEditSubmit}
-                        >
-                          Submit
-                        </button>
-                        <button
-                          className={`
-                          inline-flex 
-                          items-center 
-                          justify-center 
-                          flex-shrink-0 
-                          font-medium 
-                          min-h-[38px] 
-                          py-2 
-                          px-3 
-                          w-fit 
-                          bg-background-200 
-                          text-sm
-                          rounded-lg
-                          hover:bg-accent-background-hovered-emphasis
-                        `}
-                          onClick={() => {
-                            setEditedContent(content);
-                            setIsEditing(false);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <EditingArea
+                    textareaRef={textareaRef}
+                    editedContent={editedContent}
+                    setEditedContent={setEditedContent}
+                    onSubmit={handleEditSubmit}
+                    onCancel={() => setIsEditing(false)}
+                    originalContent={content}
+                  />
                 ) : typeof content === "string" ? (
                   <>
                     <div className="ml-auto flex items-center mr-1 mt-2 h-fit mb-auto">
@@ -320,7 +275,7 @@ export const HumanMessage = ({
                           <Tooltip>
                             <TooltipTrigger>
                               <HoverableIcon
-                                icon={<FiEdit2 className="text-text-600" />}
+                                icon={<FiEdit2 className="text-text-05" />}
                                 onClick={() => {
                                   setIsEditing(true);
                                   setIsHovered(false);
@@ -343,9 +298,9 @@ export const HumanMessage = ({
                           !isEditing &&
                           (!files || files.length === 0)
                         ) && "ml-auto"
-                      } relative text-text flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
+                      } relative flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-bl-3xl rounded-t-3xl bg-background-neutral-02 px-5 py-2.5`}
                     >
-                      {content}
+                      {editedContent}
                     </div>
                   </>
                 ) : (
@@ -366,7 +321,9 @@ export const HumanMessage = ({
                     ) : (
                       <div className="h-[27px]" />
                     )}
-                    <div className="ml-auto rounded-lg p-1">{content}</div>
+                    <div className="ml-auto rounded-lg p-1">
+                      {editedContent}
+                    </div>
                   </>
                 )}
               </div>
@@ -405,4 +362,4 @@ export const HumanMessage = ({
       </div>
     </div>
   );
-};
+}

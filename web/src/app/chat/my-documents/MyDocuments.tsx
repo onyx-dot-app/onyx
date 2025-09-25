@@ -16,7 +16,7 @@ import CreateEntityModal from "@/components/modals/CreateEntityModal";
 import { useDocumentsContext } from "./DocumentsContext";
 import TextView from "@/components/chat/TextView";
 import { TokenDisplay } from "@/components/TokenDisplay";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/components-2/context/ChatContext";
 
 enum SortType {
   TimeCreated = "Time Created",
