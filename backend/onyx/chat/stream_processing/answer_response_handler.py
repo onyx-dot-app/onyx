@@ -32,6 +32,7 @@ class PassThroughAnswerResponseHandler(AnswerResponseHandler):
         previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         content = _message_to_str(response_item)
+        content = content.replace("【", "[").replace("】", "]")
         yield OnyxAnswerPiece(answer_piece=content)
 
 
@@ -75,6 +76,7 @@ class CitationResponseHandler(AnswerResponseHandler):
             return
 
         content = _message_to_str(response_item)
+        content = content.replace("【", "[").replace("】", "]")
 
         # Process the new content through the citation processor
         yield from self.citation_processor.process_token(content)
