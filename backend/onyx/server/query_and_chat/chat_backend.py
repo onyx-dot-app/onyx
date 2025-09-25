@@ -99,7 +99,7 @@ router = APIRouter(prefix="/chat")
 def get_user_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-    project_id: UUID | None = None,
+    project_id: int | None = None,
     only_non_project_chats: bool = True,
 ) -> ChatSessionsResponse:
     user_id = user.id if user is not None else None

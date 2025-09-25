@@ -3271,7 +3271,7 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[UUID] = mapped_column(PGUUID, primary_key=True)
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",

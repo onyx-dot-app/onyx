@@ -107,7 +107,7 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             for user_file_id in user_file_ids:
                 self.app.send_task(
                     OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
-                    kwargs={"user_file_id": user_file_id, "tenant_id": tenant_id},
+                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
                     queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
                     priority=OnyxCeleryPriority.HIGH,
                 )
@@ -247,7 +247,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
 
             except Exception as e:
                 task_logger.exception(
-                    f"process_single_user_file - Error id={user_file_id}: {e}"
+                    f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
                 )
                 uf.status = UserFileStatus.FAILED
                 db_session.add(uf)
@@ -269,7 +269,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 db_session.commit()
 
         task_logger.exception(
-            f"process_single_user_file - Error id={user_file_id}: {e}"
+            f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
         return None
     finally:
@@ -313,7 +313,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             for user_file_id in user_file_ids:
                 self.app.send_task(
                     OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
-                    kwargs={"user_file_id": user_file_id, "tenant_id": tenant_id},
+                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
                     queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
                     priority=OnyxCeleryPriority.HIGH,
                 )
@@ -392,7 +392,7 @@ def process_single_user_file_project_sync(
 
     except Exception as e:
         task_logger.exception(
-            f"process_single_user_file_project_sync - Error id={user_file_id}: {e}"
+            f"process_single_user_file_project_sync - Error syncing project for file id={user_file_id} - {e.__class__.__name__}"
         )
         return None
     finally:
@@ -529,7 +529,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                         user_project_ids = [project.id for project in uf.projects]
                 except Exception as e:
                     task_logger.warning(
-                        f"Tenant={tenant_id} failed fetching projects for doc_id={new_uuid}: {e}"
+                        f"Tenant={tenant_id} failed fetching projects for doc_id={new_uuid} - {e.__class__.__name__}"
                     )
                 try:
                     _update_document_id_in_vespa(
@@ -540,7 +540,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     )
                 except Exception as e:
                     task_logger.warning(
-                        f"Tenant={tenant_id} failed Vespa update for {old_doc_id} -> {new_uuid}: {e}"
+                        f"Tenant={tenant_id} failed Vespa update for doc_id={new_uuid} - {e.__class__.__name__}"
                     )
 
             # Update search_doc records to refer to the UUID string
@@ -627,7 +627,8 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                             normalized += 1
                         except Exception as e:
                             task_logger.warning(
-                                f"Tenant={tenant_id} failed plaintext object normalize for id={fr.file_id}: {e}"
+                                f"Tenant={tenant_id} failed plaintext object normalize for "
+                                f"id={fr.file_id} - {e.__class__.__name__}"
                             )
 
                     if normalized:
@@ -641,7 +642,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     )
             except Exception:
                 task_logger.exception(
-                    f"user_file_docid_migration_task encountered an error during plaintext normalization for tenant={tenant_id}"
+                    f"user_file_docid_migration_task - Error during plaintext normalization for tenant={tenant_id}"
                 )
 
         task_logger.info(
@@ -650,6 +651,6 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
         return True
     except Exception:
         task_logger.exception(
-            f"user_file_docid_migration_task encountered an error for tenant={tenant_id}"
+            f"user_file_docid_migration_task - Error during execution for tenant={tenant_id}"
         )
         return False

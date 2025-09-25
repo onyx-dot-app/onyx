@@ -1,3 +1,5 @@
+"use client";
+
 import { ChatSession } from "@/app/chat/interfaces";
 import { deleteChatSession } from "@/app/chat/services/lib";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -83,7 +85,8 @@ export function ChatSessionMorePopup({
       const projectId = parseInt(item.id);
       await moveChatSessionService(projectId, chatSession.id);
       await fetchProjects();
-      await refreshChatSessions();
+      await refreshChatSessions({ skipRedirectOnMissing: true });
+      setPopoverOpen(false);
       afterMove?.();
     },
     [

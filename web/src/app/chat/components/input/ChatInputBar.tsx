@@ -291,8 +291,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
       );
       const totalTokens =
         (currentSessionFileTokenCount || 0) + currentFilesTokenTotal;
-      console.log("totalTokens", totalTokens);
-      console.log("availableContextTokens", availableContextTokens);
       // Hide processing state when files are within context limits
       return totalTokens < availableContextTokens;
     }

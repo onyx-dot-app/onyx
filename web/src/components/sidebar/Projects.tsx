@@ -53,7 +53,6 @@ function CollapsibleFolder({
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
   const [isSaving, setIsSaving] = useState(false);
-  console.log("isSelected", isSelected);
   return (
     <div className="w-full">
       <div

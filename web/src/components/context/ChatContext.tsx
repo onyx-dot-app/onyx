@@ -27,7 +27,9 @@ interface ChatContextProps {
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;
-  refreshChatSessions: () => Promise<void>;
+  refreshChatSessions: (options?: {
+    skipRedirectOnMissing?: boolean;
+  }) => Promise<void>;
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
@@ -49,7 +51,9 @@ export const ChatProvider: React.FC<{
   const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
   const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
 
-  const refreshChatSessions = async () => {
+  const refreshChatSessions = async (options?: {
+    skipRedirectOnMissing?: boolean;
+  }) => {
     try {
       const response = await fetch("/api/chat/get-user-chat-sessions");
       if (!response.ok) throw new Error("Failed to fetch chat sessions");
@@ -63,7 +67,9 @@ export const ChatProvider: React.FC<{
           (session: ChatSession) => session.id === currentSessionId
         )
       ) {
-        router.replace("/chat");
+        if (!options?.skipRedirectOnMissing) {
+          router.replace("/chat");
+        }
       }
     } catch (error) {
       console.error("Error refreshing chat sessions:", error);

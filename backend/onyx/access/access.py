@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import cast
 
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
@@ -131,7 +132,12 @@ def get_access_for_user_files(
     user_file_ids: list[str],
     db_session: Session,
 ) -> dict[str, DocumentAccess]:
-    user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+    user_files = (
+        db_session.query(UserFile)
+        .options(joinedload(UserFile.user))  # Eager load the user relationship
+        .filter(UserFile.id.in_(user_file_ids))
+        .all()
+    )
     return {
         str(user_file.id): DocumentAccess.build(
             user_emails=[user_file.user.email] if user_file.user else [],

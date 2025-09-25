@@ -111,7 +111,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   // Load full details for current project
   const refreshCurrentProjectDetails = useCallback(async () => {
     if (currentProjectId) {
-      console.log("refreshing current project details", currentProjectId);
       const details = await svcGetProjectDetails(currentProjectId);
       setCurrentProjectDetails(details);
     }
@@ -122,7 +121,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       if (!currentProjectId) {
         throw new Error("No project selected");
       }
-      console.log("upserting instructions", instructions);
       await svcUpsertProjectInstructions(currentProjectId, instructions);
       await refreshCurrentProjectDetails();
     },

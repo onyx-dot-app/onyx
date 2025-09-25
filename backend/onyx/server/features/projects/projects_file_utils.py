@@ -19,6 +19,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 FILE_TOKEN_COUNT_THRESHOLD = 50000
+UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
+
+
+def get_safe_filename(upload: UploadFile) -> str:
+    """Get filename from upload, with fallback to UNKNOWN_FILENAME if None."""
+    if not upload.filename:
+        logger.warning("Received upload with no filename")
+        return UNKNOWN_FILENAME
+    return upload.filename
+
 
 # Guard against extremely large images
 Image.MAX_IMAGE_PIXELS = 12000 * 12000
@@ -118,23 +128,25 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
 
     for upload in files:
         try:
-            extension = get_file_ext(upload.filename or "")
+            filename = get_safe_filename(upload)
+            extension = get_file_ext(filename)
 
             # If image, estimate tokens via dedicated method first
             if extension in ACCEPTED_IMAGE_FILE_EXTENSIONS:
                 try:
                     token_count = estimate_image_tokens_for_upload(upload)
-                except (UnidentifiedImageError, OSError):
-                    results.unsupported.append(upload.filename or "")
+                except (UnidentifiedImageError, OSError) as e:
+                    logger.warning(
+                        f"Failed to process image file '{filename}': {str(e)}"
+                    )
+                    results.unsupported.append(filename)
                     continue
 
                 if token_count > FILE_TOKEN_COUNT_THRESHOLD:
-                    results.non_accepted.append(upload.filename or "")
+                    results.non_accepted.append(filename)
                 else:
                     results.acceptable.append(upload)
-                    results.acceptable_file_to_token_count[upload.filename or ""] = (
-                        token_count
-                    )
+                    results.acceptable_file_to_token_count[filename] = token_count
                 continue
 
             # Otherwise, handle as text/document: extract text and count tokens
@@ -144,35 +156,40 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
             ):
                 text_content = extract_file_text(
                     file=upload.file,
-                    file_name=upload.filename or "",
+                    file_name=filename,
                     break_on_unprocessable=False,
                     extension=extension,
                 )
                 if not text_content:
-                    results.unsupported.append(upload.filename or "")
+                    logger.warning(f"No text content extracted from '{filename}'")
+                    results.unsupported.append(filename)
                     continue
 
                 token_count = len(tokenizer.encode(text_content))
                 if token_count > FILE_TOKEN_COUNT_THRESHOLD:
-                    results.non_accepted.append(upload.filename or "")
+                    results.non_accepted.append(filename)
                 else:
                     results.acceptable.append(upload)
-                    results.acceptable_file_to_token_count[upload.filename or ""] = (
-                        token_count
-                    )
+                    results.acceptable_file_to_token_count[filename] = token_count
+
                 # Reset file pointer for subsequent upload handling
                 try:
                     upload.file.seek(0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to reset file pointer for '{filename}': {str(e)}"
+                    )
                 continue
 
             # If not recognized as supported types above, mark unsupported
-            results.unsupported.append(upload.filename or "")
+            logger.warning(
+                f"Unsupported file extension '{extension}' for file '{filename}'"
+            )
+            results.unsupported.append(filename)
         except Exception as e:
             logger.warning(
-                f"Failed to process uploaded file '{getattr(upload, 'filename', 'unknown')}': {e}"
+                f"Failed to process uploaded file '{get_safe_filename(upload)}' (error_type={type(e).__name__}, error={str(e)})"
             )
-            results.unsupported.append(upload.filename or "")
+            results.unsupported.append(get_safe_filename(upload))
 
     return results

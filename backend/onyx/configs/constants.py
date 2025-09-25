@@ -304,6 +304,7 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
+    USER_FILE = "user_file"
 
 
 class FileType(str, Enum):

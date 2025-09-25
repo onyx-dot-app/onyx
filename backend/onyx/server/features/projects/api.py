@@ -81,8 +81,11 @@ def upload_user_files(
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
-        logger.error(f"Error uploading files: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
+        logger.error(f"Error uploading files - type: {type(e).__name__}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to upload files. Please try again or contact support if the issue persists.",
+        )
 
 
 @router.get("/{project_id}")

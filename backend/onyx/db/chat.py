@@ -170,7 +170,7 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
-    project_id: UUID | None = None,
+    project_id: int | None = None,
     only_non_project_chats: bool = False,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)

@@ -1,5 +1,10 @@
 import { ChatFileType, ChatSession } from "../interfaces";
 
+// Generic error handler that avoids exposing server error details
+const handleRequestError = (action: string, response: Response) => {
+  throw new Error(`${action} failed (Status: ${response.status})`);
+};
+
 export interface Project {
   id: number;
   name: string;
@@ -48,7 +53,7 @@ export type ProjectDetails = {
 export async function fetchProjects(): Promise<Project[]> {
   const response = await fetch("/api/user/projects/");
   if (!response.ok) {
-    throw new Error("Failed to fetch projects");
+    handleRequestError("Fetch projects", response);
   }
   return response.json();
 }
@@ -59,8 +64,7 @@ export async function createProject(name: string): Promise<Project> {
     { method: "POST" }
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to create project");
+    handleRequestError("Create project", response);
   }
   return response.json();
 }
@@ -81,8 +85,7 @@ export async function uploadFiles(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to upload files");
+    handleRequestError("Upload files", response);
   }
 
   return response.json();
@@ -91,7 +94,7 @@ export async function uploadFiles(
 export async function getRecentFiles(): Promise<ProjectFile[]> {
   const response = await fetch(`/api/user/files/recent`);
   if (!response.ok) {
-    throw new Error("Failed to fetch recent files");
+    handleRequestError("Fetch recent files", response);
   }
   return response.json();
 }
@@ -101,7 +104,7 @@ export async function getFilesInProject(
 ): Promise<ProjectFile[]> {
   const response = await fetch(`/api/user/projects/files/${projectId}`);
   if (!response.ok) {
-    throw new Error("Failed to fetch project files");
+    handleRequestError("Fetch project files", response);
   }
   return response.json();
 }
@@ -109,7 +112,7 @@ export async function getFilesInProject(
 export async function getProject(projectId: number): Promise<Project> {
   const response = await fetch(`/api/user/projects/${projectId}`);
   if (!response.ok) {
-    throw new Error("Failed to fetch project");
+    handleRequestError("Fetch project", response);
   }
   return response.json();
 }
@@ -124,8 +127,7 @@ export async function renameProject(
     body: JSON.stringify({ name }),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to rename project");
+    handleRequestError("Rename project", response);
   }
   return response.json();
 }
@@ -135,8 +137,7 @@ export async function deleteProject(projectId: number): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to delete project");
+    handleRequestError("Delete project", response);
   }
 }
 
@@ -145,7 +146,7 @@ export async function getProjectInstructions(
 ): Promise<string | null> {
   const response = await fetch(`/api/user/projects/${projectId}/instructions`);
   if (!response.ok) {
-    throw new Error("Failed to fetch project instructions");
+    handleRequestError("Fetch project instructions", response);
   }
   const data = (await response.json()) as { instructions: string | null };
   return data.instructions ?? null;
@@ -161,10 +162,7 @@ export async function upsertProjectInstructions(
     body: JSON.stringify({ instructions }),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).detail || "Failed to upsert project instructions"
-    );
+    handleRequestError("Update project instructions", response);
   }
   const data = (await response.json()) as { instructions: string | null };
   return data.instructions ?? null;
@@ -175,7 +173,7 @@ export async function getProjectDetails(
 ): Promise<ProjectDetails> {
   const response = await fetch(`/api/user/projects/${projectId}/details`);
   if (!response.ok) {
-    throw new Error("Failed to fetch project details");
+    handleRequestError("Fetch project details", response);
   }
   return response.json();
 }
@@ -191,10 +189,7 @@ export async function unlinkFileFromProject(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).detail || "Failed to unlink file from project"
-    );
+    handleRequestError("Unlink file from project", response);
   }
 }
 
@@ -209,10 +204,7 @@ export async function linkFileToProject(
     { method: "POST" }
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).detail || "Failed to link file to project"
-    );
+    handleRequestError("Link file to project", response);
   }
   return response.json();
 }
@@ -225,8 +217,7 @@ export async function deleteUserFile(fileId: string): Promise<void> {
     }
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to delete file");
+    handleRequestError("Delete file", response);
   }
 }
 
@@ -235,8 +226,7 @@ export async function getUserFile(fileId: string): Promise<ProjectFile> {
     `/api/user/projects/file/${encodeURIComponent(fileId)}`
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to fetch file");
+    handleRequestError("Fetch file", response);
   }
   return response.json();
 }
@@ -250,10 +240,7 @@ export async function getUserFileStatuses(
     body: JSON.stringify({ file_ids: fileIds }),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).detail || "Failed to fetch file statuses"
-    );
+    handleRequestError("Fetch file statuses", response);
   }
   return response.json();
 }
@@ -297,7 +284,6 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
 export async function getMaxSelectedDocumentTokens(
   personaId: number
 ): Promise<number> {
-  console.log("getMaxSelectedDocumentTokens", personaId);
   const response = await fetch(
     `/api/chat/max-selected-document-tokens?persona_id=${personaId}`
   );
@@ -321,8 +307,7 @@ export async function moveChatSession(
     }
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as any).detail || "Failed to move chat session");
+    handleRequestError("Move chat session", response);
   }
   return response.ok;
 }
@@ -336,10 +321,7 @@ export async function removeChatSessionFromProject(
     body: JSON.stringify({ chat_session_id: chatSessionId }),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).detail || "Failed to remove chat session from project"
-    );
+    handleRequestError("Remove chat session from project", response);
   }
   return response.ok;
 }
