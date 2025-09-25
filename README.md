@@ -26,14 +26,20 @@
 
 **[Onyx](https://www.onyx.app/)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
 
-> Onyx comes loaded with advanced features like AI Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
+> [!NOTE]
+> Onyx comes loaded with advanced features like creating Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
 
 Deploy Onyx with a single command (or see deployment section below):
 ```
 curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 ```
 
+****
+
 ![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
+
+
+
 
 ## ⭐ Features
 - **🤖 Custom Agents:** Build AI Agents with unique instructions, knowledge and actions.
@@ -43,9 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/d
 - **▶️ Actions & MCP:** Give AI Agents the ability to interact with external systems.
 - **💻 Code Interpreter:** Execute code to analyze data, render graphs and create files.
 - **🎨 Image Generation:** Generate images based on user prompts.
-- **👥 Collaboration Features:** Chat sharing, user management, usage analytics, and more.
+- **👥 Collaboration:** Chat sharing, user management, usage analytics, and more.
 
-Onyx works with any LLM provider (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
+Onyx works with all LLMs (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
 
 To learn more about Onyx's features, check out our [documentation](https://docs.onyx.app/welcome)!
 
@@ -64,31 +70,33 @@ See guides below:
 > **To try it out for free without a deployment, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
 
-## 🔍 Other Notable Benefits of Onyx
-- Custom deep learning models for indexing and inference time, only through Onyx + learning from user feedback.
-- Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
-- Knowledge curation features like document-sets, query history, usage analytics, etc.
-- Scalable deployment options tested up to many tens of thousands users and hundreds of millions of documents.
+
+## 🔍 Other Notable Benefits
+Onyx is built for teams of all sizes, from individuals to the largest global enterprises.
+
+- **Enterprise Search**: unlike simple RAG, Onyx has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
+- **Security**: SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
+- **Management UI**: different user roles such as basic, curator, and admin.
+- **Document Permissioning**: mirrors user access from external apps for RAG use cases.
+
 
 
 ## 🚧 Roadmap
-- New methods in information retrieval (StructRAG, LightGraphRAG, etc.)
-- Personalized Search
-- Organizational understanding and ability to locate and suggest experts from your team.
-- Code Search
-- SQL and Structured Query Language
+To see ongoing and upcoming projects, check out our [roadmap](https://github.com/orgs/onyx-dot-app/projects/2)!
+
 
 
 ## 📚 Licensing
 There are two editions of Onyx:
 
-- Onyx Community Edition (CE) is available freely under the MIT Expat license. Simply follow the Deployment guide above.
+- Onyx Community Edition (CE) is available freely under the MIT license.
 - Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
 For feature details, check out [our website](https://www.onyx.app/pricing).
 
 To try the Onyx Enterprise Edition:
 1. Checkout [Onyx Cloud](https://cloud.onyx.app/signup).
 2. For self-hosting the Enterprise Edition, contact us at [founders@onyx.app](mailto:founders@onyx.app) or book a call with us on our [Cal](https://cal.com/team/onyx/founders).
+
 
 
 ## 💡 Contributing
