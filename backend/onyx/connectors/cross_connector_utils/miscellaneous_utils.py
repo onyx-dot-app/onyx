@@ -155,7 +155,7 @@ def is_atlassian_date_error(e: Exception) -> bool:
 
 def get_cloudId(base_url: str) -> str:
     tenant_info_url = urljoin(base_url, "/_edge/tenant_info")
-    response = requests.get(tenant_info_url)
+    response = requests.get(tenant_info_url, timeout=10)
     response.raise_for_status()
     return response.json()["cloudId"]
 
