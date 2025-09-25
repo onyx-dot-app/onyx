@@ -25,10 +25,10 @@
 
 **[Onyx](https://www.onyx.app/)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
 
-Onyx comes loaded with advanced features like custom Agents, RAG, Web Search, Connectors to 40+ knowledge sources, MCP, Deep Research, and more.
+Onyx comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep Research, Connectors to 40+ knowledge sources, and more.
 
 > [!TIP]
-> Try Onyx with one command (or see deployment section below):
+> Run Onyx with one command (or see deployment section below):
 > ```
 > curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 > ```
@@ -36,7 +36,6 @@ Onyx comes loaded with advanced features like custom Agents, RAG, Web Search, Co
 ****
 
 ![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
-
 
 
 
@@ -49,11 +48,11 @@ Onyx comes loaded with advanced features like custom Agents, RAG, Web Search, Co
 - **▶️ Actions & MCP:** Give AI Agents the ability to interact with external systems.
 - **💻 Code Interpreter:** Execute code to analyze data, render graphs and create files.
 - **🎨 Image Generation:** Generate images based on user prompts.
-- **👥 Collaboration:** Chat sharing, user management, usage analytics, and more.
+- **👥 Collaboration:** Chat sharing, feedback gathering, user management, usage analytics, and more.
 
 Onyx works with all LLMs (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
 
-To learn more about Onyx's features, check out our [documentation](https://docs.onyx.app/welcome)!
+To learn more about the features, check out our [documentation](https://docs.onyx.app/welcome)!
 
 
 
@@ -74,7 +73,7 @@ See guides below:
 ## 🔍 Other Notable Benefits
 Onyx is built for teams of all sizes, from individual users to the largest global enterprises.
 
-- **Enterprise Search**: unlike simple RAG, Onyx has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
+- **Enterprise Search**: far more than simple RAG, Onyx has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
 - **Security**: SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
 - **Management UI**: different user roles such as basic, curator, and admin.
 - **Document Permissioning**: mirrors user access from external apps for RAG use cases.
