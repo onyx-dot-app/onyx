@@ -22,34 +22,46 @@
 </a>
 </p>
 
-**Onyx** is a feature-rich, self-hostable Chat UI that works with any LLM. Onyx is easy to deploy and can run in a completely airgapped environment.
 
-Deploy Onyx with a single command (or see deployment section below for other options):
+
+**[Onyx](https://www.onyx.app/)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
+
+> Onyx comes loaded with advanced features like AI Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
+
+Deploy Onyx with a single command (or see deployment section below):
 ```
 curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 ```
 
+![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
+
+## ⭐ Features
+- **🤖 Custom Agents:** Build AI Agents with unique instructions, knowledge and actions.
+- **🌍 Web Search:** Browse the web with Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
+- **🔍 RAG:** Best in class hybrid-search + knowledge graph for uploaded files and ingested documents from connectors. 
+- **🔌 Connectors:** Pull knowledge, metadata, and access information from over 40 applications.
+- **▶️ Actions & MCP:** Give AI Agents the ability to interact with external systems.
+- **💻 Code Interpreter:** Execute code to analyze data, render graphs and create files.
+- **🎨 Image Generation:** Generate images based on user prompts.
+- **👥 Collaboration Features:** Chat sharing, user management, usage analytics, and more.
+
+Onyx works with any LLM provider (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
+
+To learn more about Onyx's features, check out our [documentation](https://docs.onyx.app/welcome)!
 
 
-## Features
-- **Agents:** Build custom AI Agents with unique instructions, knowledge and actions.
-- **Web Search:** Supporting Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
-- **RAG:**
-- **Connectors**
-- **Actions & MCP:**
-- **Code Interpreter**
-- **Image Generation**
 
-Works with any LLM provider (like OpenAI, Anthropic, Gemini, AWS Bedrock, Azure OpenAI, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
+## 🚀 Deployment
+Onyx supports deployments in Docker, Kubernetes, Terraform, along with guides for major cloud providers.
 
-## Deployment
-**To try it out for free and get started in seconds, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
+See guides below:
+- [Docker](https://docs.onyx.app/deployment/local/docker) or [Quickstart](https://docs.onyx.app/deployment/getting_started/quickstart) (best for most users)
+- [Kubernetes](https://docs.onyx.app/deployment/local/kubernetes) (best for large teams)
+- [Terraform](https://docs.onyx.app/deployment/local/terraform) (best for teams already using Terraform)
+- Cloud specific guides (best if specifically using [AWS EKS](https://docs.onyx.app/deployment/cloud/aws/eks), [Azure VMs](https://docs.onyx.app/deployment/cloud/azure), etc.)
 
-Onyx can also be run locally (even on a laptop) or deployed on a virtual machine with a single
-`docker compose` command. Checkout our [docs](https://docs.onyx.app/deployment/getting_started/quickstart) to learn more.
-
-We also have built-in support for high-availability/scalable deployment on Kubernetes.
-References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
+> [!TIP]  
+> **To try it out for free without a deployment, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
 
 ## 🔍 Other Notable Benefits of Onyx
@@ -65,28 +77,6 @@ References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
 - Organizational understanding and ability to locate and suggest experts from your team.
 - Code Search
 - SQL and Structured Query Language
-
-
-## 🔌 Connectors
-Keep knowledge and access up to sync across 40+ connectors:
-
-- Google Drive
-- Confluence
-- Slack
-- Gmail
-- Salesforce
-- Microsoft Sharepoint
-- Github
-- Jira
-- Zendesk
-- Gong
-- Microsoft Teams
-- Dropbox
-- Local Files
-- Websites
-- And more ...
-
-See the full list [here](https://docs.onyx.app/admin/connectors/overview).
 
 
 ## 📚 Licensing
