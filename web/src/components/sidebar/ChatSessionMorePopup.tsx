@@ -14,6 +14,11 @@ import { FiEdit2, FiMoreHorizontal, FiShare2, FiTrash } from "react-icons/fi";
 import { HiOutlineArrowUturnRight } from "react-icons/hi2";
 import { useChatContext } from "@/components/context/ChatContext";
 import { useCallback, useState } from "react";
+import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+
+// Constants
+const DEFAULT_PERSONA_ID = 0;
+const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
 interface ChatSessionMorePopupProps {
   chatSession: ChatSession;
@@ -44,6 +49,15 @@ export function ChatSessionMorePopup({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { refreshChatSessions } = useChatContext();
   const { fetchProjects, projects } = useProjectsContext();
+
+  const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
+    number | null
+  >(null);
+  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
+    useState(false);
+
+  const isChatUsingDefaultAssistant =
+    chatSession.persona_id === DEFAULT_PERSONA_ID;
 
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {
@@ -80,22 +94,34 @@ export function ChatSessionMorePopup({
     [chatSession, refreshChatSessions, fetchProjects, afterDelete]
   );
 
-  const handleMoveChatSession = useCallback(
-    async (item: { id: string; label: string }) => {
-      const projectId = parseInt(item.id);
-      await moveChatSessionService(projectId, chatSession.id);
+  const performMove = useCallback(
+    async (targetProjectId: number) => {
+      await moveChatSessionService(targetProjectId, chatSession.id);
       await fetchProjects();
       await refreshChatSessions({ skipRedirectOnMissing: true });
       setPopoverOpen(false);
       afterMove?.();
     },
-    [
-      chatSession.id,
-      fetchProjects,
-      refreshChatSessions,
-      moveChatSessionService,
-      afterMove,
-    ]
+    [chatSession.id, fetchProjects, refreshChatSessions, afterMove]
+  );
+
+  const handleMoveChatSession = useCallback(
+    async (item: { id: string; label: string }) => {
+      const targetProjectId = parseInt(item.id);
+      const hideModal =
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
+          "true";
+
+      if (!isChatUsingDefaultAssistant && !hideModal) {
+        setPendingMoveProjectId(targetProjectId);
+        setShowMoveCustomAgentModal(true);
+        return;
+      }
+
+      await performMove(targetProjectId);
+    },
+    [isChatUsingDefaultAssistant, performMove]
   );
 
   const handleRemoveChatSessionFromProject = useCallback(async () => {
@@ -207,6 +233,27 @@ export function ChatSessionMorePopup({
           triggerMaxWidth
         />
       </div>
+      <MoveCustomAgentChatModal
+        isOpen={showMoveCustomAgentModal}
+        onCancel={() => {
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveProjectId(null);
+        }}
+        onConfirm={async (doNotShowAgain: boolean) => {
+          if (doNotShowAgain && typeof window !== "undefined") {
+            window.localStorage.setItem(
+              LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
+              "true"
+            );
+          }
+          const target = pendingMoveProjectId;
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveProjectId(null);
+          if (target != null) {
+            await performMove(target);
+          }
+        }}
+      />
     </div>
   );
 }

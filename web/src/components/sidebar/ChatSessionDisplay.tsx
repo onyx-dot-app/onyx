@@ -16,13 +16,7 @@ import { ShareChatSessionModal } from "@/app/chat/components/modal/ShareChatSess
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
-import { InfoIcon } from "@/components/icons/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+// removed Info tooltip imports as we no longer show custom assistant info icon
 
 export function ChatSessionDisplay({
   chatSession,
@@ -35,7 +29,6 @@ export function ChatSessionDisplay({
   parentFolderName,
   showDragHandle = true,
   projectId,
-  isCustomAssistant,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -47,7 +40,6 @@ export function ChatSessionDisplay({
   parentFolderName?: string;
   showDragHandle?: boolean;
   projectId?: number;
-  isCustomAssistant?: boolean;
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
@@ -209,26 +201,6 @@ export function ChatSessionDisplay({
                         } `}
                       />
                     </p>
-                    {isCustomAssistant && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="my-auto text-amber-600 dark:text-yellow-500">
-                              <InfoIcon
-                                size={14}
-                                className="text-amber-600 dark:text-yellow-500"
-                              />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="center">
-                            <p className="max-w-[220px] text-sm">
-                              Project files and instructions aren’t applied here
-                              because this chat uses a custom assistant.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
                   </>
                 )}
 

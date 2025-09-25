@@ -6,7 +6,6 @@ import { ChatBubbleIcon } from "@/components/icons/CustomIcons";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import { InfoIcon } from "@/components/icons/icons";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import {
@@ -96,36 +95,6 @@ export default function ProjectChatSessionList() {
                         >
                           {chat.name || "Unnamed Chat"}
                         </span>
-                        {(() => {
-                          const personaIdToDefault =
-                            currentProjectDetails?.persona_id_to_is_default ||
-                            {};
-                          const isDefault = personaIdToDefault[chat.persona_id];
-                          if (isDefault === false) {
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center text-amber-600 dark:text-yellow-500 cursor-default flex-shrink-0">
-                                      <InfoIcon
-                                        size={14}
-                                        className="text-amber-600 dark:text-yellow-500"
-                                      />
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" align="center">
-                                    <p className="max-w-[220px] text-sm">
-                                      Project files and instructions aren&apos;t
-                                      applied here because this chat uses a
-                                      custom assistant.
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          }
-                          return null;
-                        })()}
                       </div>
                       <div className="flex items-center">
                         {hoveredChatId === chat.id && (
