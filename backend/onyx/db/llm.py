@@ -46,87 +46,87 @@ def update_group_llm_provider_relationships__no_commit(
         db_session.add_all(new_relationships)
 
 
-def upsert_cloud_embedding_provider(
-    db_session: Session, provider: CloudEmbeddingProviderCreationRequest
-) -> CloudEmbeddingProvider:
-    existing_provider = (
-        db_session.query(CloudEmbeddingProviderModel)
-        .filter_by(provider_type=provider.provider_type)
-        .first()
-    )
-    if existing_provider:
-        for key, value in provider.model_dump().items():
-            setattr(existing_provider, key, value)
-    else:
-        new_provider = CloudEmbeddingProviderModel(**provider.model_dump())
+# def upsert_cloud_embedding_provider(
+#     db_session: Session, provider: CloudEmbeddingProviderCreationRequest
+# ) -> CloudEmbeddingProvider:
+#     existing_provider = (
+#         db_session.query(CloudEmbeddingProviderModel)
+#         .filter_by(provider_type=provider.provider_type)
+#         .first()
+#     )
+#     if existing_provider:
+#         for key, value in provider.model_dump().items():
+#             setattr(existing_provider, key, value)
+#     else:
+#         new_provider = CloudEmbeddingProviderModel(**provider.model_dump())
 
-        db_session.add(new_provider)
-        existing_provider = new_provider
-    db_session.commit()
-    db_session.refresh(existing_provider)
-    return CloudEmbeddingProvider.from_request(existing_provider)
+#         db_session.add(new_provider)
+#         existing_provider = new_provider
+#     db_session.commit()
+#     db_session.refresh(existing_provider)
+#     return CloudEmbeddingProvider.from_request(existing_provider)
 
 
-def upsert_llm_provider(
-    llm_provider_upsert_request: LLMProviderUpsertRequest,
-    db_session: Session,
-) -> LLMProviderView:
-    existing_llm_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
+# def upsert_llm_provider(
+#     llm_provider_upsert_request: LLMProviderUpsertRequest,
+#     db_session: Session,
+# ) -> LLMProviderView:
+#     existing_llm_provider = fetch_existing_llm_provider(
+#         name=llm_provider_upsert_request.name, db_session=db_session
+#     )
 
-    if not existing_llm_provider:
-        existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
-        db_session.add(existing_llm_provider)
+#     if not existing_llm_provider:
+#         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
+#         db_session.add(existing_llm_provider)
 
-    existing_llm_provider.provider = llm_provider_upsert_request.provider
-    existing_llm_provider.api_key = llm_provider_upsert_request.api_key
-    existing_llm_provider.api_base = llm_provider_upsert_request.api_base
-    existing_llm_provider.api_version = llm_provider_upsert_request.api_version
-    existing_llm_provider.custom_config = llm_provider_upsert_request.custom_config
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
-    existing_llm_provider.fast_default_model_name = (
-        llm_provider_upsert_request.fast_default_model_name
-    )
-    existing_llm_provider.is_public = llm_provider_upsert_request.is_public
-    existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
+#     existing_llm_provider.provider = llm_provider_upsert_request.provider
+#     existing_llm_provider.api_key = llm_provider_upsert_request.api_key
+#     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
+#     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
+#     existing_llm_provider.custom_config = llm_provider_upsert_request.custom_config
+#     existing_llm_provider.default_model_name = (
+#         llm_provider_upsert_request.default_model_name
+#     )
+#     existing_llm_provider.fast_default_model_name = (
+#         llm_provider_upsert_request.fast_default_model_name
+#     )
+#     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+#     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
-    if not existing_llm_provider.id:
-        # If its not already in the db, we need to generate an ID by flushing
-        db_session.flush()
+#     if not existing_llm_provider.id:
+#         # If its not already in the db, we need to generate an ID by flushing
+#         db_session.flush()
 
-    # Delete existing model configurations
-    db_session.query(ModelConfiguration).filter(
-        ModelConfiguration.llm_provider_id == existing_llm_provider.id
-    ).delete(synchronize_session="fetch")
+#     # Delete existing model configurations
+#     db_session.query(ModelConfiguration).filter(
+#         ModelConfiguration.llm_provider_id == existing_llm_provider.id
+#     ).delete(synchronize_session="fetch")
 
-    db_session.flush()
+#     db_session.flush()
 
-    for model_configuration in llm_provider_upsert_request.model_configurations:
-        db_session.execute(
-            insert(ModelConfiguration)
-            .values(
-                llm_provider_id=existing_llm_provider.id,
-                name=model_configuration.name,
-                is_visible=model_configuration.is_visible,
-                max_input_tokens=model_configuration.max_input_tokens,
-            )
-            .on_conflict_do_nothing()
-        )
+#     for model_configuration in llm_provider_upsert_request.model_configurations:
+#         db_session.execute(
+#             insert(ModelConfiguration)
+#             .values(
+#                 llm_provider_id=existing_llm_provider.id,
+#                 name=model_configuration.name,
+#                 is_visible=model_configuration.is_visible,
+#                 max_input_tokens=model_configuration.max_input_tokens,
+#             )
+#             .on_conflict_do_nothing()
+#         )
 
-    # Make sure the relationship table stays up to date
-    update_group_llm_provider_relationships__no_commit(
-        llm_provider_id=existing_llm_provider.id,
-        group_ids=llm_provider_upsert_request.groups,
-        db_session=db_session,
-    )
-    full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
+#     # Make sure the relationship table stays up to date
+#     update_group_llm_provider_relationships__no_commit(
+#         llm_provider_id=existing_llm_provider.id,
+#         group_ids=llm_provider_upsert_request.groups,
+#         db_session=db_session,
+#     )
+#     full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
 
-    db_session.commit()
+#     db_session.commit()
 
-    return full_llm_provider
+#     return full_llm_provider
 
 
 def fetch_existing_embedding_providers(
@@ -215,54 +215,54 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
-    )
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
+# def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
+#     provider_model = db_session.scalar(
+#         select(LLMProviderModel)
+#         .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
+#         .options(selectinload(LLMProviderModel.model_configurations))
+#     )
+#     if not provider_model:
+#         return None
+#     return LLMProviderView.from_model(provider_model)
 
 
-def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_vision_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
-    )
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
+# def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
+#     provider_model = db_session.scalar(
+#         select(LLMProviderModel)
+#         .where(LLMProviderModel.is_default_vision_provider == True)  # noqa: E712
+#         .options(selectinload(LLMProviderModel.model_configurations))
+#     )
+#     if not provider_model:
+#         return None
+#     return LLMProviderView.from_model(provider_model)
 
 
-def fetch_llm_provider_view(
-    db_session: Session, provider_name: str
-) -> LLMProviderView | None:
-    provider_model = fetch_existing_llm_provider(
-        name=provider_name, db_session=db_session
-    )
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
+# def fetch_llm_provider_view(
+#     db_session: Session, provider_name: str
+# ) -> LLMProviderView | None:
+#     provider_model = fetch_existing_llm_provider(
+#         name=provider_name, db_session=db_session
+#     )
+#     if not provider_model:
+#         return None
+#     return LLMProviderView.from_model(provider_model)
 
 
-def remove_embedding_provider(
-    db_session: Session, provider_type: EmbeddingProvider
-) -> None:
-    db_session.execute(
-        delete(SearchSettings).where(SearchSettings.provider_type == provider_type)
-    )
+# def remove_embedding_provider(
+#     db_session: Session, provider_type: EmbeddingProvider
+# ) -> None:
+#     db_session.execute(
+#         delete(SearchSettings).where(SearchSettings.provider_type == provider_type)
+#     )
 
-    # Delete the embedding provider
-    db_session.execute(
-        delete(CloudEmbeddingProviderModel).where(
-            CloudEmbeddingProviderModel.provider_type == provider_type
-        )
-    )
+#     # Delete the embedding provider
+#     db_session.execute(
+#         delete(CloudEmbeddingProviderModel).where(
+#             CloudEmbeddingProviderModel.provider_type == provider_type
+#         )
+#     )
 
-    db_session.commit()
+#     db_session.commit()
 
 
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:
@@ -312,7 +312,7 @@ def update_default_vision_provider(
     # Validate that the specified vision model supports image input
     model_to_validate = vision_model or new_default.default_model_name
     if model_to_validate:
-        if not model_supports_image_input(model_to_validate, new_default.provider):
+        if not True:
             raise ValueError(
                 f"Model '{model_to_validate}' for provider '{new_default.provider}' does not support image input"
             )

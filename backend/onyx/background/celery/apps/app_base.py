@@ -24,18 +24,11 @@ from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatt
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.celery_utils import make_probe_path
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
-from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
@@ -49,6 +42,10 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+# from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
+# from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
+# from onyx.redis.redis_connector import RedisConnector
+# from onyx.redis.redis_connector_delete import RedisConnectorDelete
 
 logger = setup_logger()
 
@@ -157,9 +154,6 @@ def on_task_postrun(
     # NOTE: we want to remove the `Redis*` classes, prefer to just have functions to
     # do these things going forward. In short, things should generally be like the doc
     # sync task rather than the others below
-    if task_id.startswith(DOCUMENT_SYNC_PREFIX):
-        r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
-        return
 
     if task_id.startswith(RedisDocumentSet.PREFIX):
         document_set_id = RedisDocumentSet.get_id_from_task_id(task_id)
@@ -173,34 +167,6 @@ def on_task_postrun(
         if usergroup_id is not None:
             rug = RedisUserGroup(tenant_id, int(usergroup_id))
             r.srem(rug.taskset_key, task_id)
-        return
-
-    if task_id.startswith(RedisConnectorDelete.PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorDelete.remove_from_taskset(int(cc_pair_id), task_id, r)
-        return
-
-    if task_id.startswith(RedisConnectorPrune.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorPrune.remove_from_taskset(int(cc_pair_id), task_id, r)
-        return
-
-    if task_id.startswith(RedisConnectorPermissionSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorPermissionSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
-        return
-
-    if task_id.startswith(RedisConnectorExternalGroupSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorExternalGroupSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
         return
 
 
