@@ -261,7 +261,7 @@ services:
     environment:
       - DOMAIN=localhost
     ports:
-    # - "80:80"
+      - "80:80"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
