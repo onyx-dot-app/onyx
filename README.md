@@ -26,13 +26,13 @@
 
 **[Onyx](https://www.onyx.app/)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
 
-> [!NOTE]
-> Onyx comes loaded with advanced features like creating Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
+Onyx comes loaded with advanced features like creating Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
 
-Deploy Onyx with a single command (or see deployment section below):
-```
-curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
-```
+> [!NOTE]
+> Deploy Onyx with a single command (or see deployment section below):
+> ```
+> curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
+> ```
 
 ****
 
