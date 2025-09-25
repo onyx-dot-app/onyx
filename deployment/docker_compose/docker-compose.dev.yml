@@ -27,6 +27,7 @@ services:
       - "6379:6379"
 
   minio:
+    # use different ports to avoid conflicts with model servers
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9004:9000"
+      - "9005:9001"
