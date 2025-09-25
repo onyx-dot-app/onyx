@@ -4,15 +4,15 @@ import {
   CitationDelta,
   SearchToolDelta,
   StreamingCitation,
-} from "../../services/streamingModels";
-import { FullChatState } from "./interfaces";
+} from "@/app/chat/services/streamingModels";
+import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Logo } from "@/components/logo/Logo";
 import { CopyButton } from "@/components/CopyButton";
 import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
 import { HoverableIcon } from "@/components/Hoverable";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { CitedSourcesToggle } from "./CitedSourcesToggle";
+import { CitedSourcesToggle } from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import {
   CustomTooltip,
   TooltipGroup,
@@ -22,21 +22,29 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
-} from "../../stores/useChatSessionStore";
-import { copyAll, handleCopy } from "../copyingUtils";
-import RegenerateOption from "../../components/RegenerateOption";
-import { MessageSwitcher } from "../MessageSwitcher";
-import { BlinkingDot } from "../BlinkingDot";
+} from "@/app/chat/stores/useChatSessionStore";
+import { copyAll, handleCopy } from "@/app/chat/message/copyingUtils";
+import RegenerateOption from "@/app/chat/components/RegenerateOption";
+import { MessageSwitcher } from "@/app/chat/message/MessageSwitcher";
+import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
   getTextContent,
   isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
-} from "../../services/packetUtils";
-import { useMessageSwitching } from "./hooks/useMessageSwitching";
-import MultiToolRenderer from "./MultiToolRenderer";
-import { RendererComponent } from "./renderMessageComponent";
+} from "@/app/chat/services/packetUtils";
+import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
+import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
+import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
+
+interface AIMessageProps {
+  rawPackets: Packet[];
+  chatState: FullChatState;
+  nodeId: number;
+  otherMessagesCanSwitchTo?: number[];
+  onMessageSelection?: (nodeId: number) => void;
+}
 
 export function AIMessage({
   rawPackets,
@@ -44,13 +52,7 @@ export function AIMessage({
   nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
-}: {
-  rawPackets: Packet[];
-  chatState: FullChatState;
-  nodeId: number;
-  otherMessagesCanSwitchTo?: number[];
-  onMessageSelection?: (nodeId: number) => void;
-}) {
+}: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
@@ -417,7 +419,7 @@ export function AIMessage({
                                 documentMap.size > 0) && (
                                 <>
                                   {chatState.regenerate && (
-                                    <div className="h-4 w-px bg-border mx-2" />
+                                    <div className="h-4 w-px mx-2" />
                                   )}
                                   <CustomTooltip
                                     showTick

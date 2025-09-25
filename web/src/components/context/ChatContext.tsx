@@ -13,9 +13,105 @@ import { Folder } from "@/app/chat/components/folders/interfaces";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { SEARCH_PARAMS } from "@/lib/extension/constants";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+
+// We use Omit to exclude 'refreshChatSessions' from the value prop type
+// because we're defining it within the component
+interface ChatProviderProps {
+  value: Omit<
+    ChatContextProps,
+    | "refreshChatSessions"
+    | "refreshAvailableAssistants"
+    | "reorderFolders"
+    | "refreshFolders"
+    | "refreshInputPrompts"
+  >;
+  children: React.ReactNode;
+}
+
+export function ChatProvider({ value, children }: ChatProviderProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentChatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
+  const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
+  const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
+  const [folders, setFolders] = useState(value?.folders || []);
+  const currentChat =
+    value.chatSessions.find(
+      (chatSession) => chatSession.id === currentChatId
+    ) || null;
+
+  const reorderFolders = (displayPriorityMap: Record<number, number>) => {
+    setFolders(
+      folders.map((folder) => {
+        if (folder.folder_id) {
+          const display_priority = displayPriorityMap[folder.folder_id];
+          if (display_priority !== undefined) {
+            folder.display_priority = display_priority;
+          }
+        }
+        return folder;
+      })
+    );
+  };
+
+  const refreshChatSessions = async () => {
+    try {
+      const response = await fetch("/api/chat/get-user-chat-sessions");
+      if (!response.ok) throw new Error("Failed to fetch chat sessions");
+      const { sessions } = await response.json();
+      setChatSessions(sessions);
+
+      if (
+        currentChatId &&
+        !sessions.some((session: ChatSession) => session.id === currentChatId)
+      ) {
+        router.replace("/chat");
+      }
+    } catch (error) {
+      console.error("Error refreshing chat sessions:", error);
+    }
+  };
+
+  const refreshFolders = async () => {
+    const response = await fetch("/api/folder");
+    if (!response.ok) throw new Error("Failed to fetch folders");
+    const { folders } = await response.json();
+    setFolders(folders);
+  };
+
+  const refreshInputPrompts = async () => {
+    const response = await fetch("/api/input_prompt");
+    if (!response.ok) throw new Error("Failed to fetch input prompts");
+    const inputPrompts = await response.json();
+    setInputPrompts(inputPrompts);
+  };
+
+  return (
+    <ChatContext.Provider
+      value={{
+        ...value,
+        inputPrompts,
+        refreshInputPrompts,
+        chatSessions,
+        currentChatId,
+        currentChat,
+        folders,
+        reorderFolders,
+        refreshChatSessions,
+        refreshFolders,
+      }}
+    >
+      {children}
+    </ChatContext.Provider>
+  );
+}
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
+  currentChatId: string | null;
+  currentChat: ChatSession | null;
   sidebarInitiallyVisible: boolean;
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
@@ -40,94 +136,9 @@ interface ChatContextProps {
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
 
-// We use Omit to exclude 'refreshChatSessions' from the value prop type
-// because we're defining it within the component
-export const ChatProvider: React.FC<{
-  value: Omit<
-    ChatContextProps,
-    | "refreshChatSessions"
-    | "refreshAvailableAssistants"
-    | "reorderFolders"
-    | "refreshFolders"
-    | "refreshInputPrompts"
-  >;
-  children: React.ReactNode;
-}> = ({ value, children }) => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
-  const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
-  const [folders, setFolders] = useState(value?.folders || []);
-
-  const reorderFolders = (displayPriorityMap: Record<number, number>) => {
-    setFolders(
-      folders.map((folder) => {
-        if (folder.folder_id) {
-          const display_priority = displayPriorityMap[folder.folder_id];
-          if (display_priority !== undefined) {
-            folder.display_priority = display_priority;
-          }
-        }
-        return folder;
-      })
-    );
-  };
-
-  const refreshChatSessions = async () => {
-    try {
-      const response = await fetch("/api/chat/get-user-chat-sessions");
-      if (!response.ok) throw new Error("Failed to fetch chat sessions");
-      const { sessions } = await response.json();
-      setChatSessions(sessions);
-
-      const currentSessionId = searchParams?.get("chatId");
-      if (
-        currentSessionId &&
-        !sessions.some(
-          (session: ChatSession) => session.id === currentSessionId
-        )
-      ) {
-        router.replace("/chat");
-      }
-    } catch (error) {
-      console.error("Error refreshing chat sessions:", error);
-    }
-  };
-  const refreshFolders = async () => {
-    const response = await fetch("/api/folder");
-    if (!response.ok) throw new Error("Failed to fetch folders");
-    const { folders } = await response.json();
-    setFolders(folders);
-  };
-  const refreshInputPrompts = async () => {
-    const response = await fetch("/api/input_prompt");
-    if (!response.ok) throw new Error("Failed to fetch input prompts");
-    const inputPrompts = await response.json();
-    setInputPrompts(inputPrompts);
-  };
-
-  return (
-    <ChatContext.Provider
-      value={{
-        ...value,
-        inputPrompts,
-        refreshInputPrompts,
-        chatSessions,
-        folders,
-        reorderFolders,
-        refreshChatSessions,
-        refreshFolders,
-      }}
-    >
-      {children}
-    </ChatContext.Provider>
-  );
-};
-
-export const useChatContext = (): ChatContextProps => {
+export function useChatContext(): ChatContextProps {
   const context = useContext(ChatContext);
-  if (!context) {
+  if (!context)
     throw new Error("useChatContext must be used within a ChatProvider");
-  }
   return context;
-};
+}

@@ -5,16 +5,20 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { ClientLayout } from "./ClientLayout";
+import { ClientLayout } from "@/components/admin/ClientLayout";
 import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
-import { AnnouncementBanner } from "../header/AnnouncementBanner";
+import { AnnouncementBanner } from "@/components/header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "../context/ChatContext";
+import { ChatProvider } from "@/components/context/ChatContext";
 
-export async function Layout({ children }: { children: React.ReactNode }) {
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+export async function Layout({ children }: LayoutProps) {
   const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
 
   // catch cases where the backend is completely unreachable here

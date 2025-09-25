@@ -3,6 +3,7 @@ import { AlertIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import React from "react";
+import Text from "@/components-2/Text";
 
 interface SourceTileProps {
   sourceMetadata: SourceMetadata;
@@ -23,28 +24,28 @@ export default function SourceTile({
               flex-col
               items-center
               justify-center
-              p-4
+              p-spacing-paragraph
               rounded-lg
               w-40
               cursor-pointer
               shadow-md
-              hover:bg-accent-background-hovered
               relative
-              ${
-                preSelect
-                  ? "bg-accent-background-hovered subtle-pulse"
-                  : "bg-accent-background"
-              }
+              ${preSelect ? "bg-background-tint-03 subtle-pulse" : "bg-background-tint-02"}
+              hover:bg-background-tint-03
+              gap-padding-button
             `}
       href={navigationUrl}
     >
       {sourceMetadata.federated && !hasExistingSlackCredentials && (
-        <div className="absolute -top-2 -left-2 z-10 bg-white rounded-full p-1 shadow-md border border-orange-200">
-          <AlertIcon size={18} className="text-orange-500 font-bold stroke-2" />
+        <div className="absolute -top-2 -left-2 z-10 bg-background-neutral-inverted-00 rounded-full p-1 shadow-md border border-status-warning-02">
+          <AlertIcon
+            size={18}
+            className="text-status-warning-05 font-bold stroke-2"
+          />
         </div>
       )}
       <SourceIcon sourceType={sourceMetadata.internalName} iconSize={24} />
-      <p className="font-medium text-sm mt-2">{sourceMetadata.displayName}</p>
+      <Text>{sourceMetadata.displayName}</Text>
     </Link>
   );
 }

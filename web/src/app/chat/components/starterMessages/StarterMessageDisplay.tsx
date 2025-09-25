@@ -1,40 +1,31 @@
 import { StarterMessage } from "@/app/admin/assistants/interfaces";
+import Text from "@/components-2/Text";
+
+export interface StarterMessageProps {
+  starterMessages: StarterMessage[];
+  onSelectStarterMessage: (message: string) => void;
+}
 
 export function StarterMessageDisplay({
   starterMessages,
   onSelectStarterMessage,
-}: {
-  starterMessages: StarterMessage[];
-  onSelectStarterMessage: (message: string) => void;
-}) {
+}: StarterMessageProps) {
   return (
     <div
       data-testid="starter-messages"
-      className="flex flex-col gap-2 w-full max-w-searchbar-max mx-auto"
+      className="flex flex-col w-full max-w-[40rem] p-spacing-inline gap-spacing-inline"
     >
-      {starterMessages.map((starterMessage, index) => (
-        <div
-          key={starterMessage.name}
+      {starterMessages.map(({ name, message }, index) => (
+        <button
+          key={index}
           data-testid={`starter-message-${index}`}
-          onClick={() => onSelectStarterMessage(starterMessage.message)}
-          className="
-            text-left 
-            text-text-500 
-            text-sm 
-            mx-7 
-            px-2 
-            py-2 
-            hover:bg-background-100 
-            dark:hover:bg-neutral-800
-            rounded-lg 
-            cursor-pointer
-            overflow-hidden
-            text-ellipsis
-            whitespace-nowrap
-          "
+          className="cursor-pointer bg-transparent hover:bg-background-tint-02 rounded-08 overflow-hidden text-ellipsis whitespace-nowrap p-padding-button"
+          onClick={() => onSelectStarterMessage(message)}
         >
-          {starterMessage.name}
-        </div>
+          <Text text03 className="text-left">
+            {name}
+          </Text>
+        </button>
       ))}
     </div>
   );

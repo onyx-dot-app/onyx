@@ -1,4 +1,5 @@
 "use client";
+
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
@@ -34,17 +35,23 @@ import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 
+interface CategorizedSources {
+  [key: string]: SourceMetadata[];
+}
+
+interface SourceTileTooltipWrapperProps {
+  sourceMetadata: SourceMetadata;
+  preSelect?: boolean;
+  federatedConnectors?: FederatedConnectorDetail[];
+  slackCredentials?: Credential<any>[];
+}
+
 function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,
   federatedConnectors,
   slackCredentials,
-}: {
-  sourceMetadata: SourceMetadata;
-  preSelect?: boolean;
-  federatedConnectors?: FederatedConnectorDetail[];
-  slackCredentials?: Credential<any>[];
-}) {
+}: SourceTileTooltipWrapperProps) {
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
     if (!sourceMetadata.federated || !federatedConnectors) {
@@ -189,7 +196,7 @@ export default function Page() {
     );
   }, [sources, filterSources, searchTerm]);
 
-  const categorizedSources = useMemo(() => {
+  const categorizedSources = useMemo((): CategorizedSources => {
     const filtered = filterSources(sources);
     const categories = Object.values(SourceCategory).reduce(
       (acc, category) => {
@@ -286,7 +293,7 @@ export default function Page() {
         value={rawSearchTerm} // keep the input bound to immediate state
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
-        className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="ml-1 w-96 h-9 flex-none rounded-md border border-01 bg-background-tint-03 px-3 py-1 text-sm shadow-01 transition-colors placeholder:text-text-03 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-theme-primary-04"
       />
 
       {dedupedPopular.length > 0 && (

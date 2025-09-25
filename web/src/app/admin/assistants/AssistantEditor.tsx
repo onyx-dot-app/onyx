@@ -96,6 +96,7 @@ import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { FormErrorFocus } from "@/components/FormErrorHelpers";
+import { useAgentsContext } from "@/components-2/context/AgentsContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -122,6 +123,17 @@ function SubLabel({ children }: { children: string | JSX.Element }) {
   );
 }
 
+interface AssistantEditorProps {
+  existingPersona?: FullPersona | null;
+  ccPairs: CCPairBasicInfo[];
+  documentSets: DocumentSetSummary[];
+  user: User | null;
+  defaultPublic: boolean;
+  llmProviders: LLMProviderView[];
+  tools: ToolSnapshot[];
+  shouldAddAssistantToUserPreferences?: boolean;
+}
+
 export function AssistantEditor({
   existingPersona,
   ccPairs,
@@ -131,17 +143,9 @@ export function AssistantEditor({
   llmProviders,
   tools,
   shouldAddAssistantToUserPreferences,
-}: {
-  existingPersona?: FullPersona | null;
-  ccPairs: CCPairBasicInfo[];
-  documentSets: DocumentSetSummary[];
-  user: User | null;
-  defaultPublic: boolean;
-  llmProviders: LLMProviderView[];
-  tools: ToolSnapshot[];
-  shouldAddAssistantToUserPreferences?: boolean;
-}) {
-  const { refreshAssistants } = useAssistantsContext();
+}: AssistantEditorProps) {
+  // const { refreshAssistants } = useAssistantsContext();
+  const { refreshAgents } = useAgentsContext();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -452,7 +456,7 @@ export function AssistantEditor({
     if (existingPersona) {
       const response = await deletePersona(existingPersona.id);
       if (response.ok) {
-        await refreshAssistants();
+        await refreshAgents();
         router.push(
           isAdminPage ? `/admin/assistants?u=${Date.now()}` : `/chat`
         );
@@ -703,7 +707,7 @@ export function AssistantEditor({
                   message: `"${assistant.name}" has been added to your list.`,
                   type: "success",
                 });
-                await refreshAssistants();
+                await refreshAgents();
               } else {
                 setPopup({
                   message: `"${assistant.name}" could not be added to your list.`,
@@ -712,7 +716,7 @@ export function AssistantEditor({
               }
             }
 
-            await refreshAssistants();
+            await refreshAgents();
             await refreshFolders();
 
             router.push(
@@ -787,7 +791,7 @@ export function AssistantEditor({
                       Edit assistant <b>{existingPersona.name}</b>
                     </>
                   ) : (
-                    "Create an Assistant"
+                    "Create an Agent"
                   )}
                 </p>
                 <div className="max-w-4xl w-full">

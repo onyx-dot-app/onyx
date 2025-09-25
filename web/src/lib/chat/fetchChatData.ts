@@ -213,10 +213,6 @@ export async function fetchChatData(searchParams: {
       ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
       : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN);
 
-  sidebarToggled
-    ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
-    : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN;
-
   const finalDocumentSidebarInitialWidth = documentSidebarCookieInitialWidth
     ? parseInt(documentSidebarCookieInitialWidth.value)
     : undefined;
