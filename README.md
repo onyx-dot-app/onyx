@@ -66,7 +66,7 @@ See guides below:
 - Cloud specific guides (best if specifically using [AWS EKS](https://docs.onyx.app/deployment/cloud/aws/eks), [Azure VMs](https://docs.onyx.app/deployment/cloud/azure), etc.)
 
 > [!TIP]  
-> **To try Onyx for free deploying, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
+> **To try Onyx for free without deploying, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
 
 
