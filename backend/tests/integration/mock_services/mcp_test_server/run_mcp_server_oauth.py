@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -17,6 +18,9 @@ from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.server import FunctionTool
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logging.basicConfig(level=logging.DEBUG)
+
 
 """
 Setup Okta:
@@ -151,6 +155,10 @@ if __name__ == "__main__":
         "MCP_OAUTH_JWKS_URI", "https://test-domain.okta.com/oauth2/default/v1/keys"
     )
     required_scopes = os.getenv("MCP_OAUTH_REQUIRED_SCOPES", "mcp:use")
+    print(f"Required scopes: {required_scopes}")
+    print(f"Audience: {audience}")
+    print(f"Issuer: {issuer}")
+    print(f"JWKS URI: {jwks_uri}")
 
     verifier = JWTVerifier(
         issuer=issuer,

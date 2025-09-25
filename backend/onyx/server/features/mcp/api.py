@@ -73,6 +73,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _truncate_description(description: str | None, max_length: int = 500) -> str:
+    """Truncate description to max_length characters, adding ellipsis if truncated."""
+    if not description:
+        return ""
+    if len(description) <= max_length:
+        return description
+    return description[: max_length - 3] + "..."
+
+
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 15  # 15 minutes
@@ -1102,7 +1112,7 @@ def _list_mcp_tools_by_id(
         auth = make_oauth_provider(
             mcp_server,
             user_id,
-            "unused_path",
+            UNUSED_RETURN_PATH,
             connection_config.id,
             mcp_server.admin_connection_config_id,
         )
@@ -1119,6 +1129,11 @@ def _list_mcp_tools_by_id(
     logger.info(
         f"Discovered {len(tools)} tools for MCP server: {mcp_server.name}: {time.time() - t1}"
     )
+
+    # Truncate tool descriptions to prevent overly long responses
+    for tool in tools:
+        if tool.description:
+            tool.description = _truncate_description(tool.description)
 
     # TODO: Also list resources from the MCP server
     # resources = discover_mcp_resources(mcp_server, connection_config)
@@ -1388,7 +1403,7 @@ def _add_tools_to_server(
         # Create Tool entry for each selected tool
         tool = create_tool__no_commit(
             name=tool_name,
-            description=tool_def.description,
+            description=_truncate_description(tool_def.description),
             openapi_schema=None,  # MCP tools don't use OpenAPI
             custom_headers=None,
             user_id=user.id if user else None,
@@ -1490,7 +1505,7 @@ def get_mcp_server_db_tools(
                 id=tool.id,
                 name=tool_name,
                 display_name=tool.display_name or tool_name,
-                description=tool.description or "",
+                description=_truncate_description(tool.description),
             )
         )
 
