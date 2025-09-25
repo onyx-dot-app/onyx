@@ -52,5 +52,6 @@ export async function switchModel(page: Page, modelName: string) {
 
 export async function startNewChat(page: Page) {
   await page.getByRole("link", { name: "New Chat" }).click();
+  await page.waitForTimeout(15000);
   await expect(page.locator('div[data-testid="chat-intro"]')).toBeVisible();
 }

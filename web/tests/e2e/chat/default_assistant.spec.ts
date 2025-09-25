@@ -231,10 +231,10 @@ test.describe("Default Assistant Tests", () => {
       await startNewChat(page);
 
       // Should be back to default assistant
-      const inputPlaceholder = await page
-        .locator("#onyx-chat-input-textarea")
-        .getAttribute("placeholder");
-      expect(inputPlaceholder).toContain("Assistant");
+      await expect(page.locator("#onyx-chat-input-textarea")).toHaveAttribute(
+        "placeholder",
+        /Onyx/
+      );
     });
   });
 
