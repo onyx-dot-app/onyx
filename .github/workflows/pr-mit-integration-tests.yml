@@ -127,6 +127,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
+          no-cache: true
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -154,6 +156,7 @@ jobs:
           push: true
           outputs: type=registry
           provenance: false
+          no-cache: true
 
   build-integration-image:
     needs: prepare-build
@@ -186,6 +189,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
+          no-cache: true
 
   integration-tests-mit:
     needs:
@@ -228,9 +233,9 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
