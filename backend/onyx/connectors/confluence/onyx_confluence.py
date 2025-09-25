@@ -41,6 +41,7 @@ from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -65,12 +66,6 @@ _DEFAULT_PAGINATION_LIMIT = 1000
 
 class ConfluenceRateLimitError(Exception):
     pass
-
-
-# TODO: given a url that looks like https://<your-domain>.atlassian.net/{api},
-# convert it to  url that looks like https://api.atlassian.com/ex/confluence/<your-domain>
-def scoped_url(url: str) -> str:
-    return url
 
 
 class OnyxConfluence:
@@ -100,7 +95,7 @@ class OnyxConfluence:
             CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
         ),
     ) -> None:
-        url = scoped_url(url) if scoped_token else url
+        url = scoped_url(url, "confluence") if scoped_token else url
 
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")

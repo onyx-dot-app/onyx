@@ -5,7 +5,10 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import TypeVar
+from urllib.parse import urljoin
+from urllib.parse import urlparse
 
+import requests
 from dateutil.parser import parse
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
@@ -148,3 +151,17 @@ def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
 
 def is_atlassian_date_error(e: Exception) -> bool:
     return "field 'updated' is invalid" in str(e)
+
+
+def get_cloudId(base_url: str) -> str:
+    tenant_info_url = urljoin(base_url, "/_edge/tenant_info")
+    response = requests.get(tenant_info_url)
+    response.raise_for_status()
+    return response.json()["cloudId"]
+
+
+def scoped_url(url: str, product: str) -> str:
+    parsed = urlparse(url)
+    base_url = parsed.scheme + "://" + parsed.netloc
+    cloud_id = get_cloudId(base_url)
+    return f"https://api.atlassian.com/ex/{product}/{cloud_id}{parsed.path}"
