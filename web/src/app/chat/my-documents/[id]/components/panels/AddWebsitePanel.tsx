@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../../i18n/keys";
 import React, { useState } from "react";
 import { Link, ChevronDown, ChevronRight } from "lucide-react";
@@ -14,6 +14,7 @@ export function AddWebsitePanel({
   folderId,
   onCreateFileFromLink,
 }: AddWebsitePanelProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -42,7 +43,7 @@ export function AddWebsitePanel({
         <div className="flex items-center">
           <Link className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
           <span className="text-sm font-medium leading-tight">
-            {i18n.t(k.ADD_A_WEBSITE)}
+            {t(k.ADD_A_WEBSITE)}
           </span>
         </div>
         <Button variant="ghost" size="sm" className="w-6 h-6 p-0 rounded-full">
@@ -61,7 +62,7 @@ export function AddWebsitePanel({
               type="text"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="Введите URL"
+              placeholder={t(k.ENTER_URL_PLACEHOLDER)}
               className="flex-grow !text-sm mr-2 px-2 py-1 border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
             />
 
@@ -72,7 +73,7 @@ export function AddWebsitePanel({
               onClick={handleCreateFileFromLink}
               disabled={isCreating || !linkUrl}
             >
-              {isCreating ? i18n.t(k.CREATING) : i18n.t(k.CREATE1)}
+              {isCreating ? t(k.CREATING) : t(k.CREATE1)}
             </Button>
           </div>
         </div>

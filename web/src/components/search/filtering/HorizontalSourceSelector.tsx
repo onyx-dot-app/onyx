@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React from "react";
 import {
@@ -45,6 +46,7 @@ export function HorizontalSourceSelector({
   availableDocumentSets,
   availableTags,
 }: SourceSelectorProps) {
+  const { t } = useTranslation();
   const handleSourceSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
       if (prev.map((s) => s.internalName).includes(source.internalName)) {
@@ -110,7 +112,7 @@ export function HorizontalSourceSelector({
             <span>
               {timeRange?.from
                 ? getDateRangeString(timeRange.from, timeRange.to)
-                : i18n.t(k.DATE_RANGE)}
+                : t(k.DATE_RANGE)}
             </span>
           </button>
         </PopoverTrigger>

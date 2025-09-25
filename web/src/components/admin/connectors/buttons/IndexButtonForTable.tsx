@@ -1,10 +1,12 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 interface Props {
   onClick: () => void;
 }
 
 export const IndexButtonForTable = ({ onClick }: Props) => {
+  const { t } = useTranslation();
   return (
     <button
       className={
@@ -16,7 +18,7 @@ export const IndexButtonForTable = ({ onClick }: Props) => {
       }
       onClick={onClick}
     >
-      {i18n.t(k.INDEX)}
+      {t(k.INDEX)}
     </button>
   );
 };

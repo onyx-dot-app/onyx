@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -32,8 +32,6 @@ import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import CreateButton from "@/components/ui/createButton";
 
-const API_KEY_TEXT = `Ключи API позволяют получить программный доступ к API SmartSearch. Нажмите кнопку ниже, чтобы сгенерировать новый ключ API.`;
-
 function NewApiKeyModal({
   apiKey,
   onClose,
@@ -41,18 +39,17 @@ function NewApiKeyModal({
   apiKey: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [copyClicked, setCopyClicked] = useState(false);
 
   return (
     <Modal onOutsideClick={onClose}>
       <div className="px-8 py-8">
         <div className="flex w-full border-b border-border mb-4 pb-4">
-          <Title>{i18n.t(k.NEW_API_KEY)}</Title>
+          <Title>{t(k.NEW_API_KEY)}</Title>
         </div>
         <div className="h-32">
-          <Text className="mb-4">
-            {i18n.t(k.MAKE_SURE_YOU_COPY_YOUR_NEW_AP)}
-          </Text>
+          <Text className="mb-4">{t(k.MAKE_SURE_YOU_COPY_YOUR_NEW_AP)}</Text>
 
           <div className="flex mt-2">
             <b className="my-auto break-all">{apiKey}</b>
@@ -71,7 +68,7 @@ function NewApiKeyModal({
           </div>
           {copyClicked && (
             <Text className="text-success text-xs font-medium mt-1">
-              {i18n.t(k.API_KEY_COPIED)}
+              {t(k.API_KEY_COPIED)}
             </Text>
           )}
         </div>
@@ -81,6 +78,7 @@ function NewApiKeyModal({
 }
 
 function Main() {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
 
   const {
@@ -115,7 +113,7 @@ function Main() {
   const newApiKeyButton = (
     <CreateButton
       onClick={() => setShowCreateUpdateForm(true)}
-      text="Создать API-ключ"
+      text={t(k.CREATE_API_KEY)}
     />
   );
 
@@ -123,7 +121,7 @@ function Main() {
     return (
       <div>
         {popup}
-        <Text>{API_KEY_TEXT}</Text>
+        <Text>{t(k.API_KEY_TEXT)}</Text>
         {newApiKeyButton}
 
         {showCreateUpdateForm && (
@@ -157,20 +155,20 @@ function Main() {
 
       {keyIsGenerating && <Spinner />}
 
-      <Text>{API_KEY_TEXT}</Text>
+      <Text>{t(k.API_KEY_TEXT)}</Text>
       {newApiKeyButton}
 
       <Separator />
 
-      <Title className="mt-6">{i18n.t(k.EXISTING_API_KEYS)}</Title>
+      <Title className="mt-6">{t(k.EXISTING_API_KEYS)}</Title>
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.NAME)}</TableHead>
-            <TableHead>{i18n.t(k.API_KEY)}</TableHead>
-            <TableHead>{i18n.t(k.ROLE)}</TableHead>
-            <TableHead>{i18n.t(k.REGENERATE)}</TableHead>
-            <TableHead>{i18n.t(k.DELETE)}</TableHead>
+            <TableHead>{t(k.NAME)}</TableHead>
+            <TableHead>{t(k.API_KEY)}</TableHead>
+            <TableHead>{t(k.ROLE)}</TableHead>
+            <TableHead>{t(k.REGENERATE)}</TableHead>
+            <TableHead>{t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -191,7 +189,7 @@ function Main() {
                   onClick={() => handleEdit(apiKey)}
                 >
                   <FiEdit2 className="my-auto mr-2" />
-                  {apiKey.api_key_name || <i>{i18n.t(k.NULL)}</i>}
+                  {apiKey.api_key_name || <i>{t(k.NULL)}</i>}
                 </div>
               </TableCell>
               <TableCell className="max-w-64">
@@ -220,7 +218,7 @@ function Main() {
                       const errorMsg = await response.text();
                       setPopup({
                         type: "error",
-                        message: `${i18n.t(
+                        message: `${t(
                           k.FAILED_TO_REGENERATE_API_KEY
                         )} ${errorMsg}`,
                       });
@@ -232,7 +230,7 @@ function Main() {
                   }}
                 >
                   <FiRefreshCw className="mr-1 my-auto" />
-                  {i18n.t(k.REFRESH)}
+                  {t(k.REFRESH)}
                 </div>
               </TableCell>
               <TableCell>
@@ -243,9 +241,7 @@ function Main() {
                       const errorMsg = await response.text();
                       setPopup({
                         type: "error",
-                        message: `${i18n.t(
-                          k.FAILED_TO_DELETE_API_KEY
-                        )} ${errorMsg}`,
+                        message: `${t(k.FAILED_TO_DELETE_API_KEY)} ${errorMsg}`,
                       });
                       return;
                     }
@@ -277,9 +273,10 @@ function Main() {
 }
 
 export default function Page() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="API-ключи" icon={<KeyIcon size={32} />} />
+      <AdminPageTitle title={t(k.API_KEYS)} icon={<KeyIcon size={32} />} />
 
       <Main />
     </div>

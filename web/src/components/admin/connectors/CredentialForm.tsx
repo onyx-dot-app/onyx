@@ -1,6 +1,8 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
-import React, { useState } from "react";
+import React, { JSX, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Popup } from "./Popup";
@@ -16,6 +18,7 @@ export async function submitCredential<T>(
   message: string;
   isSuccess: boolean;
 }> {
+  const { t } = useTranslation();
   let isSuccess = false;
   try {
     const response = await createCredential(credential);
@@ -24,13 +27,16 @@ export async function submitCredential<T>(
       const parsed_response = await response.json();
       const credential = parsed_response.credential;
       isSuccess = true;
-      return { credential, message: i18n.t(k.SUCCESS1), isSuccess: true };
+      return { credential, message: t(k.SUCCESS1), isSuccess: true };
     } else {
       const errorData = await response.json();
-      return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+      return {
+        message: t(k.ERROR_WITH_DETAIL, { detail: errorData.detail }),
+        isSuccess: false,
+      };
     }
   } catch (error) {
-    return { message: `Ошибка: ${error}`, isSuccess: false };
+    return { message: t(k.ERROR_GENERIC, { error }), isSuccess: false };
   }
 }
 
@@ -49,6 +55,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
   source,
   onSubmit,
 }: Props<T>): JSX.Element {
+  const { t } = useTranslation();
   const [popup, setPopup] = useState<{
     message: string;
     type: "success" | "error";
@@ -93,7 +100,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
                 disabled:pointer-events-none disabled:opacity-50 
                 shadow hover:bg-primary/90 h-9 px-4 py-2"
               >
-                {i18n.t(k.UPDATE)}
+                {t(k.UPDATE)}
               </button>
             </div>
           </Form>

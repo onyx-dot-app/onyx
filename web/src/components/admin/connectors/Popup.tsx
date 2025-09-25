@@ -1,6 +1,7 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Check, CheckCircle, XCircle } from "lucide-react";
@@ -28,60 +29,64 @@ export interface PopupSpec extends VariantProps<typeof popupVariants> {
   message: string;
 }
 
-export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
-  <div className={cn(popupVariants({ type }))}>
-    {type === "success" ? (
-      <Check className="w-6 h-6" />
-    ) : type === "error" ? (
-      <Warning className="w-6 h-6 " />
-    ) : type === "info" ? (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-    ) : (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-        />
-      </svg>
-    )}
-    <div className="flex flex-col justify-center items-start">
-      <p className="font-medium">{message}</p>
-      {type === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK && (
-        <p className="text-xs">
-          {i18n.t(k.NEED_HELP)}{" "}
-          <a
-            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-red-100 dark:hover:text-red-200"
-          >
-            {i18n.t(k.JOIN_OUR_COMMUNITY)}
-          </a>{" "}
-          {i18n.t(k.FOR_SUPPORT)}
-        </p>
+export const Popup: React.FC<PopupSpec> = ({ message, type }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className={cn(popupVariants({ type }))}>
+      {type === "success" ? (
+        <Check className="w-6 h-6" />
+      ) : type === "error" ? (
+        <Warning className="w-6 h-6 " />
+      ) : type === "info" ? (
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      ) : (
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
+        </svg>
       )}
+      <div className="flex flex-col justify-center items-start">
+        <p className="font-medium">{message}</p>
+        {type === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK && (
+          <p className="text-xs">
+            {t(k.NEED_HELP)}{" "}
+            <a
+              href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-red-100 dark:hover:text-red-200"
+            >
+              {t(k.JOIN_OUR_COMMUNITY)}
+            </a>{" "}
+            {t(k.FOR_SUPPORT)}
+          </p>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const usePopup = () => {
   const [popup, setPopup] = useState<PopupSpec | null>(null);

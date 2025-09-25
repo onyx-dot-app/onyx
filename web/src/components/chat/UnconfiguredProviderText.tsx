@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { useProviderStatus } from "./ProviderContext";
 
@@ -9,32 +10,33 @@ export default function CredentialNotConfigured({
   showConfigureAPIKey: () => void;
   noSources?: boolean;
 }) {
+  const { t } = useTranslation();
   const { shouldShowConfigurationNeeded } = useProviderStatus();
 
   return (
     <>
       {noSources ? (
         <p className="text-base text-center w-full text-subtle">
-          {i18n.t(k.YOU_HAVE_NOT_YET_ADDED_ANY_SOU)}{" "}
+          {t(k.YOU_HAVE_NOT_YET_ADDED_ANY_SOU)}{" "}
           <a
             href="/admin/add-connector"
             className="text-link hover:underline cursor-pointer"
           >
-            {i18n.t(k.A_SOURCE)}
+            {t(k.A_SOURCE)}
           </a>{" "}
-          {i18n.t(k.TO_CONTINUE)}
+          {t(k.TO_CONTINUE)}
         </p>
       ) : (
         shouldShowConfigurationNeeded && (
           <p className="text-base text-center w-full text-subtle">
-            {i18n.t(k.PLEASE_NOTE_THAT_YOU_HAVE_NOT)}{" "}
+            {t(k.PLEASE_NOTE_THAT_YOU_HAVE_NOT)}{" "}
             <button
               onClick={showConfigureAPIKey}
               className="text-link hover:underline cursor-pointer"
             >
-              {i18n.t(k.HERE)}
+              {t(k.HERE)}
             </button>
-            {i18n.t(k._8)}
+            {t(k._8)}
           </p>
         )
       )}

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import { useState, useEffect, useCallback } from "react";
@@ -23,6 +23,7 @@ export default function TextView({
   presentingDocument,
   onClose,
 }: TextViewProps) {
+  const { t } = useTranslation();
   const [zoom, setZoom] = useState(100);
   const [fileContent, setFileContent] = useState("");
   const [fileUrl, setFileUrl] = useState("");
@@ -156,23 +157,23 @@ export default function TextView({
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="icon" onClick={handleZoomOut}>
               <ZoomOut className="h-4 w-4" />
-              <span className="sr-only">{i18n.t(k.ZOOM_OUT)}</span>
+              <span className="sr-only">{t(k.ZOOM_OUT)}</span>
             </Button>
             <span className="text-sm">
               {zoom}
-              {i18n.t(k._15)}
+              {t(k._15)}
             </span>
             <Button variant="ghost" size="icon" onClick={handleZoomIn}>
               <ZoomIn className="h-4 w-4" />
-              <span className="sr-only">{i18n.t(k.ZOOM_IN)}</span>
+              <span className="sr-only">{t(k.ZOOM_IN)}</span>
             </Button>
             <Button variant="ghost" size="icon" onClick={handleDownload}>
               <Download className="h-4 w-4" />
-              <span className="sr-only">{i18n.t(k.DOWNLOAD)}</span>
+              <span className="sr-only">{t(k.DOWNLOAD)}</span>
             </Button>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <XIcon className="h-4 w-4" />
-              <span className="sr-only">{i18n.t(k.CLOSE)}</span>
+              <span className="sr-only">{t(k.CLOSE)}</span>
             </Button>
           </div>
         </DialogHeader>
@@ -182,7 +183,7 @@ export default function TextView({
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
                 <p className="mt-6 text-lg font-medium text-muted-foreground">
-                  {i18n.t(k.LOADING_DOCUMENT)}
+                  {t(k.LOADING_DOCUMENT)}
                 </p>
               </div>
             ) : (
@@ -200,7 +201,7 @@ export default function TextView({
                   <iframe
                     src={`${fileUrl}#toolbar=0`}
                     className="w-full h-full border-none"
-                    title="Просмотр файлов"
+                    title={t(k.VIEW_FILES)}
                   />
                 ) : isMarkdownFormat(fileType) ? (
                   <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">
@@ -212,10 +213,10 @@ export default function TextView({
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">
                     <p className="text-lg font-medium text-muted-foreground">
-                      {i18n.t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
+                      {t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
                     </p>
                     <Button className="mt-4" onClick={handleDownload}>
-                      {i18n.t(k.DOWNLOAD_FILE)}
+                      {t(k.DOWNLOAD_FILE)}
                     </Button>
                   </div>
                 )}

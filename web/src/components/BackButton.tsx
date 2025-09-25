@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ export function BackButton({
   behaviorOverride?: () => void;
   routerOverride?: string;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -39,7 +40,7 @@ export function BackButton({
       }}
     >
       <FiChevronLeft className="mr-1 my-auto" />
-      {i18n.t(k.BACK)}
+      {t(k.BACK)}
     </div>
   );
 }

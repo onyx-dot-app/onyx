@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -44,7 +44,8 @@ function SourceTile({
   );
 }
 export default function Page() {
-  const sources = useMemo(() => listSourceMetadata(), []);
+  const { t } = useTranslation();
+  const sources = useMemo<SourceMetadata[]>(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -82,14 +83,17 @@ export default function Page() {
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      const filteredCategories = Object.entries(categorizedSources).filter(
-        ([_, sources]) => sources.length > 0
-      );
+      const filteredCategories = (
+        Object.entries(categorizedSources) as [
+          SourceCategory,
+          SourceMetadata[]
+        ][]
+      ).filter(([_category, sources]) => sources.length > 0);
       if (
         filteredCategories.length > 0 &&
         filteredCategories[0][1].length > 0
       ) {
-        const firstSource = filteredCategories[0][1][0];
+        const firstSource = (filteredCategories[0][1] as SourceMetadata[])[0];
         if (firstSource) {
           window.open(firstSource.adminUrl, "_self");
         }
@@ -101,12 +105,10 @@ export default function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ConnectorIcon size={32} />}
-        title="Добавить коннектор"
+        title={t(k.ADD_CONNECTOR)}
         farRightElement={
           <Link href="/admin/indexing/status">
-            <Button variant="success-reverse">
-              {i18n.t(k.SEE_CONNECTORS)}
-            </Button>
+            <Button variant="success-reverse">{t(k.SEE_CONNECTORS)}</Button>
           </Link>
         }
       />
@@ -114,14 +116,19 @@ export default function Page() {
       <input
         type="text"
         ref={searchInputRef}
-        placeholder="Найти коннекторы..."
+        placeholder={t(k.SEARCH_CONNECTORS_PLACEHOLDER)}
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
-      {Object.entries(categorizedSources)
+      {(
+        Object.entries(categorizedSources) as [
+          SourceCategory,
+          SourceMetadata[]
+        ][]
+      )
         .filter(([_, sources]) => sources.length > 0)
         .map(([category, sources], categoryInd) => (
           <div key={category} className="mb-8">
@@ -149,20 +156,20 @@ export default function Page() {
 // function getCategoryDescription(category: SourceCategory): string {
 //   switch (category) {
 //     case SourceCategory.Messaging:
-//       return "Интеграция с платформами обмена сообщениями и общения.";
+//       return "Integration with messaging platforms and communication tools.";
 //     case SourceCategory.ProjectManagement:
-//       return "Ссылка на инструменты управления проектами и отслеживания задач.";
+//       return "Link to project management tools and task tracking systems.";
 //     case SourceCategory.CustomerSupport:
-//       return "Подключение к системам поддержки клиентов и справочной службы.";
+//       return "Connect to customer support systems and help desk services.";
 //     case SourceCategory.CodeRepository:
-//       return "Интеграция с репозиториями кода и системами контроля версий.";
+//       return "Integration with code repositories and version control systems.";
 //     case SourceCategory.Storage:
-//       return "Подключение к облачным хранилищам и службам хостинга файлов.";
+//       return "Connect to cloud storage and file hosting services.";
 //     case SourceCategory.Wiki:
-//       return "Ссылка на платформы вики и базы знаний.";
+//       return "Link to wiki platforms and knowledge bases.";
 //     case SourceCategory.Other:
-//       return "Подключение к другим различным источникам знаний.";
+//       return "Connect to other various knowledge sources.";
 //     default:
-//       return "Подключение к различным источникам знаний.";
+//       return "Connect to various knowledge sources.";
 //   }
 // }

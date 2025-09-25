@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React from "react";
 import { Switch } from "@/components/ui/switch";
@@ -68,6 +70,7 @@ export const SettingsPanel = ({
   toggleSettings: () => void;
   handleUseOnyxToggle: (checked: boolean) => void;
 }) => {
+  const { t } = useTranslation();
   const {
     theme,
     setTheme,
@@ -103,31 +106,31 @@ export const SettingsPanel = ({
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-white">
-            {i18n.t(k.HOME_PAGE_SETTINGS)}
+            {t(k.HOME_PAGE_SETTINGS)}
           </h2>
           <button
             aria-label="Close"
             onClick={toggleSettings}
             className="text-text-400 hover:text-white"
           >
-            {i18n.t(k._16)}
+            {t(k._16)}
           </button>
         </div>
 
-        <h3 className="text-sm font-semibold mb-2">{i18n.t(k.GENERAL)}</h3>
+        <h3 className="text-sm font-semibold mb-2">{t(k.GENERAL)}</h3>
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
-          label={i18n.t(k.USE_SMARTSEARCH_NEW_TAB)}
+          label={t(k.USE_SMARTSEARCH_NEW_TAB)}
         />
 
         <SidebarSwitch
           checked={showShortcuts}
           onCheckedChange={setShowShortcuts}
-          label={i18n.t(k.SHOW_BOOKMARKS)}
+          label={t(k.SHOW_BOOKMARKS)}
         />
 
-        <h3 className="text-sm font-semibold mt-6 mb-2">{i18n.t(k.THEME)}</h3>
+        <h3 className="text-sm font-semibold mt-6 mb-2">{t(k.THEME)}</h3>
         <RadioGroup
           value={theme}
           onValueChange={toggleTheme}
@@ -135,24 +138,22 @@ export const SettingsPanel = ({
         >
           <RadioOption
             value="light"
-            label={i18n.t(k.LIGHT_THEME)}
-            description={i18n.t(k.LIGHT_THEME_DESC)}
+            label={t(k.LIGHT_THEME)}
+            description={t(k.LIGHT_THEME_DESC)}
             groupValue={theme}
             onChange={toggleTheme}
           />
 
           <RadioOption
             value="dark"
-            label={i18n.t(k.DARK_THEME)}
-            description={i18n.t(k.DARK_THEME_DESC)}
+            label={t(k.DARK_THEME)}
+            description={t(k.DARK_THEME_DESC)}
             groupValue={theme}
             onChange={toggleTheme}
           />
         </RadioGroup>
 
-        <h3 className="text-sm font-semibold mt-6 mb-2">
-          {i18n.t(k.BACKGROUND)}
-        </h3>
+        <h3 className="text-sm font-semibold mt-6 mb-2">{t(k.BACKGROUND)}</h3>
         <div className="grid grid-cols-4 gap-2">
           {(theme === "dark" ? darkExtensionImages : lightExtensionImages).map(
             (bg: string, index: number) => (

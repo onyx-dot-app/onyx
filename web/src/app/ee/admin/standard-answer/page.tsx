@@ -1,6 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
-import k from "./../../../../i18n/keys";
+import React, { JSX } from "react";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ClipboardIcon, EditIcon, TrashIcon } from "@/components/icons/icons";
@@ -69,9 +70,11 @@ const CategoryBubble = ({
 }: {
   name: string;
   onDelete?: () => void;
-}) => (
-  <span
-    className={`
+}) => {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={`
       inline-block
       px-2
       py-1
@@ -86,19 +89,20 @@ const CategoryBubble = ({
       w-fit
       ${onDelete ? "cursor-pointer" : ""}
     `}
-    onClick={onDelete}
-  >
-    {name}
-    {onDelete && (
-      <button
-        className="ml-1 text-subtle hover:text-emphasis"
-        aria-label="Remove category"
-      >
-        {i18n.t(k._36)}
-      </button>
-    )}
-  </span>
-);
+      onClick={onDelete}
+    >
+      {name}
+      {onDelete && (
+        <button
+          className="ml-1 text-subtle hover:text-emphasis"
+          aria-label="Remove category"
+        >
+          {t(k._36)}
+        </button>
+      )}
+    </span>
+  );
+};
 
 const StandardAnswersTableRow = ({
   standardAnswer,
@@ -161,18 +165,19 @@ const StandardAnswersTable = ({
   refresh: () => void;
   setPopup: (popup: PopupSpec | null) => void;
 }) => {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategories, setSelectedCategories] = useState<
     StandardAnswerCategory[]
   >([]);
   const columns = [
-    { name: i18n.t(k._1), key: i18n.t(k.EDIT2) },
-    { name: i18n.t(k.CATEGORIES1), key: i18n.t(k.CATEGORY1) },
-    { name: i18n.t(k.KEYWORDS_PATTERN), key: i18n.t(k.KEYWORD) },
-    { name: i18n.t(k.MATCH_REGEX1), key: i18n.t(k.MATCH_REGEX2) },
-    { name: i18n.t(k.ANSWER), key: i18n.t(k.ANSWER2) },
-    { name: i18n.t(k._1), key: i18n.t(k.DELETE1) },
+    { name: t(k._1), key: t(k.EDIT2) },
+    { name: t(k.CATEGORIES1), key: t(k.CATEGORY1) },
+    { name: t(k.KEYWORDS_PATTERN), key: t(k.KEYWORD) },
+    { name: t(k.MATCH_REGEX1), key: t(k.MATCH_REGEX2) },
+    { name: t(k.ANSWER), key: t(k.ANSWER2) },
+    { name: t(k._1), key: t(k.DELETE1) },
   ];
 
   const filteredStandardAnswers = standardAnswers.filter((standardAnswer) => {
@@ -214,13 +219,13 @@ const StandardAnswersTable = ({
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
       setPopup({
-        message: `Стандартный ответ ${id} удален`,
+        message: `${t(k.STANDARD_ANSWER_DELETED)} ${id}`,
         type: "success",
       });
     } else {
       const errorMsg = await response.text();
       setPopup({
-        message: `Не удалось удалить стандартный ответ - ${errorMsg}`,
+        message: `${t(k.FAILED_TO_DELETE_STANDARD_ANSWER)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -246,7 +251,7 @@ const StandardAnswersTable = ({
           className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Найти стандартные ответы по ключевому слову/фразе..."
+          placeholder={t(k.SEARCH_STANDARD_ANSWERS_PLACEHOLDER)}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -281,7 +286,7 @@ const StandardAnswersTable = ({
               <FiTag size={16} />
             </div>
           }
-          defaultDisplay="Все категории"
+          defaultDisplay={t(k.ALL_CATEGORIES)}
         />
 
         <div className="flex flex-wrap pb-4 mt-3">
@@ -320,18 +325,18 @@ const StandardAnswersTable = ({
         </Table>
         {paginatedStandardAnswers.length === 0 && (
           <div className="flex justify-center">
-            <Text>{i18n.t(k.NO_MATCHING_STANDARD_ANSWERS_F)}</Text>
+            <Text>{t(k.NO_MATCHING_STANDARD_ANSWERS_F)}</Text>
           </div>
         )}
         {paginatedStandardAnswers.length > 0 && (
           <>
             {/* <div className="mt-4">
               <Text>
-                {i18n.t(k.ENSURE_THAT_YOU_HAVE_ADDED_THE)}{" "}
+                {t(k.ENSURE_THAT_YOU_HAVE_ADDED_THE)}{" "}
                 <a className="text-link" href="/admin/bots">
-                  {i18n.t(k.SLACK_BOT)}
+                  {t(k.SLACK_BOT)}
                 </a>
-                {i18n.t(k._8)}
+                {t(k._8)}
               </Text>
             </div> */}
             <div className="mt-4 flex justify-center">
@@ -350,6 +355,7 @@ const StandardAnswersTable = ({
 };
 
 const Main = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const {
     data: standardAnswers,
@@ -370,7 +376,7 @@ const Main = () => {
   if (standardAnswersError || !standardAnswers) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки стандартных ответов"
+        errorTitle={t(k.STANDARD_ANSWERS_LOADING_ERROR)}
         errorMsg={
           standardAnswersError.info?.message ||
           standardAnswersError.message.info?.detail
@@ -382,7 +388,7 @@ const Main = () => {
   if (standardAnswerCategoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки стандартных категорий ответов"
+        errorTitle={t(k.STANDARD_ANSWER_CATEGORIES_LOADING_ERROR)}
         errorMsg={
           standardAnswerCategoriesError.info?.message ||
           standardAnswerCategoriesError.message.info?.detail
@@ -396,18 +402,18 @@ const Main = () => {
       {popup}
 
       <Text className="mb-2">
-        {i18n.t(k.MANAGE_THE_STANDARD_ANSWERS_FO)}
+        {t(k.MANAGE_THE_STANDARD_ANSWERS_FO)}
         <br />
-        {i18n.t(k.NOTE_CURRENTLY_ONLY_QUESTION)}
+        {t(k.NOTE_CURRENTLY_ONLY_QUESTION)}
       </Text>
       {standardAnswers.length == 0 && (
-        <Text className="mb-2">{i18n.t(k.ADD_YOUR_FIRST_STANDARD_ANSWER)}</Text>
+        <Text className="mb-2">{t(k.ADD_YOUR_FIRST_STANDARD_ANSWER)}</Text>
       )}
       <div className="mb-2"></div>
 
       <CreateButton
         href="/admin/standard-answer/new"
-        text="Новый стандартный ответ"
+        text={t(k.NEW_STANDARD_ANSWER)}
       />
 
       <Separator />
@@ -425,11 +431,12 @@ const Main = () => {
 };
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
-        title="Стандартные ответы"
+        title={t(k.STANDARD_ANSWERS_TITLE)}
       />
 
       <Main />

@@ -1,6 +1,5 @@
-import i18n from "@/i18n/init";
-import k from "./../../i18n/keys";
-import React from "react";
+// Removed unused i18n import
+import React, { JSX } from "react";
 import crypto from "crypto";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { CustomTooltip } from "../tooltip/CustomTooltip";

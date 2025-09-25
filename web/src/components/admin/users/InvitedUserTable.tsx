@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -36,9 +37,10 @@ const InvitedUserTable = ({
   isLoading,
   q,
 }: Props) => {
+  const { t } = useTranslation();
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
 
-  if (!users.length) return <p>{i18n.t(k.USERS_THAT_HAVE_BEEN_INVITED_W)}</p>;
+  if (!users.length) return <p>{t(k.USERS_THAT_HAVE_BEEN_INVITED_W)}</p>;
 
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
 
@@ -71,9 +73,9 @@ const InvitedUserTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
+            <TableHead>{t(k.EMAIL)}</TableHead>
             <TableHead>
-              <div className="flex justify-end">{i18n.t(k.ACTIONS)}</div>
+              <div className="flex justify-end">{t(k.ACTIONS)}</div>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -97,7 +99,7 @@ const InvitedUserTable = ({
           ) : (
             <TableRow>
               <TableCell colSpan={2} className="h-24 text-center">
-                {`${i18n.t(k.NO_USERS_FOUND_MATCHING)}${q}${i18n.t(k._17)}`}
+                {`${t(k.NO_USERS_FOUND_MATCHING)}${q}${t(k._17)}`}
               </TableCell>
             </TableRow>
           )}

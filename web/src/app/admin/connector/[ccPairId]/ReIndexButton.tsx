@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
@@ -28,8 +28,9 @@ function ReIndexPopup({
   setPopup: (popupSpec: PopupSpec | null) => void;
   hide: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <Modal title="Запустить индексацию" onOutsideClick={hide}>
+    <Modal title={t(k.START_INDEXING_TITLE)} onOutsideClick={hide}>
       <div>
         <Button
           variant="submit"
@@ -45,10 +46,10 @@ function ReIndexPopup({
             hide();
           }}
         >
-          {i18n.t(k.RUN_UPDATE)}
+          {t(k.RUN_UPDATE)}
         </Button>
 
-        <Text className="mt-2">{i18n.t(k.THIS_WILL_PULL_IN_AND_INDEX_AL)}</Text>
+        <Text className="mt-2">{t(k.THIS_WILL_PULL_IN_AND_INDEX_AL)}</Text>
 
         <Separator />
 
@@ -66,13 +67,13 @@ function ReIndexPopup({
             hide();
           }}
         >
-          {i18n.t(k.RUN_COMPLETE_RE_INDEXING)}
+          {t(k.RUN_COMPLETE_RE_INDEXING)}
         </Button>
 
-        <Text className="mt-2">{i18n.t(k.THIS_WILL_CAUSE_A_COMPLETE_RE)}</Text>
+        <Text className="mt-2">{t(k.THIS_WILL_CAUSE_A_COMPLETE_RE)}</Text>
 
         <Text className="mt-2">
-          <b>{i18n.t(k.NOTE)}</b> {i18n.t(k.DEPENDING_ON_THE_NUMBER_OF_DOC)}
+          <b>{t(k.NOTE)}</b> {t(k.DEPENDING_ON_THE_NUMBER_OF_DOC)}
         </Text>
       </div>
     </Modal>
@@ -94,6 +95,7 @@ export function ReIndexButton({
   isDisabled: boolean;
   ccPairStatus: ConnectorCredentialPairStatus;
 }) {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
 
@@ -123,7 +125,7 @@ export function ReIndexButton({
         }
         tooltip={getCCPairStatusMessage(isDisabled, isIndexing, ccPairStatus)}
       >
-        {i18n.t(k.RE_INDEX)}
+        {t(k.RE_INDEX)}
       </Button>
     </>
   );

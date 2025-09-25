@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { X, Search } from "lucide-react";
@@ -27,6 +29,7 @@ export function PersonaMessagesChart({
 }: {
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
@@ -144,19 +147,19 @@ export function PersonaMessagesChart({
   } else if (!personaList || hasError) {
     content = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">{i18n.t(k.FAILED_TO_FETCH_DATA)}</p>
+        <p className="m-auto">{t(k.FAILED_TO_FETCH_DATA)}</p>
       </div>
     );
   } else if (selectedPersonaId === undefined) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">{i18n.t(k.SELECT_AN_ASSISTANT_TO_VIEW_AN)}</p>
+        <p className="m-auto">{t(k.SELECT_AN_ASSISTANT_TO_VIEW_AN)}</p>
       </div>
     );
   } else if (!personaMessagesData?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">{i18n.t(k.NO_DATA_FOUND_FOR_SELECTED_ASS)}</p>
+        <p className="m-auto">{t(k.NO_DATA_FOUND_FOR_SELECTED_ASS)}</p>
       </div>
     );
   } else if (chartData) {
@@ -174,9 +177,9 @@ export function PersonaMessagesChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>{i18n.t(k.ASSISTANT_ANALYTICS)}</Title>
+      <Title>{t(k.ASSISTANT_ANALYTICS)}</Title>
       <div className="flex flex-col gap-4">
-        <Text>{i18n.t(k.MESSAGES_AND_UNIQUE_USERS_PER)}</Text>
+        <Text>{t(k.MESSAGES_AND_UNIQUE_USERS_PER)}</Text>
         <div className="flex items-center gap-4">
           <Select
             value={selectedPersonaId?.toString() ?? ""}
@@ -185,14 +188,14 @@ export function PersonaMessagesChart({
             }}
           >
             <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Выберите помощника для отображения" />
+              <SelectValue placeholder={t(k.SELECT_ASSISTANT_PLACEHOLDER)} />
             </SelectTrigger>
             <SelectContent>
               <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
                 <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
                 <input
                   className="flex h-8 w-full rounded-sm bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Поиск ассистентов..."
+                  placeholder={t(k.SEARCH_ASSISTANTS_PLACEHOLDER)}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onClick={(e) => e.stopPropagation()}

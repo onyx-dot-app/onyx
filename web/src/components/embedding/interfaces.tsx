@@ -11,6 +11,7 @@ import {
   OpenSourceIcon,
   VoyageIconSVG,
 } from "@/components/icons/icons";
+import { JSX } from "react";
 
 export enum EmbeddingProvider {
   OPENAI = "OpenAI",

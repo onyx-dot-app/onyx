@@ -1,6 +1,4 @@
 import { User } from "./types";
-import i18n from "@/i18n/init";
-import k from "../i18n/keys";
 
 const conditionallyAddPlural = (solo: string, noun: string, cnt: number) => {
   if (cnt > 1) {
@@ -22,63 +20,59 @@ export const timeAgo = (
 
   if (secondsDiff < 60) {
     return `${secondsDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_SECOND),
-      i18n.t(k.TIME_SECONDS),
+      "second",
+      "seconds",
       secondsDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+    )} ago`;
   }
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
     return `${minutesDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_MINUTE),
-      i18n.t(k.TIME_MINUTES),
-      secondsDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+      "minute",
+      "minutes",
+      minutesDiff
+    )} ago`;
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
   if (hoursDiff < 24) {
     return `${hoursDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_HOUR),
-      i18n.t(k.TIME_HOURS),
+      "hour",
+      "hours",
       hoursDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+    )} ago`;
   }
 
   const daysDiff = Math.floor(hoursDiff / 24);
   if (daysDiff < 30) {
-    return `${daysDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_DAY),
-      i18n.t(k.TIME_DAYS),
-      daysDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+    return `${daysDiff} ${conditionallyAddPlural("day", "days", daysDiff)} ago`;
   }
 
   const weeksDiff = Math.floor(daysDiff / 7);
   if (weeksDiff < 4) {
     return `${weeksDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_WEEK),
-      i18n.t(k.TIME_WEEKS),
+      "week",
+      "weeks",
       weeksDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+    )} ago`;
   }
 
   const monthsDiff = Math.floor(daysDiff / 30);
   if (monthsDiff < 12) {
     return `${monthsDiff} ${conditionallyAddPlural(
-      i18n.t(k.TIME_MONTH),
-      i18n.t(k.TIME_MONTHS),
+      "month",
+      "months",
       monthsDiff
-    )} ${i18n.t(k.TIME_AGO)}`;
+    )} ago`;
   }
 
   const yearsDiff = Math.floor(monthsDiff / 12);
   return `${yearsDiff} ${conditionallyAddPlural(
-    i18n.t(k.TIME_YEAR),
-    i18n.t(k.TIME_YEARS),
+    "year",
+    "years",
     yearsDiff
-  )} ${i18n.t(k.TIME_AGO)}`;
+  )} ago`;
 };
 
 export function localizeAndPrettify(dateString: string) {

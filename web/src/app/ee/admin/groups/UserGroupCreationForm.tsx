@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
@@ -27,6 +29,7 @@ export const UserGroupCreationForm = ({
   ccPairs,
   existingUserGroup,
 }: UserGroupCreationFormProps) => {
+  const { t } = useTranslation();
   const isUpdate = existingUserGroup !== undefined;
 
   // Filter out ccPairs that aren't access_type "private"
@@ -38,9 +41,7 @@ export const UserGroupCreationForm = ({
     <Modal className="w-fit" onOutsideClick={onClose}>
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate
-            ? i18n.t(k.UPDATE_A_USER_GROUP)
-            : i18n.t(k.CREATE_A_NEW_USER_GROUP)}
+          {isUpdate ? t(k.UPDATE_A_USER_GROUP) : t(k.CREATE_A_NEW_USER_GROUP)}
         </h2>
 
         <Separator />
@@ -52,7 +53,7 @@ export const UserGroupCreationForm = ({
             cc_pair_ids: [] as number[],
           }}
           validationSchema={Yup.object().shape({
-            name: Yup.string().required("Пожалуйста, введите имя группы"),
+            name: Yup.string().required(t(k.PLEASE_ENTER_GROUP_NAME)),
             user_ids: Yup.array().of(Yup.string().required()),
             cc_pair_ids: Yup.array().of(Yup.number().required()),
           })}
@@ -64,8 +65,8 @@ export const UserGroupCreationForm = ({
             if (response.ok) {
               setPopup({
                 message: isUpdate
-                  ? i18n.t(k.SUCCESSFULLY_UPDATED_USER_GROU)
-                  : i18n.t(k.SUCCESSFULLY_CREATED_USER_GROU),
+                  ? t(k.SUCCESSFULLY_UPDATED_USER_GROU)
+                  : t(k.SUCCESSFULLY_CREATED_USER_GROU),
 
                 type: "success",
               });
@@ -75,8 +76,8 @@ export const UserGroupCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `${i18n.t(k.ERROR_UPDATING_USER_GROUP)} ${errorMsg}`
-                  : `${i18n.t(k.ERROR_CREATING_USER_GROUP)} ${errorMsg}`,
+                  ? `${t(k.ERROR_UPDATING_USER_GROUP)} ${errorMsg}`
+                  : `${t(k.ERROR_CREATING_USER_GROUP)} ${errorMsg}`,
                 type: "error",
               });
             }
@@ -87,8 +88,8 @@ export const UserGroupCreationForm = ({
               <div className="py-4">
                 <TextFormField
                   name="name"
-                  label="Название:"
-                  placeholder="Название для группы пользователей"
+                  label={t(k.GROUP_NAME_LABEL)}
+                  placeholder={t(k.GROUP_NAME_PLACEHOLDER)}
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
@@ -96,10 +97,10 @@ export const UserGroupCreationForm = ({
                 <Separator />
 
                 <h2 className="mb-1 font-medium">
-                  {i18n.t(k.SELECT_WHICH_PRIVATE_CONNECTOR)}
+                  {t(k.SELECT_WHICH_PRIVATE_CONNECTOR)}
                 </h2>
                 <p className="mb-3 text-xs">
-                  {i18n.t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S)}
+                  {t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S)}
                 </p>
 
                 <ConnectorEditor
@@ -113,10 +114,10 @@ export const UserGroupCreationForm = ({
                 <Separator />
 
                 <h2 className="mb-1 font-medium">
-                  {i18n.t(k.SELECT_WHICH_USERS_SHOULD_BE_A)}
+                  {t(k.SELECT_WHICH_USERS_SHOULD_BE_A)}
                 </h2>
                 <p className="mb-3 text-xs">
-                  {i18n.t(k.ALL_SELECTED_USERS_WILL_BE_ABL)}
+                  {t(k.ALL_SELECTED_USERS_WILL_BE_ABL)}
                 </p>
                 <div className="mb-3 gap-2">
                   <UserEditor
@@ -136,7 +137,7 @@ export const UserGroupCreationForm = ({
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >
-                    {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
+                    {isUpdate ? t(k.UPDATE1) : t(k.CREATE)}
                   </Button>
                 </div>
               </div>

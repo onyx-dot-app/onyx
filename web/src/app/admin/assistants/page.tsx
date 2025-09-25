@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "./../../../i18n/keys";
 import { PersonasTable } from "./PersonaTable";
 import Text from "@/components/ui/text";
@@ -11,7 +11,10 @@ import CreateButton from "@/components/ui/createButton";
 export default async function Page() {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Ассистенты" />
+      <AdminPageTitle
+        icon={<AssistantsIcon size={32} />}
+        title={i18n.t(k.ASSISTANTS)}
+      />
 
       <Text className="mb-2">{i18n.t(k.ASSISTANTS_ARE_A_WAY_TO_BUILD)}</Text>
       <Text className="mt-2">{i18n.t(k.THEY_ALLOW_YOU_TO_CUSTOMIZE)}</Text>
@@ -28,7 +31,7 @@ export default async function Page() {
         <Title>{i18n.t(k.CREATE_AN_ASSISTANT)}</Title>
         <CreateButton
           href="/assistants/new?admin=true"
-          text="Новый ассистент"
+          text={i18n.t(k.NEW_ASSISTANT)}
         />
 
         <Separator />

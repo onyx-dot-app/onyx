@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useFormikContext } from "formik";
 import { FC, useState } from "react";
@@ -22,6 +23,7 @@ export const FileUpload: FC<FileUploadProps> = ({
   multiple = true,
   accept,
 }) => {
+  const { t } = useTranslation();
   const [dragActive, setDragActive] = useState(false);
   const { setFieldValue } = useFormikContext();
 
@@ -54,10 +56,10 @@ export const FileUpload: FC<FileUploadProps> = ({
               <input {...getInputProps()} />
               <b className="text-text-darker">
                 {message ||
-                  `${i18n.t(k.DRAG_AND_DROP)} ${
-                    multiple ? i18n.t(k.SOME_FILES) : i18n.t(k.A_FILE)
-                  } ${i18n.t(k.HERE_OR_CLICK_TO_SELECT)} ${
-                    multiple ? i18n.t(k.FILES) : i18n.t(k.A_FILE)
+                  `${t(k.DRAG_AND_DROP)} ${
+                    multiple ? t(k.SOME_FILES) : t(k.A_FILE)
+                  } ${t(k.HERE_OR_CLICK_TO_SELECT)} ${
+                    multiple ? t(k.FILES) : t(k.A_FILE)
                   }`}
               </b>
             </div>
@@ -68,8 +70,8 @@ export const FileUpload: FC<FileUploadProps> = ({
       {selectedFiles.length > 0 && (
         <div className="mt-4">
           <h2 className="text-sm font-bold">
-            {i18n.t(k.SELECTED_FILE)}
-            {multiple ? i18n.t(k.S) : ""}
+            {t(k.SELECTED_FILE)}
+            {multiple ? t(k.S) : ""}
           </h2>
           <ul>
             {selectedFiles.map((file) => (

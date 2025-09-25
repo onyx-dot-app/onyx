@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
@@ -25,6 +27,7 @@ import {
 import { SourceChip } from "../input/ChatInputBar";
 
 export default function InputPrompts() {
+  const { t } = useTranslation();
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
   const [newPrompt, setNewPrompt] = useState<Partial<InputPrompt>>({});
@@ -42,7 +45,7 @@ export default function InputPrompts() {
         const data = await response.json();
         setInputPrompts(data);
       } else {
-        throw new Error("Не удалось получить ярлыки подсказок");
+        throw new Error(t(k.FAILED_TO_FETCH_PROMPT_LABELS));
       }
     } catch (error) {
       setPopup({ message: "Failed to fetch prompt shortcuts", type: "error" });
@@ -78,7 +81,7 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось обновить приглашение");
+        throw new Error(t(k.FAILED_TO_UPDATE_PROMPT));
       }
 
       // Update local state with new values
@@ -91,9 +94,9 @@ export default function InputPrompts() {
       );
 
       setEditingPromptId(null);
-      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
+      setPopup({ message: t(k.PROMPT_UPDATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
+      setPopup({ message: t(k.FAILED_TO_UPDATE_PROMPT), type: "error" });
     }
   };
 
@@ -124,13 +127,13 @@ export default function InputPrompts() {
       );
       setPopup({
         message: isPromptPublic(promptToDelete)
-          ? "Подсказка успешно скрыта"
-          : "Подсказка успешно удалена",
+          ? t(k.PROMPT_SUCCESSFULLY_HIDDEN)
+          : t(k.PROMPT_SUCCESSFULLY_DELETED),
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось удалить/скрыть подсказку",
+        message: t(k.FAILED_TO_DELETE_PROMPT),
         type: "error",
       });
     }
@@ -145,16 +148,16 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Не удалось создать приглашение");
+        throw new Error(t(k.FAILED_TO_CREATE_PROMPT));
       }
 
       const createdPrompt = await response.json();
       setInputPrompts((prevPrompts) => [...prevPrompts, createdPrompt]);
       setNewPrompt({});
       setIsCreatingNew(false);
-      setPopup({ message: "Запрос создан успешно", type: "success" });
+      setPopup({ message: t(k.PROMPT_CREATED_SUCCESS), type: "success" });
     } catch (error) {
-      setPopup({ message: "Не удалось создать приглашение", type: "error" });
+      setPopup({ message: t(k.FAILED_TO_CREATE_PROMPT), type: "error" });
     }
   };
 
@@ -166,8 +169,8 @@ export default function InputPrompts() {
       {popup}
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
-          <Title>{i18n.t(k.PROMPT_SHORTCUTS)}</Title>
-          <Text>{i18n.t(k.MANAGE_AND_CUSTOMIZE_PROMPT_SH)}</Text>
+          <Title>{t(k.PROMPT_SHORTCUTS)}</Title>
+          <Text>{t(k.MANAGE_AND_CUSTOMIZE_PROMPT_SH)}</Text>
         </div>
       </div>
 
@@ -185,7 +188,7 @@ export default function InputPrompts() {
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
           <Textarea
-            placeholder="Ярлык подсказки (например, «Резюмировать»)"
+            placeholder={t(k.PROMPT_LABEL_PLACEHOLDER)}
             value={newPrompt.prompt || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -194,7 +197,7 @@ export default function InputPrompts() {
           />
 
           <Textarea
-            placeholder="Фактическая подсказка (например, кратко изложите загруженный документ и выделите ключевые моменты.)"
+            placeholder={t(k.PROMPT_CONTENT_PLACEHOLDER)}
             value={newPrompt.content || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, content: e.target.value })
@@ -203,16 +206,16 @@ export default function InputPrompts() {
           />
 
           <div className="flex space-x-2">
-            <Button onClick={handleCreate}>{i18n.t(k.CREATE1)}</Button>
+            <Button onClick={handleCreate}>{t(k.CREATE1)}</Button>
             <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
-              {i18n.t(k.CANCEL)}
+              {t(k.CANCEL)}
             </Button>
           </div>
         </div>
       ) : (
         <Button onClick={() => setIsCreatingNew(true)} className="w-full mt-4">
           <PlusIcon size={14} className="mr-2" />
-          {i18n.t(k.CREATE_NEW_PROMPT)}
+          {t(k.CREATE_NEW_PROMPT)}
         </Button>
       )}
     </div>
@@ -234,6 +237,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
   onDelete,
   isEditing,
 }) => {
+  const { t } = useTranslation();
   const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
   const [localContent, setLocalContent] = useState(prompt.content);
 
@@ -282,19 +286,19 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 value={localPrompt}
                 onChange={(e) => handleLocalEdit("prompt", e.target.value)}
                 className="mb-2 resize-none"
-                placeholder="Промпт"
+                placeholder={t(k.PROMPT_PLACEHOLDER)}
               />
 
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
                 className="resize-vertical min-h-[100px]"
-                placeholder="Контент"
+                placeholder={t(k.CONTENT_PLACEHOLDER)}
               />
             </div>
             <div className="flex items-end">
               <Button onClick={handleSaveLocal}>
-                {prompt.id ? i18n.t(k.SAVE) : i18n.t(k.CREATE1)}
+                {prompt.id ? t(k.SAVE) : t(k.CREATE1)}
               </Button>
             </div>
           </div>
@@ -306,12 +310,14 @@ const PromptCard: React.FC<PromptCardProps> = ({
               <TooltipTrigger asChild>
                 <div className="mb-2  flex gap-x-2 ">
                   <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Встроенный" />}
+                  {isPromptPublic(prompt) && (
+                    <SourceChip title={t(k.BUILT_IN)} />
+                  )}
                 </div>
               </TooltipTrigger>
               {isPromptPublic(prompt) && (
                 <TooltipContent>
-                  <p>{i18n.t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
+                  <p>{t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -331,11 +337,11 @@ const PromptCard: React.FC<PromptCardProps> = ({
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (
                   <DropdownMenuItem onClick={() => onEdit(prompt.id)}>
-                    {i18n.t(k.EDIT)}
+                    {t(k.EDIT)}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => onDelete(prompt.id)}>
-                  {i18n.t(k.DELETE)}
+                  {t(k.DELETE)}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

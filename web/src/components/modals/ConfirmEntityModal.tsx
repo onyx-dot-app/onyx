@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+"use client";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { Modal } from "../Modal";
 import { Button } from "../ui/button";
@@ -28,6 +29,7 @@ export const ConfirmEntityModal = ({
   accent?: boolean;
   removeConfirmationText?: boolean;
 }) => {
+  const { t } = useTranslation();
   const isDeleteVariant = variant === "delete";
   const defaultButtonText = isDeleteVariant ? "Delete" : "Confirm";
   const buttonText = actionButtonText || defaultButtonText;
@@ -49,16 +51,16 @@ export const ConfirmEntityModal = ({
         </div>
         {!removeConfirmationText && (
           <p className="mb-4">
-            {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO)} {getActionText()}{" "}
+            {t(k.ARE_YOU_SURE_YOU_WANT_TO)} {getActionText()}{" "}
             <b>{entityName}</b>
-            {i18n.t(k._10)}
+            {t(k._10)}
           </p>
         )}
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex justify-end gap-2">
           {includeCancelButton && (
             <Button onClick={onClose} variant="outline">
-              {i18n.t(k.CANCEL)}
+              {t(k.CANCEL)}
             </Button>
           )}
           <Button

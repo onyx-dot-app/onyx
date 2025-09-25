@@ -20,7 +20,7 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import i18n from "@/i18n/init";
+// Removed client i18n import; avoid pulling React context into server bundles
 import k from "../i18n/keys";
 
 interface PartialSourceMetadata {
@@ -41,7 +41,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
   },
   file: {
     icon: FileIcon,
-    displayName: i18n.t(k.FILE_SOURCE),
+    displayName: "File Source",
     category: SourceCategory.ImportedKnowledge,
     adminUrl: "file",
   },

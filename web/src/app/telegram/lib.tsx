@@ -1,3 +1,8 @@
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "../../i18n/keys";
+import i18n from "../../i18n/init";
 import {
   AnswerPiecePacket,
   OnyxDocument,
@@ -119,9 +124,11 @@ export async function createChatSession(
   );
   if (!createChatSessionResponse.ok) {
     console.error(
-      `Не удалось создать сеанс чата - ${createChatSessionResponse.status}`
+      `${i18n.t(k.FAILED_TO_CREATE_CHAT_SESSION)} - ${
+        createChatSessionResponse.status
+      }`
     );
-    throw Error("Не удалось создать сеанс чата");
+    throw Error(i18n.t(k.FAILED_TO_CREATE_CHAT_SESSION));
   }
   const chatSessionResponseJson = await createChatSessionResponse.json();
   return chatSessionResponseJson.chat_session_id;
@@ -260,7 +267,7 @@ export async function* sendMessage({
   });
 
   if (!response.ok) {
-    throw new Error(`Ошибка HTTP! статус: ${response.status}`);
+    throw new Error(`${i18n.t(k.HTTP_ERROR_STATUS)} ${response.status}`);
   }
 
   yield* handleSSEStream<PacketType>(response, signal);
@@ -423,10 +430,10 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
   today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
 
   const groups: Record<string, ChatSession[]> = {
-    Сегодня: [],
-    "Предыдущие 7 дней": [],
-    "Предыдущие 30 дней": [],
-    "Более 30 дней": [],
+    [i18n.t(k.TODAY)]: [],
+    [i18n.t(k.PREVIOUS_7_DAYS)]: [],
+    [i18n.t(k.PREVIOUS_30_DAYS)]: [],
+    [i18n.t(k.MORE_THAN_30_DAYS)]: [],
   };
 
   chatSessions.forEach((chatSession) => {
@@ -436,13 +443,13 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
 
     if (diffDays < 1) {
-      groups["Сегодня"].push(chatSession);
+      groups[i18n.t(k.TODAY)].push(chatSession);
     } else if (diffDays <= 7) {
-      groups["Предыдущие 7 дней"].push(chatSession);
+      groups[i18n.t(k.PREVIOUS_7_DAYS)].push(chatSession);
     } else if (diffDays <= 30) {
-      groups["Предыдущие 30 дней"].push(chatSession);
+      groups[i18n.t(k.PREVIOUS_30_DAYS)].push(chatSession);
     } else {
-      groups["Более 30 дней"].push(chatSession);
+      groups[i18n.t(k.MORE_THAN_30_DAYS)].push(chatSession);
     }
   });
 
@@ -714,7 +721,7 @@ export async function uploadFilesForChat(
   if (!response.ok) {
     return [
       [],
-      `Не удалось загрузить файлы - ${(await response.json()).detail}`,
+      `${i18n.t(k.FAILED_TO_LOAD_FILES)} ${(await response.json()).detail}`,
     ];
   }
   const responseJson = await response.json();

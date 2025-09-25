@@ -1,4 +1,8 @@
+"use client";
+
 import React from "react";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "./../../../../../../i18n/keys";
 import { LLMModelDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   Select,
@@ -20,26 +24,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   models,
   selectedModel,
   onSelectModel,
-}) => (
-  <Select
-    value={selectedModel.modelName}
-    onValueChange={(value) =>
-      onSelectModel(models.find((m) => m.modelName === value) || models[0])
-    }
-  >
-    <SelectTrigger className="w-full">
-      <SelectValue placeholder="Выберите модель" />
-    </SelectTrigger>
-    <SelectContent>
-      {models.map((model) => (
-        <SelectItem
-          icon={OpenAIIcon}
-          key={model.modelName}
-          value={model.modelName}
-        >
-          {getDisplayNameForModel(model.modelName)}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Select
+      value={selectedModel.modelName}
+      onValueChange={(value) =>
+        onSelectModel(models.find((m) => m.modelName === value) || models[0])
+      }
+    >
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={t(k.SELECT_MODEL_PLACEHOLDER)} />
+      </SelectTrigger>
+      <SelectContent>
+        {models.map((model) => (
+          <SelectItem
+            icon={OpenAIIcon}
+            key={model.modelName}
+            value={model.modelName}
+          >
+            {getDisplayNameForModel(model.modelName)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};

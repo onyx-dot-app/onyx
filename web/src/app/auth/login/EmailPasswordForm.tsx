@@ -1,5 +1,7 @@
 "use client";
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -32,6 +34,7 @@ export function EmailPasswordForm({
   defaultEmail?: string | null;
   isJoin?: boolean;
 }) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -39,12 +42,12 @@ export function EmailPasswordForm({
 
   console.log(
     "TEST",
-    i18n.t,
+    t,
     isJoin,
-    i18n.t(k.JOIN),
+    t(k.JOIN),
     isSignup,
-    i18n.t(k.SIGN_UP),
-    i18n.t(k.LOG_IN)
+    t(k.SIGN_UP),
+    t(k.LOG_IN)
   );
   return (
     <>
@@ -57,10 +60,10 @@ export function EmailPasswordForm({
         }}
         validationSchema={Yup.object().shape({
           email: Yup.string()
-            .email("Поле заполнено некорректно")
-            .required("Поле обязательно")
+            .email(t(k.FIELD_FILLED_INCORRECTLY))
+            .required(t(k.FIELD_REQUIRED))
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required("Поле обязательно"),
+          password: Yup.string().required(t(k.FIELD_REQUIRED)),
         })}
         onSubmit={async (values) => {
           // Ensure email is lowercase
@@ -79,25 +82,25 @@ export function EmailPasswordForm({
               setIsWorking(false);
 
               const errorDetail = (await response.json()).detail;
-              let errorMsg = i18n.t(k.UNKNOWN_ERROR);
+              let errorMsg = t(k.UNKNOWN_ERROR);
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
-                errorMsg = i18n.t(k.AN_ACCOUNT_ALREADY_EXISTS_WITH);
+                errorMsg = t(k.AN_ACCOUNT_ALREADY_EXISTS_WITH);
               }
               if (response.status === 429) {
-                errorMsg = i18n.t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
+                errorMsg = t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
               }
               setPopup({
                 type: "error",
-                message: `${i18n.t(k.FAILED_TO_SIGN_UP)} ${errorMsg}`,
+                message: `${t(k.FAILED_TO_SIGN_UP)} ${errorMsg}`,
               });
               setIsWorking(false);
               return;
             } else {
               setPopup({
                 type: "success",
-                message: i18n.t(k.ACCOUNT_CREATED_SUCCESSFULLY),
+                message: t(k.ACCOUNT_CREATED_SUCCESSFULLY),
               });
             }
           }
@@ -122,20 +125,20 @@ export function EmailPasswordForm({
           } else {
             setIsWorking(false);
             const errorDetail = (await loginResponse.json()).detail;
-            let errorMsg = i18n.t(k.UNKNOWN_ERROR);
+            let errorMsg = t(k.UNKNOWN_ERROR);
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-              errorMsg = i18n.t(k.INVALID_EMAIL_OR_PASSWORD);
+              errorMsg = t(k.INVALID_EMAIL_OR_PASSWORD);
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-              errorMsg = i18n.t(k.CREATE_AN_ACCOUNT_TO_SET_A_PAS);
+              errorMsg = t(k.CREATE_AN_ACCOUNT_TO_SET_A_PAS);
             } else if (typeof errorDetail === "string") {
               errorMsg = errorDetail;
             }
             if (loginResponse.status === 429) {
-              errorMsg = i18n.t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
+              errorMsg = t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
             }
             setPopup({
               type: "error",
-              message: `${i18n.t(k.FAILED_TO_LOGIN)} ${errorMsg}`,
+              message: `${t(k.FAILED_TO_LOGIN)} ${errorMsg}`,
             });
           }
         }}
@@ -151,7 +154,7 @@ export function EmailPasswordForm({
 
             <TextFormField
               name="password"
-              label="Пароль"
+              label={t(k.PASSWORD)}
               type="password"
               includeForgotPassword={
                 NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup
@@ -165,11 +168,7 @@ export function EmailPasswordForm({
               disabled={isSubmitting}
               className="mx-auto  !py-4 w-full"
             >
-              {isJoin
-                ? i18n.t(k.JOIN)
-                : isSignup
-                ? i18n.t(k.SIGN_UP)
-                : i18n.t(k.LOG_IN)}
+              {isJoin ? t(k.JOIN) : isSignup ? t(k.SIGN_UP) : t(k.LOG_IN)}
             </Button>
             {user?.is_anonymous_user && (
               <Link
@@ -177,7 +176,7 @@ export function EmailPasswordForm({
                 className="text-xs text-blue-500  cursor-pointer text-center w-full text-link font-medium mx-auto"
               >
                 <span className="hover:border-b hover:border-dotted hover:border-blue-500">
-                  {i18n.t(k.OR_CONTINUE_AS_GUEST)}
+                  {t(k.OR_CONTINUE_AS_GUEST)}
                 </span>
               </Link>
             )}

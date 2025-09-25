@@ -1,7 +1,8 @@
-import i18n from "@/i18n/init";
+"use client";
 import k from "./../../../i18n/keys";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
+import { JSX } from "react";
 
 interface Option {
   key: string;

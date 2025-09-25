@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
 import {
@@ -65,6 +65,7 @@ import {
   useMemo,
   useRef,
   useState,
+  RefObject,
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
@@ -168,6 +169,7 @@ export function ChatPage({
   initialFolders?: any;
   initialFiles?: any;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1124,7 +1126,7 @@ export function ChatPage({
 
   const continueGenerating = () => {
     onSubmit({
-      messageOverride: i18n.t(k.CONTINUE_GENERATING_PICK_UP_E),
+      messageOverride: t(k.CONTINUE_GENERATING_PICK_UP_E),
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
@@ -1135,9 +1137,9 @@ export function ChatPage({
 
   useScrollonStream({
     chatState: currentSessionChatState,
-    scrollableDivRef,
+    scrollableDivRef: scrollableDivRef as React.RefObject<HTMLDivElement>,
     scrollDist,
-    endDivRef,
+    endDivRef: endDivRef as React.RefObject<HTMLDivElement>,
     debounceNumber,
     mobile: settings?.isMobile,
     enableAutoScroll: autoScrollEnabled,
@@ -1212,12 +1214,12 @@ export function ChatPage({
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
         setPopup({
-          message: i18n.t(k.PLEASE_WAIT_FOR_THE_CONTENT_TO),
+          message: t(k.PLEASE_WAIT_FOR_THE_CONTENT_TO),
           type: "error",
         });
       } else {
         setPopup({
-          message: i18n.t(k.PLEASE_WAIT_FOR_THE_RESPONSE_T),
+          message: t(k.PLEASE_WAIT_FOR_THE_RESPONSE_T),
           type: "error",
         });
       }
@@ -1290,7 +1292,7 @@ export function ChatPage({
 
     if (!messageToResend && messageIdToResend !== undefined) {
       setPopup({
-        message: i18n.t(k.FAILED_TO_RE_SEND_MESSAGE_PL),
+        message: t(k.FAILED_TO_RE_SEND_MESSAGE_PL),
 
         type: "error",
       });
@@ -1795,7 +1797,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
-      console.log("Ошибка:", e);
+      console.log(t(k.ERROR), e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1885,14 +1887,14 @@ export function ChatPage({
 
     if (response.ok) {
       setPopup({
-        message: i18n.t(k.THANKS_FOR_YOUR_FEEDBACK),
+        message: t(k.THANKS_FOR_YOUR_FEEDBACK),
         type: "success",
       });
     } else {
       const responseJson = await response.json();
       const errorMsg = responseJson.detail || responseJson.message;
       setPopup({
-        message: `Не удалось отправить отзыв - ${errorMsg}`,
+        message: `${t(k.FAILED_TO_SEND_FEEDBACK)} ${errorMsg}`,
         type: "error",
       });
     }
@@ -1913,7 +1915,7 @@ export function ChatPage({
     if (imageFiles.length > 0 && !llmAcceptsImages) {
       setPopup({
         type: "error",
-        message: i18n.t(k.THE_CURRENT_MODEL_DOES_NOT_SUP),
+        message: t(k.THE_CURRENT_MODEL_DOES_NOT_SUP),
       });
       return;
     }
@@ -1969,7 +1971,7 @@ export function ChatPage({
 
   useSidebarVisibility({
     sidebarVisible,
-    sidebarElementRef,
+    sidebarElementRef: sidebarElementRef as React.RefObject<HTMLElement>,
     showDocSidebar: showHistorySidebar,
     setShowDocSidebar: setShowHistorySidebar,
     setToggled: removeToggle,
@@ -2065,16 +2067,16 @@ export function ChatPage({
         });
 
         if (!response.ok) {
-          throw new Error("Не удалось создать чат из Slack");
+          throw new Error(t(k.FAILED_TO_CREATE_CHAT_FROM_SLACK));
         }
 
         const data = await response.json();
 
         router?.push(data.redirect_url);
       } catch (error) {
-        console.error("Ошибка при загрузке чата из Slack:", error);
+        console.error(t(k.ERROR_LOADING_CHAT_FROM_SLACK), error);
         setPopup({
-          message: i18n.t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
+          message: t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
           type: "error",
         });
       }
@@ -2161,7 +2163,7 @@ export function ChatPage({
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
       setPopup({
-        message: i18n.t(k.NO_PREVIOUSLY_SUBMITTED_USER_M),
+        message: t(k.NO_PREVIOUSLY_SUBMITTED_USER_M),
         type: "error",
       });
       return;
@@ -2279,7 +2281,7 @@ export function ChatPage({
       {toggleDocSelection && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
-          buttonContent="Установить как контекст"
+          buttonContent={t(k.SET_AS_CONTEXT)}
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
@@ -2298,7 +2300,7 @@ export function ChatPage({
           <Modal
             hideDividerForTitle
             onOutsideClick={() => setDocumentSidebarVisible(false)}
-            title="Источники"
+            title={t(k.SOURCES)}
           >
             <DocumentResults
               agenticMessage={
@@ -2938,8 +2940,7 @@ export function ChatPage({
                                         }
                                         handleFeedback={
                                           i === messageHistory.length - 1 &&
-                                          currentSessionChatState !=
-                                            i18n.t(k.INPUT)
+                                          currentSessionChatState != t(k.INPUT)
                                             ? undefined
                                             : (feedbackType: FeedbackType) =>
                                                 setCurrentFeedback([
@@ -3059,7 +3060,7 @@ export function ChatPage({
                                                 if (!previousMessage) {
                                                   setPopup({
                                                     type: "error",
-                                                    message: i18n.t(
+                                                    message: t(
                                                       k.CANNOT_EDIT_QUERY_OF_FIRST_MES
                                                     ),
                                                   });
@@ -3071,7 +3072,7 @@ export function ChatPage({
                                                 ) {
                                                   setPopup({
                                                     type: "error",
-                                                    message: i18n.t(
+                                                    message: t(
                                                       k.CANNOT_EDIT_QUERY_OF_A_PENDING
                                                     ),
                                                   });
@@ -3100,7 +3101,7 @@ export function ChatPage({
                                           } else {
                                             setPopup({
                                               type: "error",
-                                              message: i18n.t(
+                                              message: t(
                                                 k.FAILED_TO_FORCE_SEARCH_PLEAS
                                               ),
                                             });
@@ -3174,11 +3175,11 @@ export function ChatPage({
                                   messageId={null}
                                   content={
                                     <div
-                                      key={i18n.t(k.GENERATING1)}
+                                      key={t(k.GENERATING1)}
                                       className="mr-auto relative inline-block"
                                     >
                                       <span className="text-sm loading-text">
-                                        {i18n.t(k.THINKING1)}
+                                        {t(k.THINKING1)}
                                       </span>
                                     </div>
                                   }
@@ -3264,7 +3265,9 @@ export function ChatPage({
                               setAlternativeAssistant={setAlternativeAssistant}
                               setFiles={setCurrentMessageFiles}
                               handleFileUpload={handleImageUpload}
-                              textAreaRef={textAreaRef}
+                              textAreaRef={
+                                textAreaRef as RefObject<HTMLTextAreaElement>
+                              }
                             />
 
                             {enterpriseSettings &&

@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
 import { use } from "react";
 
@@ -17,6 +17,7 @@ import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 const Page = (props: { params: Promise<{ groupId: string }> }) => {
+  const { t } = useTranslation();
   const params = use(props.params);
   const router = useRouter();
 
@@ -48,13 +49,13 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   if (!userGroup || userGroupError) {
-    return <div>{i18n.t(k.ERROR_LOADING_USER_GROUP)}</div>;
+    return <div>{t(k.ERROR_LOADING_USER_GROUP)}</div>;
   }
   if (!users || usersError) {
-    return <div>{i18n.t(k.ERROR_LOADING_USERS)}</div>;
+    return <div>{t(k.ERROR_LOADING_USERS)}</div>;
   }
   if (!ccPairs || ccPairsError) {
-    return <div>{i18n.t(k.ERROR_LOADING_CONNECTORS)}</div>;
+    return <div>{t(k.ERROR_LOADING_CONNECTORS)}</div>;
   }
 
   return (
@@ -62,7 +63,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
       <BackButton />
 
       <AdminPageTitle
-        title={userGroup.name || "Неизвестный"}
+        title={userGroup.name || t(k.UNKNOWN_USER)}
         icon={<GroupsIcon size={32} />}
       />
 
@@ -74,7 +75,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
           refreshUserGroup={refreshUserGroup}
         />
       ) : (
-        <div>{i18n.t(k.UNABLE_TO_FETCH_USER_GROUP)}</div>
+        <div>{t(k.UNABLE_TO_FETCH_USER_GROUP)}</div>
       )}
     </div>
   );

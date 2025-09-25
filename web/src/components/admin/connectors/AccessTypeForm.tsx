@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { DefaultDropdown } from "@/components/Dropdown";
 import {
@@ -24,6 +26,7 @@ export function AccessTypeForm({
 }: {
   connector: ConfigurableSources;
 }) {
+  const { t } = useTranslation();
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
 
@@ -52,28 +55,25 @@ export function AccessTypeForm({
 
   const options = [
     {
-      name: "Частный",
+      name: t(k.PRIVATE),
       value: "private",
-      description:
-        "Только пользователи, которым явно предоставлен доступ к этому коннектору (через страницу групп пользователей), могут получить доступ к документам, полученным этим коннектором",
+      description: t(k.PRIVATE_DESCRIPTION),
     },
   ];
 
   if (isAdmin) {
     options.push({
-      name: "Публичный",
+      name: t(k.PUBLIC),
       value: "public",
-      description:
-        "Все пользователи с учетной записью на SmartSearch могут получить доступ к документам, полученным этим коннектором",
+      description: t(k.PUBLIC_DESCRIPTION),
     });
   }
 
   if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
     options.push({
-      name: "Автоматическая синхронизация разрешений",
+      name: t(k.AUTO_SYNC_PERMISSIONS),
       value: "sync",
-      description:
-        "Мы автоматически синхронизируем разрешения из источника. Документ будет доступен для поиска в SmartSearch, если и только если пользователь, выполняющий поиск, имеет разрешение на доступ к документу в источнике.",
+      description: t(k.AUTO_SYNC_DESCRIPTION),
     });
   }
 
@@ -83,10 +83,10 @@ export function AccessTypeForm({
         <>
           <div>
             <label className="text-text-950 font-medium">
-              {i18n.t(k.DOCUMENT_ACCESS)}
+              {t(k.DOCUMENT_ACCESS)}
             </label>
             <p className="text-sm text-text-500">
-              {i18n.t(k.CONTROL_WHO_HAS_ACCESS_TO_THE)}
+              {t(k.CONTROL_WHO_HAS_ACCESS_TO_THE)}
             </p>
           </div>
           <DefaultDropdown

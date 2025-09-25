@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "../../../../../i18n/keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import {
   useConnectorCredentialIndexingStatus,
@@ -19,6 +21,7 @@ import { useDocumentSets } from "../../sets/hooks";
 import { use } from "react";
 
 function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 
@@ -45,7 +48,7 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
   if (knowledgeMapsError || ccPairsError || !ccPairs) {
     return (
       <ErrorCallout
-        errorTitle="Не удалось получить карту знаний"
+        errorTitle={t(k.FAILED_TO_FETCH_KNOWLEDGE_MAP)}
         errorMsg={knowledgeMapsError}
       />
     );
@@ -58,8 +61,8 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
   if (!knowledgeMap) {
     return (
       <ErrorCallout
-        errorTitle="Карта знаний не найдена"
-        errorMsg={`Карта знаний с идентификатором ${knowledgeMapId} не найдена`}
+        errorTitle={t(k.KNOWLEDGE_MAP_NOT_FOUND)}
+        errorMsg={`${t(k.KNOWLEDGE_MAP_NOT_FOUND_WITH_ID)} ${knowledgeMapId}`}
       />
     );
   }
@@ -93,14 +96,15 @@ function Main({ knowledgeMapId }: { knowledgeMapId: number }) {
 export default function Page(props: {
   params: Promise<{ knowledgeMapId: string }>;
 }) {
+  const { t } = useTranslation();
   const params = use(props.params);
   const { knowledgeMapId } = params;
 
   if (!knowledgeMapId || typeof knowledgeMapId !== "string") {
     return (
       <ErrorCallout
-        errorTitle="Неверный идентификатор карты знаний"
-        errorMsg="Идентификатор карты знаний должен быть строкой."
+        errorTitle={t(k.INVALID_KNOWLEDGE_MAP_ID)}
+        errorMsg={t(k.KNOWLEDGE_MAP_ID_MUST_BE_STRING)}
       />
     );
   }
@@ -110,8 +114,8 @@ export default function Page(props: {
   if (isNaN(knowledgeMapIdNumber)) {
     return (
       <ErrorCallout
-        errorTitle="Неверный идентификатор карты знаний"
-        errorMsg={`Идентификатор карты знаний "${knowledgeMapId}" не является числом.`}
+        errorTitle={t(k.INVALID_KNOWLEDGE_MAP_ID)}
+        errorMsg={`${t(k.KNOWLEDGE_MAP_ID_NOT_NUMBER)} "${knowledgeMapId}"`}
       />
     );
   }

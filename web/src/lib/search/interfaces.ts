@@ -1,7 +1,7 @@
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { Tag, ValidSources } from "../types";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import i18n from "@/i18n/init";
+// Removed client i18n import; avoid pulling React context into server bundles
 import k from "../../i18n/keys";
 
 export const FlowType = {
@@ -183,8 +183,8 @@ export interface SearchResponse {
 }
 
 export const SourceCategory = {
-  AppConnection: i18n.t(k.CONNECT_TO_APPS),
-  ImportedKnowledge: i18n.t(k.IMPORT_KNOWLEDGE),
+  AppConnection: "Connect to Apps",
+  ImportedKnowledge: "Import Knowledge",
 } as const;
 
 export type SourceCategory =

@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { JSX, ReactNode } from "react";
 import { CompactDocumentCard, CompactQuestionCard } from "../DocumentDisplay";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import {
@@ -51,8 +51,8 @@ export function Citation({
                     document_info.updatePresentingDocument
                   )
                 : question_info?.question
-                  ? question_info.openQuestion(question_info.question)
-                  : null;
+                ? question_info.openQuestion(question_info.question)
+                : null;
             }}
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out"
           >

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -41,18 +43,21 @@ const CreateButton = ({
   isSubmitting: boolean;
   isAdmin: boolean;
   groups: number[];
-}) => (
-  <div className="flex justify-end w-full">
-    <Button
-      onClick={onClick}
-      type="button"
-      disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    >
-      <PlusCircleIcon className="h-4 w-4" />
-      {i18n.t(k.CREATE1)}
-    </Button>
-  </div>
-);
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex justify-end w-full">
+      <Button
+        onClick={onClick}
+        type="button"
+        disabled={isSubmitting || (!isAdmin && groups.length === 0)}
+      >
+        <PlusCircleIcon className="h-4 w-4" />
+        {t(k.CREATE1)}
+      </Button>
+    </div>
+  );
+};
 
 type formType = IsPublicGroupSelectorFormType & {
   name: string;
@@ -81,6 +86,7 @@ export default function CreateCredential({
   swapConnector?: Connector<any>; // Mutating parent state
   refresh?: () => void;
 }) {
+  const { t } = useTranslation();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { isAdmin } = useUser();
@@ -109,14 +115,17 @@ export default function CreateCredential({
     );
 
     try {
-      const response = await submitCredential({
-        credential_json: filteredCredentialValues,
-        admin_public: true,
-        curator_public: is_public,
-        groups: groups,
-        name: name,
-        source: sourceType,
-      });
+      const response = await submitCredential(
+        {
+          credential_json: filteredCredentialValues,
+          admin_public: true,
+          curator_public: is_public,
+          groups: groups,
+          name: name,
+          source: sourceType,
+        },
+        t
+      );
 
       const { message, isSuccess, credential } = response;
 
@@ -157,7 +166,7 @@ export default function CreateCredential({
   }
 
   const credentialTemplate: dictionaryType = credentialTemplates[sourceType];
-  const validationSchema = createValidationSchema(credentialTemplate);
+  const validationSchema = createValidationSchema(credentialTemplate, t);
 
   return (
     <Formik
@@ -175,23 +184,23 @@ export default function CreateCredential({
         <Form className="w-full flex items-stretch">
           {!hideSource && (
             <p className="text-sm">
-              {i18n.t(k.CHECK_OUR)}
+              {t(k.CHECK_OUR)}
               <a
                 className="text-blue-600 hover:underline"
                 target="_blank"
                 href={getSourceDocLink(sourceType) || ""}
               >
                 {" "}
-                {i18n.t(k.DOCS)}{" "}
+                {t(k.DOCS)}{" "}
               </a>
-              {i18n.t(k.FOR_INFORMATION_ON_SETTING_UP)}
+              {t(k.FOR_INFORMATION_ON_SETTING_UP)}
             </p>
           )}
           <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
-              placeholder="(Необязательно) Название учетных данных.."
-              label="Название:"
+              placeholder={t(k.CREDENTIAL_NAME_PLACEHOLDER)}
+              label={t(k.CREDENTIAL_NAME_LABEL)}
             />
 
             {Object.entries(credentialTemplate).map(([key, val]) => {
@@ -211,10 +220,10 @@ export default function CreateCredential({
                   placeholder={val}
                   label={getDisplayNameForCredentialKey(key)}
                   type={
-                    key.toLowerCase().includes(i18n.t(k.TOKEN)) ||
-                    key.toLowerCase().includes(i18n.t(k.PASSWORD))
-                      ? i18n.t(k.PASSWORD)
-                      : i18n.t(k.TEXT)
+                    key.toLowerCase().includes(t(k.TOKEN)) ||
+                    key.toLowerCase().includes(t(k.PASSWORD))
+                      ? t(k.PASSWORD)
+                      : t(k.TEXT)
                   }
                 />
               );
@@ -265,7 +274,7 @@ export default function CreateCredential({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaAccusoft />
-                  <p>{i18n.t(k.CREATE1)}</p>
+                  <p>{t(k.CREATE1)}</p>
                 </div>
               </Button>
             </div>

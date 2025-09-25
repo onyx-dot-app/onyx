@@ -1,9 +1,10 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
-import {
+import React, {
   ChangeEvent,
   FC,
   forwardRef,
+  JSX,
   useCallback,
   useEffect,
   useRef,
@@ -60,13 +61,14 @@ export function SearchMultiSelectDropdown({
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
-  itemComponent?: FC<{ option: StringOrNumberOption }>;
+  itemComponent?: React.ComponentType<{ option: StringOrNumberOption }>;
   onCreate?: (name: string) => void;
   onDelete?: (name: string) => void;
   onSearchTermChange?: (term: string) => void;
   initialSearchTerm?: string;
   allowCustomValues?: boolean;
 }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -124,9 +126,7 @@ export function SearchMultiSelectDropdown({
         <input
           type="text"
           placeholder={
-            allowCustomValues
-              ? i18n.t(k.SEARCH_OR_ENTER_CUSTOM_VALUE)
-              : i18n.t(k.SEARCH2)
+            allowCustomValues ? t(k.SEARCH_OR_ENTER_CUSTOM_VALUE) : t(k.SEARCH2)
           }
           value={searchTerm}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +181,7 @@ export function SearchMultiSelectDropdown({
                     handleSelect(option);
                   }}
                 >
-                  {itemComponent({ option })}
+                  {React.createElement(itemComponent, { option })}
                 </div>
               ) : (
                 <StandardDropdownOption
@@ -205,9 +205,9 @@ export function SearchMultiSelectDropdown({
                   onClick={handleCustomValueSelect}
                 >
                   <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
-                  {i18n.t(k.USE)}
+                  {t(k.USE)}
                   {searchTerm}
-                  {i18n.t(k.AS_CUSTOM_VALUE)}
+                  {t(k.AS_CUSTOM_VALUE)}
                 </button>
               )}
 
@@ -229,9 +229,9 @@ export function SearchMultiSelectDropdown({
                     }}
                   >
                     <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
-                    {i18n.t(k.CREATE_LABEL)}
+                    {t(k.CREATE_LABEL)}
                     {searchTerm}
-                    {i18n.t(k._17)}
+                    {t(k._17)}
                   </button>
                 </>
               )}
@@ -240,7 +240,7 @@ export function SearchMultiSelectDropdown({
               ((!onCreate && !allowCustomValues) ||
                 searchTerm.trim() === "") && (
                 <div className="px-4 py-2.5 text-sm text-text-500">
-                  {i18n.t(k.NO_MATCHES_FOUND)}
+                  {t(k.NO_MATCHES_FOUND)}
                 </div>
               )}
           </div>
@@ -305,12 +305,13 @@ export function DefaultDropdownElement({
   includeCheckbox = false,
 }: {
   name: string | JSX.Element;
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
   description?: string;
   onSelect?: () => void;
   isSelected?: boolean;
   includeCheckbox?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`
@@ -339,7 +340,11 @@ export function DefaultDropdownElement({
               onChange={() => null}
             />
           )}
-          {icon && icon({ size: 16, className: "mr-2 h-4 w-4 my-auto" })}
+          {icon &&
+            React.createElement(icon, {
+              size: 16,
+              className: "mr-2 h-4 w-4 my-auto",
+            })}
           {name}
         </div>
         {description && <div className="text-xs">{description}</div>}
@@ -376,6 +381,7 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
     },
     ref
   ) => {
+    const { t } = useTranslation();
     const selectedOption = options.find((option) => option.value === selected);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -400,8 +406,8 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
         <p className="line-clamp-1">
           {selectedOption?.name ||
             (includeDefault
-              ? defaultValue || i18n.t(k.DEFAULT2)
-              : i18n.t(k.SELECT_AN_OPTION1))}
+              ? defaultValue || t(k.DEFAULT2)
+              : t(k.SELECT_AN_OPTION1))}
         </p>
         <FiChevronDown className="my-auto ml-auto" />
       </div>

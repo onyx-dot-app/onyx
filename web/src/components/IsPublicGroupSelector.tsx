@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../i18n/keys";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
@@ -31,6 +33,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   removeIndent?: boolean;
   enforceGroupSelection?: boolean;
 }) => {
+  const { t } = useTranslation();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
@@ -55,7 +58,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   }, [user, userGroups, isPaidEnterpriseFeaturesEnabled]);
 
   if (userGroupsIsLoading) {
-    return <div>{i18n.t(k.LOADING)}</div>;
+    return <div>{t(k.LOADING)}</div>;
   }
   if (!isPaidEnterpriseFeaturesEnabled) {
     return null;
@@ -66,9 +69,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
       <>
         {userGroups && (
           <div className="mb-1 font-medium text-base">
-            {i18n.t(k.THIS)} {objectName} {i18n.t(k.WILL_BE_ASSIGNED_TO_GROUP)}{" "}
+            {t(k.THIS)} {objectName} {t(k.WILL_BE_ASSIGNED_TO_GROUP)}{" "}
             <b>{userGroups[0].name}</b>
-            {i18n.t(k._8)}
+            {t(k._8)}
           </div>
         )}
       </>
@@ -85,40 +88,39 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             removeIndent={removeIndent}
             label={
               publicToWhom === "Curators"
-                ? `${i18n.t(k.MAKE_THIS)} ${
+                ? `${t(k.MAKE_THIS)} ${
                     objectName === "document set"
-                      ? "набор документов"
+                      ? "t(k.DOCUMENT_SET)"
                       : objectName
-                  } ${i18n.t(k.CURATOR_ACCESSIBLE)}`
-                : `${i18n.t(k.MAKE_THIS)} ${
+                  } ${t(k.CURATOR_ACCESSIBLE)}`
+                : `${t(k.MAKE_THIS)} ${
                     objectName === "document set"
-                      ? "набор документов"
+                      ? "t(k.DOCUMENT_SET)"
                       : objectName
-                  } ${i18n.t(k.PUBLIC2)}`
+                  } ${t(k.PUBLIC2)}`
             }
             disabled={!isAdmin}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
-                {i18n.t(k.IF_SET_THEN_THIS)}{" "}
+                {t(k.IF_SET_THEN_THIS)}{" "}
                 {objectName === "document set"
-                  ? "набор документов"
+                  ? "t(k.DOCUMENT_SET)"
                   : objectName}{" "}
-                {i18n.t(k.WILL_BE_USABLE_BY)}{" "}
+                {t(k.WILL_BE_USABLE_BY)}{" "}
                 <b>
-                  {i18n.t(k.ALL1)}{" "}
-                  {publicToWhom === "Users" ? "пользователей" : publicToWhom}
+                  {t(k.ALL1)}{" "}
+                  {publicToWhom === "Users" ? t(k.USERS) : publicToWhom}
                 </b>
-                {i18n.t(k.OTHERWISE_ONLY)} <b>{i18n.t(k.ADMINS)}</b>{" "}
-                {i18n.t(k.AND)}{" "}
+                {t(k.OTHERWISE_ONLY)} <b>{t(k.ADMINS)}</b> {t(k.AND)}{" "}
                 <b>
-                  {publicToWhom === "Users" ? "Пользователи" : publicToWhom}
+                  {publicToWhom === "Users" ? t(k.USERS_CAPITAL) : publicToWhom}
                 </b>
                 {", "}
-                {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}{" "}
+                {t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}{" "}
                 {objectName === "document set"
-                  ? "набору документов"
+                  ? t(k.TO_DOCUMENT_SET)
                   : objectName}{" "}
-                {i18n.t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
+                {t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
               </span>
             }
           />
@@ -131,9 +133,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
           <>
             <div className="flex mt-4 gap-x-2 items-center">
               <div className="block font-medium text-base">
-                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)}{" "}
+                {t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)}{" "}
                 {objectName === "document set"
-                  ? "набора документов"
+                  ? t(k.OF_DOCUMENT_SETS)
                   : objectName}
               </div>
             </div>
@@ -143,17 +145,17 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               <Text className="mb-3">
                 {isAdmin || !enforceGroupSelection ? (
                   <>
-                    {i18n.t(k.THIS)}{" "}
+                    {t(k.THIS)}{" "}
                     {objectName === "document set"
-                      ? "набор документов"
+                      ? "t(k.DOCUMENT_SET)"
                       : objectName}{" "}
-                    {i18n.t(k.WILL_BE_VISIBLE_ACCESSIBLE_BY)}
+                    {t(k.WILL_BE_VISIBLE_ACCESSIBLE_BY)}
                   </>
                 ) : (
                   <>
-                    {i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO1)}
+                    {t(k.CURATORS_MUST_SELECT_ONE_OR_MO1)}
                     {objectName === "document set"
-                      ? "набор документов"
+                      ? "t(k.DOCUMENT_SET)"
                       : objectName}
                   </>
                 )}

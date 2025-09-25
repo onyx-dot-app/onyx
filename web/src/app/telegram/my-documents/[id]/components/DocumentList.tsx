@@ -1,6 +1,6 @@
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../../i18n/keys";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { JSX, useState, useEffect, useCallback, useMemo } from "react";
 import {
   FileResponse,
   FolderResponse,
@@ -129,6 +129,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   showInvalidFileMessage = false,
   setShowInvalidFileMessage,
 }) => {
+  const { t } = useTranslation();
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
   const openDocument = (file: FileResponse) => {
@@ -183,9 +184,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         {
           name: url,
           error:
-            error instanceof Error
-              ? error.message
-              : "Не удалось загрузить файл",
+            error instanceof Error ? error.message : t(k.FAILED_TO_LOAD_FILE),
           isPopoverOpen: false,
         },
       ]);
@@ -213,9 +212,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         {
           name: url,
           error:
-            error instanceof Error
-              ? error.message
-              : "Не удалось загрузить файл",
+            error instanceof Error ? error.message : t(k.FAILED_TO_LOAD_FILE),
           isPopoverOpen: false,
         },
       ]);
@@ -527,7 +524,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[40%] flex items-center cursor-pointer transition-colors"
                         >
-                          {i18n.t(k.NAME)}{" "}
+                          {t(k.NAME)}{" "}
                           {renderSortIndicator?.(SortType.Alphabetical)}
                           {renderHoverIndicator?.(SortType.Alphabetical)}
                         </button>
@@ -539,7 +536,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[30%] flex items-center cursor-pointer transition-colors"
                         >
-                          {i18n.t(k.CREATED)}{" "}
+                          {t(k.CREATED)}{" "}
                           {renderSortIndicator?.(SortType.TimeCreated)}
                           {renderHoverIndicator?.(SortType.TimeCreated)}
                         </button>
@@ -549,16 +546,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[30%] flex items-center cursor-pointer transition-colors"
                         >
-                          {i18n.t(k.LLM_TOKENS)}{" "}
+                          {t(k.LLM_TOKENS)}{" "}
                           {renderSortIndicator?.(SortType.Tokens)}
                           {renderHoverIndicator?.(SortType.Tokens)}
                         </button>
                       </>
                     ) : (
                       <>
-                        <div className="w-[40%]">{i18n.t(k.NAME)}</div>
-                        <div className="w-[30%]">{i18n.t(k.CREATED)}</div>
-                        <div className="w-[30%]">{i18n.t(k.LLM_TOKENS)}</div>
+                        <div className="w-[40%]">{t(k.NAME)}</div>
+                        <div className="w-[30%]">{t(k.CREATED)}</div>
+                        <div className="w-[30%]">{t(k.LLM_TOKENS)}</div>
                       </>
                     )}
                   </div>
@@ -581,14 +578,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                             className="mr-2"
                             size="sm"
                           >
-                            {i18n.t(k.SAVE)}
+                            {t(k.SAVE)}
                           </Button>
                           <Button
                             onClick={onCancelRename}
                             variant="outline"
                             size="sm"
                           >
-                            {i18n.t(k.CANCEL)}
+                            {t(k.CANCEL)}
                           </Button>
                         </div>
                       </div>
@@ -636,10 +633,10 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         </span>
                       </div>
                       <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-                        {i18n.t(k._)}
+                        {t(k._)}
                       </div>
                       <div className="w-[30%] flex items-center text-text-400 dark:text-neutral-400 text-sm">
-                        {i18n.t(k._)}
+                        {t(k._)}
                       </div>
                     </div>
                   </div>
@@ -663,7 +660,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         </span>
                       </div>
                       <div className="w-[30%] text-sm text-red-500 dark:text-red-400">
-                        {i18n.t(k.UPLOAD_FAILED)}
+                        {t(k.UPLOAD_FAILED)}
                       </div>
                       <div className="w-[30%] flex items-center justify-end">
                         <Popover
@@ -684,9 +681,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                             <div className="flex flex-col gap-3">
                               <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-red-500">
-                                  {i18n.t(k.VISITING_URL_FAILED)}
+                                  {t(k.VISITING_URL_FAILED)}
                                   <br />
-                                  {i18n.t(k.YOU_CAN_RETRY_OR_REMOVE_IT_FRO)}
+                                  {t(k.YOU_CAN_RETRY_OR_REMOVE_IT_FRO)}
                                 </p>
                               </div>
                               <div className="flex flex-col gap-2">
@@ -702,7 +699,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                                   }}
                                 >
                                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                                  {i18n.t(k.RETRY)}
+                                  {t(k.RETRY)}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -715,7 +712,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                                   }}
                                 >
                                   <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                  {i18n.t(k.REMOVE)}
+                                  {t(k.REMOVE)}
                                 </Button>
                               </div>
                             </div>
@@ -731,8 +728,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   failedUploads.length === 0 && (
                     <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
                       {searchQuery
-                        ? i18n.t(k.NO_DOCUMENTS_MATCH_YOUR_SEARCH)
-                        : i18n.t(k.NO_DOCUMENTS_IN_THIS_FOLDER_YE)}
+                        ? t(k.NO_DOCUMENTS_MATCH_YOUR_SEARCH)
+                        : t(k.NO_DOCUMENTS_IN_THIS_FOLDER_YE)}
                     </div>
                   )}
               </>
@@ -746,21 +743,21 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-medium text-xs">
-                  {i18n.t(k.UNSUPPORTED_FILE_TYPE)}
-                  {invalidFiles.length > 1 ? i18n.t(k.S) : ""}
+                  {t(k.UNSUPPORTED_FILE_TYPE)}
+                  {invalidFiles.length > 1 ? t(k.S) : ""}
                 </p>
                 <p className="mt-0.5 text-xs">
                   {invalidFiles.length > 1
-                    ? `${i18n.t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
+                    ? `${t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
                         .slice(0, 3)
-                        .join(i18n.t(k._3))}${
+                        .join(t(k._3))}${
                         invalidFiles.length > 3
-                          ? ` ${i18n.t(k.AND)} ${
-                              invalidFiles.length - 3
-                            } ${i18n.t(k.MORE)}`
+                          ? ` ${t(k.AND)} ${invalidFiles.length - 3} ${t(
+                              k.MORE
+                            )}`
                           : ""
                       }`
-                    : `${i18n.t(k.THE_FILE)}${invalidFiles[0]}${i18n.t(
+                    : `${t(k.THE_FILE)}${invalidFiles[0]}${t(
                         k.CANNOT_BE_UPLOADED
                       )}`}
                 </p>

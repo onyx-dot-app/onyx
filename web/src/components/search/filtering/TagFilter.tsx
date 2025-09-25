@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { Tag } from "@/lib/types";
@@ -40,6 +42,7 @@ export function TagFilter({
   selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
 }) {
+  const { t } = useTranslation();
   const [filterValue, setFilterValue] = useState("");
   const [filteredTags, setFilteredTags] = useState<Tag[]>(tags);
 
@@ -74,7 +77,7 @@ export function TagFilter({
     <div className="pt-4 h-full flex flex-col w-full">
       <div className="flex pb-2 px-4">
         <Input
-          placeholder="Поиск тегов..."
+          placeholder={t(k.SEARCH_TAGS_PLACEHOLDER)}
           value={filterValue}
           onChange={(e) => setFilterValue(e.target.value)}
           className="border border-text-subtle w-full"

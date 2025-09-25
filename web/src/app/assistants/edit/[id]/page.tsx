@@ -4,6 +4,8 @@ import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { SuccessfulPersonaUpdateRedirectType } from "@/app/admin/assistants/enums";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { BackButton } from "@/components/BackButton";
+import i18n from "@/i18n/init";
+import k from "@/i18n/keys";
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -12,7 +14,10 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   if (!values) {
     return (
       <div className="px-32">
-        <ErrorCallout errorTitle="Что-то пошло не так :(" errorMsg={error} />
+        <ErrorCallout
+          errorTitle={i18n.t(k.SOMETHING_WENT_WRONG)}
+          errorMsg={error}
+        />
       </div>
     );
   } else {

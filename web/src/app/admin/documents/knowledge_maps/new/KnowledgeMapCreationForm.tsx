@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "../../../../../i18n/keys";
 import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import { useEffect, useState } from "react";
 import * as Yup from "yup";
@@ -53,6 +57,7 @@ export const KnowledgeMapCreationForm = ({
   setPopup,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const { t } = useTranslation();
   const isUpdate = existingDocumentSet !== undefined;
   const [selectedDoc, setSelectedDoc] = useState<number | null>(
     existingDocumentSet ? existingDocumentSet.document_set_id : null
@@ -70,10 +75,8 @@ export const KnowledgeMapCreationForm = ({
             : "",
         }}
         validationSchema={Yup.object().shape({
-          name: Yup.string().required("Введите название карты знаний"),
-          description: Yup.string().required(
-            "Пожалуйста, введите описание для набора"
-          ),
+          name: Yup.string().required(t(k.ENTER_KNOWLEDGE_MAP_NAME)),
+          description: Yup.string().required(t(k.ENTER_DESCRIPTION_FOR_SET)),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -97,8 +100,8 @@ export const KnowledgeMapCreationForm = ({
           if (response.ok) {
             setPopup({
               message: isUpdate
-                ? "Карта знаний успешно обновлена!"
-                : "Карта знаний успешно создана!",
+                ? t(k.KNOWLEDGE_MAP_UPDATED_SUCCESS)
+                : t(k.KNOWLEDGE_MAP_CREATED_SUCCESS),
               type: "success",
             });
             const responseData = await response.json();
@@ -108,8 +111,8 @@ export const KnowledgeMapCreationForm = ({
             const errorMsg = await response.text();
             setPopup({
               message: isUpdate
-                ? `Ошибка обновления карты знаний - ${errorMsg}`
-                : `Ошибка создания карты знаний - ${errorMsg}`,
+                ? `${t(k.KNOWLEDGE_MAP_UPDATE_ERROR)} ${errorMsg}`
+                : `${t(k.KNOWLEDGE_MAP_CREATE_ERROR)} ${errorMsg}`,
               type: "error",
             });
           }
@@ -119,31 +122,29 @@ export const KnowledgeMapCreationForm = ({
           <Form>
             <TextFormField
               name="name"
-              label="Название:"
-              placeholder="Название карты знаний"
+              label={t(k.NAME_LABEL)}
+              placeholder={t(k.KNOWLEDGE_MAP_NAME_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
             <TextFormField
               name="description"
-              label="Описание:"
-              placeholder="Пожалуйста, введите описание карты знаний"
+              label={t(k.DESCRIPTION_LABEL)}
+              placeholder={t(k.KNOWLEDGE_MAP_DESCRIPTION_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="flowiseId"
-              label="Пайлплайн Flowise:"
-              placeholder="Пожалуйста, введите ID пайлплайна Flowise"
+              label={t(k.FLOWISE_PIPELINE_LABEL)}
+              placeholder={t(k.FLOWISE_PIPELINE_PLACEHOLDER)}
               autoCompleteDisabled={true}
             />
 
             <h2 className="mb-1 font-medium text-base">
-              Выберите набор документов:
+              {t(k.SELECT_DOCUMENT_SET)}
             </h2>
             <p className="mb-3 text-xs">
-              Карта знаний формируется из ранее созданного набора документов.
-              Все документы, проиндексированные в наборе документов, будут
-              использованы для формирования карты знаний
+              {t(k.KNOWLEDGE_MAP_FORMATION_DESCRIPTION)}
             </p>
             <FieldArray
               name="cc_pair_ids"
@@ -198,7 +199,7 @@ export const KnowledgeMapCreationForm = ({
                 disabled={isSubmitting}
                 className="w-64 mx-auto"
               >
-                {isUpdate ? "Обновить!" : "Создать!"}
+                {isUpdate ? t(k.UPDATE) : t(k.CREATE)}
               </Button>
             </div>
           </Form>
@@ -207,18 +208,20 @@ export const KnowledgeMapCreationForm = ({
 
       {isUpdate && (
         <div>
-          <Title>Просмотр и редактирование Карты знаний</Title>
+          <Title>{t(k.KNOWLEDGE_MAP_VIEW_EDIT)}</Title>
           <Table className="overflow-visible mt-2">
             <TableHead>
               <TableRow>
-                <TableHeaderCell>Название темы</TableHeaderCell>
-                <TableHeaderCell>Описание темы</TableHeaderCell>
-                <TableHeaderCell>Примеры запросов</TableHeaderCell>
+                <TableHeaderCell>{t(k.TOPIC_NAME)}</TableHeaderCell>
+                <TableHeaderCell>
+                  {t(k.TOPIC_DESCRIPTION_HEADER)}
+                </TableHeaderCell>
+                <TableHeaderCell>{t(k.QUERY_EXAMPLES_HEADER)}</TableHeaderCell>
                 <TableHeaderCell>key_json</TableHeaderCell>
-                <TableHeaderCell>Источник</TableHeaderCell>
-                <TableHeaderCell>Выбор</TableHeaderCell>
-                <TableHeaderCell>Знания</TableHeaderCell>
-                <TableHeaderCell>Извлечение</TableHeaderCell>
+                <TableHeaderCell>{t(k.SOURCE_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.SELECTION_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.KNOWLEDGE_HEADER)}</TableHeaderCell>
+                <TableHeaderCell>{t(k.EXTRACTION_HEADER)}</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -260,7 +263,7 @@ export const KnowledgeMapCreationForm = ({
                 generateAnswers(existingDocumentSet.id);
               }}
             >
-              Извлечь
+              {t(k.EXTRACT_BUTTON)}
             </Button>
           </div>
         </div>

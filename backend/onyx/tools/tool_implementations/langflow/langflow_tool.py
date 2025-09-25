@@ -32,12 +32,20 @@ class LangflowTool(Tool):
     langflow_tool_description = """An API for Langflow"""
     _DISPLAY_NAME = "Langflow"
 
-    def __init__(self, db_session: Session, pipeline_id: str, prompt_config: PromptConfig, llm_config: LLMConfig):
+    def __init__(
+            self,
+            db_session: Session,
+            pipeline_id: str,
+            prompt_config: PromptConfig,
+            llm_config: LLMConfig,
+            chat_session_id,
+    ):
         self.db_session = db_session
         self.pipeline_id = pipeline_id
         self.base_url = LANGFLOW_BASE_URL
         self.prompt_config = prompt_config
         self.llm_config = llm_config
+        self.chat_session_id = chat_session_id
 
     @property
     def name(self) -> str:
@@ -87,7 +95,10 @@ class LangflowTool(Tool):
         return {"question": query}
 
     def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
-        request_body = {"input_value": kwargs['question']}
+        request_body = {
+            "input_value": kwargs['question'],
+            "session_id": str(self.chat_session_id),
+        }
 
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"

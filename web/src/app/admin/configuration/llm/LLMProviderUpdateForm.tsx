@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -42,6 +44,7 @@ export function LLMProviderUpdateForm({
   firstTimeConfiguration?: boolean;
   hasAdvancedOptions?: boolean;
 }) {
+  const { t } = useTranslation();
   const { mutate } = useSWRConfig();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -84,15 +87,15 @@ export function LLMProviderUpdateForm({
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
-    name: Yup.string().required("Отображаемое имя обязательно"),
+    name: Yup.string().required(t(k.DISPLAY_NAME_REQUIRED)),
     api_key: llmProviderDescriptor.api_key_required
-      ? Yup.string().required("Требуется API-ключ")
+      ? Yup.string().required(t(k.API_KEY_REQUIRED))
       : Yup.string(),
     api_base: llmProviderDescriptor.api_base_required
-      ? Yup.string().required("Требуется API Base")
+      ? Yup.string().required(t(k.API_BASE_REQUIRED))
       : Yup.string(),
     api_version: llmProviderDescriptor.api_version_required
-      ? Yup.string().required("Требуется версия API")
+      ? Yup.string().required(t(k.API_VERSION_REQUIRED))
       : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
       ? {
@@ -103,7 +106,7 @@ export function LLMProviderUpdateForm({
                   acc[customConfigKey.name] = Yup.string().required(
                     `${
                       customConfigKey.display_name || customConfigKey.name
-                    } обязательно`
+                    } ${t(k.FIELD_REQUIRED)}`
                   );
                 }
                 return acc;
@@ -114,9 +117,9 @@ export function LLMProviderUpdateForm({
         }
       : {}),
     deployment_name: llmProviderDescriptor.deployment_name_required
-      ? Yup.string().required("Требуется указать имя развертывания")
+      ? Yup.string().required(t(k.DEPLOYMENT_NAME_REQUIRED))
       : Yup.string().nullable(),
-    default_model_name: Yup.string().required("Название модели обязательно"),
+    default_model_name: Yup.string().required(t(k.MODEL_NAME_REQUIRED)),
     fast_default_model_name: Yup.string().nullable(),
     // EE Only
     is_public: Yup.boolean().required(),
@@ -179,8 +182,8 @@ export function LLMProviderUpdateForm({
         if (!response.ok) {
           const errorMsg = (await response.json()).detail;
           const fullErrorMsg = existingLlmProvider
-            ? `${i18n.t(k.FAILED_TO_UPDATE_PROVIDER)} ${errorMsg}`
-            : `${i18n.t(k.FAILED_TO_ENABLE_PROVIDER)} ${errorMsg}`;
+            ? `${t(k.FAILED_TO_UPDATE_PROVIDER)} ${errorMsg}`
+            : `${t(k.FAILED_TO_ENABLE_PROVIDER)} ${errorMsg}`;
           if (setPopup) {
             setPopup({
               type: "error",
@@ -202,7 +205,7 @@ export function LLMProviderUpdateForm({
           );
           if (!setDefaultResponse.ok) {
             const errorMsg = (await setDefaultResponse.json()).detail;
-            const fullErrorMsg = `${i18n.t(
+            const fullErrorMsg = `${t(
               k.FAILED_TO_SET_PROVIDER_AS_DEFA
             )} ${errorMsg}`;
             if (setPopup) {
@@ -221,8 +224,8 @@ export function LLMProviderUpdateForm({
         onClose();
 
         const successMsg = existingLlmProvider
-          ? i18n.t(k.PROVIDER_UPDATED_SUCCESSFULLY)
-          : i18n.t(k.PROVIDER_ENABLED_SUCCESSFULLY);
+          ? t(k.PROVIDER_UPDATED_SUCCESSFULLY)
+          : t(k.PROVIDER_ENABLED_SUCCESSFULLY);
 
         if (!hideSuccess && setPopup) {
           setPopup({
@@ -241,9 +244,9 @@ export function LLMProviderUpdateForm({
           {!firstTimeConfiguration && (
             <TextFormField
               name="name"
-              label="Отображаемое имя"
-              subtext="Имя, которое можно использовать для идентификации этого поставщика при выборе его в пользовательском интерфейсе."
-              placeholder="Отображаемое имя"
+              label={t(k.DISPLAY_NAME_LABEL)}
+              subtext={t(k.DISPLAY_NAME_SUBTEXT)}
+              placeholder={t(k.DISPLAY_NAME_PLACEHOLDER)}
               disabled={existingLlmProvider ? true : false}
             />
           )}
@@ -286,9 +289,7 @@ export function LLMProviderUpdateForm({
                     label={
                       customConfigKey.is_required
                         ? customConfigKey.display_name
-                        : `${i18n.t(k.OPTIONAL1)} ${
-                            customConfigKey.display_name
-                          }`
+                        : `${t(k.OPTIONAL1)} ${customConfigKey.display_name}`
                     }
                     subtext={customConfigKey.description || undefined}
                   />
@@ -315,11 +316,11 @@ export function LLMProviderUpdateForm({
               {llmProviderDescriptor.llm_names.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
-                  subtext="Модель, используемая по умолчанию для этого поставщика, если не указано иное."
-                  label="LLM-модель по умолчанию"
+                  subtext={t(k.DEFAULT_MODEL_SUBTEXT)}
+                  label={t(k.DEFAULT_MODEL_LABEL)}
                   options={llmProviderDescriptor.llm_names.map((name) => ({
-                    // не очищайте имена здесь, чтобы дать администраторам описательные имена / обрабатывать дубликаты
-                    // как us.anthropic.claude-3-7-sonnet-20250219-v1:0 и anthropic.claude-3-7-sonnet-20250219-v1:0
+                    // don't clean up names here to give admins descriptive names / handle duplicates
+                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                     name: name,
                     value: name,
                   }))}
@@ -328,17 +329,17 @@ export function LLMProviderUpdateForm({
               ) : (
                 <TextFormField
                   name="default_model_name"
-                  subtext="Модель, используемая по умолчанию для этого поставщика, если не указано иное."
-                  label="LLM-модель по дефолт"
-                  placeholder="Например gpt-4"
+                  subtext={t(k.DEFAULT_MODEL_SUBTEXT)}
+                  label={t(k.DEFAULT_MODEL_LABEL)}
+                  placeholder={t(k.DEFAULT_MODEL_PLACEHOLDER)}
                 />
               )}
 
               {llmProviderDescriptor.deployment_name_required && (
                 <TextFormField
                   name="deployment_name"
-                  label="Имя развертывания"
-                  placeholder="Имя развертывания"
+                  label={t(k.DEPLOYMENT_NAME_LABEL)}
+                  placeholder={t(k.DEPLOYMENT_NAME_PLACEHOLDER)}
                 />
               )}
 
@@ -346,8 +347,8 @@ export function LLMProviderUpdateForm({
                 (llmProviderDescriptor.llm_names.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
-                    subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
-                    label="[Необязательно] Быстрая модель"
+                    subtext={`${t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
+                    label={t(k.FAST_MODEL_OPTIONAL_LABEL)}
                     options={llmProviderDescriptor.llm_names.map((name) => ({
                       // don't clean up names here to give admins descriptive names / handle duplicates
                       // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
@@ -360,9 +361,9 @@ export function LLMProviderUpdateForm({
                 ) : (
                   <TextFormField
                     name="fast_default_model_name"
-                    subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
-                    label="[Необязательно] Быстрая модель"
-                    placeholder="Например gpt-4"
+                    subtext={`${t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
+                    label={t(k.FAST_MODEL_OPTIONAL_LABEL)}
+                    placeholder={t(k.FAST_MODEL_EXAMPLE_PLACEHOLDER)}
                   />
                 ))}
 
@@ -383,8 +384,8 @@ export function LLMProviderUpdateForm({
                               formikProps.values.display_model_names
                             }
                             name="display_model_names"
-                            label="Отобразить модели"
-                            subtext="Выберите модели, которые будут доступны пользователям. Невыбранные модели будут недоступны."
+                            label={t(k.DISPLAY_MODELS_LABEL)}
+                            subtext={t(k.DISPLAY_MODELS_SUBTEXT)}
                             options={llmProviderDescriptor.llm_names.map(
                               (name) => ({
                                 value: name,
@@ -424,9 +425,9 @@ export function LLMProviderUpdateForm({
               {isTesting ? (
                 <LoadingAnimation text="Testing" />
               ) : existingLlmProvider ? (
-                i18n.t(k.UPDATE)
+                t(k.UPDATE)
               ) : (
-                i18n.t(k.ENABLE)
+                t(k.ENABLE)
               )}
             </Button>
             {existingLlmProvider && (
@@ -444,7 +445,7 @@ export function LLMProviderUpdateForm({
                   );
                   if (!response.ok) {
                     const errorMsg = (await response.json()).detail;
-                    alert(`${i18n.t(k.FAILED_TO_DELETE_PROVIDER)} ${errorMsg}`);
+                    alert(`${t(k.FAILED_TO_DELETE_PROVIDER)} ${errorMsg}`);
                     return;
                   }
 
@@ -473,7 +474,7 @@ export function LLMProviderUpdateForm({
                   onClose();
                 }}
               >
-                {i18n.t(k.DELETE)}
+                {t(k.DELETE)}
               </Button>
             )}
           </div>

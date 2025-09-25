@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 
 import {
@@ -11,6 +11,8 @@ import {
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
+  JSX,
+  RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -276,6 +278,7 @@ export const AIMessage = ({
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
   removePadding?: boolean;
 }) => {
+  const { t } = useTranslation();
   const toolCallGenerating = toolCall && !toolCall.tool_result;
 
   // Check if content contains thinking tokens (complete or partial)
@@ -571,12 +574,8 @@ export const AIMessage = ({
                         <ToolRunDisplay
                           toolName={
                             toolCall.tool_result && content
-                              ? `${i18n.t(k.USED)}${toolCall.tool_name}${i18n.t(
-                                  k._17
-                                )}`
-                              : `${i18n.t(k.USING)}${
-                                  toolCall.tool_name
-                                }${i18n.t(k._17)}`
+                              ? `${t(k.USED)}${toolCall.tool_name}${t(k._17)}`
+                              : `${t(k.USING)}${toolCall.tool_name}${t(k._17)}`
                           }
                           toolLogo={
                             <FiTool size={15} className="my-auto mr-1" />
@@ -593,8 +592,8 @@ export const AIMessage = ({
                         <ToolRunDisplay
                           toolName={
                             toolCall.tool_result
-                              ? `${i18n.t(k.SEARCHED_THE_INTERNET)}`
-                              : `${i18n.t(k.SEARCHING_THE_INTERNET)}`
+                              ? `${t(k.SEARCHED_THE_INTERNET)}`
+                              : `${t(k.SEARCHING_THE_INTERNET)}`
                           }
                           toolLogo={
                             <FiGlobe size={15} className="my-auto mr-1" />
@@ -719,7 +718,12 @@ export const AIMessage = ({
                             <div
                               ref={markdownRef}
                               className="focus:outline-none cursor-text select-text"
-                              onCopy={(e) => handleCopy(e, markdownRef)}
+                              onCopy={(e) =>
+                                handleCopy(
+                                  e,
+                                  markdownRef as RefObject<HTMLDivElement>
+                                )
+                              }
                             >
                               {renderedMarkdown}
                             </div>
@@ -764,27 +768,36 @@ export const AIMessage = ({
                                       ]
                                     );
                                   }}
+                                  t={t}
                                 />
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Копировать">
+                          <CustomTooltip showTick line content={t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
                                   finalContentProcessed as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Хороший ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={t(k.GOOD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Плохой ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={t(k.BAD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -796,7 +809,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Перегенерировать"
+                              content={t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -846,29 +859,38 @@ export const AIMessage = ({
                                       ]
                                     );
                                   }}
+                                  t={t}
                                 />
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Копировать">
+                          <CustomTooltip showTick line content={t(k.COPY)}>
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
                                   finalContentProcessed as string,
-                                  markdownRef
+                                  markdownRef as RefObject<HTMLDivElement>
                                 )
                               }
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Хороший ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={t(k.GOOD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Плохой ответ">
+                          <CustomTooltip
+                            showTick
+                            line
+                            content={t(k.BAD_ANSWER)}
+                          >
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -879,7 +901,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Перегенерировать"
+                              content={t(k.REGENERATE)}
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -915,12 +937,14 @@ function MessageSwitcher({
   handlePrevious,
   handleNext,
   disableForStreaming,
+  t,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
   disableForStreaming?: boolean;
+  t: (key: string, params?: any) => string;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
@@ -942,14 +966,14 @@ function MessageSwitcher({
           </TooltipTrigger>
           <TooltipContent>
             {disableForStreaming
-              ? i18n.t(k.WAIT_FOR_AGENT_MESSAGE_TO_COMP)
-              : i18n.t(k.PREVIOUS)}
+              ? t(k.WAIT_FOR_AGENT_MESSAGE_TO_COMP)
+              : t(k.PREVIOUS)}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
       <span className="text-text-darker select-none">
-        {currentPage} {i18n.t(k._6)} {totalPages}
+        {currentPage} {t(k._6)} {totalPages}
       </span>
 
       <TooltipProvider>
@@ -970,8 +994,8 @@ function MessageSwitcher({
           </TooltipTrigger>
           <TooltipContent>
             {disableForStreaming
-              ? i18n.t(k.WAIT_FOR_AGENT_MESSAGE_TO_COMP)
-              : i18n.t(k.NEXT)}
+              ? t(k.WAIT_FOR_AGENT_MESSAGE_TO_COMP)
+              : t(k.NEXT)}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -1002,6 +1026,7 @@ export const HumanMessage = ({
   disableSwitchingForStreaming?: boolean;
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isHovered, setIsHovered] = useState(false);
@@ -1136,7 +1161,7 @@ export const HumanMessage = ({
                         `}
                           onClick={handleEditSubmit}
                         >
-                          {i18n.t(k.SUBMIT1)}
+                          {t(k.SUBMIT1)}
                         </button>
                         <button
                           className={`
@@ -1159,7 +1184,7 @@ export const HumanMessage = ({
                             setIsEditing(false);
                           }}
                         >
-                          {i18n.t(k.CANCEL)}
+                          {t(k.CANCEL)}
                         </button>
                       </div>
                     </div>
@@ -1182,7 +1207,7 @@ export const HumanMessage = ({
                                 }}
                               />
                             </TooltipTrigger>
-                            <TooltipContent>{i18n.t(k.EDIT)}</TooltipContent>
+                            <TooltipContent>{t(k.EDIT)}</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       ) : (
@@ -1250,6 +1275,7 @@ export const HumanMessage = ({
                         otherMessagesCanSwitchTo[currentMessageInd + 1]
                       );
                     }}
+                    t={t}
                   />
                 </div>
               )}

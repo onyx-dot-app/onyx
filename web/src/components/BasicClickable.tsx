@@ -1,3 +1,5 @@
+import { JSX } from "react";
+
 export function BasicClickable({
   children,
   onClick,
@@ -60,8 +62,8 @@ export function EmphasizedClickable({
           size === "sm"
             ? `p-1`
             : size === "md"
-              ? `min-h-[38px]  py-1 px-3`
-              : `min-h-[42px] py-2 px-4`
+            ? `min-h-[38px]  py-1 px-3`
+            : `min-h-[42px] py-2 px-4`
         }
         w-fit 
         bg-accent-background-hovered
@@ -113,10 +115,10 @@ export function BasicSelectable({
             ? isDragging
               ? "bg-background-chat-hover"
               : selected
-                ? "bg-background-chat-selected"
-                : isHovered
-                  ? "bg-background-chat-hover"
-                  : "hover:bg-background-chat-hover"
+              ? "bg-background-chat-selected"
+              : isHovered
+              ? "bg-background-chat-hover"
+              : "hover:bg-background-chat-hover"
             : ""
         }
         ${fullWidth ? "w-full" : ""}`}

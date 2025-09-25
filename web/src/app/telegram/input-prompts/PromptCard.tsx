@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { SourceChip } from "../input/ChatInputBar";
 
@@ -41,6 +43,7 @@ export const PromptCard = ({
   handleEdit: (id: number) => void;
   fetchInputPrompts: () => void;
 }) => {
+  const { t } = useTranslation();
   const isEditing = editingPromptId === prompt.id;
   const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
   const [localContent, setLocalContent] = useState(prompt.content);
@@ -85,19 +88,19 @@ export const PromptCard = ({
                 value={localPrompt}
                 onChange={(e) => handleLocalEdit("prompt", e.target.value)}
                 className="mb-2 resize-none"
-                placeholder="Промпт"
+                placeholder={t(k.PROMPT_PLACEHOLDER)}
               />
 
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
                 className="resize-vertical min-h-[100px]"
-                placeholder="Контент"
+                placeholder={t(k.CONTENT_PLACEHOLDER)}
               />
             </div>
             <div className="flex items-end">
               <Button onClick={handleSaveLocal}>
-                {prompt.id ? i18n.t(k.SAVE) : i18n.t(k.CREATE1)}
+                {prompt.id ? t(k.SAVE) : t(k.CREATE1)}
               </Button>
             </div>
           </div>
@@ -109,12 +112,14 @@ export const PromptCard = ({
               <TooltipTrigger asChild>
                 <div className="mb-2  flex gap-x-2 ">
                   <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Встроенный" />}
+                  {isPromptPublic(prompt) && (
+                    <SourceChip title={t(k.BUILT_IN_TITLE)} />
+                  )}
                 </div>
               </TooltipTrigger>
               {isPromptPublic(prompt) && (
                 <TooltipContent>
-                  <p>{i18n.t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
+                  <p>{t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -134,11 +139,11 @@ export const PromptCard = ({
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (
                   <DropdownMenuItem onClick={() => handleEdit(prompt.id)}>
-                    {i18n.t(k.EDIT)}
+                    {t(k.EDIT)}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => handleDelete(prompt.id)}>
-                  {i18n.t(k.DELETE)}
+                  {t(k.DELETE)}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -96,6 +98,7 @@ export function ShareChatSessionModal({
   assistantId?: number;
   modelOverride?: LlmDescriptor;
 }) {
+  const { t } = useTranslation();
   const [shareLink, setShareLink] = useState<string>(
     existingSharedStatus === ChatSessionSharedStatus.Public
       ? buildShareLink(chatSessionId)
@@ -112,14 +115,14 @@ export function ShareChatSessionModal({
         <>
           <div className="flex mb-4">
             <h2 className="text-2xl text-text-darker font-bold flex my-auto">
-              {i18n.t(k.SHARE_LINK_TO_CHAT)}
+              {t(k.SHARE_LINK_TO_CHAT)}
             </h2>
           </div>
 
           <div className="flex mt-2">
             {shareLink ? (
               <div>
-                <Text>{i18n.t(k.THIS_CHAT_SESSION_IS_CURRENTLY)}</Text>
+                <Text>{t(k.THIS_CHAT_SESSION_IS_CURRENTLY)}</Text>
 
                 <div className="flex mt-2">
                   <CopyButton content={shareLink} />
@@ -136,7 +139,7 @@ export function ShareChatSessionModal({
                 <Separator />
 
                 <Text className="mb-4">
-                  {i18n.t(k.CLICK_THE_BUTTON_BELOW_TO_MAKE)}
+                  {t(k.CLICK_THE_BUTTON_BELOW_TO_MAKE)}
                 </Text>
 
                 <Button
@@ -146,19 +149,19 @@ export function ShareChatSessionModal({
                       setShareLink("");
                       onShare && onShare(false);
                     } else {
-                      alert(i18n.t(k.FAILED_TO_DELETE_SHARE_LINK));
+                      alert(t(k.FAILED_TO_DELETE_SHARE_LINK));
                     }
                   }}
                   size="sm"
                   variant="destructive"
                 >
-                  {i18n.t(k.DELETE_SHARE_LINK)}
+                  {t(k.DELETE_SHARE_LINK)}
                 </Button>
               </div>
             ) : (
               <div>
-                <Callout type="warning" title="Предупреждение" className="mb-4">
-                  {i18n.t(k.PLEASE_MAKE_SURE_THAT_ALL_CONT)}
+                <Callout type="warning" title={t(k.WARNING)} className="mb-4">
+                  {t(k.PLEASE_MAKE_SURE_THAT_ALL_CONT)}
                 </Callout>
                 <div className="flex w-full justify-between">
                   <Button
@@ -171,7 +174,7 @@ export function ShareChatSessionModal({
                           chatSessionId
                         );
                         if (!shareLink) {
-                          alert(i18n.t(k.FAILED_TO_GENERATE_SHARE_LINK));
+                          alert(t(k.FAILED_TO_GENERATE_SHARE_LINK));
                         } else {
                           setShareLink(shareLink);
                           onShare && onShare(true);
@@ -184,7 +187,7 @@ export function ShareChatSessionModal({
                     size="sm"
                     variant="secondary"
                   >
-                    {i18n.t(k.GENERATE_AND_COPY_SHARE_LINK)}
+                    {t(k.GENERATE_AND_COPY_SHARE_LINK)}
                   </Button>
                 </div>
               </div>
@@ -196,14 +199,14 @@ export function ShareChatSessionModal({
           <AdvancedOptionsToggle
             showAdvancedOptions={showAdvancedOptions}
             setShowAdvancedOptions={setShowAdvancedOptions}
-            title="Расширенные настройки"
+            title={t(k.ADVANCED_SETTINGS)}
           />
 
           {showAdvancedOptions && (
             <>
               <div className="mb-4">
-                <Callout type="notice" title="Создать новый чат">
-                  {i18n.t(k.GENERATE_A_LINK_TO_A_NEW_CHAT)}
+                <Callout type="notice" title={t(k.CREATE_NEW_CHAT)}>
+                  {t(k.GENERATE_A_LINK_TO_A_NEW_CHAT)}
                 </Callout>
               </div>
               <div className="flex w-full justify-between">
@@ -218,13 +221,13 @@ export function ShareChatSessionModal({
                       );
                       if (!seedLink) {
                         setPopup({
-                          message: i18n.t(k.FAILED_TO_GENERATE_SEED_LINK),
+                          message: t(k.FAILED_TO_GENERATE_SEED_LINK),
                           type: "error",
                         });
                       } else {
                         navigator.clipboard.writeText(seedLink);
                         setPopup({
-                          message: i18n.t(k.LINK_COPIED_TO_CLIPBOARD),
+                          message: t(k.LINK_COPIED_TO_CLIPBOARD),
                           type: "success",
                         });
                       }
@@ -236,7 +239,7 @@ export function ShareChatSessionModal({
                   size="sm"
                   variant="secondary"
                 >
-                  {i18n.t(k.GENERATE_AND_COPY_SEED_LINK)}
+                  {t(k.GENERATE_AND_COPY_SEED_LINK)}
                 </Button>
               </div>
             </>

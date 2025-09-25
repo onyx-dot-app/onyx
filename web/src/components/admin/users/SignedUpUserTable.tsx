@@ -1,4 +1,5 @@
-import i18n from "@/i18n/init";
+import React from "react";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import {
   type User,
@@ -75,6 +76,7 @@ const SignedUpUserTable = ({
   q = "",
   invitedUsersMutate,
 }: Props) => {
+  const { t } = useTranslation();
   const [filters, setFilters] = useState<{
     is_active?: boolean;
     roles?: UserRole[];
@@ -104,7 +106,7 @@ const SignedUpUserTable = ({
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки пользователей"
+        errorTitle={t(k.LOAD_USERS_ERROR)}
         errorMsg={error?.message}
       />
     );
@@ -116,9 +118,9 @@ const SignedUpUserTable = ({
   };
 
   const onRoleChangeSuccess = () =>
-    handlePopup("Роль пользователя успешно обновлена!", "success");
+    handlePopup(t(k.USER_ROLE_UPDATED_SUCCESS), "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
+    handlePopup(`${t(k.USER_ROLE_UPDATE_FAILED)} ${errorMsg}`, "error");
 
   const toggleRole = (roleEnum: UserRole) => {
     setFilters((prev) => {
@@ -170,17 +172,17 @@ const SignedUpUserTable = ({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-background-50">
-            <SelectItem value="all">{i18n.t(k.ALL_STATUS)}</SelectItem>
-            <SelectItem value="true">{i18n.t(k.ACTIVE)}</SelectItem>
-            <SelectItem value="false">{i18n.t(k.INACTIVE)}</SelectItem>
+            <SelectItem value="all">{t(k.ALL_STATUS)}</SelectItem>
+            <SelectItem value="true">{t(k.ACTIVE)}</SelectItem>
+            <SelectItem value="false">{t(k.INACTIVE)}</SelectItem>
           </SelectContent>
         </Select>
         <Select value="roles">
           <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
             <SelectValue>
               {filters.roles?.length
-                ? `${filters.roles.length} ${i18n.t(k.ROLE_S_SELECTED)}`
-                : i18n.t(k.ALL_ROLES)}
+                ? `${filters.roles.length} ${t(k.ROLE_S_SELECTED)}`
+                : t(k.ALL_ROLES)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-background-50">
@@ -213,7 +215,7 @@ const SignedUpUserTable = ({
             style={{ padding: "2px 8px" }}
           >
             <span>{USER_ROLE_LABELS[role]}</span>
-            <span className="ml-3">{i18n.t(k._36)}</span>
+            <span className="ml-3">{t(k._36)}</span>
           </button>
         ))}
       </div>
@@ -244,7 +246,7 @@ const SignedUpUserTable = ({
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">{i18n.t(k.OPEN_MENU)}</span>
+            <span className="sr-only">{t(k.OPEN_MENU)}</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
@@ -258,7 +260,7 @@ const SignedUpUserTable = ({
                 className={buttonClassName}
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>{i18n.t(k.LEAVE_ORGANIZATION)}</span>
+                <span>{t(k.LEAVE_ORGANIZATION)}</span>
               </LeaveOrganizationButton>
             ) : (
               <>
@@ -270,7 +272,7 @@ const SignedUpUserTable = ({
                     className={buttonClassName}
                   >
                     <UserMinus className="mr-2 h-4 w-4" />
-                    <span>{i18n.t(k.DELETE_USER)}</span>
+                    <span>{t(k.DELETE_USER)}</span>
                   </DeleteUserButton>
                 )}
                 <DeactivateUserButton
@@ -282,8 +284,8 @@ const SignedUpUserTable = ({
                 >
                   <UserX className="mr-2 h-4 w-4" />
                   <span>
-                    {user.is_active ? i18n.t(k.DEACTIVATE) : i18n.t(k.ACTIVATE)}{" "}
-                    {i18n.t(k.USER)}
+                    {user.is_active ? t(k.DEACTIVATE) : t(k.ACTIVATE)}{" "}
+                    {t(k.USER)}
                   </span>
                 </DeactivateUserButton>
               </>
@@ -295,7 +297,7 @@ const SignedUpUserTable = ({
                 onClick={() => handleResetPassword(user)}
               >
                 <KeyRound className="mr-2 h-4 w-4" />
-                <span>{i18n.t(k.RESET_PASSWORD)}</span>
+                <span>{t(k.RESET_PASSWORD)}</span>
               </Button>
             )}
           </div>
@@ -323,12 +325,12 @@ const SignedUpUserTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
-            <TableHead className="text-center">{i18n.t(k.ROLE)}</TableHead>
-            <TableHead className="text-center">{i18n.t(k.STATUS)}</TableHead>
+            <TableHead>{t(k.EMAIL)}</TableHead>
+            <TableHead className="text-center">{t(k.ROLE)}</TableHead>
+            <TableHead className="text-center">{t(k.STATUS)}</TableHead>
             <TableHead>
               <div className="flex">
-                <div className="ml-auto">{i18n.t(k.ACTIONS)}</div>
+                <div className="ml-auto">{t(k.ACTIONS)}</div>
               </div>
             </TableHead>
           </TableRow>
@@ -348,10 +350,8 @@ const SignedUpUserTable = ({
                 <TableCell colSpan={4} className="text-center">
                   <p className="pt-4 pb-4">
                     {filters.roles?.length || filters.is_active !== undefined
-                      ? i18n.t(k.NO_USERS_FOUND_MATCHING_YOUR_F)
-                      : `${i18n.t(k.NO_USERS_FOUND_MATCHING)}${q}${i18n.t(
-                          k._17
-                        )}`}
+                      ? t(k.NO_USERS_FOUND_MATCHING_YOUR_F)
+                      : `${t(k.NO_USERS_FOUND_MATCHING)}${q}${t(k._17)}`}
                   </p>
                 </TableCell>
               </TableRow>
@@ -363,9 +363,7 @@ const SignedUpUserTable = ({
                     {renderUserRoleDropdown(user)}
                   </TableCell>
                   <TableCell className="text-center w-[140px]">
-                    <i>
-                      {user.is_active ? i18n.t(k.ACTIVE) : i18n.t(k.INACTIVE)}
-                    </i>
+                    <i>{user.is_active ? t(k.ACTIVE) : t(k.INACTIVE)}</i>
                   </TableCell>
                   <TableCell className="text-right  w-[300px] ">
                     {renderActionButtons(user)}

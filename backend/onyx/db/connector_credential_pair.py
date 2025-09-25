@@ -95,6 +95,7 @@ def _add_user_filters(
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
+        where_clause |= ConnectorCredentialPair.creator_id == user.id
 
     return stmt.where(where_clause)
 
@@ -251,6 +252,19 @@ def get_connector_credential_pair_from_id_for_user(
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def verify_user_has_access_to_cc_pair(
+        cc_pair_id: int,
+        db_session: Session,
+        user: User,
+        get_editable: bool = True,
+) -> bool:
+    stmt = select(ConnectorCredentialPair.id)
+    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    result = db_session.execute(stmt)
+    return result.scalars().first() is not None
 
 
 def get_connector_credential_pair_from_id(

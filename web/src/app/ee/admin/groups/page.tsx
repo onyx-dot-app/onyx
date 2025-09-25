@@ -1,6 +1,6 @@
 "use client";
-import i18n from "@/i18n/init";
-import k from "./../../../../i18n/keys";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 
 import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
@@ -16,6 +16,7 @@ import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/components/ui/createButton";
 
 const Main = () => {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const [showForm, setShowForm] = useState(false);
 
@@ -40,17 +41,15 @@ const Main = () => {
   }
 
   if (error || !data) {
-    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
+    return <div className="text-red-600">{t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   if (ccPairsError || !ccPairs) {
-    return (
-      <div className="text-red-600">{i18n.t(k.ERROR_LOADING_CONNECTORS)}</div>
-    );
+    return <div className="text-red-600">{t(k.ERROR_LOADING_CONNECTORS)}</div>;
   }
 
   if (usersError || !users) {
-    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
+    return <div className="text-red-600">{t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   return (
@@ -59,7 +58,7 @@ const Main = () => {
       {isAdmin && (
         <CreateButton
           onClick={() => setShowForm(true)}
-          text="Создать новую группу"
+          text={t(k.CREATE_NEW_GROUP)}
         />
       )}
       {data.length > 0 && (
@@ -87,10 +86,11 @@ const Main = () => {
 };
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Управление группами пользователей"
+        title={t(k.USER_GROUP_MANAGEMENT)}
         icon={<GroupsIcon size={32} />}
       />
 

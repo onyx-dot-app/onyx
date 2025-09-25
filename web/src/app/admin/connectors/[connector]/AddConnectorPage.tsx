@@ -1,5 +1,6 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
+import i18n from "./../../../../i18n/init";
 import k from "./../../../../i18n/keys";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -103,7 +104,10 @@ export async function submitConnector<T>(
         };
       } else {
         const errorData = await response.json();
-        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+        return {
+          message: `${i18n.t(k.ERROR_COLON)} ${errorData.detail}`,
+          isSuccess: false,
+        };
       }
     } else {
       const response = await fetch(
@@ -126,11 +130,14 @@ export async function submitConnector<T>(
         };
       } else {
         const errorData = await response.json();
-        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
+        return {
+          message: `${i18n.t(k.ERROR_COLON)} ${errorData.detail}`,
+          isSuccess: false,
+        };
       }
     }
   } catch (error) {
-    return { message: `Ошибка: ${error}`, isSuccess: false };
+    return { message: `${i18n.t(k.ERROR_COLON)} ${error}`, isSuccess: false };
   }
 }
 
@@ -139,6 +146,7 @@ export default function AddConnector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const { t } = useTranslation();
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -230,7 +238,7 @@ export default function AddConnector({
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
       setPopup({
-        message: i18n.t(k.CREDENTIAL_DELETED_SUCCESSFULL),
+        message: t(k.CREDENTIAL_DELETED_SUCCESSFULL),
         type: "success",
       });
     } else {
@@ -246,7 +254,7 @@ export default function AddConnector({
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
     setPopup({
-      message: i18n.t(k.SWAPPED_CREDENTIAL_SUCCESSFULL),
+      message: t(k.SWAPPED_CREDENTIAL_SUCCESSFULL),
       type: "success",
     });
     refresh();
@@ -273,18 +281,21 @@ export default function AddConnector({
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
         setPopup({
-          message: i18n.t(k.FAILED_TO_FETCH_OAUTH_URL),
+          message: t(k.FAILED_TO_FETCH_OAUTH_URL),
           type: "error",
         });
       }
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        setPopup({ message: `Ошибка: ${error.message}`, type: "error" });
+        setPopup({
+          message: `${t(k.ERROR_COLON)} ${error.message}`,
+          type: "error",
+        });
       } else {
         // Handle non-standard errors
         setPopup({
-          message: i18n.t(k.AN_UNKNOWN_ERROR_OCCURRED),
+          message: t(k.AN_UNKNOWN_ERROR_OCCURRED),
           type: "error",
         });
       }
@@ -372,7 +383,7 @@ export default function AddConnector({
             }
           } catch (error) {
             setPopup({
-              message: i18n.t(k.ERROR_UPLOADING_FILES),
+              message: t(k.ERROR_UPLOADING_FILES),
               type: "error",
             });
           } finally {
@@ -441,7 +452,7 @@ export default function AddConnector({
             {popup}
 
             {uploading && (
-              <TemporaryLoadingModal content="Загрузка файлов..." />
+              <TemporaryLoadingModal content={t(k.LOADING_FILES)} />
             )}
 
             <AdminPageTitle
@@ -453,7 +464,7 @@ export default function AddConnector({
             {formStep == 0 && (
               <CardSection>
                 <Title className="mb-2 text-lg">
-                  {i18n.t(k.SELECT_A_CREDENTIAL)}
+                  {t(k.SELECT_A_CREDENTIAL)}
                 </Title>
 
                 {connector == ValidSources.Gmail ? (
@@ -504,7 +515,7 @@ export default function AddConnector({
                             }
                           }}
                         >
-                          {i18n.t(k.CREATE_NEW)}
+                          {t(k.CREATE_NEW)}
                         </Button>
                         {/* Button to sign in via OAuth */}
                         {oauthSupportedSources.includes(connector) &&
@@ -518,8 +529,8 @@ export default function AddConnector({
                               hidden={!isAuthorizeVisible}
                             >
                               {isAuthorizing
-                                ? i18n.t(k.AUTHORIZING)
-                                : `${i18n.t(
+                                ? t(k.AUTHORIZING)
+                                : `${t(
                                     k.AUTHORIZE_WITH
                                   )} ${getSourceDisplayName(connector)}`}
                             </Button>
@@ -539,9 +550,8 @@ export default function AddConnector({
                         ) : (
                           <>
                             <Title className="mb-2 text-lg">
-                              {i18n.t(k.CREATE_A)}{" "}
-                              {getSourceDisplayName(connector)}{" "}
-                              {i18n.t(k.CREDENTIAL)}
+                              {t(k.CREATE_A)} {getSourceDisplayName(connector)}{" "}
+                              {t(k.CREDENTIAL)}
                             </Title>
                             {oauthDetails && oauthDetails.oauth_enabled ? (
                               <CreateStdOAuthCredential

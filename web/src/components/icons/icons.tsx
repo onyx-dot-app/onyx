@@ -1,6 +1,4 @@
 "use client";
-import i18n from "@/i18n/init";
-import k from "./../../i18n/keys";
 
 import {
   Trash,
@@ -1491,8 +1489,8 @@ export const ZendeskIcon = ({
   >
     <LogoIcon
       size={
-        typeof window !== i18n.t(k.UNDEFINED) &&
-        window.matchMedia(i18n.t(k.PREFERS_COLOR_SCHEME_DARK)).matches
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
           ? size * 0.8
           : size
       }

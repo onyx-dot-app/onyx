@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +32,7 @@ const UsersTables = ({
   q: string;
   setPopup: (spec: PopupSpec) => void;
 }) => {
+  const { t } = useTranslation();
   const {
     data: invitedUsers,
     error: invitedUsersError,
@@ -64,7 +65,7 @@ const UsersTables = ({
   if (domainsError) {
     return (
       <ErrorCallout
-        errorTitle="Ошибка загрузки допустимых доменов"
+        errorTitle={t(k.DOMAIN_LOAD_ERROR)}
         errorMsg={domainsError?.info?.detail}
       />
     );
@@ -73,17 +74,17 @@ const UsersTables = ({
   return (
     <Tabs defaultValue="current">
       <TabsList>
-        <TabsTrigger value="current">{i18n.t(k.CURRENT_USERS)}</TabsTrigger>
-        <TabsTrigger value="invited">{i18n.t(k.INVITED_USERS)}</TabsTrigger>
+        <TabsTrigger value="current">{t(k.CURRENT_USERS)}</TabsTrigger>
+        <TabsTrigger value="invited">{t(k.INVITED_USERS)}</TabsTrigger>
         {NEXT_PUBLIC_CLOUD_ENABLED && (
-          <TabsTrigger value="pending">{i18n.t(k.PENDING_USERS)}</TabsTrigger>
+          <TabsTrigger value="pending">{t(k.PENDING_USERS)}</TabsTrigger>
         )}
       </TabsList>
 
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <CardTitle>{i18n.t(k.CURRENT_USERS)}</CardTitle>
+            <CardTitle>{t(k.CURRENT_USERS)}</CardTitle>
           </CardHeader>
           <CardContent>
             <SignedUpUserTable
@@ -98,7 +99,7 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <CardTitle>{i18n.t(k.INVITED_USERS)}</CardTitle>
+            <CardTitle>{t(k.INVITED_USERS)}</CardTitle>
           </CardHeader>
           <CardContent>
             <InvitedUserTable
@@ -116,7 +117,7 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <CardTitle>{i18n.t(k.PENDING_USERS)}</CardTitle>
+              <CardTitle>{t(k.PENDING_USERS)}</CardTitle>
             </CardHeader>
             <CardContent>
               <PendingUsersTable
@@ -165,6 +166,7 @@ const AddUserButton = ({
 }: {
   setPopup: (spec: PopupSpec) => void;
 }) => {
+  const { t } = useTranslation();
   const [modal, setModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -179,7 +181,7 @@ const AddUserButton = ({
     );
     setModal(false);
     setPopup({
-      message: "Пользователи приглашены!",
+      message: t(k.USERS_INVITED_SUCCESS),
       type: "success",
     });
   };
@@ -187,7 +189,7 @@ const AddUserButton = ({
   const onFailure = async (res: Response) => {
     const error = (await res.json()).detail;
     setPopup({
-      message: `Не удалось пригласить пользователей - ${error}`,
+      message: `${t(k.FAILED_TO_INVITE_USERS)} ${error}`,
       type: "error",
     });
   };
@@ -214,30 +216,30 @@ const AddUserButton = ({
       <Button className="my-auto w-fit" onClick={handleInviteClick}>
         <div className="flex">
           <FiPlusSquare className="my-auto mr-2" />
-          {i18n.t(k.INVITE_USERS)}
+          {t(k.INVITE_USERS)}
         </div>
       </Button>
 
       {showConfirmation && (
         <ConfirmEntityModal
-          entityType="Приглашение первого пользователя"
-          entityName="ваша логика доступа"
+          entityType={t(k.FIRST_USER_INVITATION)}
+          entityName={t(k.ACCESS_LOGIC_ENTITY)}
           onClose={() => setShowConfirmation(false)}
           onSubmit={handleConfirmFirstInvite}
-          additionalDetails="После приглашения первого пользователя, только приглашенные пользователи смогут присоединиться к этой платформе. Это мера безопасности для контроля доступа к вашей команде."
-          actionButtonText="Продолжить"
+          additionalDetails={t(k.FIRST_USER_INVITATION_DETAILS)}
+          actionButtonText={t(k.CONTINUE_BUTTON)}
           variant="action"
         />
       )}
 
       {modal && (
         <Modal
-          title="Массовое добавление пользователей"
+          title={t(k.BULK_USER_ADDITION)}
           onOutsideClick={() => setModal(false)}
         >
           <div className="flex flex-col gap-y-4">
             <Text className="font-medium text-base">
-              {i18n.t(k.ADD_THE_EMAIL_ADDRESSES_TO_IMP)}
+              {t(k.ADD_THE_EMAIL_ADDRESSES_TO_IMP)}
             </Text>
             <BulkAdd onSuccess={onSuccess} onFailure={onFailure} />
           </div>
@@ -248,10 +250,11 @@ const AddUserButton = ({
 };
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Управление пользователями"
+        title={t(k.USER_MANAGEMENT)}
         icon={<UsersIcon size={32} />}
       />
       <SearchableTables />

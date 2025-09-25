@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { CustomCheckbox } from "./CustomCheckbox";
 
 export function Bubble({
@@ -27,8 +28,8 @@ export function Bubble({
         (notSelectable
           ? " bg-background cursor-default"
           : isSelected
-            ? " bg-accent-background-hovered cursor-pointer"
-            : " bg-background hover:bg-accent-background cursor-pointer")
+          ? " bg-accent-background-hovered cursor-pointer"
+          : " bg-background hover:bg-accent-background cursor-pointer")
       }
       onClick={onClick}
     >

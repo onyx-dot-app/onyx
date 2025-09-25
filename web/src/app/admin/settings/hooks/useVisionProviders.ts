@@ -5,6 +5,8 @@ import {
   setDefaultVisionProvider,
 } from "@/lib/llm/visionLLM";
 import { destructureValue, structureValue } from "@/lib/llm/utils";
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "@/i18n/keys";
 
 // Define a type for the popup setter function
 type SetPopup = (popup: {
@@ -14,6 +16,7 @@ type SetPopup = (popup: {
 
 // Accept the setPopup function as a parameter
 export function useVisionProviders(setPopup: SetPopup) {
+  const { t } = useTranslation();
   const [visionProviders, setVisionProviders] = useState<VisionProvider[]>([]);
   const [visionLLM, setVisionLLM] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,14 +50,17 @@ export function useVisionProviders(setPopup: SetPopup) {
         }
       }
     } catch (error) {
-      console.error("Ошибка загрузки поставщиков визуализации:", error);
+      console.error(t(k.ERROR_LOADING_VISION_PROVIDERS), error);
       setError(
-        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
+        error instanceof Error
+          ? error.message
+          : t(k.UNKNOWN_ERROR_OCCURRED)
       );
       setPopup({
-        message: `Не удалось загрузить поставщиков визуализации: ${
-          error instanceof Error ? error.message : "Неизвестная ошибка"
-        }`,
+        message: t(k.FAILED_TO_LOAD_VISION_PROVIDERS, {
+          error:
+            error instanceof Error ? error.message : t(k.UNKNOWN_ERROR),
+        }),
         type: "error",
       });
     } finally {
@@ -66,7 +72,7 @@ export function useVisionProviders(setPopup: SetPopup) {
     async (llmValue: string | null) => {
       if (!llmValue) {
         setPopup({
-          message: "Выберите допустимую модель зрения",
+          message: t(k.SELECT_VALID_VISION_MODEL),
           type: "error",
         });
         return false;
@@ -78,13 +84,13 @@ export function useVisionProviders(setPopup: SetPopup) {
         // Find the provider ID
         const providerObj = visionProviders.find((p) => p.name === name);
         if (!providerObj) {
-          throw new Error("Провайдер не найден");
+          throw new Error(t(k.PROVIDER_NOT_FOUND));
         }
 
         await setDefaultVisionProvider(providerObj.id, modelName);
 
         setPopup({
-          message: "Провайдер по умолчанию успешно обновлен!",
+          message: t(k.DEFAULT_PROVIDER_UPDATED_SUCCESS),
           type: "success",
         });
         setVisionLLM(llmValue);
@@ -97,9 +103,11 @@ export function useVisionProviders(setPopup: SetPopup) {
         const errorMessage =
           error instanceof Error
             ? error.message
-            : "Произошла неизвестная ошибка";
+            : t(k.UNKNOWN_ERROR_OCCURRED);
         setPopup({
-          message: `Не удалось обновить провайдера визуализации по умолчанию:${errorMessage}`,
+          message: t(k.FAILED_TO_UPDATE_DEFAULT_VISION_PROVIDER, {
+            error: errorMessage,
+          }),
           type: "error",
         });
         return false;

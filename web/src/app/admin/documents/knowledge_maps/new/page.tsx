@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "@/hooks/useTranslation";
+import k from "../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookOpen, InfoIcon } from "@/components/icons/icons";
 import { useUserGroups } from "@/lib/hooks";
@@ -13,6 +15,7 @@ import { KnowledgeMapCreationForm } from "./KnowledgeMapCreationForm";
 import { useDocumentSets } from "../../sets/hooks";
 
 function Main() {
+  const { t } = useTranslation();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -32,7 +35,7 @@ function Main() {
   if (ccPairsError || !ccPairs) {
     return (
       <ErrorCallout
-        errorTitle="Не удалось получить карты знаний"
+        errorTitle={t(k.FAILED_TO_FETCH_KNOWLEDGE_MAPS)}
         errorMsg={ccPairsError}
       />
     );
@@ -57,13 +60,14 @@ function Main() {
 }
 
 const Page = () => {
+  const { t } = useTranslation();
   return (
     <div className="container mx-auto">
       <BackButton />
 
       <AdminPageTitle
         icon={<BookOpen size={32} />}
-        title="Новая карта знаний"
+        title={t(k.NEW_KNOWLEDGE_MAP)}
       />
 
       <Main />

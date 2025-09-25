@@ -40,7 +40,8 @@ export function extractCodeText(
       if (!node) return "";
 
       if (React.isValidElement(node)) {
-        const children = node.props.children;
+        const children = ((node as React.ReactElement).props as any)
+          .children as React.ReactNode;
         if (Array.isArray(children)) {
           return children.map(extractTextFromReactNode).join("");
         }

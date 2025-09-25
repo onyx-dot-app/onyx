@@ -1,4 +1,6 @@
-import i18n from "@/i18n/init";
+"use client";
+
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 import { useState, useEffect } from "react";
 import {
@@ -79,15 +81,14 @@ export const AddShortCut = ({
 }: {
   openShortCutModal: () => void;
 }) => {
+  const { t } = useTranslation();
   return (
     <button
       onClick={openShortCutModal}
       className="w-24 h-24 flex-none rounded-xl bg-[#fff]/10 hover:bg-[#fff]/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
     >
       <PlusIcon className="w-8 h-8 text-[#fff] mb-2" />
-      <h1 className="text-[#fff] text-xs font-medium">
-        {i18n.t(k.NEW_BOOKMARK)}
-      </h1>
+      <h1 className="text-[#fff] text-xs font-medium">{t(k.NEW_BOOKMARK)}</h1>
     </button>
   );
 };
@@ -107,6 +108,7 @@ export const NewShortCutModal = ({
   editingShortcut?: Shortcut | null;
   setPopup: (popup: PopupSpec) => void;
 }) => {
+  const { t } = useTranslation();
   const [name, setName] = useState(editingShortcut?.name || "");
   const [url, setUrl] = useState(editingShortcut?.url || "");
   const [faviconError, setFaviconError] = useState(false);
@@ -152,14 +154,12 @@ export const NewShortCutModal = ({
       <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-background-900 border-none text-[#fff]">
         <DialogHeader>
           <DialogTitle>
-            {editingShortcut
-              ? i18n.t(k.EDIT_SHORTCUT)
-              : i18n.t(k.ADD_NEW_SHORTCUT)}
+            {editingShortcut ? t(k.EDIT_SHORTCUT) : t(k.ADD_NEW_SHORTCUT)}
           </DialogTitle>
           <DialogDescription>
             {editingShortcut
-              ? i18n.t(k.MODIFY_YOUR_EXISTING_SHORTCUT)
-              : i18n.t(k.CREATE_A_NEW_SHORTCUT_FOR_QUIC)}
+              ? t(k.MODIFY_YOUR_EXISTING_SHORTCUT)
+              : t(k.CREATE_A_NEW_SHORTCUT_FOR_QUIC)}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="w-full space-y-6">
@@ -169,14 +169,14 @@ export const NewShortCutModal = ({
                 htmlFor="name"
                 className="text-sm font-medium text-text-300"
               >
-                {i18n.t(k.NAME)}
+                {t(k.NAME)}
               </Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-background-800 border-background-700 text-[#fff]"
-                placeholder="Введите короткое название"
+                placeholder={t(k.ENTER_SHORT_NAME_PLACEHOLDER)}
               />
             </div>
             <div className="flex flex-col space-y-2">
@@ -184,7 +184,7 @@ export const NewShortCutModal = ({
                 htmlFor="url"
                 className="text-sm font-medium text-text-300"
               >
-                {i18n.t(k.URL)}
+                {t(k.URL)}
               </Label>
               <Input
                 id="url"
@@ -198,13 +198,13 @@ export const NewShortCutModal = ({
 
               {!isValidUrl && url && (
                 <p className="text-red-500 text-sm">
-                  {i18n.t(k.PLEASE_ENTER_A_VALID_URL)}
+                  {t(k.PLEASE_ENTER_A_VALID_URL)}
                 </p>
               )}
             </div>
             <div className="flex items-center space-x-2">
               <Label className="text-sm font-medium text-text-300">
-                {i18n.t(k.FAVICON_PREVIEW)}
+                {t(k.FAVICON_PREVIEW)}
               </Label>
               <div className="w-8 h-8 relative flex items-center justify-center">
                 {isValidUrl && !faviconError ? (
@@ -228,9 +228,7 @@ export const NewShortCutModal = ({
               className="bg-blue-600 hover:bg-blue-700 text-[#fff]"
               disabled={!isValidUrl || !name}
             >
-              {editingShortcut
-                ? i18n.t(k.SAVE_CHANGES)
-                : i18n.t(k.ADD_SHORTCUT)}
+              {editingShortcut ? t(k.SAVE_CHANGES) : t(k.ADD_SHORTCUT)}
             </Button>
             {editingShortcut && (
               <Button
@@ -238,7 +236,7 @@ export const NewShortCutModal = ({
                 variant="destructive"
                 onClick={() => onDelete(editingShortcut)}
               >
-                {i18n.t(k.DELETE)}
+                {t(k.DELETE)}
               </Button>
             )}
           </DialogFooter>
@@ -253,6 +251,7 @@ export const MaxShortcutsReachedModal = ({
 }: {
   onClose: () => void;
 }) => {
+  const { t } = useTranslation();
   return (
     <Modal
       width="max-w-md"
@@ -261,9 +260,9 @@ export const MaxShortcutsReachedModal = ({
     >
       <div className="flex flex-col gap-4">
         <p className="text-left text-text-900">
-          {i18n.t(k.YOU_VE_REACHED_THE_MAXIMUM_LIM)}
+          {t(k.YOU_VE_REACHED_THE_MAXIMUM_LIM)}
         </p>
-        <Button onClick={onClose}>{i18n.t(k.CLOSE)}</Button>
+        <Button onClick={onClose}>{t(k.CLOSE)}</Button>
       </div>
     </Modal>
   );

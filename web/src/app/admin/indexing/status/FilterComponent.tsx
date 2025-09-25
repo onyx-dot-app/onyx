@@ -1,5 +1,5 @@
 "use client";
-import i18n from "@/i18n/init";
+import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 
 import React, { useState, useImperativeHandle, forwardRef } from "react";
@@ -39,6 +39,7 @@ export const FilterComponent = forwardRef<
   { resetFilters: () => void },
   FilterComponentProps
 >(({ onFilterChange }, ref) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     accessType: null,
@@ -200,14 +201,14 @@ export const FilterComponent = forwardRef<
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <DropdownMenuLabel className="text-base font-medium">
-              {i18n.t(k.FILTER_CONNECTORS)}
+              {t(k.FILTER_CONNECTORS)}
             </DropdownMenuLabel>
           </div>
           <DropdownMenuSeparator />
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              {i18n.t(k.ACCESS_TYPE)}
+              {t(k.ACCESS_TYPE)}
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -216,7 +217,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.PUBLIC)}
+                {t(k.PUBLIC)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("private")}
@@ -224,7 +225,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.PRIVATE1)}
+                {t(k.PRIVATE1)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("sync")}
@@ -232,7 +233,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.AUTO_SYNC1)}
+                {t(k.AUTO_SYNC1)}
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -241,7 +242,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              {i18n.t(k.LAST_STATUS)}
+              {t(k.LAST_STATUS)}
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -250,7 +251,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.SUCCESS2)}
+                {t(k.SUCCESS2)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("failed")}
@@ -258,7 +259,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.FAILED)}
+                {t(k.FAILED)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("in_progress")}
@@ -266,7 +267,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.IN_PROGRESS1)}
+                {t(k.IN_PROGRESS1)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("not_started")}
@@ -274,7 +275,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.NOT_STARTED)}
+                {t(k.NOT_STARTED)}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("completed_with_errors")}
@@ -284,7 +285,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                {i18n.t(k.COMPLETED_WITH_ERRORS1)}
+                {t(k.COMPLETED_WITH_ERRORS1)}
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -293,7 +294,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              {i18n.t(k.DOCUMENT_COUNT)}
+              {t(k.DOCUMENT_COUNT)}
             </DropdownMenuLabel>
             <div
               className="flex items-center px-2 py-2 gap-2"
@@ -311,7 +312,7 @@ export const FilterComponent = forwardRef<
                   }}
                   type="button"
                 >
-                  {i18n.t(k._29)}
+                  {t(k._29)}
                 </Button>
                 <Button
                   variant={docsOperator === "<" ? "default" : "outline"}
@@ -324,7 +325,7 @@ export const FilterComponent = forwardRef<
                   }}
                   type="button"
                 >
-                  {i18n.t(k._30)}
+                  {t(k._30)}
                 </Button>
                 <Button
                   variant={docsOperator === "=" ? "default" : "outline"}
@@ -337,12 +338,12 @@ export const FilterComponent = forwardRef<
                   }}
                   type="button"
                 >
-                  {i18n.t(k._12)}
+                  {t(k._12)}
                 </Button>
               </div>
               <Input
                 type="number"
-                placeholder="Количество"
+                placeholder={t(k.QUANTITY)}
                 value={docsValue}
                 onChange={(e) => setDocsValue(e.target.value)}
                 className="h-8 w-full"
@@ -361,7 +362,7 @@ export const FilterComponent = forwardRef<
                 }}
                 type="button"
               >
-                {i18n.t(k.APPLY)}
+                {t(k.APPLY)}
               </Button>
             </div>
           </DropdownMenuGroup>
