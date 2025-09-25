@@ -233,3 +233,51 @@ def drop_messages_history_overflow(
     final_messages.extend(final_msgs)
 
     return final_messages
+
+
+def drop_messages_history_overflow_tr_df(
+    messages_with_token_cnts: list[tuple[BaseMessage, int]],
+    max_allowed_tokens: int,
+) -> list[BaseMessage]:
+    """As message history grows, messages need to be dropped starting from the furthest in the past.
+    The System message should be kept if at all possible and the latest user input which is inserted in the
+    prompt template must be included"""
+
+    final_messages: list[BaseMessage] = []
+    messages, token_counts = cast(
+        tuple[list[BaseMessage], list[int]], zip(*messages_with_token_cnts)
+    )
+    system_msg = (
+        final_messages[0]
+        if final_messages and final_messages[0].type == "system"
+        else None
+    )
+
+    history_msgs = messages[:-1]
+    final_msg = messages[-1]
+    if final_msg.type != "human":
+        if final_msg.type == "tool":
+            final_msgs = messages[-3:]
+            history_msgs = messages[:-3]
+        elif final_msg.type == "ai":
+            final_msgs = messages[-2:]
+            history_msgs = messages[:-2]
+        else:
+            raise ValueError(
+                "Last message must be user input OR a tool result OR AI message"
+            )
+    else:
+        final_msgs = [final_msg]
+
+    # Start dropping from the history if necessary
+    ind_prev_msg_start = find_last_index(
+        token_counts, max_prompt_tokens=max_allowed_tokens
+    )
+
+    if system_msg and ind_prev_msg_start <= len(history_msgs):
+        final_messages.append(system_msg)
+
+    final_messages.extend(history_msgs[ind_prev_msg_start:])
+    final_messages.extend(final_msgs)
+
+    return final_messages

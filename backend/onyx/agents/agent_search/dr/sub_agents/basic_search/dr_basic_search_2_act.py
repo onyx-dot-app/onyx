@@ -5,6 +5,7 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import DR_BASIC_SEARCH_MAX_DOCS
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import BaseSearchProcessingResponse
 from onyx.agents.agent_search.dr.models import IterationAnswer
@@ -176,7 +177,7 @@ def basic_search(
 
     document_texts_list = []
 
-    for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
+    for doc_num, retrieved_doc in enumerate(retrieved_docs[:DR_BASIC_SEARCH_MAX_DOCS]):
         if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
             raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
         chunk_text = build_document_context(retrieved_doc, doc_num + 1)

@@ -29,10 +29,7 @@ from onyx.db.engine.sql_engine import get_db_readonly_user_session_with_current_
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import ENTITY_SOURCE_DETECTION_PROMPT
-from onyx.prompts.kg_prompts import ENTITY_TABLE_DESCRIPTION
-from onyx.prompts.kg_prompts import RELATIONSHIP_TABLE_DESCRIPTION
 from onyx.prompts.kg_prompts import SIMPLE_ENTITY_SQL_PROMPT
-from onyx.prompts.kg_prompts import SIMPLE_SQL_ERROR_FIX_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
 from onyx.prompts.kg_prompts import SQL_INSTRUCTIONS_ENTITY_PROMPT
@@ -410,84 +407,93 @@ def generate_simple_sql(
             logger.debug(f"A3 source_documents_sql: {source_documents_sql_display}")
 
         query_results = []  # if no results, will be empty (not None)
-        query_generation_error = None
 
         # run sql
         try:
             query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
-            if not query_results:
-                query_generation_error = "SQL query returned no results"
-                logger.warning(f"{query_generation_error}, retrying...")
+            # No corrections for now.
+            # if not query_results:
+            #     query_generation_error = "SQL query returned no results"
+            # logger.warning(f"{query_generation_error}, retrying...")
         except Exception as e:
-            query_generation_error = str(e)
+            # query_generation_error = str(e)
+            # drop views. No correction for now.
+            drop_views(
+                allowed_docs_view_name=doc_temp_view,
+                kg_relationships_view_name=rel_temp_view,
+                kg_entity_view_name=ent_temp_view,
+            )
+            raise
             logger.warning(f"Error executing SQL query: {e}, retrying...")
 
         # TODO: exclude the case where the verification failed
         # fix sql and try one more time if sql query didn't work out
         # if the result is still empty after this, the kg probably doesn't have the answer,
         # so we update the strategy to simple and address this in the answer generation
-        if query_generation_error is not None:
-            sql_fix_prompt = (
-                SIMPLE_SQL_ERROR_FIX_PROMPT.replace(
-                    "---table_description---",
-                    (
-                        ENTITY_TABLE_DESCRIPTION
-                        if state.query_type
-                        == KGRelationshipDetection.NO_RELATIONSHIPS.value
-                        else RELATIONSHIP_TABLE_DESCRIPTION
-                    ),
-                )
-                .replace("---entity_types---", entities_types_str)
-                .replace("---relationship_types---", relationship_types_str)
-                .replace("---question---", question)
-                .replace("---sql_statement---", sql_statement)
-                .replace("---error_message---", query_generation_error)
-                .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
-                .replace("---user_name---", f"EMPLOYEE:{user_name}")
-            )
-            msg = [HumanMessage(content=sql_fix_prompt)]
-            primary_llm = graph_config.tooling.primary_llm
 
-            try:
-                llm_response = run_with_timeout(
-                    KG_SQL_GENERATION_TIMEOUT,
-                    primary_llm.invoke,
-                    prompt=msg,
-                    timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
-                    max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
-                )
+        # query_generation_error always None for now. TODO: add correction.
+        # if query_generation_error is not None:
+        #     sql_fix_prompt = (
+        #         SIMPLE_SQL_ERROR_FIX_PROMPT.replace(
+        #             "---table_description---",
+        #             (
+        #                 ENTITY_TABLE_DESCRIPTION
+        #                 if state.query_type
+        #                 == KGRelationshipDetection.NO_RELATIONSHIPS.value
+        #                 else RELATIONSHIP_TABLE_DESCRIPTION
+        #             ),
+        #         )
+        #         .replace("---entity_types---", entities_types_str)
+        #         .replace("---relationship_types---", relationship_types_str)
+        #         .replace("---question---", question)
+        #         .replace("---sql_statement---", sql_statement)
+        #         .replace("---error_message---", query_generation_error)
+        #         .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+        #         .replace("---user_name---", f"EMPLOYEE:{user_name}")
+        #     )
+        #     msg = [HumanMessage(content=sql_fix_prompt)]
+        #     primary_llm = graph_config.tooling.primary_llm
 
-                cleaned_response = (
-                    str(llm_response.content)
-                    .replace("```json\n", "")
-                    .replace("\n```", "")
-                )
-                sql_statement = (
-                    cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-                )
-                sql_statement = sql_statement.split(";")[0].strip() + ";"
-                sql_statement = sql_statement.replace("sql", "").strip()
-                sql_statement = sql_statement.replace(
-                    "relationship_table", rel_temp_view
-                )
-                sql_statement = sql_statement.replace("entity_table", ent_temp_view)
+        #     try:
+        #         llm_response = run_with_timeout(
+        #             KG_SQL_GENERATION_TIMEOUT,
+        #             primary_llm.invoke,
+        #             prompt=msg,
+        #             timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
+        #             max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
+        #         )
 
-                reasoning = (
-                    cleaned_response.split("<reasoning>")[1]
-                    .strip()
-                    .split("</reasoning>")[0]
-                )
+        #         cleaned_response = (
+        #             str(llm_response.content)
+        #             .replace("```json\n", "")
+        #             .replace("\n```", "")
+        #         )
+        #         sql_statement = (
+        #             cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+        #         )
+        #         sql_statement = sql_statement.split(";")[0].strip() + ";"
+        #         sql_statement = sql_statement.replace("sql", "").strip()
+        #         sql_statement = sql_statement.replace(
+        #             "relationship_table", rel_temp_view
+        #         )
+        #         sql_statement = sql_statement.replace("entity_table", ent_temp_view)
 
-                query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
-            except Exception as e:
-                logger.error(f"Error executing SQL query even after retry: {e}")
-                # TODO: raise error on frontend
-                drop_views(
-                    allowed_docs_view_name=doc_temp_view,
-                    kg_relationships_view_name=rel_temp_view,
-                    kg_entity_view_name=ent_temp_view,
-                )
-                raise
+        #         reasoning = (
+        #             cleaned_response.split("<reasoning>")[1]
+        #             .strip()
+        #             .split("</reasoning>")[0]
+        #         )
+
+        #         query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
+        #     except Exception as e:
+        #         logger.error(f"Error executing SQL query even after retry: {e}")
+        #         # TODO: raise error on frontend
+        #         drop_views(
+        #             allowed_docs_view_name=doc_temp_view,
+        #             kg_relationships_view_name=rel_temp_view,
+        #             kg_entity_view_name=ent_temp_view,
+        #         )
+        #         raise
 
         source_document_results = None
         if source_documents_sql is not None and source_documents_sql != sql_statement:

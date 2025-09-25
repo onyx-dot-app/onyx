@@ -1,3 +1,5 @@
+import os
+
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
 
@@ -11,6 +13,8 @@ MAX_DR_PARALLEL_SEARCH = 4
 MAX_NUM_CLOSER_SUGGESTIONS = (
     0  # how many times the closer can send back to the orchestrator
 )
+
+DR_BASIC_SEARCH_MAX_DOCS = int(os.environ.get("DR_BASIC_SEARCH_MAX_DOCS", 15))
 
 CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
 HIGH_LEVEL_PLAN_PREFIX = "The Plan:"

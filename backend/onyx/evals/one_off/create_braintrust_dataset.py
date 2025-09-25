@@ -103,14 +103,14 @@ def parse_csv_file(csv_path: str) -> List[Dict[str, Any]]:
 
             # Filter records: should_use = TRUE and categories contains "web-only"
             if (
-                should_use == "TRUE" and "web-only" in categories and question
+                should_use == "TRUE"  # and "web-only" in categories and question
             ):  # Ensure question is not empty
-                if expected_depth == "Deep":
+                if expected_depth != "Deep":
                     records.extend(
                         [
                             {
                                 "question": question
-                                + ". All info is contained in the quesiton. DO NOT ask any clarifying questions.",
+                                + ". [No further specifications are available.]",
                                 "research_type": "DEEP",
                                 "categories": categories,
                                 "expected_depth": expected_depth,
@@ -231,6 +231,11 @@ def main() -> None:
 
     # Create the Braintrust dataset
     create_braintrust_dataset(records, dataset_name)
+
+    print("Research type breakdown:")
+    print(f"  DEEP: {deep_count}")
+    print(f"  THOUGHTFUL: {thoughtful_count}")
+    print()
 
 
 if __name__ == "__main__":
