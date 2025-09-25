@@ -15,14 +15,12 @@ from pathlib import Path
 from typing import Any
 from typing import IO
 from typing import NamedTuple
+from typing import Optional
+from typing import TYPE_CHECKING
 from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-from markitdown import FileConversionException
-from markitdown import MarkItDown
-from markitdown import StreamInfo
-from markitdown import UnsupportedFormatException
 from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
@@ -36,6 +34,11 @@ from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.file_types import PRESENTATION_MIME_TYPE
 from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
+
+
+if TYPE_CHECKING:
+    from markitdown import MarkItDown
+
 
 logger = setup_logger()
 
@@ -85,7 +88,7 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
-_MARKITDOWN_CONVERTER: MarkItDown | None = None
+_MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
 KNOWN_OPENPYXL_BUGS = [
     "Value must be either numerical or a string containing a wildcard",
@@ -93,9 +96,11 @@ KNOWN_OPENPYXL_BUGS = [
 ]
 
 
-def get_markitdown_converter() -> MarkItDown:
+def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
     if _MARKITDOWN_CONVERTER is None:
+        from markitdown import MarkItDown
+
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
 
@@ -357,6 +362,12 @@ def docx_to_text_and_images(
     of avoiding materializing the list of images in memory.
     The images list returned is empty in this case.
     """
+    from markitdown import (
+        FileConversionException,
+        StreamInfo,
+        UnsupportedFormatException,
+    )
+
     md = get_markitdown_converter()
     try:
         doc = md.convert(
@@ -393,6 +404,12 @@ def docx_to_text_and_images(
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
+    from markitdown import (
+        FileConversionException,
+        StreamInfo,
+        UnsupportedFormatException,
+    )
+
     md = get_markitdown_converter()
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
