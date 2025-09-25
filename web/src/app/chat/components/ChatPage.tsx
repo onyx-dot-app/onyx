@@ -718,7 +718,6 @@ export function ChatPage({
   }, []);
 
   const handleChatInputSubmit = useCallback(() => {
-    setProjectPanelVisible(false);
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
