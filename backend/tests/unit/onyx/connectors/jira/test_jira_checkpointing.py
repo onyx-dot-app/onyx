@@ -109,7 +109,9 @@ def test_load_credentials(jira_connector: JiraConnector) -> None:
         result = jira_connector.load_credentials(credentials)
 
         mock_build_client.assert_called_once_with(
-            credentials=credentials, jira_base=jira_connector.jira_base
+            credentials=credentials,
+            jira_base=jira_connector.jira_base,
+            scoped_token=False,
         )
         assert result is None
         assert jira_connector._jira_client == mock_build_client.return_value
