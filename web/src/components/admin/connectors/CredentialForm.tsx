@@ -12,13 +12,13 @@ import { createCredential } from "@/lib/credential";
 import { CredentialBase, Credential } from "@/lib/connectors/credentials";
 
 export async function submitCredential<T>(
-  credential: CredentialBase<T>
+  credential: CredentialBase<T>,
+  t: (key: string, params?: any) => string
 ): Promise<{
   credential?: Credential<any>;
   message: string;
   isSuccess: boolean;
 }> {
-  const { t } = useTranslation();
   let isSuccess = false;
   try {
     const response = await createCredential(credential);
@@ -75,7 +75,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
             curator_public: false,
             groups: [],
             source: source,
-          }).then(({ message, isSuccess }) => {
+          }, t).then(({ message, isSuccess }) => {
             setPopup({ message, type: isSuccess ? "success" : "error" });
             formikHelpers.setSubmitting(false);
             setTimeout(() => {
