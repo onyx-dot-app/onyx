@@ -1,35 +1,34 @@
 <a name="readme-top"></a>
 
 <h2 align="center">
-<a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
+    <a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
 </h2>
 
-<p align="center">
 <p align="center">Open Source AI Platform</p>
 
 <p align="center">
-<a href="https://docs.onyx.app/" target="_blank">
-    <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation">
-</a>
-<a href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA" target="_blank">
-    <img src="https://img.shields.io/badge/slack-join-blue.svg?logo=slack" alt="Slack">
-</a>
-<a href="https://discord.gg/TDJ59cGV2X" target="_blank">
-    <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord">
-</a>
-<a href="https://github.com/onyx-dot-app/onyx/blob/main/README.md" target="_blank">
-    <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License">
-</a>
+    <a href="https://discord.gg/TDJ59cGV2X" target="_blank">
+        <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord">
+    </a>
+    <a href="https://docs.onyx.app/" target="_blank">
+        <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation">
+    </a>
+    <a href="https://docs.onyx.app/" target="_blank">
+        <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Documentation">
+    </a>
+    <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE" target="_blank">
+        <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License">
+    </a>
 </p>
 
 
 
 **[Onyx](https://www.onyx.app/)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
 
-Onyx comes loaded with advanced features like creating Agents, RAG, Connectors to 40+ knowledge sources, Web Search, MCP, Deep Research, and more.
+Onyx comes loaded with advanced features like custom Agents, RAG, Web Search, Connectors to 40+ knowledge sources, MCP, Deep Research, and more.
 
-> [!NOTE]
-> Deploy Onyx with a single command (or see deployment section below):
+> [!TIP]
+> Try Onyx with one command (or see deployment section below):
 > ```
 > curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 > ```
@@ -46,6 +45,7 @@ Onyx comes loaded with advanced features like creating Agents, RAG, Connectors t
 - **🌍 Web Search:** Browse the web with Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
 - **🔍 RAG:** Best in class hybrid-search + knowledge graph for uploaded files and ingested documents from connectors. 
 - **🔌 Connectors:** Pull knowledge, metadata, and access information from over 40 applications.
+- **🔬 Deep Research:** Get in depth answers with an agentic multi-step search.
 - **▶️ Actions & MCP:** Give AI Agents the ability to interact with external systems.
 - **💻 Code Interpreter:** Execute code to analyze data, render graphs and create files.
 - **🎨 Image Generation:** Generate images based on user prompts.
@@ -67,12 +67,12 @@ See guides below:
 - Cloud specific guides (best if specifically using [AWS EKS](https://docs.onyx.app/deployment/cloud/aws/eks), [Azure VMs](https://docs.onyx.app/deployment/cloud/azure), etc.)
 
 > [!TIP]  
-> **To try it out for free without a deployment, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
+> **To try Onyx for free deploying, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
 
 
 ## 🔍 Other Notable Benefits
-Onyx is built for teams of all sizes, from individuals to the largest global enterprises.
+Onyx is built for teams of all sizes, from individual users to the largest global enterprises.
 
 - **Enterprise Search**: unlike simple RAG, Onyx has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
 - **Security**: SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
@@ -93,9 +93,10 @@ There are two editions of Onyx:
 - Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
 For feature details, check out [our website](https://www.onyx.app/pricing).
 
-To try the Onyx Enterprise Edition:
-1. Checkout [Onyx Cloud](https://cloud.onyx.app/signup).
-2. For self-hosting the Enterprise Edition, contact us at [founders@onyx.app](mailto:founders@onyx.app) or book a call with us on our [Cal](https://cal.com/team/onyx/founders).
+
+
+## 👪 Community
+Join our open source community on **[Discord](https://discord.gg/TDJ59cGV2X)**!
 
 
 
