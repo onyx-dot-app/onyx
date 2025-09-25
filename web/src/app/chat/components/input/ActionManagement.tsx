@@ -14,6 +14,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ToolSnapshot,
@@ -67,74 +73,87 @@ export function ActionItem({
     .replace(/^-|-$/g, "");
 
   return (
-    <div
-      data-testid={`tool-option-${testIdBase}`}
-      className={`
-      group
-      flex 
-      items-center 
-      justify-between 
-      px-2 
-      cursor-pointer 
-      hover:bg-background-100 
-      dark:hover:bg-neutral-800
-      dark:text-neutral-300
-      rounded-lg 
-      py-2 
-      mx-1
-      ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
-    `}
-      onClick={() => {
-        // If disabled, un-disable the tool
-        if (onToggle && disabled) {
-          onToggle();
-        }
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            data-testid={`tool-option-${testIdBase}`}
+            className={`
+            group
+            flex 
+            items-center 
+            justify-between 
+            px-2 
+            cursor-pointer 
+            hover:bg-background-100 
+            dark:hover:bg-neutral-800
+            dark:text-neutral-300
+            rounded-lg 
+            py-2 
+            mx-1
+            ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
+          `}
+            onClick={() => {
+              // If disabled, un-disable the tool
+              if (onToggle && disabled) {
+                onToggle();
+              }
 
-        onForceToggle();
-      }}
-    >
-      <div
-        className={`flex items-center gap-2 flex-1 ${
-          disabled ? "opacity-50" : ""
-        } ${isForced && "text-blue-500"}`}
-      >
-        <Icon
-          size={16}
-          className={
-            isForced ? "text-blue-500" : "text-text-500 dark:text-neutral-400"
-          }
-        />
-        <span
-          className={`text-sm font-medium select-none ${
-            disabled ? "line-through" : ""
-          }`}
-        >
-          {label}
-        </span>
-      </div>
-      <div
-        className={`
-          flex
-          items-center
-          gap-2
-          transition-opacity
-          duration-200
-          ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
-        `}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-      >
-        <DisableIcon
-          className={`transition-colors cursor-pointer ${
-            disabled
-              ? "text-text-900 hover:text-text-500"
-              : "text-text-500 hover:text-text-900"
-          }`}
-        />
-      </div>
-    </div>
+              onForceToggle();
+            }}
+          >
+            <div
+              className={`flex items-center gap-2 flex-1 ${
+                disabled ? "opacity-50" : ""
+              } ${isForced && "text-blue-500"}`}
+            >
+              <Icon
+                size={16}
+                className={
+                  isForced
+                    ? "text-blue-500"
+                    : "text-text-500 dark:text-neutral-400"
+                }
+              />
+              <span
+                className={`text-sm font-medium select-none ${
+                  disabled ? "line-through" : ""
+                }`}
+              >
+                {label}
+              </span>
+            </div>
+            <div
+              className={`
+                flex
+                items-center
+                gap-2
+                transition-opacity
+                duration-200
+                ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+              `}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+            >
+              <DisableIcon
+                className={`transition-colors cursor-pointer ${
+                  disabled
+                    ? "text-text-900 hover:text-text-500"
+                    : "text-text-500 hover:text-text-900"
+                }`}
+              />
+            </div>
+          </div>
+        </TooltipTrigger>
+        {tool?.description && (
+          <TooltipContent side="left" width="max-w-xs">
+            <p className="text-wrap">{tool.description}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
