@@ -61,6 +61,19 @@ EMAIL_FIELDS = [
 add_retries = retry_builder(tries=50, max_delay=30)
 
 
+def _is_mail_service_disabled_error(error: HttpError) -> bool:
+    """Detect if the Gmail API is telling us the mailbox is not provisioned."""
+
+    if error.resp.status != 400:
+        return False
+
+    error_message = str(error)
+    return (
+        "Mail service not enabled" in error_message
+        or "failedPrecondition" in error_message
+    )
+
+
 def _build_time_range_query(
     time_range_start: SecondsSinceUnixEpoch | None = None,
     time_range_end: SecondsSinceUnixEpoch | None = None,
@@ -307,33 +320,42 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         doc_batch = []
         for user_email in self._get_all_user_emails():
             gmail_service = get_gmail_service(self.creds, user_email)
-            for thread in execute_paginated_retrieval(
-                retrieval_function=gmail_service.users().threads().list,
-                list_key="threads",
-                userId=user_email,
-                fields=THREAD_LIST_FIELDS,
-                q=query,
-                continue_on_404_or_403=True,
-            ):
-                full_threads = execute_single_retrieval(
-                    retrieval_function=gmail_service.users().threads().get,
-                    list_key=None,
+            try:
+                for thread in execute_paginated_retrieval(
+                    retrieval_function=gmail_service.users().threads().list,
+                    list_key="threads",
                     userId=user_email,
-                    fields=THREAD_FIELDS,
-                    id=thread["id"],
+                    fields=THREAD_LIST_FIELDS,
+                    q=query,
                     continue_on_404_or_403=True,
-                )
-                # full_threads is an iterator containing a single thread
-                # so we need to convert it to a list and grab the first element
-                full_thread = list(full_threads)[0]
-                doc = thread_to_document(full_thread, user_email)
-                if doc is None:
-                    continue
+                ):
+                    full_threads = execute_single_retrieval(
+                        retrieval_function=gmail_service.users().threads().get,
+                        list_key=None,
+                        userId=user_email,
+                        fields=THREAD_FIELDS,
+                        id=thread["id"],
+                        continue_on_404_or_403=True,
+                    )
+                    # full_threads is an iterator containing a single thread
+                    # so we need to convert it to a list and grab the first element
+                    full_thread = list(full_threads)[0]
+                    doc = thread_to_document(full_thread, user_email)
+                    if doc is None:
+                        continue
 
-                doc_batch.append(doc)
-                if len(doc_batch) > self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+                    doc_batch.append(doc)
+                    if len(doc_batch) > self.batch_size:
+                        yield doc_batch
+                        doc_batch = []
+            except HttpError as e:
+                if _is_mail_service_disabled_error(e):
+                    logger.warning(
+                        "Skipping Gmail sync for %s because the mailbox is disabled.",
+                        user_email,
+                    )
+                    continue
+                raise
 
         if doc_batch:
             yield doc_batch
@@ -349,35 +371,44 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         for user_email in self._get_all_user_emails():
             logger.info(f"Fetching slim threads for user: {user_email}")
             gmail_service = get_gmail_service(self.creds, user_email)
-            for thread in execute_paginated_retrieval(
-                retrieval_function=gmail_service.users().threads().list,
-                list_key="threads",
-                userId=user_email,
-                fields=THREAD_LIST_FIELDS,
-                q=query,
-                continue_on_404_or_403=True,
-            ):
-                doc_batch.append(
-                    SlimDocument(
-                        id=thread["id"],
-                        external_access=ExternalAccess(
-                            external_user_emails={user_email},
-                            external_user_group_ids=set(),
-                            is_public=False,
-                        ),
+            try:
+                for thread in execute_paginated_retrieval(
+                    retrieval_function=gmail_service.users().threads().list,
+                    list_key="threads",
+                    userId=user_email,
+                    fields=THREAD_LIST_FIELDS,
+                    q=query,
+                    continue_on_404_or_403=True,
+                ):
+                    doc_batch.append(
+                        SlimDocument(
+                            id=thread["id"],
+                            external_access=ExternalAccess(
+                                external_user_emails={user_email},
+                                external_user_group_ids=set(),
+                                is_public=False,
+                            ),
+                        )
                     )
-                )
-                if len(doc_batch) > SLIM_BATCH_SIZE:
-                    yield doc_batch
-                    doc_batch = []
+                    if len(doc_batch) > SLIM_BATCH_SIZE:
+                        yield doc_batch
+                        doc_batch = []
 
-                    if callback:
-                        if callback.should_stop():
-                            raise RuntimeError(
-                                "retrieve_all_slim_documents: Stop signal detected"
-                            )
+                        if callback:
+                            if callback.should_stop():
+                                raise RuntimeError(
+                                    "retrieve_all_slim_documents: Stop signal detected"
+                                )
 
-                        callback.progress("retrieve_all_slim_documents", 1)
+                            callback.progress("retrieve_all_slim_documents", 1)
+            except HttpError as e:
+                if _is_mail_service_disabled_error(e):
+                    logger.warning(
+                        "Skipping slim Gmail sync for %s because the mailbox is disabled.",
+                        user_email,
+                    )
+                    continue
+                raise
 
         if doc_batch:
             yield doc_batch
