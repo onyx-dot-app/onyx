@@ -170,8 +170,8 @@ export function ActionItem({
           <DisableIcon
             className={`transition-colors cursor-pointer ${
               disabled
-                ? "text-text-900 hover:text-text-500"
-                : "text-text-500 hover:text-text-900"
+                ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
+                : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
             }`}
           />
         </div>
@@ -184,7 +184,7 @@ export function ActionItem({
           >
             <FiChevronRight
               size={16}
-              className="transition-colors cursor-pointer text-text-500 hover:text-text-900"
+              className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
             />
           </div>
         )}
@@ -277,7 +277,9 @@ function MCPServerItem({
         {getServerIcon()}
         <span className="text-sm font-medium select-none">{server.name}</span>
         {isAuthenticated && tools.length > 0 && (
-          <span className="text-xs text-text-400">({tools.length} tools)</span>
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">
+            ({tools.length} tools)
+          </span>
         )}
       </div>
       {isAuthenticated && tools.length > 0 && (
@@ -868,18 +870,18 @@ export function ActionToggle({
           className="
             w-[244px] 
             max-h-[300px]
-            text-text-600 
+            text-neutral-600 dark:text-neutral-400
             text-sm 
             p-0 
             overflow-hidden
             flex
             flex-col
+            bg-white dark:bg-neutral-900
+            border border-neutral-200 dark:border-transparent
+            shadow-lg dark:shadow-xl dark:shadow-[0_0_8px_rgba(255,255,255,0.05)]
           "
           style={{
             borderRadius: "var(--Radius-12, 12px)",
-            background: "var(--Background-Neutral-00, #FFF)",
-            boxShadow:
-              "0 2px 8px 0 var(--Shadow-02, rgba(0, 0, 0, 0.10)), 0 0 1px 1px var(--Shadow-01, rgba(0, 0, 0, 0.05))",
           }}
         >
           {/* Search Input */}
@@ -904,10 +906,8 @@ export function ActionToggle({
                     rounded-lg
                     text-sm
                     outline-none
-                    text-text-700
-                    placeholder:text-text-400
-                    dark:placeholder:text-neutral-600
-                    dark:bg-neutral-950
+                    text-neutral-700 dark:text-neutral-300
+                    placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                   "
                   autoFocus
                 />
@@ -944,9 +944,8 @@ export function ActionToggle({
                           rounded-lg
                           text-sm
                           outline-none
-                          text-text-700
-                          placeholder:text-text-400
-                          dark:placeholder:text-neutral-600
+                          text-neutral-700 dark:text-neutral-300
+                          placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                         "
                       />
                     </div>
@@ -972,18 +971,29 @@ export function ActionToggle({
                                 rounded-lg
                                 text-sm
                                 outline-none
-                                text-text-700
-                                placeholder:text-text-400
-                                dark:placeholder:text-neutral-600
+                                text-neutral-700 dark:text-neutral-300
+                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                                 cursor-pointer
-                                hover:bg-gray-50
-                                dark:hover:bg-neutral-800
                               "
                             />
                             <img
                               src="/unplug.svg"
                               alt="Disable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none opacity-60"
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
+                              style={{
+                                filter:
+                                  document.documentElement.classList.contains(
+                                    "dark"
+                                  )
+                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
+                                    : "invert(0.4) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.8)",
+                                opacity:
+                                  document.documentElement.classList.contains(
+                                    "dark"
+                                  )
+                                    ? 0.9
+                                    : 0.7,
+                              }}
                             />
                           </div>
                         );
@@ -1004,18 +1014,29 @@ export function ActionToggle({
                                 rounded-lg
                                 text-sm
                                 outline-none
-                                text-text-700
-                                placeholder:text-text-400
-                                dark:placeholder:text-neutral-600
+                                text-neutral-700 dark:text-neutral-300
+                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                                 cursor-pointer
-                                hover:bg-gray-50
-                                dark:hover:bg-neutral-800
                               "
                             />
                             <img
                               src="/plug.svg"
                               alt="Enable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none opacity-60"
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
+                              style={{
+                                filter:
+                                  document.documentElement.classList.contains(
+                                    "dark"
+                                  )
+                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
+                                    : "invert(0.4) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.8)",
+                                opacity:
+                                  document.documentElement.classList.contains(
+                                    "dark"
+                                  )
+                                    ? 0.9
+                                    : 0.7,
+                              }}
                             />
                           </div>
                         );
@@ -1054,7 +1075,7 @@ export function ActionToggle({
                       .map((source) => (
                         <div
                           key={source.uniqueKey}
-                          className="flex items-center justify-between px-1 py-1 mx-1 hover:bg-background-100 rounded-lg"
+                          className="flex items-center justify-between px-1 py-1 mx-1 rounded-lg"
                         >
                           <div className="flex items-center gap-3">
                             <SourceIcon
@@ -1065,8 +1086,8 @@ export function ActionToggle({
                               <div
                                 className={`text-sm font-medium ${
                                   isSourceEnabled(source.uniqueKey)
-                                    ? "text-text-700"
-                                    : "text-text-400 dark:text-neutral-600"
+                                    ? "text-neutral-700 dark:text-neutral-300"
+                                    : "text-neutral-400 dark:text-neutral-500"
                                 }`}
                               >
                                 {source.displayName}
@@ -1075,22 +1096,28 @@ export function ActionToggle({
                           </div>
                           <button
                             onClick={() => toggleSource(source.uniqueKey)}
-                            className="relative transition-colors"
+                            className={`relative transition-colors ${
+                              isSourceEnabled(source.uniqueKey)
+                                ? "bg-blue-500"
+                                : "bg-neutral-300 dark:bg-neutral-700"
+                            }`}
                             style={{
                               width: "28px",
                               height: "16px",
-                              borderRadius: "1000px",
-                              background: isSourceEnabled(source.uniqueKey)
-                                ? "#286DF8"
-                                : "#d1d5db",
+                              borderRadius: "var(--Radius-Round, 1000px)",
                               transition: "background-color 0.2s ease-in-out",
                             }}
                           >
                             <div
-                              className="w-3 h-3 absolute transition-transform duration-200 ease-in-out"
+                              className={`absolute transition-transform duration-200 ease-in-out ${
+                                isSourceEnabled(source.uniqueKey)
+                                  ? "bg-white"
+                                  : "bg-white dark:bg-neutral-900"
+                              }`}
                               style={{
-                                borderRadius: "1000px",
-                                background: "#FFF",
+                                width: "12px",
+                                height: "12px",
+                                borderRadius: "var(--Radius-Round, 1000px)",
                                 boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
                                 top: "2px",
                                 left: "2px",
@@ -1109,7 +1136,7 @@ export function ActionToggle({
                         .toLowerCase()
                         .includes(searchLower);
                     }).length === 0 && (
-                      <div className="text-center py-4 text-text-400">
+                      <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
                         {sourceSearchTerm
                           ? "No matching sources found"
                           : "No configured sources found"}
@@ -1119,17 +1146,15 @@ export function ActionToggle({
                 </div>
                 {/* Fade mask - only when content overflows and not at bottom */}
                 <div
-                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out"
+                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
                   style={{
-                    background:
-                      "linear-gradient(180deg, transparent 0%, var(--Background-Neutral-00, #FFF) 100%)",
                     opacity: showFadeMask ? 1 : 0,
                   }}
                 />
               </>
             ) : filteredTools.length === 0 &&
               filteredMCPServers.length === 0 ? (
-              <div className="text-center py-1 text-text-400">
+              <div className="text-center py-1 text-neutral-400 dark:text-neutral-500">
                 No matching actions found
               </div>
             ) : (
