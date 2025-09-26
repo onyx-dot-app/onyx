@@ -571,7 +571,7 @@ class WebConnector(LoadConnector):
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.split("/")[-1],
+                semantic_identifier=initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
                 metadata=metadata,
                 doc_updated_at=(_get_datetime_from_last_modified_header(
                     last_modified) if last_modified else None),
