@@ -65,13 +65,24 @@ export default function FilePicker({
         onChange={handleUploadChange}
         accept={"*/*"}
       />
-      <Menubar className="bg-transparent dark:bg-transparent p-0 border-0">
+      <Menubar className="bg-transparent dark:bg-transparent p-0 border-0 h-8">
         <MenubarMenu>
-          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text py-1.5 px-0 h-8">
+          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text px-0 h-8">
             {showTriggerLabel ? (
               <div
                 className={cn(
-                  "flex flex-row gap-2 items-center justify-center p-2 rounded-md bg-background-dark/75 hover:dark:bg-neutral-800/75 hover:bg-accent-background-hovered transition-all duration-150",
+                  "flex",
+                  "flex-row",
+                  "gap-2",
+                  "items-center",
+                  "justify-center",
+                  "p-2",
+                  "rounded-md",
+                  "bg-background-dark/75",
+                  "hover:dark:bg-neutral-800/75",
+                  "hover:bg-accent-background-hovered",
+                  "transition-all",
+                  "duration-150",
                   triggerClassName
                 )}
               >
@@ -166,7 +177,7 @@ export default function FilePicker({
             >
               <Row>
                 <Paperclip size={16} />
-                <div className="flex flex-col">
+                <div className="flex flex-col cursor-pointer">
                   <span className="font-semibold">Upload Files</span>
                   <span className="text-xs font-description text-text-400 dark:text-neutral-400">
                     Upload a file from your device

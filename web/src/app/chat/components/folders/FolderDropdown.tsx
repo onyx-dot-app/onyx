@@ -2,6 +2,7 @@ import React, { useState, ReactNode, forwardRef } from "react";
 import { Folder } from "./interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
 import { Caret } from "@/components/icons/icons";
+import { cn } from "@/lib/utils";
 
 interface FolderDropdownProps {
   folder: Folder;
@@ -24,7 +25,19 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar dark:bg-[#000] sticky top-0"
+            className={cn(
+              "flex",
+              "overflow-visible",
+              "items-center",
+              "w-full",
+              "text-text-darker",
+              "rounded-md",
+              "p-1",
+              "bg-background-sidebar",
+              "dark:bg-[#000]",
+              "sticky",
+              "top-0"
+            )}
             style={{ zIndex: 10 - index }}
           >
             <button

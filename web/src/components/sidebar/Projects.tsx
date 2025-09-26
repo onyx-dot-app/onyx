@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface ProjectsProps {
   onOpenProject?: (projectId: string) => void;
@@ -247,7 +248,16 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
                 type="button"
                 aria-label="Create project"
                 onClick={() => setIsCreateProjectOpen(true)}
-                className="p-1.5 group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer hover:bg-accent-background-hovered rounded-md"
+                className={cn(
+                  "p-1.5",
+                  "group-hover:opacity-100",
+                  "opacity-0",
+                  "transition",
+                  "duration-200",
+                  "cursor-pointer",
+                  "hover:bg-accent-background-hovered",
+                  "rounded-md"
+                )}
               >
                 <FolderPlus size={18} />
               </button>
@@ -257,7 +267,7 @@ export default function Projects({ onOpenProject }: ProjectsProps) {
         </TooltipProvider>
       </div>
 
-      <div className="px-2 gap-y-1 flex flex-col text-text-history-sidebar-button items-center">
+      <div className="ml-2 px-2 gap-y-1 flex flex-col text-text-history-sidebar-button items-center">
         {projects.map((p) => (
           <CollapsibleFolder
             key={p.id}
