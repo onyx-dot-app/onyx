@@ -196,3 +196,9 @@ class BedrockModelsRequest(BaseModel):
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
     provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class OllamaModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None

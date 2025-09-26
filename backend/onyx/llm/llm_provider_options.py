@@ -97,6 +97,9 @@ BEDROCK_MODEL_NAMES = [
 ][::-1]
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
+OLLAMA_PROVIDER_NAME = "ollama"
+OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
+
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
     "claude-instant-1",
@@ -160,6 +163,7 @@ _PROVIDER_TO_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+    OLLAMA_PROVIDER_NAME: [],
 }
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
@@ -167,6 +171,7 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    OLLAMA_PROVIDER_NAME: [],
 }
 
 
@@ -184,6 +189,27 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=OLLAMA_PROVIDER_NAME,
+            display_name="Ollama",
+            api_key_required=False,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(
+                    name=OLLAMA_API_KEY_CONFIG_KEY,
+                    display_name="Ollama API Key",
+                    description="Optional API key used when connecting to Ollama Cloud (API base must be https://ollama.com).",
+                    is_required=False,
+                    is_secret=True,
+                )
+            ],
+            model_configurations=fetch_model_configurations_for_provider(
+                OLLAMA_PROVIDER_NAME
+            ),
+            default_model=None,
+            default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,

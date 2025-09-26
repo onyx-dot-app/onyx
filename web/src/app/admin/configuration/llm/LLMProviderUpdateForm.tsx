@@ -58,7 +58,9 @@ export function LLMProviderUpdateForm({
     name:
       existingLlmProvider?.name || (firstTimeConfiguration ? "Default" : ""),
     api_key: existingLlmProvider?.api_key ?? "",
-    api_base: existingLlmProvider?.api_base ?? "",
+    api_base:
+      existingLlmProvider?.api_base ??
+      (llmProviderDescriptor.name === "ollama" ? "http://127.0.0.1:11434" : ""),
     api_version: existingLlmProvider?.api_version ?? "",
     // For Azure OpenAI, combine api_base and api_version into target_uri
     target_uri:
@@ -262,6 +264,97 @@ export function LLMProviderUpdateForm({
 
       setPopup?.({
         message: `Successfully fetched ${availableModels.length} models for the selected region (including cross-region inference models).`,
+        type: "success",
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      setFetchModelsError(errorMessage);
+      setPopup?.({
+        message: `Failed to fetch models: ${errorMessage}`,
+        type: "error",
+      });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  };
+
+  const fetchOllamaModels = async (values: any, setFieldValue: any) => {
+    if (!values.api_base) {
+      setFetchModelsError("API Base is required to fetch Ollama models");
+      return;
+    }
+
+    setIsFetchingModels(true);
+    setFetchModelsError("");
+
+    try {
+      const response = await fetch("/api/admin/llm/ollama/available-models", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          api_base: values.api_base,
+          provider_name: existingLlmProvider?.name,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to fetch models";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          // ignore JSON parsing errors and use the fallback message
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const availableModels: string[] = await response.json();
+
+      const updatedModelConfigs = availableModels.map((modelName) => {
+        const existingConfig = llmProviderDescriptor.model_configurations.find(
+          (config) => config.name === modelName
+        );
+
+        return {
+          name: modelName,
+          is_visible: existingConfig?.is_visible ?? false,
+          max_input_tokens: null,
+          supports_image_input: false,
+        };
+      });
+
+      llmProviderDescriptor.model_configurations = updatedModelConfigs;
+
+      const previouslySelectedModels = values.selected_model_names || [];
+      const stillAvailableSelectedModels = previouslySelectedModels.filter(
+        (modelName: string) => availableModels.includes(modelName)
+      );
+
+      setFieldValue("selected_model_names", stillAvailableSelectedModels);
+
+      if (
+        (!values.default_model_name ||
+          !availableModels.includes(values.default_model_name)) &&
+        availableModels.length > 0
+      ) {
+        setFieldValue("default_model_name", availableModels[0]);
+      }
+
+      if (
+        values.fast_default_model_name &&
+        !availableModels.includes(values.fast_default_model_name)
+      ) {
+        setFieldValue("fast_default_model_name", null);
+      }
+
+      setFieldValue("_modelListUpdated", Date.now());
+
+      setPopup?.({
+        message: `Successfully fetched ${availableModels.length} models from Ollama.`,
         type: "success",
       });
     } catch (error) {
@@ -544,6 +637,42 @@ export function LLMProviderUpdateForm({
                 <br />
                 If you&apos;re updating your existing provider, you&apos;ll need
                 to click this button to fetch the latest models.
+              </Text>
+            </div>
+          )}
+
+          {llmProviderDescriptor.name === "ollama" && (
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  fetchOllamaModels(
+                    formikProps.values,
+                    formikProps.setFieldValue
+                  )
+                }
+                disabled={isFetchingModels || !formikProps.values.api_base}
+                className="w-fit"
+              >
+                {isFetchingModels ? (
+                  <>
+                    <LoadingAnimation size="text-sm" />
+                    <span className="ml-2">Fetching Models...</span>
+                  </>
+                ) : (
+                  "Fetch Available Ollama Models"
+                )}
+              </Button>
+
+              {fetchModelsError && (
+                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+              )}
+
+              <Text className="text-sm text-gray-600">
+                Ensure your Ollama server is accessible from Onyx and that the
+                requested models are pulled (e.g. via <code>ollama pull</code>).
+                Provide the server&apos;s base URL and optional API key (when
+                using Ollama Cloud) before fetching the available models.
               </Text>
             </div>
           )}
