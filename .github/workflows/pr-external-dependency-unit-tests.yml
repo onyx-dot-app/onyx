@@ -79,7 +79,7 @@ jobs:
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose up -d minio relational_db cache index
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d minio relational_db cache index
 
       - name: Wait for services
         run: |

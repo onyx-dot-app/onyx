@@ -703,7 +703,7 @@ export function useLlmManager(
     } else {
       setTemperature(0.5);
     }
-  }, [liveAssistant, currentChatSession]);
+  }, [liveAssistant, currentChatSession, llmProviders]);
 
   const updateTemperature = (temperature: number) => {
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {

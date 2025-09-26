@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.3.1
+version: 0.3.2
 appVersion: latest
 annotations:
   category: Productivity
@@ -22,9 +22,6 @@ dependencies:
     version: 14.3.1
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
-  - name: keda
-    version: 2.17.2
-    repository: https://kedacore.github.io/charts
   - name: vespa
     version: 0.2.24
     repository: https://onyx-dot-app.github.io/vespa-helm-charts

@@ -88,10 +88,9 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     
     if [ -d "onyx_data/deployment" ]; then
         print_info "Stopping Onyx containers..."
-        cd onyx_data/deployment
-        
+
         # Check if docker-compose.yml exists
-        if [ -f "docker-compose.yml" ]; then
+        if [ -f "onyx_data/deployment/docker-compose.yml" ]; then
             # Determine compose command
             if docker compose version &> /dev/null; then
                 COMPOSE_CMD="docker compose"
@@ -101,15 +100,18 @@ if [ "$SHUTDOWN_MODE" = true ]; then
                 print_error "Docker Compose not found. Cannot stop containers."
                 exit 1
             fi
-            
+
             # Stop containers (without removing them)
-            $COMPOSE_CMD -f docker-compose.yml stop
-            print_success "Onyx containers stopped (paused)"
+            (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml stop)
+            if [ $? -eq 0 ]; then
+                print_success "Onyx containers stopped (paused)"
+            else
+                print_error "Failed to stop containers"
+                exit 1
+            fi
         else
             print_warning "docker-compose.yml not found in onyx_data/deployment"
         fi
-        
-        cd ../..
     else
         print_warning "Onyx data directory not found. Nothing to shutdown."
     fi
@@ -140,10 +142,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     print_info "Removing Onyx containers and volumes..."
     
     if [ -d "onyx_data/deployment" ]; then
-        cd onyx_data/deployment
-        
         # Check if docker-compose.yml exists
-        if [ -f "docker-compose.yml" ]; then
+        if [ -f "onyx_data/deployment/docker-compose.yml" ]; then
             # Determine compose command
             if docker compose version &> /dev/null; then
                 COMPOSE_CMD="docker compose"
@@ -153,13 +153,15 @@ if [ "$DELETE_DATA_MODE" = true ]; then
                 print_error "Docker Compose not found. Cannot remove containers."
                 exit 1
             fi
-            
+
             # Stop and remove containers with volumes
-            $COMPOSE_CMD -f docker-compose.yml down -v
-            print_success "Onyx containers and volumes removed"
+            (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml down -v)
+            if [ $? -eq 0 ]; then
+                print_success "Onyx containers and volumes removed"
+            else
+                print_error "Failed to remove containers and volumes"
+            fi
         fi
-        
-        cd ../..
     fi
     
     print_info "Removing data directories..."
@@ -413,8 +415,6 @@ ENV_FILE="onyx_data/deployment/.env"
 
 # Check if services are already running
 if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.yml" ]; then
-    cd onyx_data/deployment
-    
     # Determine compose command
     if docker compose version &> /dev/null; then
         COMPOSE_CMD="docker compose"
@@ -423,10 +423,10 @@ if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.ym
     else
         COMPOSE_CMD=""
     fi
-    
+
     if [ -n "$COMPOSE_CMD" ]; then
         # Check if any containers are running
-        RUNNING_CONTAINERS=$($COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
+        RUNNING_CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
             print_error "Onyx services are currently running!"
             echo ""
@@ -439,8 +439,6 @@ if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.ym
             exit 1
         fi
     fi
-    
-    cd ../..
 fi
 
 if [ -f "$ENV_FILE" ]; then
@@ -558,19 +556,94 @@ else
     echo ""
 fi
 
+# Function to check if a port is available
+is_port_available() {
+    local port=$1
+
+    # Try netcat first if available
+    if command -v nc &> /dev/null; then
+        # Try to connect to the port, if it fails, the port is available
+        ! nc -z localhost "$port" 2>/dev/null
+    # Fallback using curl/telnet approach
+    elif command -v curl &> /dev/null; then
+        # Try to connect with curl, if it fails, the port might be available
+        ! curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1
+    # Final fallback using lsof if available
+    elif command -v lsof &> /dev/null; then
+        # Check if any process is listening on the port
+        ! lsof -i ":$port" >/dev/null 2>&1
+    else
+        # No port checking tools available, assume port is available
+        print_warning "No port checking tools available (nc, curl, lsof). Assuming port $port is available."
+        return 0
+    fi
+}
+
+# Function to find the first available port starting from a given port
+find_available_port() {
+    local start_port=${1:-3000}
+    local port=$start_port
+
+    while [ $port -le 65535 ]; do
+        if is_port_available "$port"; then
+            echo "$port"
+            return 0
+        fi
+        port=$((port + 1))
+    done
+
+    # If no port found, return the original port as fallback
+    echo "$start_port"
+    return 1
+}
+
+# Check for port checking tools availability
+PORT_CHECK_AVAILABLE=false
+if command -v nc &> /dev/null || command -v curl &> /dev/null || command -v lsof &> /dev/null; then
+    PORT_CHECK_AVAILABLE=true
+fi
+
+if [ "$PORT_CHECK_AVAILABLE" = false ]; then
+    print_warning "No port checking tools found (nc, curl, lsof). Port detection may not work properly."
+    print_info "Consider installing one of these tools for reliable automatic port detection."
+fi
+
+# Find available port for nginx
+print_step "Checking for available ports"
+AVAILABLE_PORT=$(find_available_port 3000)
+
+if [ "$AVAILABLE_PORT" != "3000" ]; then
+    print_info "Port 3000 is in use, found available port: $AVAILABLE_PORT"
+else
+    print_info "Port 3000 is available"
+fi
+
+# Export HOST_PORT for docker-compose
+export HOST_PORT=$AVAILABLE_PORT
+print_success "Using port $AVAILABLE_PORT for nginx"
+
 # Pull Docker images with reduced output
 print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull --quiet && cd ../..
-print_success "Docker images downloaded successfully"
+(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull --quiet)
+if [ $? -eq 0 ]; then
+    print_success "Docker images downloaded successfully"
+else
+    print_error "Failed to download Docker images"
+    exit 1
+fi
 
 # Start services
 print_step "Starting Onyx services"
 print_info "Launching containers..."
 echo ""
-cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d && cd ../..
+(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d)
+if [ $? -ne 0 ]; then
+    print_error "Failed to start Onyx services"
+    exit 1
+fi
 
 # Monitor container startup
 print_step "Verifying container health"
@@ -587,7 +660,7 @@ echo ""
 # Check for restart loops
 print_info "Checking container health status..."
 RESTART_ISSUES=false
-CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q)
+CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null)
 
 for CONTAINER in $CONTAINERS; do
     CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed 's/^\/\|^onyx_data_deployment_//g')
@@ -615,7 +688,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs"
+    echo "  (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     echo "Include the output of the logs command in your message."
@@ -626,23 +699,24 @@ fi
 check_onyx_health() {
     local max_attempts=600  # 10 minutes * 60 attempts per minute (every 1 second)
     local attempt=1
-    
+    local port=${HOST_PORT:-3000}
+
     print_info "Checking Onyx service health..."
     echo "Containers are healthy, waiting for database migrations and service initialization to finish."
     echo ""
-    
+
     while [ $attempt -le $max_attempts ]; do
         # Check for successful HTTP responses (200, 301, 302, etc.)
-        local http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000)
+        local http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port")
         if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
             return 0
         fi
-        
+
         # Show animated progress with time elapsed
         local elapsed=$((attempt))
         local minutes=$((elapsed / 60))
         local seconds=$((elapsed % 60))
-        
+
         # Create animated dots with fixed spacing (cycle through 1-3 dots)
         local dots=""
         case $((attempt % 3)) in
@@ -650,14 +724,14 @@ check_onyx_health() {
             1) dots=".. " ;;
             2) dots="..." ;;
         esac
-        
+
         # Clear line and show progress with fixed spacing
         printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
-        
+
         sleep 1
         attempt=$((attempt + 1))
     done
-    
+
     echo ""  # New line after the progress line
     return 1
 }
@@ -683,10 +757,10 @@ else
 fi
 echo ""
 print_info "Access Onyx at:"
-echo -e "   ${BOLD}http://localhost:3000${NC}"
+echo -e "   ${BOLD}http://localhost:${HOST_PORT}${NC}"
 echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
-echo "   • Visit http://localhost:3000/auth/signup to create your admin account"
+echo "   • Visit http://localhost:${HOST_PORT}/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
 echo ""
 print_info "Refer to the README in the onyx_data directory for more information."

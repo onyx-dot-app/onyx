@@ -1,0 +1,33 @@
+# Docker Compose Override for Development/Testing
+# This file exposes service ports for development and testing purposes
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Or set COMPOSE_FILE environment variable:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
+#   docker compose up -d
+
+services:
+  api_server:
+    ports:
+      - "8080:8080"
+
+  relational_db:
+    ports:
+      - "5432:5432"
+
+  index:
+    ports:
+      - "19071:19071"
+      - "8081:8081"
+
+  cache:
+    ports:
+      - "6379:6379"
+
+  minio:
+    # use different ports to avoid conflicts with model servers
+    ports:
+      - "9004:9000"
+      - "9005:9001"

@@ -128,7 +128,6 @@ jobs:
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
           outputs: type=registry
-          no-cache: true
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -156,7 +155,6 @@ jobs:
           push: true
           outputs: type=registry
           provenance: false
-          no-cache: true
 
   build-integration-image:
     needs: prepare-build
@@ -190,7 +188,6 @@ jobs:
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
           outputs: type=registry
-          no-cache: true
 
   integration-tests-mit:
     needs:
@@ -258,7 +255,7 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
-          docker compose up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
             cache \

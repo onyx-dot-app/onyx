@@ -28,7 +28,6 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
@@ -69,7 +68,6 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
@@ -103,6 +101,8 @@ def _get_connector_runner(
     are the complete list of existing documents of the connector. If the task
     of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
     """
+    from onyx.connectors.factory import instantiate_connector
+
     task = attempt.connector_credential_pair.connector.input_type
 
     try:
@@ -286,6 +286,8 @@ def _run_indexing(
     2. Embed and index these documents into the chosen datastore (vespa)
     3. Updates Postgres to record the indexed documents + the outcome of this run
     """
+    from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+
     start_time = time.monotonic()  # jsut used for logging
 
     with get_session_with_current_tenant() as db_session_temp:

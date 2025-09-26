@@ -1,6 +1,3 @@
-from openai import OpenAI
-
-
 VALID_MODEL_LIST = [
     "gpt-4o-mini",
     "gpt-4o",
@@ -23,6 +20,8 @@ VALID_MODEL_LIST = [
 
 
 if __name__ == "__main__":
+    from openai import OpenAI
+
     model_version = None
     while model_version not in VALID_MODEL_LIST:
         model_version = input("Please provide an OpenAI model version to test: ")
