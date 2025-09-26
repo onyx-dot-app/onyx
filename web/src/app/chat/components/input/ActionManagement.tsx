@@ -25,7 +25,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { useFilters, FilterManager, useSourcePreferences } from "@/lib/hooks";
+import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
