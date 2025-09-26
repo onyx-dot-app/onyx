@@ -325,8 +325,9 @@ def upgrade() -> None:
         )
         UPDATE user_file uf
         SET status = CASE
-            WHEN la.status = 'failed' THEN 'FAILED'
-            ELSE 'COMPLETED'
+            WHEN la.status IN ('NOT_STARTED', 'IN_PROGRESS') THEN 'PROCESSING'
+            WHEN la.status = 'SUCCESS' THEN 'COMPLETED'
+            ELSE 'FAILED'
         END
         FROM uf_to_ccp ufc
         LEFT JOIN latest_attempt la
