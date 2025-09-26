@@ -41,6 +41,7 @@ import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useChatContext } from "@/components/context/ChatContext";
+import { useTheme } from "next-themes";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -438,6 +439,7 @@ export function ActionToggle({
   selectedAssistant,
   availableSources = [],
 }: ActionToggleProps) {
+  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [showSourceManagement, setShowSourceManagement] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -982,17 +984,10 @@ export function ActionToggle({
                               className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
                               style={{
                                 filter:
-                                  document.documentElement.classList.contains(
-                                    "dark"
-                                  )
+                                  theme === "dark"
                                     ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.4) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.8)",
-                                opacity:
-                                  document.documentElement.classList.contains(
-                                    "dark"
-                                  )
-                                    ? 0.9
-                                    : 0.7,
+                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
+                                opacity: theme === "dark" ? 0.9 : 0.8,
                               }}
                             />
                           </div>
@@ -1025,17 +1020,10 @@ export function ActionToggle({
                               className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
                               style={{
                                 filter:
-                                  document.documentElement.classList.contains(
-                                    "dark"
-                                  )
+                                  theme === "dark"
                                     ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.4) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.8)",
-                                opacity:
-                                  document.documentElement.classList.contains(
-                                    "dark"
-                                  )
-                                    ? 0.9
-                                    : 0.7,
+                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
+                                opacity: theme === "dark" ? 0.9 : 0.8,
                               }}
                             />
                           </div>
