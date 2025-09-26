@@ -154,7 +154,7 @@ def invoke_llm_json(
         or []
     ) and supports_response_schema(llm.config.model_name, llm.config.model_provider)
 
-    response_content = str(
+    raw_response_content = str(
         llm.invoke(
             prompt,
             tools=tools,
@@ -167,6 +167,8 @@ def invoke_llm_json(
         ).content
     )
 
+    response_content = raw_response_content
+
     if not supports_json:
         # remove newlines as they often lead to json decoding errors
         response_content = response_content.replace("\n", " ")
@@ -177,9 +179,38 @@ def invoke_llm_json(
         else:
             first_bracket = response_content.find("{")
             last_bracket = response_content.rfind("}")
-            response_content = response_content[first_bracket : last_bracket + 1]
+            # Guard against missing braces to avoid creating an empty string
+            if first_bracket == -1 or last_bracket == -1 or last_bracket < first_bracket:
+                response_content = ""
+            else:
+                response_content = response_content[first_bracket : last_bracket + 1]
+    # Final validation with a robust fallback for common schemas
+    try:
+        if response_content and response_content.strip():
+            return schema.model_validate_json(response_content)
+    except Exception:
+        # If JSON parsing fails below, we'll attempt a fallback
+        pass
 
-    return schema.model_validate_json(response_content)
+    # Fallback: if schema expects DecisionResponse and model didn't return JSON,
+    # create a sensible default using raw content as reasoning
+    try:
+        if schema.__name__ == "DecisionResponse":
+            from onyx.agents.agent_search.dr.models import DecisionResponse  # local import to avoid cycles
+
+            return cast(SchemaType, DecisionResponse(
+                reasoning=(raw_response_content or ""),
+                decision="LLM",
+            ))
+    except Exception:
+        # If even fallback construction fails, raise the original error
+        pass
+
+    # If we get here, raise a descriptive error including a snippet of the content
+    snippet = (raw_response_content or "").strip()[:200]
+    raise ValueError(
+        f"Failed to parse JSON response for schema {schema.__name__}. Content snippet: {snippet}"
+    )
 
 
 def get_answer_from_llm(
