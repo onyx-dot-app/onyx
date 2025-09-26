@@ -25,7 +25,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { useFilters, FilterManager } from "@/lib/hooks";
+import { useFilters, FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -450,47 +450,18 @@ export function ActionToggle({
   const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const [sourcesInitialized, setSourcesInitialized] = useState(false);
 
-  // Load saved source preferences from localStorage
-  const loadSavedSourcePreferences = () => {
-    if (typeof window === "undefined") return null;
-    const saved = localStorage.getItem("chat-selected-sources");
-    if (!saved) return null;
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return null;
-    }
-  };
-
-  const persistSourcePreferencesState = (sources: SourceMetadata[]) => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("chat-selected-sources", JSON.stringify(sources));
-  };
-
-  // Initialize sources - load from localStorage or enable all by default
-  useEffect(() => {
-    if (!sourcesInitialized && availableSources.length > 0) {
-      const savedSources = loadSavedSourcePreferences();
-      if (savedSources !== null) {
-        const availableSourceMetadata = getConfiguredSources(availableSources);
-        const validSavedSources = savedSources.filter(
-          (savedSource: SourceMetadata) =>
-            availableSourceMetadata.some(
-              (availableSource) =>
-                availableSource.uniqueKey === savedSource.uniqueKey
-            )
-        );
-        setSelectedSources(validSavedSources);
-      } else {
-        // First time user - enable all sources by default
-        const allSourceMetadata = getConfiguredSources(availableSources);
-        setSelectedSources(allSourceMetadata);
-      }
-      setSourcesInitialized(true);
-    }
-  }, [availableSources, sourcesInitialized, setSelectedSources]);
+  const {
+    sourcesInitialized,
+    enableAllSources,
+    disableAllSources,
+    toggleSource,
+    isSourceEnabled,
+  } = useSourcePreferences({
+    availableSources,
+    selectedSources,
+    setSelectedSources,
+  });
   const [mcpToolsPopup, setMcpToolsPopup] = useState<{
     serverId: number | null;
     serverName: string;
@@ -561,50 +532,6 @@ export function ActionToggle({
       // If clicking on a new tool, replace any existing forced tools with just this one
       setForcedToolIds([toolId]);
     }
-  };
-
-  const enableAllSources = () => {
-    const allSourceMetadata = getConfiguredSources(availableSources);
-    setSelectedSources(allSourceMetadata);
-    persistSourcePreferencesState(allSourceMetadata);
-  };
-
-  const disableAllSources = () => {
-    setSelectedSources([]);
-    persistSourcePreferencesState([]);
-  };
-
-  const toggleSource = (sourceUniqueKey: string) => {
-    const configuredSource = getConfiguredSources(availableSources).find(
-      (s) => s.uniqueKey === sourceUniqueKey
-    );
-    if (!configuredSource) return;
-
-    const isCurrentlySelected = selectedSources.some(
-      (s) => s.uniqueKey === configuredSource.uniqueKey
-    );
-
-    let newSources: SourceMetadata[];
-    if (isCurrentlySelected) {
-      newSources = selectedSources.filter(
-        (s) => s.uniqueKey !== configuredSource.uniqueKey
-      );
-    } else {
-      newSources = [...selectedSources, configuredSource];
-    }
-
-    setSelectedSources(newSources);
-    persistSourcePreferencesState(newSources);
-  };
-
-  const isSourceEnabled = (sourceUniqueKey: string) => {
-    const configuredSource = getConfiguredSources(availableSources).find(
-      (s) => s.uniqueKey === sourceUniqueKey
-    );
-    if (!configuredSource) return false;
-    return selectedSources.some(
-      (s: SourceMetadata) => s.uniqueKey === configuredSource.uniqueKey
-    );
   };
 
   // Simple and clean overflow detection
