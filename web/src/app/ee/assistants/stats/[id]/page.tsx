@@ -35,6 +35,7 @@ export default async function GalleryPage(props: {
     defaultAssistantId,
     inputPrompts,
     proSearchToggled,
+    projects,
   } = data;
 
   return (
@@ -54,6 +55,7 @@ export default async function GalleryPage(props: {
         llmProviders,
         shouldShowWelcomeModal,
         defaultAssistantId,
+        projects,
       }}
     >
       {shouldShowWelcomeModal && (
