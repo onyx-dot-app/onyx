@@ -92,38 +92,3 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- $engine := default "hpa" .Values.autoscaling.engine -}}
 {{- $engine | lower -}}
 {{- end }}
-
-{{/*
-Wrappers to support newly renamed helpers while retaining legacy logic.
-*/}}
-{{- define "onyx-stack.name" -}}
-{{- include "onyx.name" . -}}
-{{- end }}
-
-{{- define "onyx-stack.fullname" -}}
-{{- include "onyx.fullname" . -}}
-{{- end }}
-
-{{- define "onyx-stack.chart" -}}
-{{- include "onyx.chart" . -}}
-{{- end }}
-
-{{- define "onyx-stack.labels" -}}
-{{- include "onyx.labels" . -}}
-{{- end }}
-
-{{- define "onyx-stack.selectorLabels" -}}
-{{- include "onyx.selectorLabels" . -}}
-{{- end }}
-
-{{- define "onyx-stack.serviceAccountName" -}}
-{{- include "onyx.serviceAccountName" . -}}
-{{- end }}
-
-{{- define "onyx-stack.secretName" -}}
-{{- include "onyx.secretName" . -}}
-{{- end }}
-
-{{- define "onyx-stack.envSecrets" -}}
-{{- include "onyx.envSecrets" . -}}
-{{- end }}
