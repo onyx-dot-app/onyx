@@ -503,6 +503,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 suppressContentEditableWarning={true}
               />
 
+<<<<<<< HEAD
               {(selectedDocuments.length > 0 ||
                 currentMessageFiles.length > 0 ||
                 filterManager.timeRange ||
@@ -523,6 +524,184 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                                 (t) => t.tag_key !== tag.tag_key
                               )
                             );
+=======
+            {(selectedDocuments.length > 0 ||
+              selectedFiles.length > 0 ||
+              selectedFolders.length > 0 ||
+              currentMessageFiles.length > 0 ||
+              filterManager.timeRange ||
+              filterManager.selectedDocumentSets.length > 0 ||
+              filterManager.selectedTags.length > 0) && (
+              <div className="flex bg-input-background gap-x-.5 px-2">
+                <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
+                  {filterManager.selectedTags &&
+                    filterManager.selectedTags.map((tag, index) => (
+                      <SourceChip
+                        key={index}
+                        icon={<TagIcon size={12} />}
+                        title={`#${tag.tag_key}_${tag.tag_value}`}
+                        onRemove={() => {
+                          filterManager.setSelectedTags(
+                            filterManager.selectedTags.filter(
+                              (t) => t.tag_key !== tag.tag_key
+                            )
+                          );
+                        }}
+                      />
+                    ))}
+
+                  {/* Unified file rendering section for both selected and current message files */}
+                  {allFiles.map((file, index) =>
+                    file.chatFileType === ChatFileType.IMAGE ? (
+                      <SourceChip
+                        key={`${file.source}-${file.id}-${index}`}
+                        icon={
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <img
+                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                              src={buildImgUrl(file.id)}
+                              alt={file.name || "File image"}
+                            />
+                          )
+                        }
+                        title={file.name}
+                        onRemove={() => {
+                          if (file.source === "selected") {
+                            removeSelectedFile(file.originalFile);
+                          } else {
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
+                          }
+                        }}
+                      />
+                    ) : (
+                      <SourceChip
+                        key={`${file.source}-${file.id}-${index}`}
+                        icon={
+                          <FileIcon
+                            className={
+                              file.source === "current" ? "text-red-500" : ""
+                            }
+                            size={16}
+                          />
+                        }
+                        title={file.name}
+                        onRemove={() => {
+                          if (file.source === "selected") {
+                            removeSelectedFile(file.originalFile);
+                          } else {
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
+                          }
+                        }}
+                      />
+                    )
+                  )}
+                  {selectedFolders.map((folder) => (
+                    <SourceChip
+                      key={folder.id}
+                      icon={<FolderIcon size={16} />}
+                      title={folder.name}
+                      onRemove={() => removeSelectedFolder(folder)}
+                    />
+                  ))}
+                  {filterManager.timeRange && (
+                    <SourceChip
+                      truncateTitle={false}
+                      key="time-range"
+                      icon={<CalendarIcon size={12} />}
+                      title={`${getFormattedDateRangeString(
+                        filterManager.timeRange.from,
+                        filterManager.timeRange.to
+                      )}`}
+                      onRemove={() => {
+                        filterManager.setTimeRange(null);
+                      }}
+                    />
+                  )}
+                  {filterManager.selectedDocumentSets.length > 0 &&
+                    filterManager.selectedDocumentSets.map((docSet, index) => (
+                      <SourceChip
+                        key={`doc-set-${index}`}
+                        icon={<DocumentIcon2 size={16} />}
+                        title={docSet}
+                        onRemove={() => {
+                          filterManager.setSelectedDocumentSets(
+                            filterManager.selectedDocumentSets.filter(
+                              (ds) => ds !== docSet
+                            )
+                          );
+                        }}
+                      />
+                    ))}
+                  {selectedDocuments.length > 0 && (
+                    <SourceChip
+                      key="selected-documents"
+                      onClick={() => {
+                        toggleDocumentSidebar();
+                      }}
+                      icon={<FileIcon size={16} />}
+                      title={`${selectedDocuments.length} selected`}
+                      onRemove={removeDocs}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
+              <div className="space-x-1 flex px-4 ">
+                <ChatInputOption
+                  flexPriority="stiff"
+                  Icon={FileUploadIcon}
+                  onClick={() => {
+                    toggleDocSelection();
+                  }}
+                  tooltipContent={"Upload files and attach user files"}
+                />
+
+                {selectedAssistant.tools.length > 0 && (
+                  <ActionToggle
+                    selectedAssistant={selectedAssistant}
+                    availableSources={memoizedAvailableSources}
+                    filterManager={filterManager}
+                  />
+                )}
+
+                {retrievalEnabled &&
+                  settings?.settings.deep_research_enabled && (
+                    <DeepResearchToggle
+                      deepResearchEnabled={deepResearchEnabled}
+                      toggleDeepResearch={toggleDeepResearch}
+                    />
+                  )}
+
+                {forcedToolIds.length > 0 && (
+                  <div className="pl-1 flex items-center gap-2 text-blue-500">
+                    {forcedToolIds.map((toolId) => {
+                      const tool = selectedAssistant.tools.find(
+                        (tool) => tool.id === toolId
+                      );
+                      if (!tool) {
+                        return null;
+                      }
+                      return (
+                        <SelectedTool
+                          key={toolId}
+                          tool={tool}
+                          onClick={() => {
+                            setForcedToolIds((prev) =>
+                              prev.filter((id) => id !== toolId)
+                            );
+>>>>>>> e5547fb2c (enable all by default and persist user choice)
                           }}
                         />
                       ))}

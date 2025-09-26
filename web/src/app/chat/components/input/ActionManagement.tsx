@@ -25,7 +25,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { useFilters } from "@/lib/hooks";
+import { useFilters, FilterManager } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -433,11 +433,13 @@ function MCPToolsList({
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
   availableSources?: ValidSources[];
+  filterManager: FilterManager;
 }
 
 export function ActionToggle({
   selectedAssistant,
   availableSources = [],
+  filterManager,
 }: ActionToggleProps) {
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
@@ -446,10 +448,49 @@ export function ActionToggle({
   const [sourceSearchTerm, setSourceSearchTerm] = useState("");
   const [showFadeMask, setShowFadeMask] = useState(false);
   const [showTopShadow, setShowTopShadow] = useState(false);
-  // Use existing filter system
-  const filterManager = useFilters();
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+  const [sourcesInitialized, setSourcesInitialized] = useState(false);
+
+  // Load saved source preferences from localStorage
+  const loadSavedSourcePreferences = () => {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem("chat-selected-sources");
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  };
+
+  const persistSourcePreferencesState = (sources: SourceMetadata[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("chat-selected-sources", JSON.stringify(sources));
+  };
+
+  // Initialize sources - load from localStorage or enable all by default
+  useEffect(() => {
+    if (!sourcesInitialized && availableSources.length > 0) {
+      const savedSources = loadSavedSourcePreferences();
+      if (savedSources !== null) {
+        const availableSourceMetadata = getConfiguredSources(availableSources);
+        const validSavedSources = savedSources.filter(
+          (savedSource: SourceMetadata) =>
+            availableSourceMetadata.some(
+              (availableSource) =>
+                availableSource.uniqueKey === savedSource.uniqueKey
+            )
+        );
+        setSelectedSources(validSavedSources);
+      } else {
+        // First time user - enable all sources by default
+        const allSourceMetadata = getConfiguredSources(availableSources);
+        setSelectedSources(allSourceMetadata);
+      }
+      setSourcesInitialized(true);
+    }
+  }, [availableSources, sourcesInitialized, setSelectedSources]);
   const [mcpToolsPopup, setMcpToolsPopup] = useState<{
     serverId: number | null;
     serverName: string;
@@ -525,10 +566,12 @@ export function ActionToggle({
   const enableAllSources = () => {
     const allSourceMetadata = getConfiguredSources(availableSources);
     setSelectedSources(allSourceMetadata);
+    persistSourcePreferencesState(allSourceMetadata);
   };
 
   const disableAllSources = () => {
     setSelectedSources([]);
+    persistSourcePreferencesState([]);
   };
 
   const toggleSource = (sourceUniqueKey: string) => {
@@ -541,13 +584,17 @@ export function ActionToggle({
       (s) => s.uniqueKey === configuredSource.uniqueKey
     );
 
+    let newSources: SourceMetadata[];
     if (isCurrentlySelected) {
-      setSelectedSources((prev) =>
-        prev.filter((s) => s.uniqueKey !== configuredSource.uniqueKey)
+      newSources = selectedSources.filter(
+        (s) => s.uniqueKey !== configuredSource.uniqueKey
       );
     } else {
-      setSelectedSources((prev) => [...prev, configuredSource]);
+      newSources = [...selectedSources, configuredSource];
     }
+
+    setSelectedSources(newSources);
+    persistSourcePreferencesState(newSources);
   };
 
   const isSourceEnabled = (sourceUniqueKey: string) => {
@@ -556,7 +603,7 @@ export function ActionToggle({
     );
     if (!configuredSource) return false;
     return selectedSources.some(
-      (s) => s.uniqueKey === configuredSource.uniqueKey
+      (s: SourceMetadata) => s.uniqueKey === configuredSource.uniqueKey
     );
   };
 
