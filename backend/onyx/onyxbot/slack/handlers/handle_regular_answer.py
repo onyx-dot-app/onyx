@@ -28,6 +28,10 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import persona_has_search_tool
 from onyx.db.users import get_user_by_email
+from onyx.llm.factory import get_llms_for_persona
+from onyx.llm.models import PreviousMessage
+from onyx.llm.utils import check_number_of_tokens
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.handlers.utils import slackify_message_thread
@@ -130,13 +134,13 @@ def handle_regular_answer(
     with get_session_with_current_tenant() as db_session:
         expecting_search_result = persona_has_search_tool(persona.id, db_session)
 
-    # TODO: Add in support for Slack to truncate messages based on max LLM context
-    # llm, _ = get_llms_for_persona(persona)
+    # Get LLM configuration to create tokenizer for token counting
+    llm, _ = get_llms_for_persona(persona)
 
-    # llm_tokenizer = get_tokenizer(
-    #     model_name=llm.config.model_name,
-    #     provider_type=llm.config.model_provider,
-    # )
+    llm_tokenizer = get_tokenizer(
+        model_name=llm.config.model_name,
+        provider_type=llm.config.model_provider,
+    )
 
     # # In cases of threads, split the available tokens between docs and thread context
     # input_tokens = get_max_input_tokens(
@@ -153,6 +157,21 @@ def handle_regular_answer(
     # who previously posted in the thread.
     user_message = messages[-1]
     history_messages = messages[:-1]
+    message_history: list[PreviousMessage] = []
+    for message in history_messages:
+        # Calculate actual token count for the message
+        token_count = check_number_of_tokens(message.message, llm_tokenizer.encode)
+        message_history.append(
+            PreviousMessage(
+                message=message.message,
+                message_type=message.role,
+                token_count=token_count,
+                files=[],  # Empty list as default
+                tool_call=None,  # No tool calls in Slack message history
+                refined_answer_improvement=None,  # Not applicable for Slack messages
+                research_answer_purpose=None,  # Not applicable for Slack messages
+            )
+        )
     single_message_history = slackify_message_thread(history_messages) or None
 
     # Always check for ACL permissions, also for documnt sets that were explicitly added
@@ -184,6 +203,7 @@ def handle_regular_answer(
                 db_session=db_session,
                 bypass_acl=bypass_acl,
                 single_message_history=single_message_history,
+                message_history=message_history,
             )
             answer = gather_stream(packets)
 

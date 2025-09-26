@@ -3,7 +3,7 @@ import time
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
-from typing import cast
+from typing import cast, List
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -253,6 +253,7 @@ def stream_chat_message_objects(
     # a string which represents the history of a conversation. Used in cases like
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
     # messages.
+    message_history: List[PreviousMessage] | None = None,
     # NOTE: is not stored in the database at all.
     single_message_history: str | None = None,
 ) -> AnswerStream:
@@ -613,11 +614,11 @@ def stream_chat_message_objects(
         force_use_tool = _get_force_search_settings(
             new_msg_req, tools, search_tool_override_kwargs_for_user_files
         )
-
-        # TODO: unify message history with single message history
-        message_history = [
-            PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
-        ]
+        if message_history is None:
+            # TODO: unify message history with single message history
+            message_history = [
+                PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
+            ]
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             yield UserKnowledgeFilePacket(
                 user_files=[
