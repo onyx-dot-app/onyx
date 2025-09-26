@@ -62,6 +62,14 @@ class MCPAuthenticationType(str, PyEnum):
     OAUTH = "OAUTH"
 
 
+class MCPTransport(str, PyEnum):
+    """MCP transport types"""
+
+    STDIO = "STDIO"  # TODO: currently unsupported, need to add a user guide for setup
+    SSE = "SSE"  # Server-Sent Events (deprecated but still used)
+    STREAMABLE_HTTP = "STREAMABLE_HTTP"  # Modern HTTP streaming
+
+
 class MCPAuthenticationPerformer(str, PyEnum):
     ADMIN = "ADMIN"
     PER_USER = "PER_USER"

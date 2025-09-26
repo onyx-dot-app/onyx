@@ -181,6 +181,15 @@ def orchestrator(
             remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[research_type]
 
         elif remaining_time_budget <= 0:
+
+            write_custom_event(
+                current_step_nr,
+                SectionEnd(),
+                writer,
+            )
+
+            current_step_nr += 1
+
             return OrchestrationUpdate(
                 tools_used=[DRPath.CLOSER.value],
                 current_step_nr=current_step_nr,

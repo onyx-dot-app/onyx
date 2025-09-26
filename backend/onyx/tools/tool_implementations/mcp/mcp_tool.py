@@ -208,6 +208,7 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                 self._name,
                 kwargs,
                 connection_headers=headers,
+                transport=self.mcp_server.transport,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")
