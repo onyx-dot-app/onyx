@@ -1,4 +1,4 @@
-{{- if .Values.celery_worker_user_file_processing.autoscaling.enabled (eq (include "onyx.autoscaling.engine" .) "keda")}}
+{{- if and (.Values.celery_worker_user_file_processing.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -35,5 +35,4 @@ spec:
     {{- toYaml .Values.celery_worker_user_file_processing.autoscaling.customTriggers | nindent 4 }}
     {{- end }}
 {{- end }}
-
 
