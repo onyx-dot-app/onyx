@@ -13,6 +13,8 @@ from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
+from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
@@ -30,7 +32,29 @@ def _build_extra_model_kwargs(provider: str) -> dict[str, Any]:
     For now, just using the GEN_AI_MODEL_FALLBACK_MAX_TOKENS value.
     TODO: allow model-specific values to be configured via the UI.
     """
-    return {"num_ctx": GEN_AI_MODEL_FALLBACK_MAX_TOKENS} if provider == "ollama" else {}
+    return (
+        {"num_ctx": GEN_AI_MODEL_FALLBACK_MAX_TOKENS}
+        if provider == OLLAMA_PROVIDER_NAME
+        else {}
+    )
+
+
+def _build_provider_extra_headers(
+    provider: str, custom_config: dict[str, str] | None
+) -> dict[str, str]:
+    if provider != OLLAMA_PROVIDER_NAME or not custom_config:
+        return {}
+
+    raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
+
+    api_key = raw_api_key.strip() if raw_api_key else None
+    if not api_key:
+        return {}
+
+    if not api_key.lower().startswith("bearer "):
+        api_key = f"Bearer {api_key}"
+
+    return {"Authorization": api_key}
 
 
 def get_main_llm_from_tuple(
@@ -272,6 +296,12 @@ def get_llm(
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+
+    extra_headers = build_llm_extra_headers(additional_headers)
+    provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
+    if provider_extra_headers:
+        extra_headers.update(provider_extra_headers)
+
     return DefaultMultiLLM(
         model_provider=provider,
         model_name=model,
@@ -282,7 +312,7 @@ def get_llm(
         timeout=timeout,
         temperature=temperature,
         custom_config=custom_config,
-        extra_headers=build_llm_extra_headers(additional_headers),
+        extra_headers=extra_headers,
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
         max_input_tokens=max_input_tokens,
