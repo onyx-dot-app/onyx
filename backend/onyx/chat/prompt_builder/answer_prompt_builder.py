@@ -4,7 +4,6 @@ from typing import cast
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
 from onyx.chat.models import LlmDoc
@@ -202,10 +201,6 @@ class AnswerPromptBuilder:
 
 
 # Stores some parts of a prompt builder as needed for tool calls
-class PromptSnapshot(BaseModel):
-    raw_message_history: list[PreviousMessage]
-    raw_user_query: str
-    built_prompt: list[BaseMessage]
 
 
 # TODO: rename this? AnswerConfig maybe?

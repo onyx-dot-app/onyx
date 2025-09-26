@@ -13,7 +13,7 @@ from onyx.agents.agent_search.shared_graph_utils.operators import (
 )
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.utils import chunks_or_sections_to_search_docs
+from onyx.context.search.models import SearchDoc
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
@@ -266,7 +266,7 @@ def convert_inference_sections_to_search_docs(
     is_internet: bool = False,
 ) -> list[SavedSearchDoc]:
     # Convert InferenceSections to SavedSearchDocs
-    search_docs = chunks_or_sections_to_search_docs(inference_sections)
+    search_docs = SearchDoc.from_chunks_or_sections(inference_sections)
     for search_doc in search_docs:
         search_doc.is_internet = is_internet
 

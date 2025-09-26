@@ -69,6 +69,12 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+autoscaling:
+  # Valid options: 'hpa' (default) or 'keda'.
+  # Set to 'keda' to render KEDA ScaledObjects for components that have autoscaling enabled.
+  # When using KEDA you must install and manage the KEDA operator separately; it is not bundled with this chart.
+  engine: hpa
+
 inferenceCapability:
   service:
     portName: modelserver
@@ -213,7 +219,7 @@ webserver:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -294,7 +300,7 @@ api:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -396,7 +402,7 @@ celery_worker_heavy:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -431,7 +437,7 @@ celery_worker_docprocessing:
     maxReplicas: 20
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -466,7 +472,7 @@ celery_worker_light:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -501,7 +507,7 @@ celery_worker_monitoring:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -536,7 +542,7 @@ celery_worker_primary:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -571,7 +577,7 @@ celery_worker_user_files_indexing:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle
@@ -666,7 +672,7 @@ celery_worker_docfetching:
     maxReplicas: 20
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
     idleReplicaCount: 1  # minimum replicas when idle

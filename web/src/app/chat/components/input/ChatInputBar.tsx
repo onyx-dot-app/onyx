@@ -13,7 +13,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, LlmManager } from "@/lib/hooks";
+import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import {
   DocumentIcon2,
@@ -218,8 +218,24 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     [setCurrentMessageFiles]
   );
 
-  const { llmProviders, inputPrompts } = useChatContext();
+  const {
+    llmProviders,
+    inputPrompts,
+    ccPairs,
+    availableSources,
+    documentSets,
+  } = useChatContext();
+  const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
+
+  // Memoize availableSources to prevent unnecessary re-renders
+  const memoizedAvailableSources = useMemo(
+    () => [
+      ...ccPairs.map((ccPair) => ccPair.source),
+      ...(federatedConnectorsData?.map((connector) => connector.source) || []),
+    ],
+    [ccPairs, federatedConnectorsData]
+  );
 
   const hidePrompts = () => {
     setTimeout(() => {

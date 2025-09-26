@@ -53,9 +53,11 @@ services:
       - inference_model_server
       - minio
     restart: unless-stopped
-    # PRODUCTION: Remove this port exposure for security (only nginx should be accessible)
-    ports:
-      - "8080:8080"
+    # DEV: To expose ports, either:
+    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+    # 2. Uncomment the ports below
+    # ports:
+    #   - "8080:8080"
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
@@ -229,9 +231,11 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-    # PRODUCTION: Remove this port exposure for security (database should only be accessible internally)
-    ports:
-      - "5432:5432"
+    # DEV: To expose ports, either:
+    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+    # 2. Uncomment the ports below
+    # ports:
+    #   - "5432:5432"
     volumes:
       - db_volume:/var/lib/postgresql/data
 
@@ -241,10 +245,12 @@ services:
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=${VESPA_SKIP_UPGRADE_CHECK:-true}
-    # PRODUCTION: Remove these port exposures for security (Vespa should only be accessible internally)
-    ports:
-      - "19071:19071"
-      - "8081:8081"
+    # DEV: To expose ports, either:
+    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+    # 2. Uncomment the ports below
+    # ports:
+    #   - "19071:19071"
+    #   - "8081:8081"
     volumes:
       - vespa_volume:/opt/vespa/var
     logging:
@@ -265,7 +271,7 @@ services:
       - DOMAIN=localhost
     ports:
       - "80:80"
-      - "3000:80" # allow for localhost:3000 usage, since that is the norm
+      - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
     # PRODUCTION: Add SSL certificate volumes for HTTPS support:
@@ -289,9 +295,11 @@ services:
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
-    # PRODUCTION: Remove this port exposure for security (Redis should only be accessible internally)
-    ports:
-      - "6379:6379"
+    # DEV: To expose ports, either:
+    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+    # 2. Uncomment the ports below
+    # ports:
+    #   - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
@@ -299,10 +307,12 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
-    # PRODUCTION: Remove these port exposures for security (MinIO should only be accessible internally)
-    ports:
-      - "9004:9000"
-      - "9005:9001"
+    # DEV: To expose ports, either:
+    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+    # 2. Uncomment the ports below
+    # ports:
+    #   - "9004:9000"
+    #   - "9005:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}

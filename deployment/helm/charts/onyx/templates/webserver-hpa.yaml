@@ -1,4 +1,4 @@
-{{- if .Values.webserver.autoscaling.enabled }}
+{{- if and (.Values.webserver.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

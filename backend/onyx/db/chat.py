@@ -33,7 +33,6 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.db.models import AgentSearchMetrics
 from onyx.db.models import AgentSubQuery
 from onyx.db.models import AgentSubQuestion
@@ -54,7 +53,7 @@ from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import SubQueryDetail
 from onyx.server.query_and_chat.models import SubQuestionDetail
-from onyx.tools.tool_runner import ToolCallFinalResult
+from onyx.tools.models import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -1069,7 +1068,7 @@ def log_agent_sub_question_results(
             db_session.add(sub_query_object)
             db_session.commit()
 
-            search_docs = chunks_or_sections_to_search_docs(
+            search_docs = ServerSearchDoc.from_chunks_or_sections(
                 sub_query.retrieved_documents
             )
             for doc in search_docs:

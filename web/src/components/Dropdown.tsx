@@ -41,14 +41,18 @@ function StandardDropdownOption<T>({
   return (
     <button
       onClick={() => handleSelect(option)}
-      className={`w-full text-left block px-4 py-2.5 text-sm bg-white dark:bg-neutral-800 hover:bg-background-50 ${
-        index !== 0 ? "border-t border-background-200" : ""
+      className={`w-full text-left block px-4 py-2.5 text-sm bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 ${
+        index !== 0 ? "border-t border-neutral-200 dark:border-neutral-700" : ""
       }`}
       role="menuitem"
     >
-      <p className="font-medium  text-xs text-text-900">{option.name}</p>
+      <p className="font-medium text-xs text-neutral-900 dark:text-neutral-100">
+        {option.name}
+      </p>
       {option.description && (
-        <p className="text-xs text-text-500">{option.description}</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          {option.description}
+        </p>
       )}
     </button>
   );
@@ -156,21 +160,21 @@ export function SearchMultiSelectDropdown({
               handleCustomValueSelect();
             }
           }}
-          className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border border-background-300 rounded-md shadow-sm"
+          className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-700 rounded-md shadow-sm"
         />
         <button
           type="button"
-          className="absolute top-0 right-0 text-sm h-full px-2 border-l border-background-300"
+          className="absolute top-0 right-0 text-sm h-full px-2 border-l border-neutral-200 dark:border-neutral-700"
           aria-expanded={isOpen}
           aria-haspopup="true"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <ChevronDownIcon className="my-auto w-4 h-4 text-text-600" />
+          <ChevronDownIcon className="my-auto w-4 h-4 text-neutral-600 dark:text-neutral-400" />
         </button>
       </div>
 
       {isOpen && (
-        <div className="absolute z-10 mt-1 w-full rounded-md shadow-lg bg-white border border-background-300 max-h-60 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-full rounded-md shadow-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 max-h-60 overflow-y-auto">
           <div
             role="menu"
             aria-orientation="vertical"
