@@ -7,7 +7,11 @@ from secrets import token_urlsafe
 from typing import Any
 from typing import cast
 from typing import Literal
+from urllib.parse import parse_qsl
+from urllib.parse import urlencode
 from urllib.parse import urlparse
+from urllib.parse import urlsplit
+from urllib.parse import urlunsplit
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -85,8 +89,8 @@ def _truncate_description(description: str | None, max_length: int = 500) -> str
 
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
-STATE_TTL_SECONDS = 60 * 15  # 15 minutes
-OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
+STATE_TTL_SECONDS = 60 * 5  # 5 minutes
+OAUTH_WAIT_SECONDS = 90  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
 
 
@@ -108,6 +112,9 @@ def key_tokens(user_id: str) -> str:
 
 def key_client_info(user_id: str) -> str:
     return f"mcp:oauth:{user_id}:client_info"
+
+
+REQUESTED_SCOPE: str | None = "user"
 
 
 class OnyxTokenStorage(TokenStorage):
@@ -242,7 +249,7 @@ def make_oauth_provider(
             redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
-            # scope="user",  # TODO: do we need to pass this in? maybe make configurable
+            scope=REQUESTED_SCOPE,  # TODO: do we need to pass this in? maybe make configurable
         ),
         storage=OnyxTokenStorage(connection_config_id, admin_config_id),
         redirect_handler=redirect_handler,
@@ -387,7 +394,7 @@ async def _connect_oauth(
                 redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
                 grant_types=["authorization_code", "refresh_token"],
                 response_types=["code"],
-                # scope="user", # TODO: allow specifying scopes?
+                scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
             )
             config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
                 mode="json"
@@ -493,6 +500,95 @@ async def _connect_oauth(
                         status_code=400, detail=f"OAuth initialization failed: {str(e)}"
                     )
             raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+
+        # TODO: this is a hack that lets us work around the broken discovery mechanisms
+        # in the mcp client library when using Okta as Idp. Okta's discovery urls
+        # put the well-known section at the end, and before the mcp client library
+        # tries that variant it tries to use just the base path + well known. this path
+        # is valid for Okta (returns 200), giving the wrong metadata.
+
+        if oauth_auth.context.auth_server_url and oauth_auth.context.oauth_metadata:
+
+            parsed_url = urlsplit(oauth_auth.context.auth_server_url)
+
+            query_params = dict(parse_qsl(parsed_url.query))
+            well_known_override = query_params.get("well_known_override")
+            # effectively copied from the mcp client library
+            if well_known_override:
+
+                oauth_metadata_request = oauth_auth._create_oauth_metadata_request(
+                    well_known_override
+                )
+                import httpx
+
+                async with httpx.AsyncClient() as client:
+                    oauth_metadata_response = await client.send(oauth_metadata_request)
+
+                if oauth_metadata_response.status_code == 200:
+                    await oauth_auth._handle_oauth_metadata_response(
+                        oauth_metadata_response
+                    )
+                    # need to do this explicitly because we're overwriting the scope in the client metadata
+                    oauth_auth.context.client_metadata.scope = " ".join(
+                        oauth_auth.context.oauth_metadata.scopes_supported or []
+                    )
+                    prev_oauth_url_parts = urlsplit(oauth_url)
+                    # Construct new URL by adding query params from previous OAuth URL to the authorization endpoint
+                    # Update scope in the OAuth URL with the new client metadata scopes
+                    if oauth_auth.context.client_metadata.scope:
+                        prev_query_params = dict(parse_qsl(prev_oauth_url_parts.query))
+                        prev_query_params["scope"] = (
+                            oauth_auth.context.client_metadata.scope
+                        )
+                        prev_oauth_url_parts = prev_oauth_url_parts._replace(
+                            query=urlencode(prev_query_params)
+                        )
+                    parsed_auth_endpoint = urlsplit(
+                        str(oauth_auth.context.oauth_metadata.authorization_endpoint)
+                    )
+                    existing_query_params = dict(parse_qsl(parsed_auth_endpoint.query))
+                    prev_query_params = dict(parse_qsl(prev_oauth_url_parts.query))
+
+                    # Merge query parameters (previous params take precedence)
+                    merged_params = {**existing_query_params, **prev_query_params}
+
+                    # Reconstruct the URL with merged query parameters
+                    oauth_url = urlunsplit(
+                        parsed_auth_endpoint._replace(query=urlencode(merged_params))
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Failed to retrieve OAuth metadata: Code"
+                            f" {oauth_metadata_response.status_code} text: {oauth_metadata_response.text}"
+                        ),
+                    )
+
+                # TODO: at the moment we do not handle dynamic client registration in this flow.
+                # It's meant as a hack to work with edge case Idps with discovery urls that disagree
+                # with the ones the client library talks with.
+
+            # auth_url_override = query_params.get("auth_url_override")
+            # if auth_url_override:
+            #     parsed_oauth_url = urlsplit(oauth_url)
+            #     parsed_override = urlparse(auth_url_override)
+
+            #     # Replace all parts except query with auth_server_url parts
+            #     oauth_url = urlunparse(parsed_override._replace(query=parsed_oauth_url.query))
+
+            # scopes_override = query_params.get("scopes_override")
+            # if scopes_override:
+            #     parsed_oauth_url = urlsplit(oauth_url)
+            #     query_dict = dict(parse_qsl(parsed_oauth_url.query))
+            #     query_dict["scope"] = scopes_override
+            #     oauth_url = urlunsplit(parsed_oauth_url._replace(query=urlencode(query_dict)))
+
+            # token_url_override = query_params.get("token_url_override")
+            # if token_url_override:
+            #     oauth_auth.context.oauth_metadata.token_endpoint = AnyHttpUrl(token_url_override)
+
+            # oauth_auth.context.oauth_metadata.authorization_endpoint = AnyHttpUrl(oauth_url)
 
         logger.info(
             f"Connected to auth url: {oauth_url} for mcp server: {mcp_server.name}"
@@ -749,12 +845,14 @@ def save_user_credentials(
     try:
         auth = None
         if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
+            # should only be saving user creds if an admin config exists
+            assert mcp_server.admin_connection_config_id is not None
             auth = make_oauth_provider(
                 mcp_server,
                 email,
                 UNUSED_RETURN_PATH,
-                request.server_id,
                 mcp_server.admin_connection_config_id,
+                None,
             )
 
         if "header_substitutions" in config_data:
@@ -875,28 +973,13 @@ def _db_mcp_server_to_api_mcp_server(
         user_config = get_user_connection_config(db_server.id, email, db)
         user_authenticated = user_config is not None
 
-        # Test existing credentials if they exist
         if user_authenticated and user_config:
-            try:
-                is_valid, _ = test_mcp_server_credentials(
-                    db_server.server_url,
-                    user_config.config.get("headers", {}),
-                    None,
-                    transport=db_server.transport,
-                )
-                user_authenticated = is_valid
-                if (
-                    include_auth_config
-                    and db_server.auth_type != MCPAuthenticationType.OAUTH
-                ):
-                    user_credentials = user_config.config.get(
-                        "header_substitutions", {}
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to test user credentials for server {db_server.name}: {e}"
-                )
-                # Keep user_authenticated as True if we can't test, to avoid breaking existing flows
+            # Avoid hitting the MCP server when assembling response data.
+            if (
+                include_auth_config
+                and db_server.auth_type != MCPAuthenticationType.OAUTH
+            ):
+                user_credentials = user_config.config.get("header_substitutions", {})
 
         if (
             db_server.auth_type == MCPAuthenticationType.OAUTH
@@ -1041,7 +1124,7 @@ def _get_connection_config(
     if (
         mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
         and mcp_server.auth_performer == MCPAuthenticationPerformer.ADMIN
-    ) or (mcp_server.auth_type == MCPAuthenticationType.OAUTH and is_admin):
+    ):
         connection_config = mcp_server.admin_connection_config
     else:
         user_email = user.email if user else ""
@@ -1114,7 +1197,7 @@ def _list_mcp_tools_by_id(
             user_id,
             UNUSED_RETURN_PATH,
             connection_config.id,
-            mcp_server.admin_connection_config_id,
+            None,
         )
     import time
 
@@ -1317,7 +1400,7 @@ def _upsert_mcp_server(
                     redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
                     grant_types=["authorization_code", "refresh_token"],
                     response_types=["code"],
-                    # scope="user", # TODO: allow specifying scopes?
+                    scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
                     # default token_endpoint_auth_method is client_secret_post
                 )
                 cfg[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
