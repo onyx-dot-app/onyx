@@ -39,6 +39,7 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
             DRPath.WEB_SEARCH,
             DRPath.KNOWLEDGE_GRAPH,
             DRPath.IMAGE_GENERATION,
+            DRPath.PYTHON_TOOL,
         )
         and len(state.query_list) == 0
     ):

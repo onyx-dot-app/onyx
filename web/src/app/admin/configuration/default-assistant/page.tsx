@@ -272,6 +272,9 @@ function ToolToggle({
     if (tool.in_code_tool_id === "ImageGenerationTool") {
       return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";
     }
+    if (tool.in_code_tool_id === "PythonTool") {
+      return "Set CODE_INTERPRETER_BASE_URL on the server and restart to enable Code Interpreter.";
+    }
     return "Not configured.";
   })();
   return (
