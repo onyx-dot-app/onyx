@@ -3,7 +3,9 @@ import time
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
+from typing import Any
 from typing import cast
+from typing import Dict
 from typing import Protocol
 from uuid import UUID
 
@@ -26,12 +28,13 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.models import UserKnowledgeFilePacket
-from onyx.chat.packet_proccessing.process_streamed_packets import (
-    process_streamed_packets,
-)
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.turn import fast_chat_turn
+from onyx.chat.turn.infra.chat_turn_event_stream import convert_to_packet_obj
+from onyx.chat.turn.models import DependenciesToMaybeRemove
+from onyx.chat.turn.models import RunDependencies
 from onyx.chat.user_files.parse_user_files import parse_user_files
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
@@ -44,7 +47,6 @@ from onyx.configs.constants import NO_AUTH_USER_ID
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.retrieval.search_runner import (
     inference_sections_from_ids,
 )
@@ -83,11 +85,7 @@ from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -778,10 +776,29 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-
-        # Process streamed packets using the new packet processing module
-        yield from process_streamed_packets(
-            answer_processed_output=answer.processed_streamed_output,
+        type_to_role = {
+            "human": "user",
+            "assistant": "assistant",
+            "system": "system",
+            "function": "function",
+        }
+        other_messages = [
+            {"role": type_to_role[message.type], "content": message.content}
+            for message in answer.graph_inputs.prompt_builder.build()
+            if message.type != "system"
+        ]
+        yield from fast_chat_turn.fast_chat_turn(
+            messages=other_messages,
+            dependencies=RunDependencies(
+                llm=answer.graph_tooling.primary_llm,
+                search_tool=answer.graph_tooling.search_tool,
+                db_session=db_session,
+                dependencies_to_maybe_remove=DependenciesToMaybeRemove(
+                    chat_session_id=chat_session_id,
+                    message_id=reserved_message_id,
+                    research_type=answer.graph_config.behavior.research_type,
+                ),
+            ),
         )
 
     except ValueError as e:
@@ -843,7 +860,15 @@ def stream_chat_message(
                 document_retrieval_latency = time.time() - start_time
                 logger.debug(f"First doc time: {document_retrieval_latency}")
 
-            yield get_json_line(obj.model_dump())
+            # Convert Pydantic models to dictionaries for JSON serialization
+            if hasattr(obj, "model_dump"):
+                obj_dict = obj.model_dump()
+            elif hasattr(obj, "dict"):
+                obj_dict = obj.dict()
+            else:
+                obj_dict = obj
+
+            yield get_json_line(obj_dict)
 
 
 def remove_answer_citations(answer: str) -> str:
@@ -854,46 +879,28 @@ def remove_answer_citations(answer: str) -> str:
 
 @log_function_time()
 def gather_stream(
-    packets: AnswerStream,
+    packets: Iterator[Dict[str, Any]],
 ) -> ChatBasicResponse:
     answer = ""
-    citations: list[CitationInfo] = []
-    error_msg: str | None = None
-    message_id: int | None = None
-    top_documents: list[SavedSearchDoc] = []
-
     for packet in packets:
-        if isinstance(packet, Packet):
-            # Handle the different packet object types
-            if isinstance(packet.obj, MessageStart):
-                # MessageStart contains the initial content and final documents
-                if packet.obj.content:
-                    answer += packet.obj.content
-                if packet.obj.final_documents:
-                    top_documents = packet.obj.final_documents
-            elif isinstance(packet.obj, MessageDelta):
-                # MessageDelta contains incremental content updates
-                if packet.obj.content:
-                    answer += packet.obj.content
-            elif isinstance(packet.obj, CitationDelta):
-                # CitationDelta contains citation information
-                if packet.obj.citations:
-                    citations.extend(packet.obj.citations)
-        elif isinstance(packet, StreamingError):
-            error_msg = packet.error
-        elif isinstance(packet, MessageResponseIDInfo):
-            message_id = packet.reserved_assistant_message_id
+        if packet != {"type": "event"}:
+            print(packet)
 
-    if message_id is None:
-        raise ValueError("Message ID is required")
+        # Convert packet to PacketObj when possible
+        packet_obj = convert_to_packet_obj(packet)
+        if packet_obj:
+            # Handle PacketObj types that contain text content
+            if hasattr(packet_obj, "content") and packet_obj.content:
+                answer += packet_obj.content
+        elif "text" in packet:
+            # Fallback for legacy packet format
+            answer += packet["text"]
 
     return ChatBasicResponse(
         answer=answer,
         answer_citationless=remove_answer_citations(answer),
-        cited_documents={
-            citation.citation_num: citation.document_id for citation in citations
-        },
-        message_id=message_id,
-        error_msg=error_msg,
-        top_documents=top_documents,
+        cited_documents={},
+        message_id=0,
+        error_msg=None,
+        top_documents=[],
     )

@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
-from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
@@ -55,13 +54,8 @@ from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.exceptions import GenAIDisabledException
-from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.secondary_llm_flows.chat_session_naming import (
-    get_renamed_conversation_name,
-)
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -307,45 +301,44 @@ def rename_chat_session(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
-    name = rename_req.name
-    chat_session_id = rename_req.chat_session_id
-    user_id = user.id if user is not None else None
+    # name = rename_req.name
+    # chat_session_id = rename_req.chat_session_id
+    # user_id = user.id if user is not None else None
 
-    if name:
-        update_chat_session(
-            db_session=db_session,
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-            description=name,
-        )
-        return RenameChatSessionResponse(new_name=name)
+    # if name:
+    #     update_chat_session(
+    #         db_session=db_session,
+    #         user_id=user_id,
+    #         chat_session_id=chat_session_id,
+    #         description=name,
+    #     )
+    #     return RenameChatSessionResponse(new_name=name)
 
-    final_msg, history_msgs = create_chat_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
-    full_history = history_msgs + [final_msg]
+    # final_msg, history_msgs = create_chat_chain(
+    #     chat_session_id=chat_session_id, db_session=db_session
+    # )
+    # full_history = history_msgs + [final_msg]
 
-    try:
-        llm, _ = get_default_llms(
-            additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
-            )
-        )
-    except GenAIDisabledException:
-        # This may be longer than what the LLM tends to produce but is the most
-        # clear thing we can do
-        return RenameChatSessionResponse(new_name=full_history[0].message)
+    # try:
+    #     llm, _ = get_default_llms(
+    #         additional_headers=extract_headers(
+    #             request.headers, LITELLM_PASS_THROUGH_HEADERS
+    #         )
+    #     )
+    # except GenAIDisabledException:
+    #     # This may be longer than what the LLM tends to produce but is the most
+    #     # clear thing we can do
+    #     return RenameChatSessionResponse(new_name=full_history[0].message)
 
-    new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
+    # new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
 
-    update_chat_session(
-        db_session=db_session,
-        user_id=user_id,
-        chat_session_id=chat_session_id,
-        description=new_name,
-    )
-
-    return RenameChatSessionResponse(new_name=new_name)
+    # update_chat_session(
+    #     db_session=db_session,
+    #     user_id=user_id,
+    #     chat_session_id=chat_session_id,
+    #     description=new_name,
+    # )
+    return RenameChatSessionResponse(new_name="hi")
 
 
 @router.patch("/chat-session/{session_id}")

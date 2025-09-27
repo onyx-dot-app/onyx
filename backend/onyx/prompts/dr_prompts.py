@@ -1160,7 +1160,7 @@ ANSWER:
 
 
 GET_CLARIFICATION_PROMPT = PromptTemplate(
-    f"""\
+    """\
 You are great at asking clarifying questions in case \
 a base question is not as clear enough. Your task is to ask necessary clarification \
 questions to the user, before the question is sent to the deep research agent.
@@ -1182,17 +1182,6 @@ In case the knowledge graph is used, here is the description of the entity and r
 
 The tools and the entity and relationship types in the knowledge graph are simply provided \
 as context for determining whether the question requires clarification.
-
-Here is the question the user asked:
-{SEPARATOR_LINE}
----question---
-{SEPARATOR_LINE}
-
-Here is the previous chat history (if any), which may contain relevant information \
-to answer the question:
-{SEPARATOR_LINE}
----chat_history_string---
-{SEPARATOR_LINE}
 
 NOTES:
   - you have to reason over this purely based on your intrinsic knowledge.
