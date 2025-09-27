@@ -526,6 +526,14 @@ export const connectorConfigs: Record<
           "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
       },
       {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
         type: "tab",
         name: "indexing_scope",
         label: "How Should We Index Your Confluence?",
@@ -615,6 +623,14 @@ export const connectorConfigs: Record<
         optional: false,
         description:
           "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
       },
       {
         type: "tab",

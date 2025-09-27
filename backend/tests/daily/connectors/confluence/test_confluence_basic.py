@@ -35,6 +35,29 @@ def confluence_connector(space: str) -> ConfluenceConnector:
     return connector
 
 
+@pytest.fixture
+def confluence_connector_scoped(space: str) -> ConfluenceConnector:
+    connector = ConfluenceConnector(
+        wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
+        space=space,
+        is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
+        page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
+        scoped_token=True,
+    )
+
+    credentials_provider = OnyxStaticCredentialsProvider(
+        None,
+        DocumentSource.CONFLUENCE,
+        {
+            "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
+            # Use a SCOPED token env var for this test
+            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"],
+        },
+    )
+    connector.set_credentials_provider(credentials_provider)
+    return connector
+
+
 @pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
@@ -43,6 +66,21 @@ def confluence_connector(space: str) -> ConfluenceConnector:
 def test_confluence_connector_basic(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
+    _test_confluence_connector_basic(confluence_connector)
+
+
+@pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_confluence_connector_basic_scoped(
+    mock_get_api_key: MagicMock, confluence_connector_scoped: ConfluenceConnector
+) -> None:
+    _test_confluence_connector_basic(confluence_connector_scoped)
+
+
+def _test_confluence_connector_basic(confluence_connector: ConfluenceConnector) -> None:
     confluence_connector.set_allow_images(False)
     doc_batch = load_all_docs_from_checkpoint_connector(
         confluence_connector, 0, time.time()

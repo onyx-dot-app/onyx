@@ -372,6 +372,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
+        scoped_token: bool = False,
     ) -> None:
         self.batch_size = batch_size
         self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
@@ -379,7 +380,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
-
+        self.scoped_token = scoped_token
         self._jira_client: JIRA | None = None
 
     @property
@@ -403,6 +404,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,
+            scoped_token=self.scoped_token,
         )
         return None
 

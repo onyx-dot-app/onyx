@@ -10,6 +10,7 @@ from jira.resources import CustomFieldOption
 from jira.resources import Issue
 from jira.resources import User
 
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.logger import setup_logger
 
@@ -78,7 +79,11 @@ def build_jira_url(jira_client: JIRA, issue_key: str) -> str:
     return f"{jira_client.client_info()}/browse/{issue_key}"
 
 
-def build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
+def build_jira_client(
+    credentials: dict[str, Any], jira_base: str, scoped_token: bool = False
+) -> JIRA:
+
+    jira_base = scoped_url(jira_base, "jira") if scoped_token else jira_base
     api_token = credentials["jira_api_token"]
     # if user provide an email we assume it's cloud
     if "jira_user_email" in credentials:

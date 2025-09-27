@@ -27,6 +27,23 @@ def jira_connector() -> JiraConnector:
 
 
 @pytest.fixture
+def jira_connector_scoped() -> JiraConnector:
+    connector = JiraConnector(
+        jira_base_url="https://danswerai.atlassian.net",
+        project_key="AS",
+        comment_email_blacklist=[],
+        scoped_token=True,
+    )
+    connector.load_credentials(
+        {
+            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
+            "jira_api_token": os.environ["JIRA_API_TOKEN_SCOPED"],
+        }
+    )
+    return connector
+
+
+@pytest.fixture
 def jira_connector_with_jql() -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
@@ -47,6 +64,20 @@ def jira_connector_with_jql() -> JiraConnector:
     return_value=None,
 )
 def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> None:
+    _test_jira_connector_basic(jira_connector)
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_jira_connector_basic_scoped(
+    reset: None, jira_connector_scoped: JiraConnector
+) -> None:
+    _test_jira_connector_basic(jira_connector_scoped)
+
+
+def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector,
         start=0,
