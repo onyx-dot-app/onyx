@@ -55,7 +55,14 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
@@ -446,8 +453,35 @@ export function AssistantEditor({
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [collapsedServers, setCollapsedServers] = useState<Set<number>>(
-    new Set()
+    () => new Set(Object.keys(mcpToolsByServer).map((id) => parseInt(id, 10)))
   );
+  const seenServerIdsRef = useRef<Set<number>>(
+    new Set(Object.keys(mcpToolsByServer).map((id) => parseInt(id, 10)))
+  );
+
+  useEffect(() => {
+    const serverIds = Object.keys(mcpToolsByServer).map((id) =>
+      parseInt(id, 10)
+    );
+
+    const unseenIds = serverIds.filter(
+      (id) => !seenServerIdsRef.current.has(id)
+    );
+
+    if (unseenIds.length === 0) {
+      return;
+    }
+
+    const updatedSeen = new Set(seenServerIdsRef.current);
+    unseenIds.forEach((id) => updatedSeen.add(id));
+    seenServerIdsRef.current = updatedSeen;
+
+    setCollapsedServers((prev) => {
+      const next = new Set(prev);
+      unseenIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [mcpToolsByServer]);
 
   const { data: userGroups } = useUserGroups();
 
@@ -1321,7 +1355,8 @@ export function AssistantEditor({
                                 (server) => server.id === serverIdNum
                               ) || null;
                             const isCollapsed =
-                              collapsedServers.has(serverIdNum);
+                              collapsedServers.has(serverIdNum) ||
+                              !seenServerIdsRef.current.has(serverIdNum);
 
                             // Extract server name from tool name (format: "server_name_tool_name")
                             const firstTool = serverTools[0];

@@ -707,9 +707,9 @@ export const BooleanFormField = memo(function BooleanFormField({
       <div className="flex items-center text-sm">
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <FastField name={name} type="checkbox">
-                {({ field, form }: any) => (
+            <FastField name={name} type="checkbox">
+              {({ field, form }: any) => (
+                <TooltipTrigger asChild>
                   <Checkbox
                     id={checkboxId}
                     size="sm"
@@ -722,9 +722,9 @@ export const BooleanFormField = memo(function BooleanFormField({
                       if (onChange) onChange(checked === true);
                     }}
                   />
-                )}
-              </FastField>
-            </TooltipTrigger>
+                </TooltipTrigger>
+              )}
+            </FastField>
             {disabled && disabledTooltip && (
               <TooltipContent side="top" align="center">
                 <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
