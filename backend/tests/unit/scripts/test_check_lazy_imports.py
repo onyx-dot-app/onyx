@@ -7,6 +7,7 @@ import pytest
 from scripts.check_lazy_imports import EagerImportResult
 from scripts.check_lazy_imports import find_eager_imports
 from scripts.check_lazy_imports import find_python_files
+from scripts.check_lazy_imports import LazyImportSettings
 from scripts.check_lazy_imports import main
 
 
@@ -254,7 +255,13 @@ def use_nltk():
 
     with patch("scripts.check_lazy_imports.__file__", str(script_path)):
         # Should not raise an exception since all imports are inside functions
-        main({"vertexai", "playwright", "nltk"})
+        main(
+            {
+                "vertexai": LazyImportSettings(),
+                "playwright": LazyImportSettings(),
+                "nltk": LazyImportSettings(),
+            }
+        )
 
 
 def test_main_function_with_violations(tmp_path: Path) -> None:
@@ -283,7 +290,13 @@ from playwright.sync_api import sync_playwright
             RuntimeError,
             match="Found eager imports of .+\\. You must import them only when needed",
         ):
-            main({"vertexai", "playwright", "nltk"})
+            main(
+                {
+                    "vertexai": LazyImportSettings(),
+                    "playwright": LazyImportSettings(),
+                    "nltk": LazyImportSettings(),
+                }
+            )
 
 
 def test_main_function_specific_modules_only() -> None:
@@ -396,8 +409,8 @@ def test_find_python_files_basic() -> None:
         tests_dir.mkdir()
         (tests_dir / "test_something.py").write_text("import os")  # Should be excluded
 
-        # Test with no ignore directories
-        files = find_python_files(backend_dir, set())
+        # Test - find_python_files no longer takes ignore directories parameter
+        files = find_python_files(backend_dir)
         file_names = [f.name for f in files]
 
         assert "normal.py" in file_names
@@ -409,58 +422,58 @@ def test_find_python_files_basic() -> None:
         )  # One in root, one in subdir
 
 
-def test_find_python_files_ignore_directories() -> None:
-    """Test finding Python files with ignored directories."""
+def test_find_python_files_ignore_venv_directories() -> None:
+    """Test that find_python_files automatically ignores virtual environment directories."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         backend_dir = Path(tmp_dir)
 
         # Create files in various directories
         (backend_dir / "normal.py").write_text("import os")
 
-        model_server_dir = backend_dir / "model_server"
-        model_server_dir.mkdir()
-        (model_server_dir / "model.py").write_text(
+        # Create venv directory (should be automatically ignored)
+        venv_dir = backend_dir / "venv"
+        venv_dir.mkdir()
+        (venv_dir / "venv_file.py").write_text(
             "import transformers"
         )  # Should be excluded
 
-        ignored_dir = backend_dir / "ignored"
-        ignored_dir.mkdir()
-        (ignored_dir / "should_be_ignored.py").write_text(
+        # Create .venv directory (should be automatically ignored)
+        dot_venv_dir = backend_dir / ".venv"
+        dot_venv_dir.mkdir()
+        (dot_venv_dir / "should_be_ignored.py").write_text(
             "import vertexai"
         )  # Should be excluded
 
-        # Create a file with ignored directory name in filename (should be included)
-        (backend_dir / "model_server_utils.py").write_text("import os")
+        # Create a file with venv in filename (should be included)
+        (backend_dir / "venv_utils.py").write_text("import os")
 
-        # Test with ignore directories
-        files = find_python_files(backend_dir, {"model_server", "ignored"})
+        # Test - venv directories are automatically ignored
+        files = find_python_files(backend_dir)
         file_names = [f.name for f in files]
 
         assert "normal.py" in file_names
-        assert (
-            "model.py" not in file_names
-        )  # Excluded because in model_server directory
+        assert "venv_file.py" not in file_names  # Excluded because in venv directory
         assert (
             "should_be_ignored.py" not in file_names
-        )  # Excluded because in ignored directory
+        )  # Excluded because in .venv directory
         assert (
-            "model_server_utils.py" in file_names
+            "venv_utils.py" in file_names
         )  # Included because not in directory, just filename
 
 
-def test_find_python_files_nested_ignore() -> None:
-    """Test that ignored directories work with nested paths."""
+def test_find_python_files_nested_venv() -> None:
+    """Test that venv directories are ignored even when nested."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         backend_dir = Path(tmp_dir)
 
-        # Create nested structure
-        nested_path = backend_dir / "some" / "path" / "model_server" / "nested"
+        # Create nested structure with venv
+        nested_path = backend_dir / "some" / "path" / "venv" / "nested"
         nested_path.mkdir(parents=True)
-        (nested_path / "deep_model.py").write_text("import transformers")
+        (nested_path / "deep_venv.py").write_text("import transformers")
 
-        files = find_python_files(backend_dir, {"model_server"})
+        files = find_python_files(backend_dir)
 
-        # Should exclude the deeply nested file
+        # Should exclude the deeply nested file in venv
         assert len(files) == 0
 
 

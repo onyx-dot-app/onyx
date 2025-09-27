@@ -89,6 +89,7 @@ from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
@@ -1270,8 +1271,6 @@ def _docprocessing_task(
     tenant_id: str,
     batch_num: int,
 ) -> None:
-    from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-
     start_time = time.monotonic()
 
     if tenant_id:

@@ -3,6 +3,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict
 from typing import List
 from typing import Set
 
@@ -15,7 +16,23 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-_MODULES_TO_LAZY_IMPORT = {"vertexai", "openai", "markitdown", "tiktoken"}
+
+@dataclass
+class LazyImportSettings:
+    """Settings for which files to ignore when checking for lazy imports."""
+
+    ignore_files: Set[str] | None = None
+
+
+# Map of modules to lazy import -> settings for what to ignore
+_LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
+    "vertexai": LazyImportSettings(),
+    "openai": LazyImportSettings(),
+    "markitdown": LazyImportSettings(),
+    "tiktoken": LazyImportSettings(),
+    "unstructured": LazyImportSettings(),
+    "litellm": LazyImportSettings(ignore_files={"onyx/llm/llm_provider_options.py"}),
+}
 
 
 @dataclass
@@ -88,25 +105,19 @@ def find_eager_imports(
     )
 
 
-def find_python_files(
-    backend_dir: Path, ignore_directories: Set[str] | None = None
-) -> List[Path]:
+def find_python_files(backend_dir: Path) -> List[Path]:
     """
-    Find all Python files in the backend directory, excluding test files and ignored directories.
+    Find all Python files in the backend directory, excluding test files.
 
     Args:
         backend_dir: Path to the backend directory to search
-        ignore_directories: Set of directory names to ignore (e.g., {"model_server", "tests"})
 
     Returns:
         List of Python file paths to check
     """
-    if ignore_directories is None:
-        ignore_directories = set()
 
     # Always ignore virtual environment directories
-    venv_dirs = {".venv", "venv", ".env", "env", "__pycache__"}
-    ignore_directories = ignore_directories.union(venv_dirs)
+    ignore_directories = {".venv", "venv", ".env", "env", "__pycache__"}
 
     python_files = []
     for file_path in backend_dir.glob("**/*.py"):
@@ -119,8 +130,8 @@ def find_python_files(
         ):
             continue
 
-        # Skip ignored directories (check directory names, not file names)
-        if any(ignored_dir in path_parts[:-1] for ignored_dir in ignore_directories):
+        # Skip ignored directories
+        if any(ignored_dir in path_parts for ignored_dir in ignore_directories):
             continue
 
         python_files.append(file_path)
@@ -128,24 +139,58 @@ def find_python_files(
     return python_files
 
 
-def main(
-    modules_to_lazy_import: Set[str], directories_to_ignore: Set[str] | None = None
-) -> None:
+def should_check_file_for_module(
+    file_path: Path, backend_dir: Path, settings: LazyImportSettings
+) -> bool:
+    """
+    Check if a file should be checked for a specific module's imports.
+
+    Args:
+        file_path: Path to the file to check
+        backend_dir: Path to the backend directory
+        settings: Settings containing files to ignore for this module
+
+    Returns:
+        True if the file should be checked, False if it should be ignored
+    """
+    if not settings.ignore_files:
+        # Empty set means check everywhere
+        return True
+
+    # Get relative path from backend directory
+    rel_path = file_path.relative_to(backend_dir)
+    rel_path_str = str(rel_path)
+
+    # Check if this specific file path is in the ignore list
+    return rel_path_str not in settings.ignore_files
+
+
+def main(modules_to_lazy_import: Dict[str, LazyImportSettings]) -> None:
     backend_dir = Path(__file__).parent.parent  # Go up from scripts/ to backend/
 
     logger.info(
-        f"Checking for direct imports of lazy modules: {', '.join(modules_to_lazy_import)}"
+        f"Checking for direct imports of lazy modules: {', '.join(modules_to_lazy_import.keys())}"
     )
 
     # Find all Python files to check
-    target_python_files = find_python_files(backend_dir, directories_to_ignore)
+    target_python_files = find_python_files(backend_dir)
 
     violations_found = False
     all_violated_modules = set()
 
-    # Check each Python file
+    # Check each Python file for each module with its specific ignore directories
     for file_path in target_python_files:
-        result = find_eager_imports(file_path, modules_to_lazy_import)
+        # Determine which modules should be checked for this file
+        modules_to_check = set()
+        for module_name, settings in modules_to_lazy_import.items():
+            if should_check_file_for_module(file_path, backend_dir, settings):
+                modules_to_check.add(module_name)
+
+        if not modules_to_check:
+            # This file is ignored for all modules
+            continue
+
+        result = find_eager_imports(file_path, modules_to_check)
 
         if result.violation_lines:
             violations_found = True
@@ -159,7 +204,7 @@ def main(
             # Suggest fix only for violated modules
             if result.violated_modules:
                 logger.error(
-                    f"  💡 You must import {', '.join(sorted(result.violated_modules))} only within functions when needed"
+                    f"  💡 You must lazy import {', '.join(sorted(result.violated_modules))} within functions when needed"
                 )
 
     if violations_found:
@@ -173,7 +218,7 @@ def main(
 
 if __name__ == "__main__":
     try:
-        main(_MODULES_TO_LAZY_IMPORT)
+        main(_LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS)
         sys.exit(0)
     except RuntimeError:
         sys.exit(1)

@@ -2,7 +2,6 @@ from typing import Any
 from typing import cast
 from typing import IO
 
-from unstructured.staging.base import dict_to_elements
 from unstructured_client import UnstructuredClient  # type: ignore
 from unstructured_client.models import operations  # type: ignore
 from unstructured_client.models import shared
@@ -52,6 +51,8 @@ def _sdk_partition_request(
 
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
+    from unstructured.staging.base import dict_to_elements
+
     logger.debug(f"Starting to read file: {file_name}")
     req = _sdk_partition_request(file, file_name, strategy="fast")
 

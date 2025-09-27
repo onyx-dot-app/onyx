@@ -28,6 +28,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
@@ -101,7 +102,6 @@ def _get_connector_runner(
     are the complete list of existing documents of the connector. If the task
     of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
     """
-    from onyx.connectors.factory import instantiate_connector
 
     task = attempt.connector_credential_pair.connector.input_type
 

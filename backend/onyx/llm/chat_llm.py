@@ -5,8 +5,8 @@ from collections.abc import Iterator
 from collections.abc import Sequence
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 
-import litellm  # type: ignore
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -24,9 +24,7 @@ from langchain_core.messages import SystemMessageChunk
 from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
-from litellm.utils import get_supported_openai_params
 
-from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
@@ -35,6 +33,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.get_litellm import configure_litellm
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -45,13 +44,9 @@ from onyx.utils.long_term_log import LongTermLogger
 
 logger = setup_logger()
 
-# If a user configures a different model and it doesn't support all the same
-# parameters like frequency and presence, just ignore them
-litellm.drop_params = True
-litellm.telemetry = False
+if TYPE_CHECKING:
+    import litellm
 
-if BRAINTRUST_ENABLED:
-    litellm.callbacks = ["braintrust"]
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
@@ -85,8 +80,11 @@ def _base_msg_to_role(msg: BaseMessage) -> str:
 
 
 def _convert_litellm_message_to_langchain_message(
-    litellm_message: litellm.Message,
+    litellm_message: "litellm.Message",
 ) -> BaseMessage:
+    configure_litellm()
+    import litellm
+
     # Extracting the basic attributes from the litellm message
     content = litellm_message.content or ""
     role = litellm_message.role
@@ -176,15 +174,16 @@ def _convert_delta_to_message_chunk(
     curr_msg: BaseMessage | None,
     stop_reason: str | None = None,
 ) -> BaseMessageChunk:
+    configure_litellm()
+    from litellm.utils import ChatCompletionDeltaToolCall
+
     """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
     role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else "unknown")
     content = _dict.get("content") or ""
     additional_kwargs = {}
     if _dict.get("function_call"):
         additional_kwargs.update({"function_call": dict(_dict["function_call"])})
-    tool_calls = cast(
-        list[litellm.utils.ChatCompletionDeltaToolCall] | None, _dict.get("tool_calls")
-    )
+    tool_calls = cast(list[ChatCompletionDeltaToolCall] | None, _dict.get("tool_calls"))
 
     if role == "user":
         return HumanMessageChunk(content=content)
@@ -321,6 +320,9 @@ class DefaultMultiLLM(LLM):
 
         self._max_token_param = LEGACY_MAX_TOKENS_KWARG
         try:
+            configure_litellm()
+            from litellm.utils import get_supported_openai_params
+
             params = get_supported_openai_params(model_name, model_provider)
             if STANDARD_MAX_TOKENS_KWARG in (params or []):
                 self._max_token_param = STANDARD_MAX_TOKENS_KWARG
@@ -388,13 +390,16 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
+    ) -> Any:  # Returns Union[litellm.ModelResponse, litellm.CustomStreamWrapper]
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
         try:
+            configure_litellm()
+            import litellm
+
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
@@ -448,10 +453,10 @@ class DefaultMultiLLM(LLM):
         except Exception as e:
             self._record_error(processed_prompt, e)
             # for break pointing
-            if isinstance(e, litellm.Timeout):
+            if type(e).__name__ == "Timeout":
                 raise LLMTimeoutError(e)
 
-            elif isinstance(e, litellm.RateLimitError):
+            elif type(e).__name__ == "RateLimitError":
                 raise LLMRateLimitError(e)
 
             raise e
@@ -485,11 +490,13 @@ class DefaultMultiLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> BaseMessage:
+        configure_litellm()
+
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
         response = cast(
-            litellm.ModelResponse,
+            Any,  # litellm.ModelResponse
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -518,6 +525,8 @@ class DefaultMultiLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
+        configure_litellm()
+
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
@@ -534,7 +543,7 @@ class DefaultMultiLLM(LLM):
 
         output = None
         response = cast(
-            litellm.CustomStreamWrapper,
+            Any,  # litellm.CustomStreamWrapper
             self._completion(
                 prompt=prompt,
                 tools=tools,
