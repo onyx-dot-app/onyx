@@ -43,7 +43,7 @@ repos:
         name: Check lazy imports are not directly imported
         entry: python3 backend/scripts/check_lazy_imports.py
         language: system
-        files: ^backend/.*\.py$
+        files: ^backend/(?!\.venv/).*\.py$
         pass_filenames: false
 
   # We would like to have a mypy pre-commit hook, but due to the fact that
