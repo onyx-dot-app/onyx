@@ -1307,6 +1307,8 @@ export const OutlineIcon = ({
   />
 );
 
+export const GithubPagesIcon = GithubIcon;
+
 export const ConfluenceIcon = ({
   size = 16,
   className = defaultTailwindCSS,
