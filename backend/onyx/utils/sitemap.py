@@ -1,3 +1,4 @@
+import gzip
 import re
 import xml.etree.ElementTree as ET
 from typing import Set
@@ -34,7 +35,30 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
         if resp.status_code != 200:
             return urls
 
-        root = ET.fromstring(resp.content)
+        content_to_parse = resp.content
+
+        # Check if the URL ends with .gz. If so, attempt to decompress.
+        # requests usually handles Content-Encoding: gzip automatically,
+        # but if the server doesn't send that header for .gz files,
+        # we need to decompress manually.
+        if sitemap_url.endswith(".gz"):
+            try:
+                # Attempt to decompress the content
+                decompressed_content = gzip.decompress(resp.content)
+                content_to_parse = decompressed_content
+                logger.info(f"Successfully decompressed gzipped sitemap: {sitemap_url}")
+            except gzip.BadGzipFile:
+                # If it's not a valid gzip file (e.g., already decompressed by requests,
+                # or corrupted), log a warning and proceed with the original content.
+                logger.warning(
+                    f"Sitemap {sitemap_url} ends with .gz but is not a valid gzip file. Attempting to parse as-is."
+                )
+            except Exception as de_e:
+                logger.warning(
+                    f"Unexpected error during gzip decompression for {sitemap_url}: {de_e}. Proceeding with original content."
+                )
+
+        root = ET.fromstring(content_to_parse)
 
         # Handle both regular sitemaps and sitemap indexes
         # Remove namespace for easier parsing
