@@ -954,6 +954,33 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "ai21.jamba-instruct-v1:0": "Jamba Instruct",
   "ai21.j2-ultra-v1": "J2 Ultra",
   "ai21.j2-mid-v1": "J2 Mid",
+
+  // Ollama default models
+  // These can be directly served from the Ollama CLI
+  // User may also add arbitrary open source models
+  "llama3.2": "Llama 3.2",
+  "llama3.2:1b": "Llama 3.2 1B",
+  "llama3.2:3b": "Llama 3.2 3B",
+  "llama3.2:11b": "Llama 3.2 11B",
+  "llama3.2:90b": "Llama 3.2 90B",
+  "llama3.1": "Llama 3.1",
+  "llama3.1:8b": "Llama 3.1 8B",
+  "llama3.1:70b": "Llama 3.1 70B",
+  llama3: "Llama 3",
+  "llama3:8b": "Llama 3 8B",
+  "llama3:70b": "Llama 3 70B",
+  phi3: "Phi-3",
+  "phi3:mini": "Phi-3 Mini",
+  "phi3:medium": "Phi-3 Medium",
+  "phi3:medium-4k": "Phi-3 Medium 4K",
+  "phi3:medium-128k": "Phi-3 Medium 128K",
+  "mistral-small": "Mistral Small",
+  "mistral-large": "Mistral Large",
+  "mistral-nemo": "Mistral Nemo",
+  "smollm2:135m": "SmolLM2 135M",
+  "smollm2:360m": "SmolLM2 360M",
+  "qwen2.5:3b": "Qwen 2.5 3B",
+  "qwen2.5:7b": "Qwen 2.5 7B",
 };
 
 export function getDisplayNameForModel(modelName: string): string {
@@ -992,6 +1019,7 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "anthropic.claude-3-7-sonnet-20250219-v1:0",
   ],
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
+  ollama: ["llama3.2", "phi3:mini", "mistral-small"],
 };
 
 // Get source metadata for configured sources - deduplicated by source type
