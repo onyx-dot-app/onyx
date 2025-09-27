@@ -1,7 +1,7 @@
 """add_mcp_auth_performer
 
 Revision ID: b30353be4eec
-Revises: 505c488f6662
+Revises: 2b75d0a8ffcb
 Create Date: 2025-09-13 14:58:08.413534
 
 """
@@ -13,12 +13,13 @@ from onyx.db.enums import MCPAuthenticationPerformer, MCPTransport
 
 # revision identifiers, used by Alembic.
 revision = "b30353be4eec"
-down_revision = "505c488f6662"
+down_revision = "2b75d0a8ffcb"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
+    """moving to a better way of handling auth performer and transport"""
     # Add nullable column first for backward compatibility
     op.add_column(
         "mcp_server",
@@ -117,5 +118,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """remove cols"""
     op.drop_column("mcp_server", "transport")
     op.drop_column("mcp_server", "auth_performer")
