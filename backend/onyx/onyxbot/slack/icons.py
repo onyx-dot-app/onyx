@@ -23,6 +23,8 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Confluence.png"
     if source == DocumentSource.JIRA.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Jira.png"
+    if source == DocumentSource.JIRA_SERVICE_MANAGEMENT.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/JiraServiceManagement.png"
     if source == DocumentSource.NOTION.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Notion.png"
     if source == DocumentSource.ZENDESK.value:
