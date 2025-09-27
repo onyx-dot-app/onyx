@@ -99,6 +99,11 @@ def _format_tool_name(tool_name: str) -> str:
     return name.upper()
 
 
+def _is_kg_tool_available(available_tools: dict[str, OrchestratorTool]) -> bool:
+    """Check if the Knowledge Graph tool is available in the provided tools."""
+    return DRPath.KNOWLEDGE_GRAPH.value in available_tools
+
+
 def _get_available_tools(
     db_session: Session,
     graph_config: GraphConfig,
@@ -441,7 +446,8 @@ def clarifier(
     )
 
     kg_config = get_kg_config_settings()
-    if kg_config.KG_ENABLED and kg_config.KG_EXPOSED:
+    kg_tool_used = _is_kg_tool_available(available_tools)
+    if kg_config.KG_ENABLED and kg_config.KG_EXPOSED and kg_tool_used:
         all_entity_types = get_entity_types_str(active=True)
         all_relationship_types = get_relationship_types_str(active=True)
     else:
@@ -891,4 +897,6 @@ def clarifier(
         assistant_task_prompt=assistant_task_prompt,
         uploaded_test_context=uploaded_text_context,
         uploaded_image_context=uploaded_image_context,
+        all_entity_types=all_entity_types,
+        all_relationship_types=all_relationship_types,
     )
