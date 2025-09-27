@@ -32,6 +32,7 @@ export enum UserRole {
   GLOBAL_CURATOR = "global_curator",
   EXT_PERM_USER = "ext_perm_user",
   SLACK_USER = "slack_user",
+  API_KEY = "api_key",
 }
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
@@ -42,6 +43,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.LIMITED]: "Limited",
   [UserRole.EXT_PERM_USER]: "External Permissioned User",
   [UserRole.SLACK_USER]: "Slack User",
+  [UserRole.API_KEY]: "API Key",
 };
 
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
