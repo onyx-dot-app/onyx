@@ -87,6 +87,11 @@ export interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
+export interface JiraServiceManagementCredentialJson {
+  jira_service_management_email: string | null;
+  jira_service_management_api_token: string;
+}
+
 export interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -295,6 +300,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   } as JiraCredentialJson,
+  jira_service_management: {
+    jira_service_management_email: null,
+    jira_service_management_api_token: "",
+  } as JiraServiceManagementCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
@@ -491,6 +500,12 @@ export const credentialDisplayNames: Record<string, string> = {
   // Jira
   jira_user_email: "Jira User Email (required for Jira Cloud)",
   jira_api_token: "API or Personal Access Token",
+
+  // Jira Service Management
+  jira_service_management_email:
+    "Jira Service Management User Email (required for Jira Cloud)",
+  jira_service_management_api_token:
+    "Jira Service Management API or Personal Access Token",
 
   // Productboard
   productboard_access_token: "Productboard Access Token",

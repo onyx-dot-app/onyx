@@ -18,6 +18,7 @@ import {
   GuruIcon,
   HubSpotIcon,
   JiraIcon,
+  JiraServiceManagementIcon,
   LinearIcon,
   LoopioIcon,
   NotionIcon,
@@ -227,6 +228,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: "https://docs.onyx.app/admin/connectors/official/jira",
     isPopular: true,
+  },
+  jira_service_management: {
+    icon: JiraServiceManagementIcon,
+    displayName: "Jira SM",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: "https://docs.onyx.app/admin/connectors/official/jira_service_management",
   },
   zendesk: {
     icon: ZendeskIcon,
