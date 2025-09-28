@@ -156,10 +156,10 @@ if __name__ == "__main__":
     audience = os.getenv("MCP_OAUTH_AUDIENCE", "api://mcp")
     issuer = os.getenv(
         "MCP_OAUTH_ISSUER",
-        "https://test-domain.okta.com/oauth2/default?auth_url_override=https://dev-26633277.okta.com/oauth2/ausq8k7axgumoIoLX5d7/v1/authorize",
+        "https://test-domain.okta.com/oauth2/default?well_known_override=https://test-domain.okta.com/oauth2/<as_id>/.well-known/oauth-authorization-server",
     )  # NOTE: the mcp client library currently tries the root discovery url before
-    # falling back to the one actually used by Okta. uncomment this if your Idp has discovery urls
-    # with the well-known part after path elements (or just doesn't have path elements)
+    # falling back to the one actually used by Okta. Our client code lets you specify this well_known_override
+    # for Okta and other Idps that use these discovery urls.
 
     # issuer = os.getenv("MCP_OAUTH_ISSUER", "https://test-domain.okta.com/.well-known/oauth-authorization-server?issuer=https://test-domain.okta.com/oauth2/<auth_server_id>")
     jwks_uri = os.getenv(
