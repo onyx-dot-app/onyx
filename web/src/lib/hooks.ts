@@ -956,32 +956,38 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "ai21.j2-ultra-v1": "J2 Ultra",
   "ai21.j2-mid-v1": "J2 Mid",
 
-  // Ollama default models
-  // These can be directly served from the Ollama CLI
-  // User may also add arbitrary open source models
-  "llama3.2": "Llama 3.2",
-  "llama3.2:1b": "Llama 3.2 1B",
-  "llama3.2:3b": "Llama 3.2 3B",
-  "llama3.2:11b": "Llama 3.2 11B",
-  "llama3.2:90b": "Llama 3.2 90B",
-  "llama3.1": "Llama 3.1",
-  "llama3.1:8b": "Llama 3.1 8B",
-  "llama3.1:70b": "Llama 3.1 70B",
+  // Ollama cloud models
+  "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
+  "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
+  "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
+  "qwen3-coder:480b-cloud": "Qwen3-Coder 480B Cloud",
+
+  // Ollama models in litellm map (disjoint from ollama's supported model list)
+  // https://models.litellm.ai --> provider ollama
+  codegeex4: "CodeGeeX 4",
+  codegemma: "CodeGemma",
+  codellama: "CodeLLama",
+  "deepseek-coder-v2-base": "DeepSeek-Coder-v2 Base",
+  "deepseek-coder-v2-instruct": "DeepSeek-Coder-v2 Instruct",
+  "deepseek-coder-v2-lite-base": "DeepSeek-Coder-v2 Lite Base",
+  "deepseek-coder-v2-lite-instruct": "DeepSeek-Coder-v2 Lite Instruct",
+  "internlm2_5-20b-chat": "InternLM 2.5 20B Chat",
+  llama2: "Llama 2",
+  "llama2-uncensored": "Llama 2 Uncensored",
+  "llama2:13b": "Llama 2 13B",
+  "llama2:70b": "Llama 2 70B",
+  "llama2:7b": "Llama 2 7B",
   llama3: "Llama 3",
-  "llama3:8b": "Llama 3 8B",
   "llama3:70b": "Llama 3 70B",
-  phi3: "Phi-3",
-  "phi3:mini": "Phi-3 Mini",
-  "phi3:medium": "Phi-3 Medium",
-  "phi3:medium-4k": "Phi-3 Medium 4K",
-  "phi3:medium-128k": "Phi-3 Medium 128K",
-  "mistral-small": "Mistral Small",
-  "mistral-large": "Mistral Large",
-  "mistral-nemo": "Mistral Nemo",
-  "smollm2:135m": "SmolLM2 135M",
-  "smollm2:360m": "SmolLM2 360M",
-  "qwen2.5:3b": "Qwen 2.5 3B",
-  "qwen2.5:7b": "Qwen 2.5 7B",
+  "llama3:8b": "Llama 3 8B",
+  mistral: "Mistral", // Mistral 7b
+  "mistral-7B-Instruct-v0.1": "Mistral 7B Instruct v0.1",
+  "mistral-7B-Instruct-v0.2": "Mistral 7B Instruct v0.2",
+  "mistral-large-instruct-2407": "Mistral Large Instruct 24.07",
+  "mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B Instruct v0.1",
+  "mixtral8x7B-Instruct-v0.1": "Mixtral 8x7B Instruct v0.1",
+  "orca-mini": "Orca Mini",
+  vicuna: "Vicuna",
 };
 
 export function getDisplayNameForModel(modelName: string): string {
