@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Search, Loader2, Trash2, Eye } from "lucide-react";
+import { Search, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "../../projects/ProjectsContext";
 import { formatRelativeTime } from "../projects/project_utils";
@@ -12,7 +12,7 @@ import {
   FileUploadIcon,
   ImageIcon as ImageFileIcon,
 } from "@/components/icons/icons";
-import { DocumentIcon } from "@/components/icons/CustomIcons";
+import { DocumentIcon, OpenInNewIcon } from "@/components/icons/CustomIcons";
 
 interface FilesListProps {
   className?: string;
@@ -101,7 +101,7 @@ export default function FilesList({
 
   return (
     <div
-      className={cn("flex flex-col gap-3 focus:outline-none w-full", className)}
+      className={cn("flex flex-col gap-2 focus:outline-none w-full", className)}
       tabIndex={-1}
       onMouseDown={(e) => {
         // Prevent parent dialog from intercepting mouse events
@@ -169,7 +169,7 @@ export default function FilesList({
           maxHeight: "588px", // ~10.5 items * 56px per item
         }}
       >
-        <ScrollArea ref={scrollAreaRef} className="h-full pr-2">
+        <ScrollArea ref={scrollAreaRef} className="h-full pr-1">
           <div className="flex flex-col">
             {filtered.map((f) => (
               <button
@@ -245,7 +245,10 @@ export default function FilesList({
                           onFileClick && onFileClick(f);
                         }}
                       >
-                        <Eye className="h-4 w-4 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200" />
+                        <OpenInNewIcon
+                          size={16}
+                          className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
+                        />
                       </button>
                     )}
                   {showRemove &&

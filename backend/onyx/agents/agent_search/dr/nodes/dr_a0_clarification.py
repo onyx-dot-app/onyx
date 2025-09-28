@@ -646,6 +646,12 @@ def clarifier(
                 system_prompt_to_use = build_citations_system_message(
                     prompt_config
                 ).content
+                if graph_config.inputs.project_instructions:
+                    system_prompt_to_use = (
+                        system_prompt_to_use
+                        + PROJECT_INSTRUCTIONS_SEPARATOR
+                        + graph_config.inputs.project_instructions
+                    )
                 user_prompt_to_use = build_citations_user_message(
                     user_query=original_question,
                     files=[],
