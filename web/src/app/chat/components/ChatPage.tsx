@@ -1256,6 +1256,7 @@ export function ChatPage({
                                 }
                                 textAreaRef={textAreaRef}
                                 setPresentingDocument={setPresentingDocument}
+                                setPopup={setPopup}
                               />
                             </div>
 
