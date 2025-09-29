@@ -200,7 +200,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name=OLLAMA_API_KEY_CONFIG_KEY,
                     display_name="Ollama API Key",
-                    description="Optional API key used when connecting to Ollama Cloud (API base must be https://ollama.com).",
+                    description="Optional API key used when connecting to Ollama Cloud (i.e. API base is https://ollama.com).",
                     is_required=False,
                     is_secret=True,
                 )

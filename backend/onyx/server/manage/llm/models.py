@@ -205,7 +205,7 @@ class OllamaModelsRequest(BaseModel):
     api_base: str
 
 
-class OllamaModelResponse(BaseModel):
+class OllamaFinalModelResponse(BaseModel):
     name: str
     max_input_tokens: int
     supports_image_input: bool

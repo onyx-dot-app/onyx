@@ -11,11 +11,7 @@ import {
   OpenAISVG,
   QwenIcon,
 } from "@/components/icons/icons";
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-  LLMProviderView,
-} from "./interfaces";
+import { WellKnownLLMProviderDescriptor, LLMProviderView } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export const getProviderIcon = (

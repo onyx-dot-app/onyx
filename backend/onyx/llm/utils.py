@@ -40,8 +40,6 @@ from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
 
-# Database imports for OLLAMA provider check
-
 
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView

@@ -43,8 +43,8 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
-from onyx.server.manage.llm.models import OllamaModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
@@ -503,7 +503,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 def get_ollama_available_models(
     request: OllamaModelsRequest,
     _: User | None = Depends(current_admin_user),
-) -> list[OllamaModelResponse]:
+) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
 
     cleaned_api_base = request.api_base.strip().rstrip("/")
@@ -519,7 +519,7 @@ def get_ollama_available_models(
             detail="No models found from your Ollama server",
         )
 
-    models_with_context_size: list[OllamaModelResponse] = []
+    all_models_with_context_size_and_vision: list[OllamaFinalModelResponse] = []
     show_url = f"{cleaned_api_base}/api/show"
 
     for model_name in model_names:
@@ -567,12 +567,12 @@ def get_ollama_available_models(
         if not supports_image_input:
             supports_image_input = False
 
-        models_with_context_size.append(
-            OllamaModelResponse(
+        all_models_with_context_size_and_vision.append(
+            OllamaFinalModelResponse(
                 name=model_name,
                 max_input_tokens=context_limit,
                 supports_image_input=supports_image_input,
             )
         )
 
-    return models_with_context_size
+    return all_models_with_context_size_and_vision

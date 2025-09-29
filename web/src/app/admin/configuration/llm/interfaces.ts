@@ -1,3 +1,5 @@
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+
 export interface CustomConfigKey {
   name: string;
   display_name: string;
@@ -77,4 +79,23 @@ export interface LLMProviderDescriptor {
   is_public: boolean;
   groups: number[];
   model_configurations: ModelConfiguration[];
+}
+
+export interface ProviderFetchModelsConfig {
+  buttonText: string;
+  loadingText: string;
+  helperText: string | React.ReactNode;
+  isDisabled: (values: any) => boolean;
+}
+
+export interface FetchModelsButtonProps {
+  llmProviderDescriptor: WellKnownLLMProviderDescriptor;
+  existingLlmProvider?: LLMProviderView;
+  values: any;
+  setFieldValue: any;
+  isFetchingModels: boolean;
+  setIsFetchingModels: (loading: boolean) => void;
+  fetchModelsError: string;
+  setFetchModelsError: (error: string) => void;
+  setPopup?: (popup: PopupSpec) => void;
 }

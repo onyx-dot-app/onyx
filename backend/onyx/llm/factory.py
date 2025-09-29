@@ -285,7 +285,7 @@ def get_llm(
 
     # NOTE: this is needed since Ollama API key is optional
     # User may access Ollama cloud via locally hosted instance (logged in)
-    # or just via the cloud API (not logged in)
+    # or just via the cloud API (not logged in, using API key)
     provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)

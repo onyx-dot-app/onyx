@@ -2,29 +2,12 @@ import { Button } from "@/components/ui/button";
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
 import { fetchModels } from "./utils";
-import { WellKnownLLMProviderDescriptor, LLMProviderView } from "./interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import {
+  ProviderFetchModelsConfig,
+  FetchModelsButtonProps,
+} from "./interfaces";
 
-interface FetchModelsButtonProps {
-  llmProviderDescriptor: WellKnownLLMProviderDescriptor;
-  existingLlmProvider?: LLMProviderView;
-  values: any;
-  setFieldValue: any;
-  isFetchingModels: boolean;
-  setIsFetchingModels: (loading: boolean) => void;
-  fetchModelsError: string;
-  setFetchModelsError: (error: string) => void;
-  setPopup?: (popup: PopupSpec) => void;
-}
-
-interface ProviderConfig {
-  buttonText: string;
-  loadingText: string;
-  helperText: string | React.ReactNode;
-  isDisabled: (values: any) => boolean;
-}
-
-const providerConfigs: Record<string, ProviderConfig> = {
+const providerConfigs: Record<string, ProviderFetchModelsConfig> = {
   bedrock: {
     buttonText: "Fetch Available Models for Region",
     loadingText: "Fetching Models...",
