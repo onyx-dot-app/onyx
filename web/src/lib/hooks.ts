@@ -1006,30 +1006,6 @@ export function getDisplayNameForModel(modelName: string): string {
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
-export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: [
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4.1",
-    "o3-mini",
-    "o1-mini",
-    "o1",
-    "o4-mini",
-    "o3",
-  ],
-  bedrock: [
-    "meta.llama3-1-70b-instruct-v1:0",
-    "meta.llama3-1-8b-instruct-v1:0",
-    "anthropic.claude-3-opus-20240229-v1:0",
-    "mistral.mistral-large-2402-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "anthropic.claude-3-7-sonnet-20250219-v1:0",
-  ],
-  anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
-  ollama: ["llama3.2", "phi3:mini", "mistral-small"],
-};
-
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
   availableSources: ValidSources[]

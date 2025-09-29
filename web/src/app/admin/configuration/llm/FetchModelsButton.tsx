@@ -3,11 +3,11 @@ import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
 import { fetchModels } from "./utils";
 import {
-  ProviderFetchModelsConfig,
+  ProviderFetchModelsButtonConfig,
   FetchModelsButtonProps,
 } from "./interfaces";
 
-const providerConfigs: Record<string, ProviderFetchModelsConfig> = {
+const providerConfigs: Record<string, ProviderFetchModelsButtonConfig> = {
   bedrock: {
     buttonText: "Fetch Available Models for Region",
     loadingText: "Fetching Models...",

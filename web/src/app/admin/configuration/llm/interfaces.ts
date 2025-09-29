@@ -16,7 +16,7 @@ export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;
-  supports_image_input: boolean;
+  supports_image_input: boolean | null;
 }
 
 export interface WellKnownLLMProviderDescriptor {
@@ -33,6 +33,7 @@ export interface WellKnownLLMProviderDescriptor {
   model_configurations: ModelConfiguration[];
   default_model: string | null;
   default_fast_model: string | null;
+  default_api_base: string | null;
   is_public: boolean;
   groups: number[];
 }
@@ -81,7 +82,7 @@ export interface LLMProviderDescriptor {
   model_configurations: ModelConfiguration[];
 }
 
-export interface ProviderFetchModelsConfig {
+export interface ProviderFetchModelsButtonConfig {
   buttonText: string;
   loadingText: string;
   helperText: string | React.ReactNode;
@@ -98,4 +99,23 @@ export interface FetchModelsButtonProps {
   fetchModelsError: string;
   setFetchModelsError: (error: string) => void;
   setPopup?: (popup: PopupSpec) => void;
+}
+
+export interface OllamaModelResponse {
+  name: string;
+  max_input_tokens: number;
+  supports_image_input: boolean;
+}
+
+export interface FetchModelsConfig<
+  TApiResponse = any,
+  TProcessedResponse = ModelConfiguration,
+> {
+  endpoint: string;
+  validationCheck: () => boolean;
+  validationError: string;
+  requestBody: () => Record<string, any>;
+  processResponse: (data: TApiResponse) => TProcessedResponse[];
+  getModelNames: (data: TApiResponse) => string[];
+  successMessage: (count: number) => string;
 }

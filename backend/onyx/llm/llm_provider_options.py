@@ -39,6 +39,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     model_configurations: list[ModelConfigurationView]
     default_model: str | None = None
     default_fast_model: str | None = None
+    default_api_base: str | None = None
     # set for providers like Azure, which require a deployment name.
     deployment_name_required: bool = False
     # set for providers like Azure, which support a single model per deployment.
@@ -210,6 +211,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             default_model=None,
             default_fast_model=None,
+            default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,

@@ -68,7 +68,8 @@ export function LLMProviderUpdateForm({
     api_key: existingLlmProvider?.api_key ?? "",
     api_base:
       existingLlmProvider?.api_base ??
-      (llmProviderDescriptor.name === "ollama" ? "http://127.0.0.1:11434" : ""),
+      llmProviderDescriptor.default_api_base ??
+      "",
     api_version: existingLlmProvider?.api_version ?? "",
     // For Azure OpenAI, combine api_base and api_version into target_uri
     target_uri:

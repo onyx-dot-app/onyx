@@ -11,7 +11,13 @@ import {
   OpenAISVG,
   QwenIcon,
 } from "@/components/icons/icons";
-import { WellKnownLLMProviderDescriptor, LLMProviderView } from "./interfaces";
+import {
+  WellKnownLLMProviderDescriptor,
+  LLMProviderView,
+  FetchModelsConfig,
+  OllamaModelResponse,
+  ModelConfiguration,
+} from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export const getProviderIcon = (
@@ -75,7 +81,7 @@ export const fetchModels = async (
   setPopup?: (popup: PopupSpec) => void
 ) => {
   // Provider-specific configurations
-  const providerConfigs = {
+  const providerConfigs: Record<string, FetchModelsConfig> = {
     bedrock: {
       endpoint: "/api/admin/llm/bedrock/available-models",
       validationCheck: () => !!values.custom_config?.AWS_REGION_NAME,
@@ -88,7 +94,7 @@ export const fetchModels = async (
           values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
         provider_name: existingLlmProvider?.name,
       }),
-      processResponse: (data: string[]) =>
+      processResponse: (data: string[]): ModelConfiguration[] =>
         data.map((modelName) => {
           const existingConfig =
             llmProviderDescriptor.model_configurations.find(
@@ -112,13 +118,7 @@ export const fetchModels = async (
       requestBody: () => ({
         api_base: values.api_base,
       }),
-      processResponse: (
-        data: {
-          name: string;
-          max_input_tokens: number;
-          supports_image_input: boolean;
-        }[]
-      ) =>
+      processResponse: (data: OllamaModelResponse[]): ModelConfiguration[] =>
         data.map((modelData) => {
           const existingConfig =
             llmProviderDescriptor.model_configurations.find(
@@ -131,13 +131,8 @@ export const fetchModels = async (
             supports_image_input: modelData.supports_image_input,
           };
         }),
-      getModelNames: (
-        data: {
-          name: string;
-          max_input_tokens: number;
-          supports_image_input: boolean;
-        }[]
-      ) => data.map((model) => model.name),
+      getModelNames: (data: OllamaModelResponse[]) =>
+        data.map((model) => model.name),
       successMessage: (count: number) =>
         `Successfully fetched ${count} models from Ollama.`,
     },
