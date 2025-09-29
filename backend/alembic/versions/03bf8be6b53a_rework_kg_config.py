@@ -63,9 +63,16 @@ def upgrade() -> None:
             "KG_BETA_PERSONA_ID": current_config_dict.get("KG_BETA_PERSONA_ID", None),
         }
     )
-    op.execute(
-        f"INSERT INTO key_value_store (key, value) VALUES ('kg_config', '{kg_config_settings}')"
-    )
+        if embedding_config:
+            conn.execute(
+                sa.text(
+                    "update knowledge_graph set config = config || :embedding_config::jsonb where id = :kg_id"
+                ),
+                {
+                    "embedding_config": json.dumps({"embedding_config": embedding_config}),
+                    "kg_id": kg_id,
+                },
+            )
 
     # drop kg config table
     op.drop_table("kg_config")
