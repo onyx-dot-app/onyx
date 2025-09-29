@@ -15,7 +15,8 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     ("/auth/oidc/callback", {"GET"}),
     # saml
     ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"GET", "POST"}),
+    ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/callback", {"GET"}),
     ("/auth/saml/logout", {"POST"}),
 ]
 
