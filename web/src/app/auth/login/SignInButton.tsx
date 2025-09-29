@@ -1,5 +1,5 @@
-import i18n from "@/i18n/init";
-import k from "./../../../i18n/keys";
+import i18n from "@/i18n/init-server";
+import k from "@/i18n/keys";
 import { AuthType } from "@/lib/constants";
 import { FaGoogle } from "react-icons/fa";
 

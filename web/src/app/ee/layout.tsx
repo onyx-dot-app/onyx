@@ -1,5 +1,5 @@
-import i18n from "@/i18n/init";
-import k from "./../../i18n/keys";
+import i18n from "@/i18n/init-server";
+import k from "@/i18n/keys";
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
 
 export default async function AdminLayout({
