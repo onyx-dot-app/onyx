@@ -100,7 +100,6 @@ export function ActionItem({
   const label = tool ? tool.display_name || tool.name : providedLabel!;
   // Generate test ID based on tool name if available
   const toolName = tool?.name || providedLabel || "";
-  console.log("toolName", toolName);
 
   return (
     <div

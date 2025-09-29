@@ -41,8 +41,6 @@ export function ToolList({
     serverId
   );
 
-  console.log(tools);
-
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
     if (values.auth_type === MCPAuthenticationType.OAUTH && !oauthConnected) {
@@ -124,7 +122,6 @@ export function ToolList({
 
       const responses = await Promise.all(promises);
       const toolResponse = await responses[0]?.json();
-      console.log(toolResponse);
 
       // Check if list-tools request failed
       if (!responses[0]?.ok) {
