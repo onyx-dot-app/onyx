@@ -13,6 +13,9 @@ from onyx.configs.app_configs import AZURE_DALLE_API_BASE
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
+from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
+from onyx.configs.app_configs import CODE_INTERPRETER_REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -55,6 +58,9 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
+)
+from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
@@ -280,6 +286,27 @@ def construct_tools(
                         additional_headers=image_generation_tool_config.additional_headers,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
+                    )
+                ]
+
+            # Handle Python Tool
+            elif tool_cls.__name__ == PythonTool.__name__:
+                if not CODE_INTERPRETER_BASE_URL:
+                    raise ValueError(
+                        "Code Interpreter base URL must be configured to use the Python tool"
+                    )
+
+                available_files = []
+                if search_tool_config and search_tool_config.latest_query_files:
+                    available_files = search_tool_config.latest_query_files
+
+                tool_dict[db_tool_model.id] = [
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        base_url=CODE_INTERPRETER_BASE_URL,
+                        default_timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+                        request_timeout_seconds=CODE_INTERPRETER_REQUEST_TIMEOUT_SECONDS,
+                        available_files=available_files,
                     )
                 ]
 

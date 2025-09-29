@@ -32,6 +32,14 @@ const isImageGenerationTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
+const isPythonTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "PythonTool" ||
+    tool.in_code_tool_id === "AnalysisTool" ||
+    tool.display_name?.toLowerCase().includes("code interpreter")
+  );
+};
+
 const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
   return (
     tool.in_code_tool_id === "KnowledgeGraphTool" ||
@@ -55,6 +63,8 @@ export function getIconForAction(
     return GlobeIcon;
   } else if (isImageGenerationTool(action)) {
     return ImageIcon;
+  } else if (isPythonTool(action)) {
+    return CpuIcon;
   } else if (isKnowledgeGraphTool(action)) {
     return DatabaseIcon;
   } else if (isOktaProfileTool(action)) {

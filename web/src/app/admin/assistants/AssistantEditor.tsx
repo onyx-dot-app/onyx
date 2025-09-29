@@ -91,6 +91,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 import {
+  PYTHON_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
@@ -115,6 +116,10 @@ function findImageGenerationTool(tools: ToolSnapshot[]) {
 
 function findWebSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
+}
+
+function findPythonTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === PYTHON_TOOL_ID);
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -219,13 +224,15 @@ export function AssistantEditor({
   const searchTool = findSearchTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const webSearchTool = findWebSearchTool(tools);
+  const pythonTool = findPythonTool(tools);
 
   // Separate MCP tools from regular custom tools
   const allCustomTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== webSearchTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== pythonTool?.in_code_tool_id
   );
 
   const mcpTools = allCustomTools.filter((tool) => tool.mcp_server_id);
@@ -296,6 +303,7 @@ export function AssistantEditor({
     ...mcpTools, // Include MCP tools for form logic
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
+    ...(pythonTool ? [pythonTool] : []),
     ...(webSearchTool ? [webSearchTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
@@ -1243,6 +1251,16 @@ export function AssistantEditor({
                               }
                             />
                           </div>
+                        </>
+                      )}
+
+                      {pythonTool && (
+                        <>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${pythonTool.id}`}
+                            label={pythonTool.display_name}
+                            subtext="Execute Python code against staged files using the Code Interpreter sandbox"
+                          />
                         </>
                       )}
 

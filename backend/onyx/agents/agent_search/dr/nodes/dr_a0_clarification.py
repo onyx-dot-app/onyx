@@ -80,6 +80,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -145,6 +146,9 @@ def _get_available_tools(
                 continue
             llm_path = DRPath.KNOWLEDGE_GRAPH.value
             path = DRPath.KNOWLEDGE_GRAPH
+        elif isinstance(tool, PythonTool):
+            llm_path = DRPath.PYTHON_TOOL.value
+            path = DRPath.PYTHON_TOOL
         elif isinstance(tool, ImageGenerationTool):
             llm_path = DRPath.IMAGE_GENERATION.value
             path = DRPath.IMAGE_GENERATION
@@ -896,6 +900,6 @@ def clarifier(
         active_source_types_descriptions="\n".join(active_source_types_descriptions),
         assistant_system_prompt=assistant_system_prompt,
         assistant_task_prompt=assistant_task_prompt,
-        uploaded_test_context=uploaded_text_context,
+        uploaded_text_context=uploaded_text_context,
         uploaded_image_context=uploaded_image_context,
     )

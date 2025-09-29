@@ -46,7 +46,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     active_source_types_descriptions: str | None = None
     assistant_system_prompt: str | None = None
     assistant_task_prompt: str | None = None
-    uploaded_test_context: str | None = None
+    uploaded_text_context: str | None = None
     uploaded_image_context: list[dict[str, Any]] | None = None
 
 

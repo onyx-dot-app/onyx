@@ -53,6 +53,11 @@ def log_prompt(prompt: LanguageModelInput) -> None:
                 else:
                     log_msg = ""
                 logger.debug(f"Message {ind}:\n{log_msg}")
+            elif isinstance(msg, dict):
+                log_msg = msg.get("content", "")
+                if "files" in msg:
+                    log_msg = f"{log_msg}\nfiles: {msg['files']}"
+                logger.debug(f"Message {ind}:\n{log_msg}")
             else:
                 logger.debug(f"Message {ind}:\n{msg.content}")
     if isinstance(prompt, str):

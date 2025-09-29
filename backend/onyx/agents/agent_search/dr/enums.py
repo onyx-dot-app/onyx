@@ -27,6 +27,7 @@ class DRPath(str, Enum):
     WEB_SEARCH = "Web Search"
     IMAGE_GENERATION = "Image Generation"
     GENERIC_INTERNAL_TOOL = "Generic Internal Tool"
+    PYTHON_TOOL = "Python"
     CLOSER = "Closer"
     LOGGER = "Logger"
     END = "End"

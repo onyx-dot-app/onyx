@@ -10,6 +10,9 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
 )
+from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -20,7 +23,12 @@ logger = setup_logger()
 
 
 BUILT_IN_TOOL_TYPES = Union[
-    SearchTool, ImageGenerationTool, WebSearchTool, KnowledgeGraphTool, OktaProfileTool
+    SearchTool,
+    ImageGenerationTool,
+    WebSearchTool,
+    KnowledgeGraphTool,
+    OktaProfileTool,
+    PythonTool,
 ]
 
 # same as d09fc20a3c66_seed_builtin_tools.py
@@ -30,6 +38,7 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     WebSearchTool.__name__: WebSearchTool,
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
     OktaProfileTool.__name__: OktaProfileTool,
+    PythonTool.__name__: PythonTool,
 }
 
 

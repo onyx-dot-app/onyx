@@ -140,7 +140,7 @@ def orchestrator(
 
     available_tools = state.available_tools or {}
 
-    uploaded_context = state.uploaded_test_context or ""
+    uploaded_context = state.uploaded_text_context or ""
     uploaded_image_context = state.uploaded_image_context or []
 
     questions = [
