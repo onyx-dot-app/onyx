@@ -2,7 +2,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { ZoomInIcon } from "@/components/icons/icons";
 import { Explorer } from "./Explorer";
 import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "@/i18n/keys";
 
 const Page = async (props: {

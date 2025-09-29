@@ -4,7 +4,7 @@ import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { SuccessfulPersonaUpdateRedirectType } from "@/app/admin/assistants/enums";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { BackButton } from "@/components/BackButton";
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "@/i18n/keys";
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
