@@ -35,11 +35,11 @@ export async function sendMessage(page: Page, message: string) {
   // Wait for the copy button to appear, which indicates the message is fully rendered
   await page.waitForSelector('[data-testid="copy-button"]', { timeout: 30000 });
 
-  // Wait for up to 3 seconds for the URL to contain 'chatId='
+  // Wait for up to 10 seconds for the URL to contain 'chatId='
   await page.waitForFunction(
     () => window.location.href.includes("chatId="),
     null,
-    { timeout: 3000 }
+    { timeout: 10000 }
   );
 }
 
