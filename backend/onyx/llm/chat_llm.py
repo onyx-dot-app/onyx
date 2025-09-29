@@ -438,6 +438,23 @@ class DefaultMultiLLM(LLM):
                     else {}
                 ),  # TODO: remove once LITELLM has patched
                 **(
+                    {"reasoning_effort": "minimal"}
+                    if self.config.model_name
+                    in [
+                        "gpt-5",
+                    ]
+                    else {}
+                ),  # TODO: remove once LITELLM has better support
+                **(
+                    {"reasoning_effort": "minimal"}
+                    if self.config.model_name
+                    in [
+                        "gpt-5-mini",
+                        "gpt-5-nano",
+                    ]
+                    else {}
+                ),  # TODO: remove once LITELLM has better support
+                **(
                     {"response_format": structured_response_format}
                     if structured_response_format
                     else {}
