@@ -36,6 +36,7 @@ export default async function Layout({
     ccPairs,
     inputPrompts,
     proSearchToggled,
+    projects,
   } = data;
 
   return (
@@ -56,6 +57,7 @@ export default async function Layout({
           availableTools,
           shouldShowWelcomeModal,
           defaultAssistantId,
+          projects,
         }}
       >
         {children}

@@ -1,15 +1,15 @@
-{{- if .Values.celery_worker_user_file_processing.autoscaling.enabled }}
+{{- if and (.Values.celery_worker_user_file_processing.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-worker-user-file-processing
+  name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx-stack.fullname" . }}-celery-worker-user-file-processing
+    name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
   minReplicaCount: {{ .Values.celery_worker_user_file_processing.autoscaling.minReplicas | default 1 }}
   maxReplicaCount: {{ .Values.celery_worker_user_file_processing.autoscaling.maxReplicas | default 10 }}
   pollingInterval: {{ .Values.celery_worker_user_file_processing.autoscaling.pollingInterval | default 30 }}
@@ -35,5 +35,4 @@ spec:
     {{- toYaml .Values.celery_worker_user_file_processing.autoscaling.customTriggers | nindent 4 }}
     {{- end }}
 {{- end }}
-
 

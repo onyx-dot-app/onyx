@@ -72,12 +72,14 @@ const ProjectsContext = createContext<ProjectsContextType | undefined>(
 
 interface ProjectsProviderProps {
   children: ReactNode;
+  initialProjects?: Project[];
 }
 
 export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   children,
+  initialProjects = [],
 }) => {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -261,17 +263,17 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   );
 
   useEffect(() => {
-    // Initial load
+    // Initial load - only fetch recent files since projects come from props
     setIsLoading(true);
-    Promise.all([fetchProjects(), getRecentFiles()])
-      .then(([, recent]) => {
+    getRecentFiles()
+      .then((recent) => {
         setRecentFiles(recent);
       })
       .catch(() => {
         // errors captured in individual calls
       })
       .finally(() => setIsLoading(false));
-  }, [fetchProjects, getRecentFiles]);
+  }, [getRecentFiles]);
 
   useEffect(() => {
     if (currentProjectId) {

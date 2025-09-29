@@ -12,6 +12,7 @@ import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces"
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { Project } from "@/app/chat/projects/projectsService";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
@@ -33,6 +34,7 @@ interface ChatContextProps {
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
+  projects: Project[];
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);

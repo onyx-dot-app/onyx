@@ -72,17 +72,17 @@ def run_jobs() -> None:
         "--queues=docprocessing",
     ]
 
-    cmd_worker_user_files_indexing = [
+    cmd_worker_user_files = [
         "celery",
         "-A",
-        "onyx.background.celery.versioned_apps.docfetching",
+        "onyx.background.celery.versioned_apps.user_file_processing",
         "worker",
         "--pool=threads",
         "--concurrency=1",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
-        "--hostname=user_files_indexing@%n",
-        "--queues=user_files_indexing",
+        "--hostname=user_file_processing@%n",
+        "--queues=user_file_processing,user_file_project_sync",
     ]
 
     cmd_worker_monitoring = [
@@ -152,8 +152,8 @@ def run_jobs() -> None:
         text=True,
     )
 
-    worker_user_files_indexing_process = subprocess.Popen(
-        cmd_worker_user_files_indexing,
+    worker_user_file_process = subprocess.Popen(
+        cmd_worker_user_files,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -197,9 +197,9 @@ def run_jobs() -> None:
     worker_docprocessing_thread = threading.Thread(
         target=monitor_process, args=("DOCPROCESSING", worker_docprocessing_process)
     )
-    worker_user_files_indexing_thread = threading.Thread(
+    worker_user_file_thread = threading.Thread(
         target=monitor_process,
-        args=("USER_FILES_INDEX", worker_user_files_indexing_process),
+        args=("USER_FILE_PROCESSING", worker_user_file_process),
     )
     worker_monitoring_thread = threading.Thread(
         target=monitor_process, args=("MONITORING", worker_monitoring_process)
@@ -216,7 +216,7 @@ def run_jobs() -> None:
     worker_light_thread.start()
     worker_heavy_thread.start()
     worker_docprocessing_thread.start()
-    worker_user_files_indexing_thread.start()
+    worker_user_file_thread.start()
     worker_monitoring_thread.start()
     worker_kg_processing_thread.start()
     worker_docfetching_thread.start()
@@ -226,7 +226,7 @@ def run_jobs() -> None:
     worker_light_thread.join()
     worker_heavy_thread.join()
     worker_docprocessing_thread.join()
-    worker_user_files_indexing_thread.join()
+    worker_user_file_thread.join()
     worker_monitoring_thread.join()
     worker_kg_processing_thread.join()
     worker_docfetching_thread.join()

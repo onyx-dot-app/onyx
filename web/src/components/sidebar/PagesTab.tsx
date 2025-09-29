@@ -29,8 +29,6 @@ export function PagesTab({
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
 }) {
-  const { setPopup, popup } = usePopup();
-  const router = useRouter();
   const groupedChatSesssions = groupSessionsByDateRange(existingChats || []);
   const isHistoryEmpty = !existingChats || existingChats.length === 0;
 
@@ -54,9 +52,8 @@ export function PagesTab({
 
   return (
     <div className="flex flex-col gap-y-2 flex-grow">
-      {popup}
-      <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
-        <div className="flex group justify-between text-sm text-text-300/80 items-center font-normal leading-normal">
+      <div className="px-4 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
+        <div className="flex group justify-between text-sm text-text-300/80 items-center font-normal leading-normal -mb-3">
           <p>Chats</p>
 
           <TooltipProvider>
@@ -80,7 +77,7 @@ export function PagesTab({
         </div>
       </div>
 
-      <div className="pl-2 pr-3">
+      <div className="pl-4 pr-3">
         {!isHistoryEmpty && (
           <>
             {Object.entries(groupedChatSesssions)

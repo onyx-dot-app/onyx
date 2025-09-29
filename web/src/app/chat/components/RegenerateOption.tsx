@@ -40,7 +40,10 @@ export default function RegenerateOption({
       currentAssistant={selectedAssistant}
       currentModelName={overriddenModel}
       trigger={
-        <div onClick={() => toggleDropdownVisible(!isOpen)}>
+        <div
+          onClick={() => toggleDropdownVisible(!isOpen)}
+          data-testid="regenerate-button"
+        >
           {!overriddenModel ? (
             <Hoverable size={16} icon={FiRefreshCw as IconType} />
           ) : (

@@ -34,7 +34,7 @@ import {
 } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
-import { getSourceMetadata } from "./sources";
+import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
@@ -993,3 +993,145 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
   ],
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };
+
+// Get source metadata for configured sources - deduplicated by source type
+function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const allSources = getSourceMetadataForSources(availableSources);
+
+  const seenSources = new Set<string>();
+  const configuredSources: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
+
+  availableSources.forEach((sourceName) => {
+    // Handle federated connectors by removing the federated_ prefix
+    const cleanName = sourceName.replace("federated_", "");
+    // Skip if we've already seen this source type
+    if (seenSources.has(cleanName)) return;
+    seenSources.add(cleanName);
+    const source = allSources.find(
+      (source) => source.internalName === cleanName
+    );
+    if (source) {
+      configuredSources.push({
+        ...source,
+        originalName: sourceName,
+        uniqueKey: cleanName,
+      });
+    }
+  });
+  return configuredSources;
+}
+
+interface UseSourcePreferencesProps {
+  availableSources: ValidSources[];
+  selectedSources: SourceMetadata[];
+  setSelectedSources: (sources: SourceMetadata[]) => void;
+}
+
+const LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY = "selectedInternalSearchSources";
+
+export function useSourcePreferences({
+  availableSources,
+  selectedSources,
+  setSelectedSources,
+}: UseSourcePreferencesProps) {
+  const [sourcesInitialized, setSourcesInitialized] = useState(false);
+
+  // Load saved source preferences from localStorage
+  const loadSavedSourcePreferences = () => {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem(LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY);
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  };
+
+  const persistSourcePreferencesState = (sources: SourceMetadata[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY,
+      JSON.stringify(sources)
+    );
+  };
+
+  // Initialize sources - load from localStorage or enable all by default
+  useEffect(() => {
+    if (!sourcesInitialized && availableSources.length > 0) {
+      const savedSources = loadSavedSourcePreferences();
+      if (savedSources !== null) {
+        const availableSourceMetadata = getConfiguredSources(availableSources);
+        const validSavedSources = savedSources.filter(
+          (savedSource: SourceMetadata) =>
+            availableSourceMetadata.some(
+              (availableSource) =>
+                availableSource.uniqueKey === savedSource.uniqueKey
+            )
+        );
+        setSelectedSources(validSavedSources);
+      } else {
+        // First time user - enable all sources by default
+        const allSourceMetadata = getConfiguredSources(availableSources);
+        setSelectedSources(allSourceMetadata);
+      }
+      setSourcesInitialized(true);
+    }
+  }, [availableSources, sourcesInitialized, setSelectedSources]);
+
+  const enableAllSources = () => {
+    const allSourceMetadata = getConfiguredSources(availableSources);
+    setSelectedSources(allSourceMetadata);
+    persistSourcePreferencesState(allSourceMetadata);
+  };
+
+  const disableAllSources = () => {
+    setSelectedSources([]);
+    persistSourcePreferencesState([]);
+  };
+
+  const toggleSource = (sourceUniqueKey: string) => {
+    const configuredSource = getConfiguredSources(availableSources).find(
+      (s) => s.uniqueKey === sourceUniqueKey
+    );
+    if (!configuredSource) return;
+
+    const isCurrentlySelected = selectedSources.some(
+      (s) => s.uniqueKey === configuredSource.uniqueKey
+    );
+
+    let newSources: SourceMetadata[];
+    if (isCurrentlySelected) {
+      newSources = selectedSources.filter(
+        (s) => s.uniqueKey !== configuredSource.uniqueKey
+      );
+    } else {
+      newSources = [...selectedSources, configuredSource];
+    }
+
+    setSelectedSources(newSources);
+    persistSourcePreferencesState(newSources);
+  };
+
+  const isSourceEnabled = (sourceUniqueKey: string) => {
+    const configuredSource = getConfiguredSources(availableSources).find(
+      (s) => s.uniqueKey === sourceUniqueKey
+    );
+    if (!configuredSource) return false;
+    return selectedSources.some(
+      (s: SourceMetadata) => s.uniqueKey === configuredSource.uniqueKey
+    );
+  };
+
+  return {
+    sourcesInitialized,
+    enableAllSources,
+    disableAllSources,
+    toggleSource,
+    isSourceEnabled,
+  };
+}

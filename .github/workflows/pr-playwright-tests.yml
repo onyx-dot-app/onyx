@@ -56,6 +56,8 @@ jobs:
           provenance: false
           sbom: false
           push: true
+          outputs: type=registry
+          no-cache: true
 
   build-backend-image:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
@@ -87,6 +89,8 @@ jobs:
           provenance: false
           sbom: false
           push: true
+          outputs: type=registry
+          no-cache: true
 
   build-model-server-image:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
@@ -118,6 +122,8 @@ jobs:
           provenance: false
           sbom: false
           push: true
+          outputs: type=registry
+          no-cache: true
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
@@ -179,16 +185,21 @@ jobs:
         working-directory: ./web
         run: npx playwright install --with-deps
 
+      - name: Create .env file for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          IMAGE_TAG=test
+          EOF
+
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }} \
-          EXA_API_KEY=${{ env.EXA_API_KEY }} \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
         id: start_docker
 
@@ -228,14 +239,16 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: ./web
-        run: npx playwright test
+        run: |
+          # Create test-results directory to ensure it exists for artifact upload
+          mkdir -p test-results
+          npx playwright test
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          # Chromatic automatically defaults to the test-results directory.
-          # Replace with the path to your custom directory and adjust the CHROMATIC_ARCHIVE_LOCATION environment variable accordingly.
-          name: test-results
+          # Includes test results and debug screenshots
+          name: playwright-test-results-${{ github.run_id }}
           path: ./web/test-results
           retention-days: 30
 

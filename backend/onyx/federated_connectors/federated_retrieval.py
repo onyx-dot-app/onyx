@@ -135,12 +135,16 @@ def get_federated_retrieval_functions(
     # At this point, user_id is guaranteed to be not None since we're in the else branch
     assert user_id is not None
 
+    # If no source types are specified, don't use any federated connectors
+    if source_types is None:
+        logger.info("No source types specified, skipping all federated connectors")
+        return []
+
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
         if (
-            source_types is not None
-            and oauth_token.federated_connector.source.to_non_federated_source()
+            oauth_token.federated_connector.source.to_non_federated_source()
             not in source_types
         ):
             continue

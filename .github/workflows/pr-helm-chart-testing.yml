@@ -169,6 +169,7 @@ jobs:
             --set=celery_worker_light.replicaCount=0 \
             --set=celery_worker_monitoring.replicaCount=0 \
             --set=celery_worker_primary.replicaCount=0 \
+            --set=celery_worker_user_file_processing.replicaCount=0 \
             --set=celery_worker_user_files_indexing.replicaCount=0" \
           --helm-extra-args="--timeout 900s --debug" \
           --debug --config ct.yaml

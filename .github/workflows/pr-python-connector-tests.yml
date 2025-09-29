@@ -96,6 +96,13 @@ env:
   TEAMS_DIRECTORY_ID: ${{ secrets.TEAMS_DIRECTORY_ID }}
   TEAMS_SECRET: ${{ secrets.TEAMS_SECRET }}
 
+  # Bitbucket
+  BITBUCKET_WORKSPACE: ${{ secrets.BITBUCKET_WORKSPACE }}
+  BITBUCKET_REPOSITORIES: ${{ secrets.BITBUCKET_REPOSITORIES }}
+  BITBUCKET_PROJECTS: ${{ secrets.BITBUCKET_PROJECTS }}
+  BITBUCKET_EMAIL: ${{ secrets.BITBUCKET_EMAIL }}
+  BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
+
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/

@@ -1,4 +1,4 @@
-{{- if and (.Values.api.autoscaling.enabled) (eq (include "onyx-stack.autoscaling.engine" .) "keda") }}
+{{- if and (.Values.api.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:

@@ -38,15 +38,17 @@ export function CopyButton({
   };
 
   return (
-    <HoverableIcon
-      icon={copyClicked ? <CheckmarkIcon /> : <CopyMessageIcon />}
-      onClick={() => {
-        copyToClipboard();
-        onClick && onClick();
+    <div data-testid="copy-button">
+      <HoverableIcon
+        icon={copyClicked ? <CheckmarkIcon /> : <CopyMessageIcon />}
+        onClick={() => {
+          copyToClipboard();
+          onClick && onClick();
 
-        setCopyClicked(true);
-        setTimeout(() => setCopyClicked(false), 3000);
-      }}
-    />
+          setCopyClicked(true);
+          setTimeout(() => setCopyClicked(false), 3000);
+        }}
+      />
+    </div>
   );
 }

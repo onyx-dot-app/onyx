@@ -507,8 +507,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 currentMessageFiles.length > 0 ||
                 filterManager.timeRange ||
                 filterManager.selectedDocumentSets.length > 0 ||
-                filterManager.selectedTags.length > 0 ||
-                filterManager.selectedSources.length > 0) && (
+                filterManager.selectedTags.length > 0) && (
                 <div className="flex bg-input-background gap-x-.5 px-2">
                   <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
                     {filterManager.selectedTags &&
@@ -558,26 +557,6 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                           />
                         )
                       )}
-                    {filterManager.selectedSources.length > 0 &&
-                      filterManager.selectedSources.map((source, index) => (
-                        <SourceChip
-                          key={`source-${index}`}
-                          icon={
-                            <SourceIcon
-                              sourceType={source.internalName}
-                              iconSize={16}
-                            />
-                          }
-                          title={source.displayName}
-                          onRemove={() => {
-                            filterManager.setSelectedSources(
-                              filterManager.selectedSources.filter(
-                                (s) => s.internalName !== source.internalName
-                              )
-                            );
-                          }}
-                        />
-                      ))}
                     {selectedDocuments.length > 0 && (
                       <SourceChip
                         key="selected-documents"
@@ -613,7 +592,11 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                   />
 
                   {selectedAssistant.tools.length > 0 && (
-                    <ActionToggle selectedAssistant={selectedAssistant} />
+                    <ActionToggle
+                      selectedAssistant={selectedAssistant}
+                      availableSources={memoizedAvailableSources}
+                      filterManager={filterManager}
+                    />
                   )}
 
                   {retrievalEnabled &&
