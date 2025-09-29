@@ -453,7 +453,7 @@ class DefaultMultiLLM(LLM):
                         "gpt-5-nano",
                     ]
                     else {}
-                ),  # TODO: remove once LITELLM has better support
+                ),  # TODO: remove later. Separate from GPT-5 setting in case we want to set this to low.
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
