@@ -524,6 +524,7 @@ def get_ollama_available_models(
 
     for model_name in model_names:
         context_limit: int | None = None
+        supports_image_input: bool | None = None
         try:
             show_response = httpx.post(
                 show_url,
