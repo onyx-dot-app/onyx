@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
+from typing import Union
 
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
@@ -390,7 +391,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Any:  # Returns Union[litellm.ModelResponse, litellm.CustomStreamWrapper]
+    ) -> Union["litellm.ModelResponse", "litellm.CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
@@ -453,10 +454,10 @@ class DefaultMultiLLM(LLM):
         except Exception as e:
             self._record_error(processed_prompt, e)
             # for break pointing
-            if type(e).__name__ == "Timeout":
+            if isinstance(e, "litellm.Timeout"):
                 raise LLMTimeoutError(e)
 
-            elif type(e).__name__ == "RateLimitError":
+            elif isinstance(e, "litellm.RateLimitError"):
                 raise LLMRateLimitError(e)
 
             raise e
@@ -496,7 +497,7 @@ class DefaultMultiLLM(LLM):
             self.log_model_configs()
 
         response = cast(
-            Any,  # litellm.ModelResponse
+            "litellm.ModelResponse",
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -543,7 +544,7 @@ class DefaultMultiLLM(LLM):
 
         output = None
         response = cast(
-            Any,  # litellm.CustomStreamWrapper
+            "litellm.CustomStreamWrapper",
             self._completion(
                 prompt=prompt,
                 tools=tools,

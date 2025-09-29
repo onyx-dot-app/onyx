@@ -460,7 +460,6 @@ def get_llm_contextual_cost(
     this does not account for the cost of documents that fit within a single chunk
     which do not get contextualized.
     """
-
     import litellm
 
     # calculate input costs
