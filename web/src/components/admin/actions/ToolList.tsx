@@ -78,10 +78,7 @@ export function ToolList({
           description: values.description,
           server_url: values.server_url,
           auth_type: values.auth_type,
-          auth_performer:
-            values.auth_type !== MCPAuthenticationType.NONE
-              ? values.auth_performer
-              : undefined,
+          auth_performer: values.auth_performer,
           api_token:
             values.auth_type === MCPAuthenticationType.API_TOKEN &&
             values.auth_performer === MCPAuthenticationPerformer.ADMIN
@@ -151,24 +148,24 @@ export function ToolList({
 
       const responses = await Promise.all(promises);
       const toolsResp = responses[0];
-      let toolResponse: any = null;
-      try {
-        toolResponse = await toolsResp?.json();
-      } catch (e) {
-        // If body isn't JSON, ignore; we'll fall back to text below
-      }
 
       // Check if list-tools request failed
       if (!toolsResp?.ok) {
         let errorMessage = "Unknown error";
-        if (toolResponse && typeof toolResponse === "object") {
-          errorMessage =
-            toolResponse.detail || toolResponse.message || errorMessage;
-        } else if (toolsResp) {
+        if (toolsResp) {
           try {
-            const text = await toolsResp.text();
-            if (text) errorMessage = text;
+            const errorJson = await toolsResp.clone().json();
+            if (errorJson && typeof errorJson === "object") {
+              errorMessage =
+                errorJson.detail || errorJson.message || errorMessage;
+            }
           } catch (_) {}
+          if (errorMessage === "Unknown error") {
+            try {
+              const text = await toolsResp.text();
+              if (text) errorMessage = text;
+            } catch (_) {}
+          }
         }
         setPopup({
           message: `Failed to list tools: ${errorMessage}`,
@@ -181,15 +178,8 @@ export function ToolList({
       setShowToolList(true);
       setCurrentPage(1);
 
-      // // Update URL to include listing_tools=true for page reload persistence
-      // const currentUrl = new URL(window.location.href);
-      // if (!currentUrl.searchParams.has("listing_tools")) {
-      //   currentUrl.searchParams.set("listing_tools", "true");
-      //   router.replace(currentUrl.toString());
-      // }
-
       // Process available tools
-      const toolsData: ToolListResponse = toolResponse;
+      const toolsData: ToolListResponse = await toolsResp.json();
       setTools(toolsData.tools);
 
       // Pre-populate selected tools from existing database tools

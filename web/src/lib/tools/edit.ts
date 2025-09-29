@@ -125,7 +125,7 @@ interface MCPServerCreateResponse {
   server_name: string;
   server_url: string;
   auth_type: string;
-  auth_performer?: string;
+  auth_performer: string;
   is_authenticated: boolean;
 }
 
@@ -140,7 +140,7 @@ export async function createMCPServer(serverData: {
   server_url: string;
   transport: string;
   auth_type: MCPAuthenticationType;
-  auth_performer?: MCPAuthenticationPerformer;
+  auth_performer: MCPAuthenticationPerformer;
   api_token?: string;
   oauth_client_id?: string;
   oauth_client_secret?: string;

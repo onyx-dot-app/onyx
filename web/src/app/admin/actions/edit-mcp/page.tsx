@@ -153,9 +153,6 @@ export default function NewMCPToolPage() {
           auth_template = server.auth_template;
         }
 
-        // Do not auto-probe by listing tools on load
-
-        console.log("server.transport", server.transport);
         setInitialValues({
           name: server.name,
           description: server.description || "",
@@ -191,7 +188,6 @@ export default function NewMCPToolPage() {
     setCheckingOAuthStatus(true);
     try {
       // First, create the MCP server if it doesn't exist
-      console.log("option 1");
       const createResponse = await fetch("/api/admin/mcp/servers/create", {
         method: "POST",
         headers: {

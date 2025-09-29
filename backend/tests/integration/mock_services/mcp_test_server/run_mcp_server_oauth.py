@@ -1,4 +1,3 @@
-import logging
 import os
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -19,8 +18,8 @@ from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.server import FunctionTool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-logging.basicConfig(level=logging.DEBUG)
-
+# uncomment for debug logs
+# logging.basicConfig(level=logging.DEBUG)
 
 """
 Setup Okta:

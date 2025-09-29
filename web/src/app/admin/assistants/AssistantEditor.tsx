@@ -815,12 +815,30 @@ export function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
+          const uploadedImageUrl = useMemo(() => {
+            if (!values.uploaded_image) {
+              return null;
+            }
+
+            return URL.createObjectURL(values.uploaded_image);
+          }, [values.uploaded_image]);
+
+          useEffect(() => {
+            if (!uploadedImageUrl) {
+              return;
+            }
+
+            return () => {
+              URL.revokeObjectURL(uploadedImageUrl);
+            };
+          }, [uploadedImageUrl]);
+
           // Memoize icon to avoid regenerating on every render
           const iconElement = useMemo(() => {
-            if (values.uploaded_image) {
+            if (uploadedImageUrl) {
               return (
                 <img
-                  src={URL.createObjectURL(values.uploaded_image)}
+                  src={uploadedImageUrl}
                   alt="Uploaded assistant icon"
                   className="w-12 h-12 rounded-full object-cover"
                 />
@@ -840,7 +858,7 @@ export function AssistantEditor({
               return generateIdenticon((values.icon_shape || 0).toString(), 36);
             }
           }, [
-            values.uploaded_image,
+            uploadedImageUrl,
             values.icon_shape,
             existingPersona?.uploaded_image_id,
             removePersonaImage,

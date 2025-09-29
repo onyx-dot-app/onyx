@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPTransport
@@ -91,9 +92,9 @@ def create_mcp_server__no_commit(
     server_url: str,
     auth_type: MCPAuthenticationType,
     transport: MCPTransport,
+    auth_performer: MCPAuthenticationPerformer,
     db_session: Session,
     admin_connection_config_id: int | None = None,
-    auth_performer: MCPAuthenticationPerformer | None = None,
 ) -> MCPServer:
     """Create a new MCP server"""
     new_server = MCPServer(
@@ -259,8 +260,6 @@ def update_connection_config(
     if config_data is not None:
         config.config = config_data
         # Force SQLAlchemy to detect the change by marking the field as modified
-        from sqlalchemy.orm.attributes import flag_modified
-
         flag_modified(config, "config")
 
     db_session.commit()

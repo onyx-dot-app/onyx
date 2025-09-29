@@ -696,9 +696,6 @@ export const BooleanFormField = memo(function BooleanFormField({
   disabledTooltip,
   onChange,
 }: BooleanFormFieldProps) {
-  console.log("yikes3");
-  // Debug logging removed after investigation
-
   // Generate a stable, valid id from the field name for label association
   const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 

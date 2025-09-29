@@ -65,8 +65,8 @@ class MCPToolCreateRequest(BaseModel):
     description: Optional[str] = Field(None, description="Description of the MCP tool")
     server_url: str = Field(..., description="URL of the MCP server")
     auth_type: MCPAuthenticationType = Field(..., description="Authentication type")
-    auth_performer: Optional[MCPAuthenticationPerformer] = Field(
-        None, description="Who performs authentication"
+    auth_performer: MCPAuthenticationPerformer = Field(
+        ..., description="Who performs authentication"
     )
     api_token: Optional[str] = Field(
         None, description="API token for api_token auth type"
@@ -74,7 +74,7 @@ class MCPToolCreateRequest(BaseModel):
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
     transport: MCPTransport | None = Field(
-        None, description="MCP transport type (streamable-http or sse)"
+        None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
     )
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Template configuration for per-user authentication"
@@ -193,12 +193,6 @@ class MCPUserOAuthConnectRequest(BaseModel):
 class MCPUserOAuthConnectResponse(BaseModel):
     server_id: int
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
-    # state: str = Field(..., description="OAuth state parameter")
-    # server_id: int = Field(..., description="Server ID")
-    # server_name: str = Field(..., description="Server name")
-    # code_verifier: Optional[str] = Field(
-    #     None, description="PKCE code verifier to be used at callback"
-    # )
 
 
 class MCPOAuthCallbackRequest(BaseModel):

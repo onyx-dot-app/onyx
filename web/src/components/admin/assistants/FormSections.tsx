@@ -154,13 +154,12 @@ export const MCPServerSection = memo(function MCPServerSection({
         <div className="ml-7 space-y-2">
           {serverTools.map((tool) => (
             <FastField key={tool.id} name={`enabled_tools_map.${tool.id}`}>
-              {({ field }: any) => (
+              {({ field, form }: any) => (
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
                     checked={field.value || false}
                     onChange={(e) => {
-                      const form = (field as any).form;
                       form.setFieldValue(field.name, e.target.checked);
                     }}
                     className="w-4 h-4"
