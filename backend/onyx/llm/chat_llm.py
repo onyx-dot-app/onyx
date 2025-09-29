@@ -400,6 +400,7 @@ class DefaultMultiLLM(LLM):
         try:
             configure_litellm()
             import litellm
+            from litellm.exceptions import Timeout, RateLimitError
 
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -454,10 +455,10 @@ class DefaultMultiLLM(LLM):
         except Exception as e:
             self._record_error(processed_prompt, e)
             # for break pointing
-            if isinstance(e, "litellm.Timeout"):
+            if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)
 
-            elif isinstance(e, "litellm.RateLimitError"):
+            elif isinstance(e, RateLimitError):
                 raise LLMRateLimitError(e)
 
             raise e
@@ -492,12 +493,13 @@ class DefaultMultiLLM(LLM):
         max_tokens: int | None = None,
     ) -> BaseMessage:
         configure_litellm()
+        from litellm.utils import ModelResponse
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
         response = cast(
-            "litellm.ModelResponse",
+            ModelResponse,
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -527,6 +529,7 @@ class DefaultMultiLLM(LLM):
         max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         configure_litellm()
+        from litellm.utils import CustomStreamWrapper
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -544,7 +547,7 @@ class DefaultMultiLLM(LLM):
 
         output = None
         response = cast(
-            "litellm.CustomStreamWrapper",
+            CustomStreamWrapper,
             self._completion(
                 prompt=prompt,
                 tools=tools,
