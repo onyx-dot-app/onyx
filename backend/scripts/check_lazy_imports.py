@@ -31,6 +31,8 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
     "markitdown": LazyImportSettings(),
     "tiktoken": LazyImportSettings(),
     "litellm": LazyImportSettings(ignore_files={"onyx/llm/llm_provider_options.py"}),
+    "transformers": LazyImportSettings(ignore_files={"model_server/main.py"}),
+    "setfit": LazyImportSettings(),
 }
 
 
