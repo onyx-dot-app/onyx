@@ -110,7 +110,6 @@ async def upsert_saml_user(email: str) -> User:
 
 
 async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
-    form_data = await request.form()
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
@@ -125,14 +124,27 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         "post_data": {},
         "get_data": {},
     }
+
+    # Handle query parameters (for GET requests)
     if request.query_params:
-        rv["get_data"] = (request.query_params,)
-    if "SAMLResponse" in form_data:
-        SAMLResponse = form_data["SAMLResponse"]
-        rv["post_data"]["SAMLResponse"] = SAMLResponse
-    if "RelayState" in form_data:
-        RelayState = form_data["RelayState"]
-        rv["post_data"]["RelayState"] = RelayState
+        rv["get_data"] = dict(request.query_params)
+
+    # Handle form data (for POST requests)
+    if request.method == "POST":
+        form_data = await request.form()
+        if "SAMLResponse" in form_data:
+            SAMLResponse = form_data["SAMLResponse"]
+            rv["post_data"]["SAMLResponse"] = SAMLResponse
+        if "RelayState" in form_data:
+            RelayState = form_data["RelayState"]
+            rv["post_data"]["RelayState"] = RelayState
+    else:
+        # For GET requests, check if SAMLResponse is in query params
+        if "SAMLResponse" in request.query_params:
+            rv["get_data"]["SAMLResponse"] = request.query_params["SAMLResponse"]
+        if "RelayState" in request.query_params:
+            rv["get_data"]["RelayState"] = request.query_params["RelayState"]
+
     return rv
 
 
@@ -148,10 +160,27 @@ async def saml_login(request: Request) -> SAMLAuthorizeResponse:
     return SAMLAuthorizeResponse(authorization_url=callback_url)
 
 
+@router.get("/callback")
+async def saml_login_callback_get(
+    request: Request,
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Handle SAML callback via HTTP-Redirect binding (GET request)"""
+    return await _process_saml_callback(request, db_session)
+
+
 @router.post("/callback")
 async def saml_login_callback(
     request: Request,
     db_session: Session = Depends(get_session),
+) -> Response:
+    """Handle SAML callback via HTTP-POST binding (POST request)"""
+    return await _process_saml_callback(request, db_session)
+
+
+async def _process_saml_callback(
+    request: Request,
+    db_session: Session,
 ) -> Response:
     req = await prepare_from_fastapi_request(request)
     auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
