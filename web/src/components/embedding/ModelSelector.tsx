@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "./../../i18n/keys";
 import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {

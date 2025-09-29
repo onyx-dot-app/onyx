@@ -1,4 +1,4 @@
-import i18n from "@/i18n/init";
+import i18n from "@/i18n/init-server";
 import k from "./../../i18n/keys";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
