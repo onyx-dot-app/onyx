@@ -179,7 +179,11 @@ def test_create_llm_provider(
         (
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4", is_visible=True, max_input_tokens=4096
+                    )
+                ],
             ),
             [
                 ModelConfigurationUpsertRequest(
@@ -188,7 +192,7 @@ def test_create_llm_provider(
             ],
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4")],
+                [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
             ),
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
@@ -198,19 +202,25 @@ def test_create_llm_provider(
             (
                 "gpt-4",
                 [
-                    ModelConfigurationUpsertRequest(name="gpt-4"),
+                    ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o", max_input_tokens=4096
+                        name="gpt-4o", is_visible=True, max_input_tokens=4096
                     ),
                 ],
             ),
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096),
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True, max_input_tokens=4096
+                ),
             ],
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4", is_visible=True, max_input_tokens=4096
+                    )
+                ],
             ),
             [
                 ModelConfigurationUpsertRequest(
@@ -325,8 +335,8 @@ def test_update_model_configurations(
         (
             "gpt-4",
             [
-                ModelConfigurationUpsertRequest(name="gpt-4o"),
-                ModelConfigurationUpsertRequest(name="gpt-4"),
+                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
             ],
         ),
     ],
