@@ -1,3 +1,4 @@
+from typing import Any
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -140,6 +141,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     name: str
     is_visible: bool | None = False
     max_input_tokens: int | None = None
+    supports_image_input: bool | None = None
 
     @classmethod
     def from_model(
@@ -149,6 +151,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
+            supports_image_input=model_configuration_model.supports_image_input,
         )
 
 
@@ -200,5 +203,24 @@ class BedrockModelsRequest(BaseModel):
 
 class OllamaModelsRequest(BaseModel):
     api_base: str
-    api_key: str | None = None
-    provider_name: str | None = None
+
+
+class OllamaModelResponse(BaseModel):
+    name: str
+    max_input_tokens: int
+    supports_image_input: bool
+
+
+class OllamaModelDetails(BaseModel):
+    """Response model for Ollama /api/show endpoint"""
+
+    model_info: dict[str, Any]
+    capabilities: list[str] = []
+
+    def supports_completion(self) -> bool:
+        """Check if this model supports completion/chat"""
+        return "completion" in self.capabilities
+
+    def supports_image_input(self) -> bool:
+        """Check if this model supports image input"""
+        return "vision" in self.capabilities

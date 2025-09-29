@@ -1,8 +1,5 @@
-from typing import Any
-
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
@@ -24,19 +21,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 
 logger = setup_logger()
-
-
-def _build_extra_model_kwargs(provider: str) -> dict[str, Any]:
-    """Ollama requires us to specify the max context window.
-
-    For now, just using the GEN_AI_MODEL_FALLBACK_MAX_TOKENS value.
-    TODO: allow model-specific values to be configured via the UI.
-    """
-    return (
-        {"num_ctx": GEN_AI_MODEL_FALLBACK_MAX_TOKENS}
-        if provider == OLLAMA_PROVIDER_NAME
-        else {}
-    )
 
 
 def _build_provider_extra_headers(
@@ -298,6 +282,10 @@ def get_llm(
         temperature = GEN_AI_TEMPERATURE
 
     extra_headers = build_llm_extra_headers(additional_headers)
+
+    # NOTE: this is needed since Ollama API key is optional
+    # User may access Ollama cloud via locally hosted instance (logged in)
+    # or just via the cloud API (not logged in)
     provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
@@ -313,7 +301,7 @@ def get_llm(
         temperature=temperature,
         custom_config=custom_config,
         extra_headers=extra_headers,
-        model_kwargs=_build_extra_model_kwargs(provider),
+        model_kwargs={},
         long_term_logger=long_term_logger,
         max_input_tokens=max_input_tokens,
     )

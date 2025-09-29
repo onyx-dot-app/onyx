@@ -12,10 +12,12 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
@@ -41,6 +43,8 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import OllamaModelDetails
+from onyx.server.manage.llm.models import OllamaModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
@@ -478,79 +482,97 @@ def get_bedrock_available_models(
         )
 
 
-def _extract_model_names(response_json: dict) -> set[str]:
-    models = response_json.get("models") or response_json.get("model") or []
-    if not isinstance(models, list):
-        return set()
+def _get_ollama_available_model_names(api_base: str) -> set[str]:
+    """Fetch available model names from Ollama server."""
+    tags_url = f"{api_base}/api/tags"
+    try:
+        response = httpx.get(tags_url, timeout=5.0)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch Ollama models: {e}",
+        )
 
-    model_names: set[str] = set()
-    for model in models:
-        if not isinstance(model, dict):
-            continue
-        candidate = model.get("model") or model.get("name")
-        if isinstance(candidate, str) and candidate:
-            model_names.add(candidate)
-    return model_names
+    models = response_json.get("models", [])
+    return {model.get("name") for model in models if model.get("name")}
 
 
 @admin_router.post("/ollama/available-models")
 def get_ollama_available_models(
     request: OllamaModelsRequest,
     _: User | None = Depends(current_admin_user),
-) -> list[str]:
+) -> list[OllamaModelResponse]:
     """Fetch the list of available models from an Ollama server."""
 
-    cleaned_api_base = request.api_base.rstrip("/")
+    cleaned_api_base = request.api_base.strip().rstrip("/")
     if not cleaned_api_base:
         raise HTTPException(
             status_code=400, detail="API base URL is required to fetch Ollama models."
         )
 
-    headers: dict[str, str] = {}
+    model_names = _get_ollama_available_model_names(cleaned_api_base)
+    if not model_names:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your Ollama server",
+        )
 
-    endpoints = ["api/tags", "api/models"]
-    last_error: Exception | None = None
+    models_with_context_size: list[OllamaModelResponse] = []
+    show_url = f"{cleaned_api_base}/api/show"
 
-    for endpoint in endpoints:
-        url = f"{cleaned_api_base}/{endpoint}"
+    for model_name in model_names:
+        context_limit: int | None = None
         try:
-            response = httpx.get(url, headers=headers, timeout=10.0)
-            response.raise_for_status()
-            try:
-                response_json = response.json()
-            except ValueError as e:
-                last_error = e
+            show_response = httpx.post(
+                show_url,
+                json={"model": model_name},
+                timeout=5.0,
+            )
+            show_response.raise_for_status()
+            show_response_json = show_response.json()
+
+            # Parse the response into the expected format
+            ollama_model_details = OllamaModelDetails.model_validate(show_response_json)
+
+            # Check if this model supports completion/chat
+            if not ollama_model_details.supports_completion():
                 continue
 
-            model_names = _extract_model_names(response_json)
-            if model_names:
-                return sorted(model_names)
-
-            last_error = ValueError("No models returned from Ollama response")
-        except httpx.HTTPStatusError as e:
-            last_error = e
-            # If Ollama doesn't support the endpoint, try the next one
-            if e.response.status_code in {404, 405}:
-                continue
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=(
-                    f"Failed to fetch Ollama models: "
-                    f"{e.response.text or e.response.reason_phrase}"
-                ),
+            # Optimistically access. Context limit is stored as "model_architecture.context" = int
+            architecture = ollama_model_details.model_info.get(
+                "general.architecture", ""
             )
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to reach Ollama server at {cleaned_api_base}: {e}",
+            context_limit = ollama_model_details.model_info.get(
+                architecture + ".context_length", None
+            )
+            supports_image_input = ollama_model_details.supports_image_input()
+        except ValidationError as e:
+            logger.warning(
+                "Invalid model details from Ollama server",
+                extra={"model": model_name, "validation_error": str(e)},
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch Ollama model details",
+                extra={"model": model_name, "error": str(e)},
             )
 
-    error_detail = (
-        str(last_error)
-        if last_error
-        else "Unexpected response from Ollama when listing models"
-    )
-    raise HTTPException(
-        status_code=400,
-        detail=f"Failed to fetch Ollama models: {error_detail}",
-    )
+        # If we fail at any point attempting to extract context limit,
+        # still allow this model to be used with a fallback max context size
+        if not context_limit:
+            context_limit = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
+        if not supports_image_input:
+            supports_image_input = False
+
+        models_with_context_size.append(
+            OllamaModelResponse(
+                name=model_name,
+                max_input_tokens=context_limit,
+                supports_image_input=supports_image_input,
+            )
+        )
+
+    return models_with_context_size

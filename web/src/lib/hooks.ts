@@ -960,6 +960,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
   "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
   "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
+  "kimi-k2:1t": "Kimi K2 1T Cloud",
   "qwen3-coder:480b-cloud": "Qwen3-Coder 480B Cloud",
 
   // Ollama models in litellm map (disjoint from ollama's supported model list)
