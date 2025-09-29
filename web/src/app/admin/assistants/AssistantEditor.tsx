@@ -22,10 +22,7 @@ import {
 } from "formik";
 
 import { BooleanFormField, Label, TextFormField } from "@/components/Field";
-import {
-  MemoizedToolList,
-  MemoizedMCPServerTools,
-} from "@/components/admin/assistants/MemoizedToolCheckboxes";
+import { MemoizedToolList } from "@/components/admin/assistants/MemoizedToolCheckboxes";
 import {
   NameField,
   DescriptionField,
@@ -54,7 +51,6 @@ import {
 } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import {
   useCallback,
   useContext,
@@ -179,8 +175,7 @@ export function AssistantEditor({
   const isAdminPage = searchParams?.get("admin") === "true";
 
   const { popup, setPopup } = usePopup();
-  const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
-    useLabels();
+  const { labels, refreshLabels, createLabel, deleteLabel } = useLabels();
   const settings = useContext(SettingsContext);
 
   const colorOptions = [
@@ -209,6 +204,9 @@ export function AssistantEditor({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
+  const [uploadedImagePreview, setUploadedImagePreview] = useState<
+    string | null
+  >(null);
 
   const autoStarterMessageEnabled = useMemo(
     () => llmProviders.length > 0,
@@ -246,41 +244,39 @@ export function AssistantEditor({
   const webSearchTool = findWebSearchTool(tools);
 
   // Separate MCP tools from regular custom tools - memoize to prevent re-renders
-  const { allCustomTools, mcpTools, customTools, mcpToolsByServer } =
-    useMemo(() => {
-      const allCustom = tools.filter(
-        (tool) =>
-          tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
-          tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-          tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
-      );
+  const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
+    const allCustom = tools.filter(
+      (tool) =>
+        tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
+        tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
+        tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
+    );
 
-      const mcp = allCustom.filter((tool) => tool.mcp_server_id);
-      const custom = allCustom.filter((tool) => !tool.mcp_server_id);
+    const mcp = allCustom.filter((tool) => tool.mcp_server_id);
+    const custom = allCustom.filter((tool) => !tool.mcp_server_id);
 
-      // Group MCP tools by server
-      const groups: { [serverId: number]: ToolSnapshot[] } = {};
-      mcp.forEach((tool) => {
-        if (tool.mcp_server_id) {
-          if (!groups[tool.mcp_server_id]) {
-            groups[tool.mcp_server_id] = [];
-          }
-          groups[tool.mcp_server_id]!.push(tool);
+    // Group MCP tools by server
+    const groups: { [serverId: number]: ToolSnapshot[] } = {};
+    mcp.forEach((tool) => {
+      if (tool.mcp_server_id) {
+        if (!groups[tool.mcp_server_id]) {
+          groups[tool.mcp_server_id] = [];
         }
-      });
+        groups[tool.mcp_server_id]!.push(tool);
+      }
+    });
 
-      return {
-        allCustomTools: allCustom,
-        mcpTools: mcp,
-        customTools: custom,
-        mcpToolsByServer: groups,
-      };
-    }, [
-      tools,
-      searchTool?.in_code_tool_id,
-      imageGenerationTool?.in_code_tool_id,
-      webSearchTool?.in_code_tool_id,
-    ]);
+    return {
+      mcpTools: mcp,
+      customTools: custom,
+      mcpToolsByServer: groups,
+    };
+  }, [
+    tools,
+    searchTool?.in_code_tool_id,
+    imageGenerationTool?.in_code_tool_id,
+    webSearchTool?.in_code_tool_id,
+  ]);
 
   // Helper functions for MCP server checkbox state - memoize to prevent re-renders
   const getMCPServerCheckboxState = useCallback(
@@ -491,6 +487,14 @@ export function AssistantEditor({
   );
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (uploadedImagePreview) {
+        URL.revokeObjectURL(uploadedImagePreview);
+      }
+    };
+  }, [uploadedImagePreview]);
 
   // Fetch MCP servers for URL display
   useEffect(() => {
@@ -793,13 +797,7 @@ export function AssistantEditor({
           }
         }}
       >
-        {({
-          isSubmitting,
-          values,
-          setFieldValue,
-          errors,
-          ...formikProps
-        }: FormikProps<any>) => {
+        {({ isSubmitting, values, setFieldValue }: FormikProps<any>) => {
           function toggleToolInValues(toolId: number) {
             const updatedEnabledToolsMap = {
               ...values.enabled_tools_map,
@@ -815,38 +813,18 @@ export function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          const uploadedImageUrl = useMemo(() => {
-            if (!values.uploaded_image) {
-              return null;
-            }
-
-            return URL.createObjectURL(values.uploaded_image);
-          }, [values.uploaded_image]);
-
-          useEffect(() => {
-            if (!uploadedImageUrl) {
-              return;
-            }
-
-            return () => {
-              URL.revokeObjectURL(uploadedImageUrl);
-            };
-          }, [uploadedImageUrl]);
-
-          // Memoize icon to avoid regenerating on every render
-          const iconElement = useMemo(() => {
-            if (uploadedImageUrl) {
+          const iconElement = (() => {
+            if (uploadedImagePreview) {
               return (
                 <img
-                  src={uploadedImageUrl}
+                  src={uploadedImagePreview}
                   alt="Uploaded assistant icon"
                   className="w-12 h-12 rounded-full object-cover"
                 />
               );
-            } else if (
-              existingPersona?.uploaded_image_id &&
-              !removePersonaImage
-            ) {
+            }
+
+            if (existingPersona?.uploaded_image_id && !removePersonaImage) {
               return (
                 <img
                   src={buildImgUrl(existingPersona?.uploaded_image_id)}
@@ -854,15 +832,10 @@ export function AssistantEditor({
                   className="w-12 h-12 rounded-full object-cover"
                 />
               );
-            } else {
-              return generateIdenticon((values.icon_shape || 0).toString(), 36);
             }
-          }, [
-            uploadedImageUrl,
-            values.icon_shape,
-            existingPersona?.uploaded_image_id,
-            removePersonaImage,
-          ]);
+
+            return generateIdenticon((values.icon_shape || 0).toString(), 36);
+          })();
 
           return (
             <>
@@ -914,6 +887,8 @@ export function AssistantEditor({
                             const file = (e.target as HTMLInputElement)
                               .files?.[0];
                             if (file) {
+                              const previewUrl = URL.createObjectURL(file);
+                              setUploadedImagePreview(previewUrl);
                               setFieldValue("uploaded_image", file);
                             }
                           };
@@ -931,6 +906,7 @@ export function AssistantEditor({
                           size="sm"
                           className="flex justify-start gap-x-2 text-xs"
                           onClick={() => {
+                            setUploadedImagePreview(null);
                             setFieldValue("uploaded_image", null);
                             setRemovePersonaImage(false);
                           }}
@@ -980,6 +956,7 @@ export function AssistantEditor({
                             onClick={(e) => {
                               e.stopPropagation();
                               setRemovePersonaImage(false);
+                              setUploadedImagePreview(null);
                               setFieldValue("uploaded_image", null);
                             }}
                           >
