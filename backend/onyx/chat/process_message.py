@@ -503,6 +503,7 @@ def stream_chat_message_objects(
             for fd in new_msg_req.current_message_files:
                 uid = fd.get("user_file_id")
                 if uid is not None:
+                    uid = UUID(uid)
                     user_file_ids.append(uid)
 
         # Load in user files into memory and create search tool override kwargs if needed
