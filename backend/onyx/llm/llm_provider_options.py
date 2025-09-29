@@ -96,7 +96,6 @@ BEDROCK_MODEL_NAMES = [
     for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
     if "/" not in model and "embed" not in model
 ][::-1]
-BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 OLLAMA_PROVIDER_NAME = "ollama"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
@@ -169,7 +168,7 @@ _PROVIDER_TO_MODELS_MAP = {
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
-    BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
+    BEDROCK_PROVIDER_NAME: [],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
     OLLAMA_PROVIDER_NAME: [],
@@ -276,7 +275,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 BEDROCK_PROVIDER_NAME
             ),
-            default_model=BEDROCK_DEFAULT_MODEL,
+            default_model=None,
             default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(

@@ -139,7 +139,7 @@ class LLMProviderView(LLMProvider):
 
 class ModelConfigurationUpsertRequest(BaseModel):
     name: str
-    is_visible: bool | None = False
+    is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
 
@@ -157,7 +157,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
 
 class ModelConfigurationView(BaseModel):
     name: str
-    is_visible: bool | None = False
+    is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool
 

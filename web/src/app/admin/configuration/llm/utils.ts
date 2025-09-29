@@ -126,7 +126,7 @@ export const fetchModels = async (
             );
           return {
             name: modelData.name,
-            is_visible: existingConfig?.is_visible ?? false,
+            is_visible: existingConfig?.is_visible ?? true,
             max_input_tokens: modelData.max_input_tokens,
             supports_image_input: modelData.supports_image_input,
           };

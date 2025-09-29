@@ -176,16 +176,16 @@ export function ConfiguredLLMProviderDisplay({
             // then the provider is custom - don't use the default
             // provider descriptor
             llmProviderDescriptor={
-              isSubset(
-                defaultProviderDesciptor
-                  ? defaultProviderDesciptor.model_configurations.map(
-                      (model_configuration) => model_configuration.name
-                    )
-                  : [],
-                provider.model_configurations.map(
-                  (model_configuration) => model_configuration.name
-                )
-              )
+              defaultProviderDesciptor &&
+              (defaultProviderDesciptor.model_configurations.length === 0 ||
+                isSubset(
+                  defaultProviderDesciptor.model_configurations.map(
+                    (model_configuration) => model_configuration.name
+                  ),
+                  provider.model_configurations.map(
+                    (model_configuration) => model_configuration.name
+                  )
+                ))
                 ? defaultProviderDesciptor
                 : null
             }

@@ -23,6 +23,15 @@ def upgrade() -> None:
         sa.Column("supports_image_input", sa.Boolean(), nullable=True),
     )
 
+    # Seems to be left over from when model visibility was introduced and a nullable field.
+    # Set any null is_visible values to False
+    connection = op.get_bind()
+    connection.execute(
+        sa.text(
+            "UPDATE model_configuration SET is_visible = false WHERE is_visible IS NULL"
+        )
+    )
+
 
 def downgrade() -> None:
     op.drop_column("model_configuration", "supports_image_input")
