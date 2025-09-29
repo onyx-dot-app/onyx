@@ -36,9 +36,8 @@ from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
 if TYPE_CHECKING:
-    from setfit import SetFitModel
-    from transformers import PreTrainedTokenizer
-    from transformers import BatchEncoding
+    from setfit import SetFitModel  # type: ignore
+    from transformers import PreTrainedTokenizer, BatchEncoding  # type: ignore
 
 
 logger = setup_logger()

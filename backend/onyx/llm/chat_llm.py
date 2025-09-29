@@ -400,7 +400,6 @@ class DefaultMultiLLM(LLM):
         try:
             configure_litellm()
             import litellm
-            from litellm.exceptions import Timeout, RateLimitError
 
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -453,6 +452,8 @@ class DefaultMultiLLM(LLM):
                 **self._model_kwargs,
             )
         except Exception as e:
+            from litellm.exceptions import Timeout, RateLimitError
+
             self._record_error(processed_prompt, e)
             # for break pointing
             if isinstance(e, Timeout):

@@ -665,13 +665,13 @@ import nltk
             main(
                 {
                     "vertexai": LazyImportSettings(
-                        ignore_files=["special_module.py", "config/setup.py"]
+                        ignore_files={"special_module.py", "config/setup.py"}
                     ),
                     "playwright": LazyImportSettings(
-                        ignore_files=["special_module.py", "config/setup.py"]
+                        ignore_files={"special_module.py", "config/setup.py"}
                     ),
                     "nltk": LazyImportSettings(
-                        ignore_files=["special_module.py", "config/setup.py"]
+                        ignore_files={"special_module.py", "config/setup.py"}
                     ),
                 }
             )
@@ -683,13 +683,13 @@ import nltk
         main(
             {
                 "vertexai": LazyImportSettings(
-                    ignore_files=["special_module.py", "config/setup.py"]
+                    ignore_files={"special_module.py", "config/setup.py"}
                 ),
                 "playwright": LazyImportSettings(
-                    ignore_files=["special_module.py", "config/setup.py"]
+                    ignore_files={"special_module.py", "config/setup.py"}
                 ),
                 "nltk": LazyImportSettings(
-                    ignore_files=["special_module.py", "config/setup.py"]
+                    ignore_files={"special_module.py", "config/setup.py"}
                 ),
             }
         )
@@ -737,7 +737,7 @@ import vertexai
             main(
                 {
                     "vertexai": LazyImportSettings(
-                        ignore_files=["onyx/connectors/factory.py"]
+                        ignore_files={"onyx/connectors/factory.py"}
                     ),
                 }
             )
@@ -746,10 +746,10 @@ import vertexai
         main(
             {
                 "vertexai": LazyImportSettings(
-                    ignore_files=[
+                    ignore_files={
                         "onyx/connectors/factory.py",
                         "onyx/llm/get_litellm.py",
-                    ]
+                    }
                 ),
             }
         )
@@ -758,10 +758,10 @@ import vertexai
         main(
             {
                 "vertexai": LazyImportSettings(
-                    ignore_files=[
+                    ignore_files={
                         "connectors/factory.py",  # Should match
                         "llm/get_litellm.py",  # Should match
-                    ]
+                    }
                 ),
             }
         )
