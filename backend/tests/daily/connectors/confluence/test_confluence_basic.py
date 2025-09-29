@@ -77,10 +77,14 @@ def test_confluence_connector_basic(
 def test_confluence_connector_basic_scoped(
     mock_get_api_key: MagicMock, confluence_connector_scoped: ConfluenceConnector
 ) -> None:
-    _test_confluence_connector_basic(confluence_connector_scoped)
+    _test_confluence_connector_basic(
+        confluence_connector_scoped, expect_attachments=False
+    )
 
 
-def _test_confluence_connector_basic(confluence_connector: ConfluenceConnector) -> None:
+def _test_confluence_connector_basic(
+    confluence_connector: ConfluenceConnector, expect_attachments: bool = True
+) -> None:
     confluence_connector.set_allow_images(False)
     doc_batch = load_all_docs_from_checkpoint_connector(
         confluence_connector, 0, time.time()
@@ -118,7 +122,9 @@ def _test_confluence_connector_basic(confluence_connector: ConfluenceConnector) 
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
     assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
-    assert len(page_doc.sections) == 2  # page text + attachment text
+    assert (
+        len(page_doc.sections) == 2 if expect_attachments else 1
+    )  # page text + attachment text
 
     page_section = page_doc.sections[0]
     assert page_section.text == "test123 " + page_within_a_page_text
@@ -127,10 +133,11 @@ def _test_confluence_connector_basic(confluence_connector: ConfluenceConnector) 
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
-    text_attachment_section = page_doc.sections[1]
-    assert text_attachment_section.text == "small"
-    assert text_attachment_section.link
-    assert text_attachment_section.link.endswith("small-file.txt")
+    if expect_attachments:
+        text_attachment_section = page_doc.sections[1]
+        assert text_attachment_section.text == "small"
+        assert text_attachment_section.link
+        assert text_attachment_section.link.endswith("small-file.txt")
 
 
 @pytest.mark.parametrize("space", ["MI"])
