@@ -27,6 +27,9 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+    env_file:
+      - path: .env
+        required: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -59,6 +62,9 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+    env_file:
+      - path: .env
+        required: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -83,6 +89,9 @@ services:
     restart: unless-stopped
     environment:
       - INTERNAL_URL=http://api_server:8080
+    env_file:
+      - path: .env
+        required: false
     logging:
       driver: json-file
       options:
