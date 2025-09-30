@@ -37,6 +37,7 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
             "onyx/llm/litellm_singleton.py",
         }
     ),
+    "litellm_singleton": LazyImportSettings(),
 }
 
 
