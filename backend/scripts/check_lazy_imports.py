@@ -172,7 +172,7 @@ def should_check_file_for_module(
             # Ensure it's a proper path match, not just string suffix
             # e.g., "connectors/factory.py" should match "onyx/connectors/factory.py"
             # but not "my_connectors/factory.py"
-            if rel_path_str == ignore_pattern or rel_path_str.endswith(
+            if rel_path_str.endswith(
                 "/" + ignore_pattern
             ):
                 return False
