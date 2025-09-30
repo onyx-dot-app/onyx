@@ -197,6 +197,72 @@ def test_find_eager_imports_file_read_error() -> None:
     assert result.violated_modules == set()
 
 
+def test_litellm_singleton_eager_import_detection() -> None:
+    """Test detection of eager import of litellm_singleton module."""
+    test_content = """
+import os
+from onyx.llm.litellm_singleton import litellm  # Should be flagged as eager import
+from typing import Dict
+
+def some_function():
+    # This would be OK - lazy import
+    from onyx.llm.litellm_singleton import litellm
+    return litellm.some_method()
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(test_content)
+        test_path = Path(f.name)
+
+    try:
+        protected_modules = {"onyx.llm.litellm_singleton"}
+        result = find_eager_imports(test_path, protected_modules)
+
+        # Should find one violation (line 3)
+        assert len(result.violation_lines) == 1
+        assert result.violated_modules == {"onyx.llm.litellm_singleton"}
+
+        line_num, line = result.violation_lines[0]
+        assert "from onyx.llm.litellm_singleton import litellm" in line
+
+    finally:
+        test_path.unlink()
+
+
+def test_litellm_singleton_lazy_import_ok() -> None:
+    """Test that lazy import of litellm_singleton is allowed."""
+    test_content = """
+import os
+from typing import Dict
+
+def get_litellm():
+    # This is OK - lazy import inside function
+    from onyx.llm.litellm_singleton import litellm
+    return litellm
+
+class SomeClass:
+    def method(self):
+        # Also OK - lazy import inside method
+        from onyx.llm.litellm_singleton import litellm
+        return litellm.completion()
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(test_content)
+        test_path = Path(f.name)
+
+    try:
+        protected_modules = {"onyx.llm.litellm_singleton"}
+        result = find_eager_imports(test_path, protected_modules)
+
+        # Should find no violations
+        assert len(result.violation_lines) == 0
+        assert result.violated_modules == set()
+
+    finally:
+        test_path.unlink()
+
+
 def test_find_eager_imports_return_type() -> None:
     """Test that function returns correct EagerImportResult type."""
     test_content = """
