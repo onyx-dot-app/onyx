@@ -4,7 +4,7 @@ import {
   InvitedUserSnapshot,
   USER_ROLE_LABELS,
 } from "@/lib/types";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import CenteredPageSelector from "./CenteredPageSelector";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -46,6 +46,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UserTypeToggle } from "./UserTypeToggle";
+import { useUserTypeFilters } from "@/hooks/useUserTypeFilters";
+import { getDisplayEmail, getUserTypeLabel } from "@/lib/userUtils";
 
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
@@ -81,7 +84,7 @@ const SignedUpUserTable = ({
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
 
   const {
-    currentPageData: pageOfUsers,
+    currentPageData: allPageUsers,
     isLoading,
     error,
     currentPage,
@@ -95,6 +98,14 @@ const SignedUpUserTable = ({
     query: q,
     filter: filters,
   });
+
+  // User type filtering
+  const {
+    filters: userTypeFilters,
+    setFilters: setUserTypeFilters,
+    filteredUsers: pageOfUsers,
+    userCounts,
+  } = useUserTypeFilters(allPageUsers || []);
 
   const { user: currentUser } = useUser();
 
@@ -325,6 +336,11 @@ const SignedUpUserTable = ({
 
   return (
     <>
+      <UserTypeToggle
+        filters={userTypeFilters}
+        onFiltersChange={setUserTypeFilters}
+        userCounts={userCounts}
+      />
       {renderFilters()}
       <Table className="overflow-visible">
         <TableHeader>
@@ -362,7 +378,16 @@ const SignedUpUserTable = ({
             ) : (
               pageOfUsers.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>{getDisplayEmail(user.email)}</span>
+                      {getUserTypeLabel(user) && (
+                        <span className="text-xs text-muted-foreground">
+                          {getUserTypeLabel(user)}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="w-[180px]">
                     {renderUserRoleDropdown(user)}
                   </TableCell>
