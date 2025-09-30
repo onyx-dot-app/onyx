@@ -245,6 +245,7 @@ class OnyxConfluence:
                     logger.info(
                         f"password: {len(credentials['confluence_access_token'])}"
                     )
+                    logger.info(f"url: {url}")
                     confluence_client_with_minimal_retries = Confluence(
                         url=url,
                         username=credentials["confluence_username"],
