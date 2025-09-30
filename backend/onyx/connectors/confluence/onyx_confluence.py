@@ -224,10 +224,8 @@ class OnyxConfluence:
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()
             if self.scoped_token:
+                # v2 endpoint doesn't always work with scoped tokens, use v1
                 token = credentials["confluence_access_token"]
-                # your ctor already did: url = scoped_url(original_url, "confluence")
-                # scoped_url returns: https://api.atlassian.com/ex/confluence/{cloudId}{parsed.path}
-                # If parsed.path already includes '/wiki', v2 base is f"{url}/api/v2"
                 probe_url = f"{self.base_url}/rest/api/space?limit=1"
                 import requests
 
