@@ -96,6 +96,7 @@ class OnyxConfluence:
         ),
     ) -> None:
         url = scoped_url(url, "confluence") if scoped_token else url
+        print(f"scoped_url: {url}, scoped_token: {scoped_token}")
 
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")

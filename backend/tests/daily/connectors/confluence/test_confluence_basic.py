@@ -37,25 +37,29 @@ def confluence_connector(space: str) -> ConfluenceConnector:
 
 @pytest.fixture
 def confluence_connector_scoped(space: str) -> ConfluenceConnector:
-    connector = ConfluenceConnector(
-        wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        space=space,
-        is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
-        page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
-        scoped_token=True,
-    )
+    with patch(
+        "onyx.connectors.confluence.onyx_confluence.scoped_url",
+        return_value=os.environ["CONFLUENCE_SCOPED_URL"],
+    ):
+        connector = ConfluenceConnector(
+            wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
+            space=space,
+            is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
+            page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
+            scoped_token=True,
+        )
 
-    credentials_provider = OnyxStaticCredentialsProvider(
-        None,
-        DocumentSource.CONFLUENCE,
-        {
-            "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-            # Use a SCOPED token env var for this test
-            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"],
-        },
-    )
-    connector.set_credentials_provider(credentials_provider)
-    return connector
+        credentials_provider = OnyxStaticCredentialsProvider(
+            None,
+            DocumentSource.CONFLUENCE,
+            {
+                "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
+                # Use a SCOPED token env var for this test
+                "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"],
+            },
+        )
+        connector.set_credentials_provider(credentials_provider)
+        return connector
 
 
 @pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
