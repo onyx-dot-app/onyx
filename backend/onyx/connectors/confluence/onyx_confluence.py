@@ -96,7 +96,6 @@ class OnyxConfluence:
         ),
     ) -> None:
         url = scoped_url(url, "confluence") if scoped_token else url
-        print(f"scoped_url: {url}, scoped_token: {scoped_token}")
 
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
@@ -260,11 +259,16 @@ class OnyxConfluence:
                     )
 
             # This call sometimes hangs indefinitely, so we run it in a timeout
-            spaces = run_with_timeout(
-                timeout=10,
-                func=confluence_client_with_minimal_retries.get_all_spaces,
-                limit=1,
-            )
+            try:
+                spaces = run_with_timeout(
+                    timeout=10,
+                    func=confluence_client_with_minimal_retries.get_all_spaces,
+                    limit=1,
+                )
+            except HTTPError as e:
+                logger.error(f"HTTPError in confluence call: {e}")
+                logger.info(f"Full error: {e.response.text}")
+                raise e
 
             # uncomment the following for testing
             # the following is an attempt to retrieve the user's timezone
