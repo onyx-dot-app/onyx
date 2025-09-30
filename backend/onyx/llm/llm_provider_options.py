@@ -109,8 +109,8 @@ ANTHROPIC_MODEL_NAMES = [
     if model not in IGNORABLE_ANTHROPIC_MODELS
 ][::-1]
 ANTHROPIC_VISIBLE_MODEL_NAMES = [
-    "claude-3-5-sonnet-20241022",
-    "claude-3-7-sonnet-20250219",
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-20250514",
 ]
 
 AZURE_PROVIDER_NAME = "azure"
@@ -195,8 +195,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 ANTHROPIC_PROVIDER_NAME
             ),
-            default_model="claude-3-7-sonnet-20250219",
-            default_fast_model="claude-3-5-sonnet-20241022",
+            default_model="claude-sonnet-4-5-20250929",
+            default_fast_model="claude-sonnet-4-20250514",
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
