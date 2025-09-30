@@ -31,7 +31,12 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
     "markitdown": LazyImportSettings(),
     "tiktoken": LazyImportSettings(),
     "unstructured": LazyImportSettings(),
-    "litellm": LazyImportSettings(ignore_files={"onyx/llm/llm_provider_options.py"}),
+    "litellm": LazyImportSettings(
+        ignore_files={
+            "onyx/llm/llm_provider_options.py",
+            "onyx/llm/litellm_singleton.py",
+        }
+    ),
 }
 
 
