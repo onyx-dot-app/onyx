@@ -45,8 +45,7 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from onyx.llm.litellm_singleton import litellm
-    from litellm import ModelResponse, CustomStreamWrapper
+    from litellm import ModelResponse, CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -81,7 +80,7 @@ def _base_msg_to_role(msg: BaseMessage) -> str:
 
 
 def _convert_litellm_message_to_langchain_message(
-    litellm_message: "litellm.Message",
+    litellm_message: "Message",
 ) -> BaseMessage:
     from onyx.llm.litellm_singleton import litellm
 
