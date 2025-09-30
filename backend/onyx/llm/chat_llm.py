@@ -442,18 +442,11 @@ class DefaultMultiLLM(LLM):
                     if self.config.model_name
                     in [
                         "gpt-5",
-                    ]
-                    else {}
-                ),  # TODO: remove once LITELLM has better support
-                **(
-                    {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
                         "gpt-5-mini",
                         "gpt-5-nano",
                     ]
                     else {}
-                ),  # TODO: remove later. Separate from GPT-5 setting in case we want to set this to low.
+                ),  # TODO: remove once LITELLM has better support/we change API
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
