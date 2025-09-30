@@ -542,30 +542,25 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     task_logger.warning(
                         f"Tenant={tenant_id} failed Vespa update for doc_id={new_uuid} - {e.__class__.__name__}"
                     )
-
             # Update search_doc records to refer to the UUID string
-            uf_id_subq = (
-                sa.select(sa.cast(UserFile.id, sa.String))
+            # Use a grouped mapping (one row per legacy document_id) to avoid scalar subquery cardinality errors
+            uf_map = (
+                sa.select(
+                    UserFile.document_id.label("document_id"),
+                    sa.cast(sa.func.min(UserFile.id), sa.String).label("new_id"),
+                )
                 .where(
                     UserFile.document_id.is_not(None),
                     UserFile.document_id_migrated.is_(False),
-                    SearchDoc.document_id == UserFile.document_id,
                 )
-                .correlate(SearchDoc)
-                .scalar_subquery()
+                .group_by(UserFile.document_id)
+                .subquery()
             )
+
             db_session.execute(
                 sa.update(SearchDoc)
-                .where(
-                    sa.exists(
-                        sa.select(sa.literal(1)).where(
-                            UserFile.document_id.is_not(None),
-                            UserFile.document_id_migrated.is_(False),
-                            SearchDoc.document_id == UserFile.document_id,
-                        )
-                    )
-                )
-                .values(document_id=uf_id_subq)
+                .where(SearchDoc.document_id == uf_map.c.document_id)
+                .values(document_id=uf_map.c.new_id)
             )
             # Mark all processed user_files as migrated
             db_session.execute(
