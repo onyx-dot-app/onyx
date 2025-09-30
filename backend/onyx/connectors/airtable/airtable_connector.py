@@ -8,6 +8,7 @@ from typing import cast
 
 import requests
 from pyairtable import Api as AirtableApi
+from pyairtable import retry_strategy as build_airtable_retry_strategy
 from pyairtable.api.types import RecordDict
 from pyairtable.models.schema import TableSchema
 from retry import retry
@@ -93,7 +94,16 @@ class AirtableConnector(LoadConnector):
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self._airtable_client = AirtableApi(credentials["airtable_access_token"])
+        retry_config = build_airtable_retry_strategy(
+            total=12,
+            backoff_factor=1.0,
+            status_forcelist=(429, 500, 502, 503, 504),
+            respect_retry_after_header=True,
+        )
+        self._airtable_client = AirtableApi(
+            credentials["airtable_access_token"],
+            retry_strategy=retry_config,
+        )
         return None
 
     @property
