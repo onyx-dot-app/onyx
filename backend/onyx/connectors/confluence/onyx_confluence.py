@@ -241,6 +241,11 @@ class OnyxConfluence:
                 logger.info("Probing Confluence with Personal Access Token.")
                 url = self._url
                 if self._is_cloud:
+                    logger.info("running with cloud client")
+                    logger.info(f"username: {len(credentials['confluence_username'])}")
+                    logger.info(
+                        f"password: {len(credentials['confluence_access_token'])}"
+                    )
                     confluence_client_with_minimal_retries = Confluence(
                         url=url,
                         username=credentials["confluence_username"],
