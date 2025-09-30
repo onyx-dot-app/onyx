@@ -33,6 +33,24 @@ async function handleSamlCallback(
     fetchOptions.body = await request.formData();
   }
 
+  // OneLogin python toolkit only supports HTTP-POST binding for SAMLResponse.
+  // If the IdP returned SAMLResponse via query parameters (GET), convert to POST.
+  if (method === "GET") {
+    const samlResponse = request.nextUrl.searchParams.get("SAMLResponse");
+    const relayState = request.nextUrl.searchParams.get("RelayState");
+    if (samlResponse) {
+      const formData = new FormData();
+      formData.set("SAMLResponse", samlResponse);
+      if (relayState) {
+        formData.set("RelayState", relayState);
+      }
+      // Clear query on backend URL and send as POST with form body
+      url.search = "";
+      fetchOptions.method = "POST";
+      fetchOptions.body = formData;
+    }
+  }
+
   const response = await fetch(url.toString(), fetchOptions);
   const setCookieHeader = response.headers.get("set-cookie");
 
