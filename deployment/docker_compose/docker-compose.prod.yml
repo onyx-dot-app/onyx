@@ -136,6 +136,9 @@ services:
     command: -c 'max_connections=250'
     restart: unless-stopped
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - db_volume:/var/lib/postgresql/data
     logging:
