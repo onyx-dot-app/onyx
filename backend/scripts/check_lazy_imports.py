@@ -160,7 +160,7 @@ def should_check_file_for_module(
 
     # Get relative path from backend directory
     rel_path = file_path.relative_to(backend_dir)
-    rel_path_str = str(rel_path)
+    rel_path_str = rel_path.as_posix()
 
     # Check if this file path matches any pattern in the ignore list
     for ignore_pattern in settings.ignore_files:
@@ -172,9 +172,7 @@ def should_check_file_for_module(
             # Ensure it's a proper path match, not just string suffix
             # e.g., "connectors/factory.py" should match "onyx/connectors/factory.py"
             # but not "my_connectors/factory.py"
-            if rel_path_str.endswith(
-                "/" + ignore_pattern
-            ):
+            if rel_path_str.endswith("/" + ignore_pattern):
                 return False
 
     return True
