@@ -170,7 +170,7 @@ def upgrade() -> None:
         # Clean child tables first to satisfy foreign key constraints,
         # then the parent tables
         tables_to_clean = [
-            ("index_attempt_errors", "cc_pair_id"),
+            ("index_attempt_errors", "connector_credential_pair_id"),
             ("index_attempt", "connector_credential_pair_id"),
             ("background_error", "cc_pair_id"),
             ("document_set__connector_credential_pair", "connector_credential_pair_id"),
