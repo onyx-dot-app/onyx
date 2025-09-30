@@ -95,12 +95,13 @@ class OnyxConfluence:
             CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
         ),
     ) -> None:
+        self.base_url = url  #'/'.join(url.rstrip("/").split("/")[:-1])
         url = scoped_url(url, "confluence") if scoped_token else url
 
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
-
+        self.scoped_token = scoped_token
         self.redis_client: Redis | None = None
         self.static_credentials: dict[str, Any] | None = None
         if self._credentials_provider.is_dynamic():
@@ -222,6 +223,29 @@ class OnyxConfluence:
 
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()
+            if self.scoped_token:
+                token = credentials["confluence_access_token"]
+                # your ctor already did: url = scoped_url(original_url, "confluence")
+                # scoped_url returns: https://api.atlassian.com/ex/confluence/{cloudId}{parsed.path}
+                # If parsed.path already includes '/wiki', v2 base is f"{url}/api/v2"
+                probe_url = f"{self.base_url}/rest/api/space?limit=1"
+                import requests
+
+                try:
+                    r = requests.get(
+                        probe_url,
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=10,
+                    )
+                    r.raise_for_status()
+                except HTTPError as e:
+                    if e.response.status_code == 403:
+                        logger.warning(
+                            "scoped token authenticated but not valid for probe endpoint (spaces)"
+                        )
+                    else:
+                        raise e
+                return
 
             # probe connection with direct client, no retries
             if "confluence_refresh_token" in credentials:
@@ -241,11 +265,6 @@ class OnyxConfluence:
                 url = self._url
                 if self._is_cloud:
                     logger.info("running with cloud client")
-                    logger.info(f"username: {len(credentials['confluence_username'])}")
-                    logger.info(
-                        f"password: {len(credentials['confluence_access_token'])}"
-                    )
-                    logger.info(f"url: {url}")
                     confluence_client_with_minimal_retries = Confluence(
                         url=url,
                         username=credentials["confluence_username"],
@@ -260,16 +279,11 @@ class OnyxConfluence:
                     )
 
             # This call sometimes hangs indefinitely, so we run it in a timeout
-            try:
-                spaces = run_with_timeout(
-                    timeout=10,
-                    func=confluence_client_with_minimal_retries.get_all_spaces,
-                    limit=1,
-                )
-            except HTTPError as e:
-                logger.error(f"HTTPError in confluence call: {e}")
-                logger.info(f"Full error: {e.response.text}")
-                raise e
+            spaces = run_with_timeout(
+                timeout=10,
+                func=confluence_client_with_minimal_retries.get_all_spaces,
+                limit=1,
+            )
 
             # uncomment the following for testing
             # the following is an attempt to retrieve the user's timezone
