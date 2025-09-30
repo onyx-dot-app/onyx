@@ -245,7 +245,7 @@ def upgrade() -> None:
                   AND t.relname = 'user_file'
                   AND ft.relname = 'connector_credential_pair'
               ) LOOP
-                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT %I', r.conname);
+                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
         """
