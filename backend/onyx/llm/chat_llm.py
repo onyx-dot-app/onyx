@@ -396,10 +396,11 @@ class DefaultMultiLLM(LLM):
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
+        import litellm
+        from litellm.exceptions import Timeout, RateLimitError
 
         try:
             configure_litellm()
-            import litellm
 
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -452,7 +453,6 @@ class DefaultMultiLLM(LLM):
                 **self._model_kwargs,
             )
         except Exception as e:
-            from litellm.exceptions import Timeout, RateLimitError
 
             self._record_error(processed_prompt, e)
             # for break pointing
