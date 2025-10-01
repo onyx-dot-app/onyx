@@ -145,13 +145,14 @@ const SearchableTables = () => {
       }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "users.csv";
-      document.body.appendChild(a);
-      a.click();
+      const anchor_tag = document.createElement("a");
+      anchor_tag.href = url;
+      anchor_tag.download = "users.csv";
+      document.body.appendChild(anchor_tag);
+      anchor_tag.click();
+      //Clean up URL after download to avoid memory leaks
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      document.body.removeChild(anchor_tag);
     } catch (error) {
       setPopup({
         message: `Failed to download all users - ${error}`,
