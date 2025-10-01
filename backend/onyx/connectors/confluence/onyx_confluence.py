@@ -242,6 +242,11 @@ class OnyxConfluence:
                             "scoped token authenticated but not valid for probe endpoint (spaces)"
                         )
                     else:
+                        if "WWW-Authenticate" in e.response.headers:
+                            logger.warning(
+                                f"WWW-Authenticate: {e.response.headers['WWW-Authenticate']}"
+                            )
+                            logger.warning(f"Full error: {e.response.text}")
                         raise e
                 return
 

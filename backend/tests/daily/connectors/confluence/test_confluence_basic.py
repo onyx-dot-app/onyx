@@ -39,13 +39,13 @@ def _make_connector(
 
 @pytest.fixture
 def confluence_connector(space: str) -> ConfluenceConnector:
-    return _make_connector(space, os.environ["CONFLUENCE_ACCESS_TOKEN"])
+    return _make_connector(space, os.environ["CONFLUENCE_ACCESS_TOKEN"].strip())
 
 
 @pytest.fixture
 def confluence_connector_scoped(space: str) -> ConfluenceConnector:
     return _make_connector(
-        space, os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"], scoped_token=True
+        space, os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"].strip(), scoped_token=True
     )
 
 
