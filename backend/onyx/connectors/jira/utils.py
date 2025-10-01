@@ -75,8 +75,11 @@ def extract_text_from_adf(adf: dict | None) -> str:
     return " ".join(texts)
 
 
-def build_jira_url(jira_client: JIRA, issue_key: str) -> str:
-    return f"{jira_client.client_info()}/browse/{issue_key}"
+def build_jira_url(jira_base_url: str, issue_key: str) -> str:
+    """
+    Get the url used to access an issue in the UI.
+    """
+    return f"{jira_base_url}/browse/{issue_key}"
 
 
 def build_jira_client(

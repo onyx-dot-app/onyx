@@ -338,13 +338,9 @@ class OnyxConfluence:
             url = f"https://api.atlassian.com/ex/confluence/{credentials['cloud_id']}"
             confluence = Confluence(url=url, oauth2=oauth2_dict, **kwargs)
         else:
-            logger.info("Connecting to Confluence with Personal Access Token.")
             logger.info(
-                f"part token: {credentials['confluence_access_token'][:5]}...{credentials['confluence_access_token'][-5:]}"
+                f"Connecting to Confluence with Personal Access Token as user: {credentials['confluence_username']}"
             )
-            logger.info(f"Is Cloud: {self._is_cloud}")
-            logger.info(f"URL: {self._url}")
-            logger.info(f"Username: {credentials['confluence_username']}")
             if self._is_cloud:
                 confluence = Confluence(
                     url=self._url,
