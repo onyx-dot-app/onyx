@@ -229,6 +229,8 @@ class OnyxConfluence:
                 probe_url = f"{self.base_url}/rest/api/space?limit=1"
                 import requests
 
+                logger.info(f"Last 5 of token: {token[-5:]}")
+
                 try:
                     r = requests.get(
                         probe_url,
