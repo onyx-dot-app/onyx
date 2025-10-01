@@ -34,7 +34,6 @@ from onyx.configs.model_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
-from onyx.llm.get_litellm import configure_litellm
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -397,8 +396,6 @@ class DefaultMultiLLM(LLM):
         from litellm.exceptions import Timeout, RateLimitError
 
         try:
-            configure_litellm()
-
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
