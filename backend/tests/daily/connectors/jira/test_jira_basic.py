@@ -10,37 +10,34 @@ from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
-@pytest.fixture
-def jira_connector() -> JiraConnector:
+def _make_connector(scoped_token: bool = False) -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
         project_key="AS",
         comment_email_blacklist=[],
+        scoped_token=scoped_token,
     )
     connector.load_credentials(
         {
             "jira_user_email": os.environ["JIRA_USER_EMAIL"],
-            "jira_api_token": os.environ["JIRA_API_TOKEN"],
+            "jira_api_token": (
+                os.environ["JIRA_API_TOKEN_SCOPED"]
+                if scoped_token
+                else os.environ["JIRA_API_TOKEN"]
+            ),
         }
     )
     return connector
+
+
+@pytest.fixture
+def jira_connector() -> JiraConnector:
+    return _make_connector()
 
 
 @pytest.fixture
 def jira_connector_scoped() -> JiraConnector:
-    connector = JiraConnector(
-        jira_base_url="https://danswerai.atlassian.net",
-        project_key="AS",
-        comment_email_blacklist=[],
-        scoped_token=True,
-    )
-    connector.load_credentials(
-        {
-            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
-            "jira_api_token": os.environ["JIRA_API_TOKEN_SCOPED"],
-        }
-    )
-    return connector
+    return _make_connector(scoped_token=True)
 
 
 @pytest.fixture
