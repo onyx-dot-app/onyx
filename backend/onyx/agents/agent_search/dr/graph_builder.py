@@ -8,6 +8,7 @@ from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.nodes.dr_a0_clarification import clarifier
 from onyx.agents.agent_search.dr.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.dr.nodes.dr_a2_closer import closer
+from onyx.agents.agent_search.dr.nodes.dr_a2d_rewriter import rewriter
 from onyx.agents.agent_search.dr.nodes.dr_a3_logger import logging
 from onyx.agents.agent_search.dr.states import MainInput
 from onyx.agents.agent_search.dr.states import MainState
@@ -65,6 +66,7 @@ def dr_graph_builder() -> StateGraph:
     graph.add_node(DRPath.GENERIC_INTERNAL_TOOL, generic_internal_tool_graph)
 
     graph.add_node(DRPath.CLOSER, closer)
+    graph.add_node(DRPath.REWRITER, rewriter)
     graph.add_node(DRPath.LOGGER, logging)
 
     ### Add edges ###

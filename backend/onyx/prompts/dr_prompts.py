@@ -1889,3 +1889,32 @@ Please look at the purpose of the next tool call and briefly \
 restate it in 1 to 2 sentences. Mention the tool chosen and what \
 it should achieve.
 """
+
+CLAIM_CONTRADICTION_PROMPT = PromptTemplate(
+    f"""
+Please look at the claims below and determine if there are any contradictions or \
+inconsistencies between them, or if \
+there are areas that suggest potential contradictions, or if there are clarification needs. \
+If there are, please list them in the format outlined below.
+
+Here are the claims:
+{SEPARATOR_LINE}
+---claim_str---
+{SEPARATOR_LINE}
+
+Format:
+{{
+    "contradictions": <a list of dictionaries, one for each contradiction. Each contradiction shopuld have the format:\
+      {{
+        "contradiction": <contradiction description. This description will be sent to another tool for verification.>,
+        "claim_numbers": <the numbers of the claims that are in contradiction. These can be two or more.>
+      }}>,
+    "clarification_needs": <a list of clarification needs, one for each clarification. Each clarification shopuld have the \
+format:\
+      {{
+        "clarification": <clarification description. This description will be sent to another tool for clarification.>,
+        "claim_numbers": <the numbers of the claims that are involved in the clarification requirement. These can be ONE or more.>
+      }}>,
+}}
+"""
+)

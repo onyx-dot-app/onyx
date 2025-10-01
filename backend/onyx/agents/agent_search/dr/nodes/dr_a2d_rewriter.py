@@ -49,17 +49,31 @@ def rewriter(
 
     # iteration_responses = state.iteration_responses
 
+    claims: list[str] = []
+
     claims = []
+    for iteration_response_nr, iteration_response in enumerate(
+        state.iteration_responses
+    ):
+        for iteration_claim_nr, iteration_claim in enumerate(
+            iteration_response.claims or []
+        ):
+            claims.append(
+                f"Claim Nr: {iteration_response_nr}-{iteration_claim_nr}\nClaim:\n{iteration_claim}"
+            )
+    claim_str = "\n\n".join(claims)
 
-    # for iteration_response in iteration_responses:
-    #     claims.extend(iteration_response.claims)
+    print(claim_str)
 
-    claims = list(set(claims))
+    # claim_tension_prompt = CLAIM_CONTRADICTION_PROMPT.build(
+    #     claim_str=claim_str,
+    # )
 
-    # aggregated_context = aggregate_context(iteration_responses, include_documents=True)
-
-    # aggregated_context_wo_docs = aggregate_context(
-    #     iteration_responses, include_documents=False
+    # claim_tension_response = invoke_llm_json(
+    #     claim_tension_prompt,
+    #     model=graph_config.inputs.llm_config.model,
+    #     max_tokens=graph_config.inputs.llm_config.max_tokens,
+    #     schema=ClaimTensionResponse,
     # )
 
     return FinalUpdate(

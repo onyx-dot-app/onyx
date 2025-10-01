@@ -606,12 +606,16 @@ def orchestrator(
     )
 
     message_history_for_continuation.append(HumanMessage(content=_NEXT_ACTION_PROMPT))
-    new_messages.append(HumanMessage(content=_NEXT_ACTION_PROMPT))
-
-    message_history_for_continuation.append(
-        AIMessage(content=tool_choice_wrapper_prompt)
+    new_messages.append(
+        HumanMessage(content=tool_choice_wrapper_prompt + "\n\n" + _NEXT_ACTION_PROMPT)
     )
-    new_messages.append(AIMessage(content=tool_choice_wrapper_prompt))
+
+    # message_history_for_continuation.append(
+    #     AIMessage(content=tool_choice_wrapper_prompt)
+    # )
+    new_messages.append(
+        AIMessage(content=tool_choice_wrapper_prompt + "\n\n" + _NEXT_ACTION_PROMPT)
+    )
 
     purpose_tokens: list[str] = [""]
     purpose = ""
@@ -659,6 +663,9 @@ def orchestrator(
 
     elif research_type == ResearchType.FAST:
         purpose = f"Answering the question using the {next_tool_name}"
+
+    message_history_for_continuation.append(AIMessage(content=purpose))
+    new_messages.append(AIMessage(content=purpose))
 
     if not next_tool_name:
         raise ValueError("The next step has not been defined. This should not happen.")

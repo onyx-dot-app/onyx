@@ -36,8 +36,7 @@ from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.llm.utils import check_number_of_tokens
-from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
+from onyx.prompts.dr_prompts import FINAL_ANSWER_DEEP_CITATION_PROMPT
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
 from onyx.server.query_and_chat.streaming_models import CitationDelta
@@ -223,7 +222,7 @@ def closer(
 
     research_type = graph_config.behavior.research_type
 
-    assistant_system_prompt: str = state.assistant_system_prompt or ""
+    # assistant_system_prompt: str = state.assistant_system_prompt or ""
     assistant_task_prompt = state.assistant_task_prompt
 
     state.uploaded_test_context or ""

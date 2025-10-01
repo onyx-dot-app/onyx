@@ -20,6 +20,11 @@ class OrchestratorDecisonsNoPlan(BaseModel):
     next_step: OrchestratorStep
 
 
+class ClaimTensionResponse(BaseModel):
+    contradictions: list[dict]
+    clarification_needs: list[dict]
+
+
 class OrchestrationPlan(BaseModel):
     reasoning: str
     plan: str

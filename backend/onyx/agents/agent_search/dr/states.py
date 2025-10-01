@@ -9,6 +9,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import CoreState
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
@@ -59,6 +60,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     orchestration_llm_messages: Annotated[
         list[SystemMessage | HumanMessage | AIMessage], add
     ] = []
+    research_type: ResearchType | None = None
 
 
 class AnswerUpdate(LoggerUpdate):

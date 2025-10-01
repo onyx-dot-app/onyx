@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any
 from typing import cast
@@ -38,9 +39,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
-from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
-from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
 from onyx.chat.stream_processing.citation_processing import (
     normalize_square_bracket_citations_to_double_with_links,
 )
@@ -63,7 +61,6 @@ from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
 from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import BASE_SYSTEM_MESSAGE_TEMPLATE
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
@@ -705,39 +702,7 @@ def clarifier(
                 HumanMessage(content=decision_prompt)
             )
 
-            if context_llm_docs:
-                persona = graph_config.inputs.persona
-                if persona is not None:
-                    prompt_config = PromptConfig.from_model(persona)
-                else:
-                    prompt_config = PromptConfig(
-                        system_prompt=assistant_system_prompt,
-                        task_prompt="",
-                        datetime_aware=True,
-                    )
-
-                system_prompt_to_use_content = build_citations_system_message(
-                    prompt_config
-                ).content
-                system_prompt_to_use: str = cast(str, system_prompt_to_use_content)
-                if graph_config.inputs.project_instructions:
-                    system_prompt_to_use = (
-                        system_prompt_to_use
-                        + PROJECT_INSTRUCTIONS_SEPARATOR
-                        + graph_config.inputs.project_instructions
-                    )
-                user_prompt_to_use = build_citations_user_message(
-                    user_query=original_question,
-                    files=[],
-                    prompt_config=prompt_config,
-                    context_docs=context_llm_docs,
-                    all_doc_useful=False,
-                    history_message=chat_history_string,
-                    context_type="user files",
-                ).content
-            else:
-                system_prompt_to_use = assistant_system_prompt
-                user_prompt_to_use = decision_prompt + assistant_task_prompt
+            decision_prompt + assistant_task_prompt
 
             stream = graph_config.tooling.primary_llm.stream(
                 prompt=message_history_for_continuation,
@@ -751,8 +716,8 @@ def clarifier(
                 should_stream_answer=True,
                 writer=writer,
                 ind=0,
-                final_search_results=context_llm_docs,
-                displayed_search_results=context_llm_docs,
+                final_search_results=[],
+                displayed_search_results=[],
                 generate_final_answer=True,
                 chat_message_id=str(graph_config.persistence.chat_session_id),
             )
@@ -771,7 +736,7 @@ def clarifier(
                 # Persist final documents and derive citations when using in-context docs
                 final_documents_db, citations_map = _persist_final_docs_and_citations(
                     db_session=db_session,
-                    context_llm_docs=context_llm_docs,
+                    context_llm_docs=[],
                     full_answer=full_answer,
                 )
 
@@ -973,4 +938,5 @@ def clarifier(
         all_entity_types=all_entity_types,
         all_relationship_types=all_relationship_types,
         orchestration_llm_messages=message_history_for_continuation,
+        research_type=research_type,
     )

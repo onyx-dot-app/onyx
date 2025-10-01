@@ -4,6 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Send
 
 from onyx.agents.agent_search.dr.enums import DRPath
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.states import MainState
 
 
@@ -59,6 +60,6 @@ def completeness_router(state: MainState) -> DRPath | str:
     if next_path == DRPath.ORCHESTRATOR.value:
         return DRPath.ORCHESTRATOR
 
-    if state.ResearchType.DEEP:
+    if state.research_type == ResearchType.DEEP:
         return DRPath.REWRITER
     return DRPath.LOGGER

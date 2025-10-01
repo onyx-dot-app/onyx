@@ -178,6 +178,7 @@ def invoke_llm_json(
             first_bracket = response_content.find("{")
             last_bracket = response_content.rfind("}")
             response_content = response_content[first_bracket : last_bracket + 1]
+            response_content = response_content.replace("{{", "{").replace("}}", "}")
 
     return schema.model_validate_json(response_content)
 
