@@ -1,7 +1,7 @@
 """Add image input support to model config
 
 Revision ID: 64bd5677aeb6
-Revises: 2b75d0a8ffcb
+Revises: b30353be4eec
 Create Date: 2025-09-28 15:48:12.003612
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "64bd5677aeb6"
-down_revision = "2b75d0a8ffcb"
+down_revision = "b30353be4eec"
 branch_labels = None
 depends_on = None
 
