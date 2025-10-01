@@ -588,9 +588,7 @@ export function LLMProviderUpdateForm({
                 (llmProviderDescriptor.model_configurations.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
-            for this provider. If \`Default\` is specified, will use
-            the Default Model configured above.`}
+                    subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
                     label="[Optional] Fast Model"
                     options={llmProviderDescriptor.model_configurations.map(
                       (modelConfiguration) => ({
@@ -606,9 +604,7 @@ export function LLMProviderUpdateForm({
                 ) : (
                   <TextFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
-            for this provider. If \`Default\` is specified, will use
-            the Default Model configured above.`}
+                    subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
                     label="[Optional] Fast Model"
                     placeholder="E.g. gpt-4"
                   />

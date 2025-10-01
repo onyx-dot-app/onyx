@@ -878,6 +878,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
+  "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
 
   // Google Models
 

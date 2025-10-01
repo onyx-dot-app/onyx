@@ -54,6 +54,7 @@ ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".xml",
     ".yml",
     ".yaml",
+    ".sql",
 ]
 
 ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [

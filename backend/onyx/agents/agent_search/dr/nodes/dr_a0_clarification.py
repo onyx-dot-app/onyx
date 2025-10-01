@@ -643,9 +643,16 @@ def clarifier(
                         datetime_aware=True,
                     )
 
-                system_prompt_to_use = build_citations_system_message(
+                system_prompt_to_use_content = build_citations_system_message(
                     prompt_config
                 ).content
+                system_prompt_to_use: str = cast(str, system_prompt_to_use_content)
+                if graph_config.inputs.project_instructions:
+                    system_prompt_to_use = (
+                        system_prompt_to_use
+                        + PROJECT_INSTRUCTIONS_SEPARATOR
+                        + graph_config.inputs.project_instructions
+                    )
                 user_prompt_to_use = build_citations_user_message(
                     user_query=original_question,
                     files=[],

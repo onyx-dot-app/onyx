@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/menubar";
 import { FileUploadIcon } from "@/components/icons/icons";
 import { Files } from "@phosphor-icons/react";
-import { FileIcon, Paperclip, Loader2, Eye } from "lucide-react";
+import { FileIcon, Paperclip, Loader2 } from "lucide-react";
+import { OpenInNewIcon } from "@/components/icons/CustomIcons";
 import { cn } from "@/lib/utils";
 import { ChatInputOption } from "../input/ChatInputOption";
 import FilesList from "./FilesList";
@@ -149,7 +150,10 @@ export default function FilePicker({
                               onFileClick && onFileClick(f);
                             }}
                           >
-                            <Eye className="h-4 w-4 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200" />
+                            <OpenInNewIcon
+                              size={16}
+                              className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
+                            />
                           </button>
                         )}
                     </div>
@@ -191,14 +195,14 @@ export default function FilePicker({
 
       <Dialog open={showRecentFiles} onOpenChange={setShowRecentFiles}>
         <DialogContent
-          className="w-full max-w-lg focus:outline-none focus-visible:outline-none"
+          className="w-full max-w-lg px-6 py-3 sm:px-6 sm:py-4 focus:outline-none focus-visible:outline-none"
           tabIndex={-1}
           onOpenAutoFocus={(e) => {
             // Prevent auto-focus which can interfere with input
             e.preventDefault();
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="px-0 pt-0 pb-2">
             <Files size={32} />
             <DialogTitle>Recent Files</DialogTitle>
           </DialogHeader>

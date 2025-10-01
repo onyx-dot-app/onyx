@@ -30,7 +30,6 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
-from onyx.db.mcp import get_mcp_server_auth_performer
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
@@ -388,10 +387,7 @@ def construct_tools(
                 or mcp_server.auth_type == MCPAuthenticationType.OAUTH
             ):
                 # If server has a per-user template, only use that user's config
-                if (
-                    get_mcp_server_auth_performer(mcp_server)
-                    == MCPAuthenticationPerformer.PER_USER
-                ):
+                if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
                     connection_config = get_user_connection_config(
                         mcp_server.id, user_email, db_session
                     )
@@ -420,7 +416,7 @@ def construct_tools(
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
-                if saved_tool.name == expected_tool_name:
+                if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
             if db_tool_model.id not in tool_dict:
                 logger.warning(

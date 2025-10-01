@@ -240,6 +240,43 @@ else
     exit 1
 fi
 
+# Function to compare version numbers
+version_compare() {
+    # Returns 0 if $1 <= $2, 1 if $1 > $2
+    local version1=$1
+    local version2=$2
+
+    # Split versions into components
+    local v1_major=$(echo $version1 | cut -d. -f1)
+    local v1_minor=$(echo $version1 | cut -d. -f2)
+    local v1_patch=$(echo $version1 | cut -d. -f3)
+
+    local v2_major=$(echo $version2 | cut -d. -f1)
+    local v2_minor=$(echo $version2 | cut -d. -f2)
+    local v2_patch=$(echo $version2 | cut -d. -f3)
+
+    # Compare major version
+    if [ "$v1_major" -lt "$v2_major" ]; then
+        return 0
+    elif [ "$v1_major" -gt "$v2_major" ]; then
+        return 1
+    fi
+
+    # Compare minor version
+    if [ "$v1_minor" -lt "$v2_minor" ]; then
+        return 0
+    elif [ "$v1_minor" -gt "$v2_minor" ]; then
+        return 1
+    fi
+
+    # Compare patch version
+    if [ "$v1_patch" -le "$v2_patch" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Check Docker daemon
 if ! docker info &> /dev/null; then
     print_error "Docker daemon is not running. Please start Docker."
@@ -351,6 +388,36 @@ COMPOSE_FILE="onyx_data/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
 if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
     print_success "Docker Compose file downloaded successfully"
+
+    # Check if Docker Compose version is older than 2.24.0 and show warning
+    if version_compare "$COMPOSE_VERSION" "2.24.0"; then
+        print_warning "Docker Compose version $COMPOSE_VERSION is older than 2.24.0"
+        echo ""
+        print_warning "The docker-compose.yml file uses the newer env_file format that requires Docker Compose 2.24.0 or later."
+        echo ""
+        print_info "To use this configuration with your current Docker Compose version, you have two options:"
+        echo ""
+        echo "1. Upgrade Docker Compose to version 2.24.0 or later (recommended)"
+        echo "   Visit: https://docs.docker.com/compose/install/"
+        echo ""
+        echo "2. Manually replace all env_file sections in docker-compose.yml"
+        echo "   Change from:"
+        echo "     env_file:"
+        echo "       - path: .env"
+        echo "         required: false"
+        echo "   To:"
+        echo "     env_file: .env"
+        echo ""
+        print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
+        echo ""
+        read -p "Do you want to continue anyway? (y/N): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
+            exit 1
+        fi
+        print_info "Proceeding with installation despite Docker Compose version compatibility issues..."
+    fi
 else
     print_error "Failed to download Docker Compose file"
     print_info "Please ensure you have internet connection and try again"

@@ -7,6 +7,7 @@ interface BaseMemoizedHumanMessageProps {
   content: string;
   files?: FileDescriptor[];
   messageId?: number | null;
+  nodeId?: number;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
   shared?: boolean;
@@ -31,6 +32,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   content,
   files,
   messageId,
+  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
   shared,
@@ -44,6 +46,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
       content={content}
       files={files}
       messageId={messageId ?? undefined}
+      nodeId={nodeId}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
       shared={shared}
@@ -59,6 +62,7 @@ export const MemoizedHumanMessage = ({
   content,
   files,
   messageId,
+  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
   shared,
@@ -79,6 +83,7 @@ export const MemoizedHumanMessage = ({
       content={content}
       files={files}
       messageId={messageId}
+      nodeId={nodeId}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
       shared={shared}

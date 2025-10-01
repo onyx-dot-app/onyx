@@ -1,6 +1,7 @@
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
+  MCPTransportType,
 } from "@/lib/tools/interfaces";
 import { PopupSpec } from "../connectors/Popup";
 
@@ -26,6 +27,7 @@ export interface MCPFormValues {
   name: string;
   description: string;
   server_url: string;
+  transport: MCPTransportType;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
   api_token: string;
@@ -47,6 +49,7 @@ export interface MCPServerDetail {
   id: number;
   name: string;
   server_url: string;
+  transport: MCPTransportType;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
   description: string | null;

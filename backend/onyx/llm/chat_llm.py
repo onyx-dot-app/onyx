@@ -46,7 +46,7 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    import litellm
+    from litellm import ModelResponse, CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -81,10 +81,9 @@ def _base_msg_to_role(msg: BaseMessage) -> str:
 
 
 def _convert_litellm_message_to_langchain_message(
-    litellm_message: "litellm.Message",
+    litellm_message: "Message",
 ) -> BaseMessage:
-    configure_litellm()
-    import litellm
+    from onyx.llm.litellm_singleton import litellm
 
     # Extracting the basic attributes from the litellm message
     content = litellm_message.content or ""
@@ -175,7 +174,6 @@ def _convert_delta_to_message_chunk(
     curr_msg: BaseMessage | None,
     stop_reason: str | None = None,
 ) -> BaseMessageChunk:
-    configure_litellm()
     from litellm.utils import ChatCompletionDeltaToolCall
 
     """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
@@ -321,7 +319,6 @@ class DefaultMultiLLM(LLM):
 
         self._max_token_param = LEGACY_MAX_TOKENS_KWARG
         try:
-            configure_litellm()
             from litellm.utils import get_supported_openai_params
 
             params = get_supported_openai_params(model_name, model_provider)
@@ -391,12 +388,12 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Union["litellm.ModelResponse", "litellm.CustomStreamWrapper"]:
+    ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
-        import litellm
+        from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
         try:
@@ -444,6 +441,16 @@ class DefaultMultiLLM(LLM):
                     ]
                     else {}
                 ),  # TODO: remove once LITELLM has patched
+                **(
+                    {"reasoning_effort": "minimal"}
+                    if self.config.model_name
+                    in [
+                        "gpt-5",
+                        "gpt-5-mini",
+                        "gpt-5-nano",
+                    ]
+                    else {}
+                ),  # TODO: remove once LITELLM has better support/we change API
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
@@ -493,8 +500,7 @@ class DefaultMultiLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> BaseMessage:
-        configure_litellm()
-        from litellm.utils import ModelResponse
+        from litellm import ModelResponse
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -529,8 +535,7 @@ class DefaultMultiLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
-        configure_litellm()
-        from litellm.utils import CustomStreamWrapper
+        from litellm import CustomStreamWrapper
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()

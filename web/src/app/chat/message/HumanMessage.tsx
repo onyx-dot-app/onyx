@@ -107,6 +107,7 @@ export const HumanMessage = ({
   content,
   files,
   messageId,
+  nodeId,
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
@@ -119,6 +120,7 @@ export const HumanMessage = ({
   content: string;
   files?: FileDescriptor[];
   messageId?: number | null;
+  nodeId?: number;
   otherMessagesCanSwitchTo?: number[];
   onEdit?: (editedContent: string) => void;
   onMessageSelection?: (messageId: number) => void;
@@ -154,9 +156,15 @@ export const HumanMessage = ({
     setIsEditing(false);
   };
 
-  const currentMessageInd = messageId
-    ? otherMessagesCanSwitchTo?.indexOf(messageId)
-    : undefined;
+  // Use nodeId for finding position in siblings array since
+  // otherMessagesCanSwitchTo contains nodeIds
+  const currentMessageInd =
+    nodeId !== undefined && nodeId !== null && otherMessagesCanSwitchTo
+      ? (() => {
+          const idx = otherMessagesCanSwitchTo.indexOf(nodeId);
+          return idx === -1 ? undefined : idx;
+        })()
+      : undefined;
 
   const getPreviousMessage = () => {
     if (
@@ -319,13 +327,15 @@ export const HumanMessage = ({
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger>
-                              <HoverableIcon
-                                icon={<FiEdit2 className="text-text-600" />}
-                                onClick={() => {
-                                  setIsEditing(true);
-                                  setIsHovered(false);
-                                }}
-                              />
+                              <div data-testid="edit-button">
+                                <HoverableIcon
+                                  icon={<FiEdit2 className="text-text-600" />}
+                                  onClick={() => {
+                                    setIsEditing(true);
+                                    setIsHovered(false);
+                                  }}
+                                />
+                              </div>
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
@@ -354,7 +364,7 @@ export const HumanMessage = ({
                     isHovered &&
                     !isEditing &&
                     (!files || files.length === 0) ? (
-                      <div className="my-auto">
+                      <div data-testid="edit-button" className="my-auto">
                         <Hoverable
                           icon={FiEdit2}
                           onClick={() => {

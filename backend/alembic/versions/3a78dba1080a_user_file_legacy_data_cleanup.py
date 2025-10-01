@@ -167,7 +167,10 @@ def upgrade() -> None:
         )
 
         # Delete related records
+        # Clean child tables first to satisfy foreign key constraints,
+        # then the parent tables
         tables_to_clean = [
+            ("index_attempt_errors", "connector_credential_pair_id"),
             ("index_attempt", "connector_credential_pair_id"),
             ("background_error", "cc_pair_id"),
             ("document_set__connector_credential_pair", "connector_credential_pair_id"),
@@ -242,7 +245,7 @@ def upgrade() -> None:
                   AND t.relname = 'user_file'
                   AND ft.relname = 'connector_credential_pair'
               ) LOOP
-                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT %I', r.conname);
+                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
         """

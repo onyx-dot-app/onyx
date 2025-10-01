@@ -236,7 +236,11 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                     f"process_single_user_file - Indexing pipeline completed ={index_pipeline_result}"
                 )
 
-                if index_pipeline_result.failures:
+                if (
+                    index_pipeline_result.failures
+                    or index_pipeline_result.total_docs != len(documents)
+                    or index_pipeline_result.total_chunks == 0
+                ):
                     task_logger.error(
                         f"process_single_user_file - Indexing pipeline failed id={user_file_id}"
                     )
@@ -542,39 +546,59 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     task_logger.warning(
                         f"Tenant={tenant_id} failed Vespa update for doc_id={new_uuid} - {e.__class__.__name__}"
                     )
-
             # Update search_doc records to refer to the UUID string
-            uf_id_subq = (
-                sa.select(sa.cast(UserFile.id, sa.String))
-                .where(
-                    UserFile.document_id.is_not(None),
-                    UserFile.document_id_migrated.is_(False),
-                    SearchDoc.document_id == UserFile.document_id,
+            # we are not using document_id_migrated = false because if the migration already completed,
+            # it will not run again and we will not update the search_doc records because of the issue currently fixed
+            user_files = (
+                db_session.execute(
+                    sa.select(UserFile).where(UserFile.document_id.is_not(None))
                 )
-                .correlate(SearchDoc)
-                .scalar_subquery()
+                .scalars()
+                .all()
             )
-            db_session.execute(
-                sa.update(SearchDoc)
-                .where(
-                    sa.exists(
-                        sa.select(sa.literal(1)).where(
-                            UserFile.document_id.is_not(None),
-                            UserFile.document_id_migrated.is_(False),
-                            SearchDoc.document_id == UserFile.document_id,
-                        )
+
+            # Query all SearchDocs that need updating
+            search_docs = (
+                db_session.execute(
+                    sa.select(SearchDoc).where(
+                        SearchDoc.document_id.like("%FILE_CONNECTOR__%")
                     )
                 )
-                .values(document_id=uf_id_subq)
+                .scalars()
+                .all()
             )
-            # Mark all processed user_files as migrated
-            db_session.execute(
-                sa.update(UserFile)
-                .where(
-                    UserFile.document_id.is_not(None),
-                    UserFile.document_id_migrated.is_(False),
-                )
-                .values(document_id_migrated=True)
+
+            task_logger.info(f"Found {len(user_files)} user files to update")
+            task_logger.info(f"Found {len(search_docs)} search docs to update")
+
+            # Build a map of normalized doc IDs to SearchDocs
+            search_doc_map: dict[str, list[SearchDoc]] = {}
+            for sd in search_docs:
+                doc_id = sd.document_id
+                if search_doc_map.get(doc_id) is None:
+                    search_doc_map[doc_id] = []
+                search_doc_map[doc_id].append(sd)
+
+            # Process each UserFile and update matching SearchDocs
+            updated_count = 0
+            for uf in user_files:
+                doc_id = uf.document_id
+                if doc_id.startswith("USER_FILE_CONNECTOR__"):
+                    doc_id = "FILE_CONNECTOR__" + doc_id[len("USER_FILE_CONNECTOR__") :]
+
+                if doc_id in search_doc_map:
+                    # Update the SearchDoc to use the UserFile's UUID
+                    for search_doc in search_doc_map[doc_id]:
+                        search_doc.document_id = str(uf.id)
+                        db_session.add(search_doc)
+
+                    # Mark UserFile as migrated
+                    uf.document_id_migrated = True
+                    db_session.add(uf)
+                    updated_count += 1
+
+            task_logger.info(
+                f"Updated {updated_count} SearchDoc records with new UUIDs"
             )
             db_session.commit()
 

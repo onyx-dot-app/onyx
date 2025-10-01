@@ -109,7 +109,9 @@ def test_load_credentials(jira_connector: JiraConnector) -> None:
         result = jira_connector.load_credentials(credentials)
 
         mock_build_client.assert_called_once_with(
-            credentials=credentials, jira_base=jira_connector.jira_base
+            credentials=credentials,
+            jira_base=jira_connector.jira_base,
+            scoped_token=False,
         )
         assert result is None
         assert jira_connector._jira_client == mock_build_client.return_value
@@ -226,7 +228,7 @@ def test_load_from_checkpoint_with_issue_processing_error(
 
     # Mock process_jira_issue to succeed for some issues and fail for others
     def mock_process_side_effect(
-        jira_client: JIRA, issue: Issue, *args: Any, **kwargs: Any
+        jira_base_url: str, issue: Issue, *args: Any, **kwargs: Any
     ) -> Document | None:
         if issue.key in ["TEST-1", "TEST-3"]:
             return Document(

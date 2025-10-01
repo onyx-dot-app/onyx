@@ -247,7 +247,7 @@ def _perform_jql_search_v2(
 
 
 def process_jira_issue(
-    jira_client: JIRA,
+    jira_base_url: str,
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
@@ -281,7 +281,7 @@ def process_jira_issue(
         )
         return None
 
-    page_url = build_jira_url(jira_client, issue.key)
+    page_url = build_jira_url(jira_base_url, issue.key)
 
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
@@ -372,14 +372,20 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
+        scoped_token: bool = False,
     ) -> None:
         self.batch_size = batch_size
+
+        # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
+        # when making jira requests but still want correct links to issues in the UI.
+        # So, the user's base url is stored here, but converted to a scoped url when passed
+        # to the jira client.
         self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
         self.jira_project = project_key
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
-
+        self.scoped_token = scoped_token
         self._jira_client: JIRA | None = None
 
     @property
@@ -403,6 +409,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,
+            scoped_token=self.scoped_token,
         )
         return None
 
@@ -472,7 +479,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             issue_key = issue.key
             try:
                 if document := process_jira_issue(
-                    jira_client=self.jira_client,
+                    jira_base_url=self.jira_base,
                     issue=issue,
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
@@ -483,7 +490,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=issue_key,
-                        document_link=build_jira_url(self.jira_client, issue_key),
+                        document_link=build_jira_url(self.jira_base, issue_key),
                     ),
                     failure_message=f"Failed to process Jira issue: {str(e)}",
                     exception=e,
@@ -550,7 +557,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                     continue
 
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-                id = build_jira_url(self.jira_client, issue_key)
+                id = build_jira_url(self.jira_base, issue_key)
                 slim_doc_batch.append(
                     SlimDocument(
                         id=id,

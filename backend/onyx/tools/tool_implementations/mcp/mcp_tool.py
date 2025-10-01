@@ -56,6 +56,7 @@ class MCPTool(BaseTool):
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
+        self._llm_name = f"mcp_{mcp_server.name}_{tool_name}"
 
     @property
     def id(self) -> int:
@@ -72,6 +73,10 @@ class MCPTool(BaseTool):
     @property
     def display_name(self) -> str:
         return self._display_name
+
+    @property
+    def llm_name(self) -> str:
+        return self._llm_name
 
     def tool_definition(self) -> dict:
         """Return the tool definition from the MCP server"""
@@ -208,6 +213,7 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                 self._name,
                 kwargs,
                 connection_headers=headers,
+                transport=self.mcp_server.transport,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")

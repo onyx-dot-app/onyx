@@ -18,11 +18,20 @@ from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.server import FunctionTool
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# uncomment for debug logs
+# logging.basicConfig(level=logging.DEBUG)
+
 """
 Setup Okta:
 1. Create an authorization Server (Admin Console → Security →
 API → Authorization Servers), and get the Issuer, JWKS uri,
 audience (i.e. api://mcp). Add the mcp:use scope.
+Grant types should be Authorization Code and Refresh Token.
+policy should allow your client (or All Clients) to grant oidc default scopes + mcp:use
+WARNING: due to the order of discovery urls, you actually need to use the default authorization server
+until Okta updates where their discovery urls are or the client library stops trying
+to go to <base_url>/.well-known/oauth-authorization-server before trying the fallback
+
 2. Create a client (Admin Console → Applications → Create App Integration)
 Enable authorization code and store the client id and secret.
 """
@@ -145,15 +154,24 @@ if __name__ == "__main__":
 
     audience = os.getenv("MCP_OAUTH_AUDIENCE", "api://mcp")
     issuer = os.getenv(
-        "MCP_OAUTH_ISSUER", "https://test-domain.okta.com/oauth2/default"
-    )
+        "MCP_OAUTH_ISSUER",
+        "https://test-domain.okta.com/oauth2/default?well_known_override=https://test-domain.okta.com/oauth2/<as_id>/.well-known/oauth-authorization-server",
+    )  # NOTE: the mcp client library currently tries the root discovery url before
+    # falling back to the one actually used by Okta. Our client code lets you specify this well_known_override
+    # for Okta and other Idps that use these discovery urls.
+
+    # issuer = os.getenv("MCP_OAUTH_ISSUER", "https://test-domain.okta.com/.well-known/oauth-authorization-server?issuer=https://test-domain.okta.com/oauth2/<auth_server_id>")
     jwks_uri = os.getenv(
         "MCP_OAUTH_JWKS_URI", "https://test-domain.okta.com/oauth2/default/v1/keys"
     )
     required_scopes = os.getenv("MCP_OAUTH_REQUIRED_SCOPES", "mcp:use")
+    print(f"Required scopes: {required_scopes}")
+    print(f"Audience: {audience}")
+    print(f"Issuer: {issuer}")
+    print(f"JWKS URI: {jwks_uri}")
 
     verifier = JWTVerifier(
-        issuer=issuer,
+        issuer=issuer.split("?")[0],  # ignore auth url override if present
         audience=audience,  # exactly what you set on the AS
         jwks_uri=jwks_uri,
         required_scopes=required_scopes.split(
@@ -173,6 +191,10 @@ if __name__ == "__main__":
 
     init_app(app, mcp_resource_url, authorization_servers, scopes_supported)
     PRM_URL = metadata_url_for_resource(mcp_resource_url)
+    print(f"PRM URL: {PRM_URL}")
+    print(f"MCP Resource URL: {mcp_resource_url}")
+    print(f"Authorization Servers: {authorization_servers}")
+    print(f"Scopes Supported: {scopes_supported}")
 
     # Apply middleware at the parent app so it wraps mounted sub-apps too
     app.add_middleware(WWWAuthenticateMiddleware, protected_prefixes=["/mcp", "/sse"])

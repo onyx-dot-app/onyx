@@ -15,6 +15,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ToolSnapshot,
@@ -100,97 +106,104 @@ export function ActionItem({
   const label = tool ? tool.display_name || tool.name : providedLabel!;
   // Generate test ID based on tool name if available
   const toolName = tool?.name || providedLabel || "";
-  const testIdBase = toolName
-    .toLowerCase()
-    .replace(/tool$/i, "")
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 
   return (
-    <div
-      data-testid={`tool-option-${testIdBase}`}
-      className={`
-      group
-      flex 
-      items-center 
-      justify-between 
-      px-2 
-      cursor-pointer 
-      hover:bg-background-100 
-      dark:hover:bg-neutral-800
-      dark:text-neutral-300
-      rounded-lg 
-      py-2 
-      mx-1
-      ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
-    `}
-      onClick={() => {
-        // If disabled, un-disable the tool
-        if (onToggle && disabled) {
-          onToggle();
-        }
-
-        onForceToggle();
-      }}
-    >
-      <div
-        className={`flex items-center gap-2 flex-1 ${
-          disabled ? "opacity-50" : ""
-        } ${isForced && "text-blue-500"}`}
-      >
-        <Icon
-          size={16}
-          className={
-            isForced ? "text-blue-500" : "text-text-500 dark:text-neutral-400"
-          }
-        />
-        <span
-          className={`text-sm font-medium select-none ${
-            disabled ? "line-through" : ""
-          }`}
-        >
-          {label}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div
-          className={`
-            flex
-            items-center
-            gap-2
-            transition-opacity
-            duration-200
-            ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
-          `}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-        >
-          <DisableIcon
-            className={`transition-colors cursor-pointer ${
-              disabled
-                ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
-                : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-            }`}
-          />
-        </div>
-        {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
           <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onSourceManagementOpen?.();
+            data-testid={`tool-option-${toolName}`}
+            className={`
+            group
+            flex 
+            items-center 
+            justify-between 
+            px-2 
+            cursor-pointer 
+            hover:bg-background-100 
+            dark:hover:bg-neutral-800
+            dark:text-neutral-300
+            rounded-lg 
+            py-2 
+            mx-1
+            ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
+          `}
+            onClick={() => {
+              // If disabled, un-disable the tool
+              if (onToggle && disabled) {
+                onToggle();
+              }
+
+              onForceToggle();
             }}
           >
-            <FiChevronRight
-              size={16}
-              className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-            />
+            <div
+              className={`flex items-center gap-2 flex-1 ${
+                disabled ? "opacity-50" : ""
+              } ${isForced && "text-blue-500"}`}
+            >
+              <Icon
+                size={16}
+                className={
+                  isForced
+                    ? "text-blue-500"
+                    : "text-text-500 dark:text-neutral-400"
+                }
+              />
+              <span
+                className={`text-sm font-medium select-none ${
+                  disabled ? "line-through" : ""
+                }`}
+              >
+                {label}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className={`
+                  flex
+                  items-center
+                  gap-2
+                  transition-opacity
+                  duration-200
+                  ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+                `}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle();
+                }}
+              >
+                <DisableIcon
+                  className={`transition-colors cursor-pointer ${
+                    disabled
+                      ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
+                      : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                  }`}
+                />
+              </div>
+              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSourceManagementOpen?.();
+                  }}
+                >
+                  <FiChevronRight
+                    size={16}
+                    className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                  />
+                </div>
+              )}
+            </div>
           </div>
+        </TooltipTrigger>
+        {tool?.description && (
+          <TooltipContent side="left" width="max-w-xs">
+            <p className="text-wrap">{tool.description}</p>
+          </TooltipContent>
         )}
-      </div>
-    </div>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -646,7 +659,7 @@ export function ActionToggle({
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
       try {
-        const response = await fetch("/api/mcp/oauth/initiate", {
+        const response = await fetch("/api/mcp/oauth/connect", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -822,6 +835,7 @@ export function ActionToggle({
           </button>
         </PopoverTrigger>
         <PopoverContent
+          data-testid="tool-options"
           side="top"
           align="start"
           // Keep main popover open when interacting with nested MCP popup
@@ -1276,10 +1290,18 @@ export function ActionToggle({
         (() => {
           const rect = mcpToolsPopup.anchorElement.getBoundingClientRect();
           // Anchor the popup to the server element using viewport coordinates
+          // Ensure the popup never falls off-screen vertically.
+          const POPUP_MAX_HEIGHT = 300; // matches max-h-[300px]
+          const MARGIN = 8; // small offset from edges and trigger
+          const clampedTop = Math.max(
+            MARGIN,
+            Math.min(rect.top, window.innerHeight - POPUP_MAX_HEIGHT - MARGIN)
+          );
+
           const positioning = {
             position: "fixed" as const,
-            left: rect.right + 8,
-            top: rect.top,
+            left: rect.right + MARGIN,
+            top: clampedTop,
             zIndex: 1000,
           };
 

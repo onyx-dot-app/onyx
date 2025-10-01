@@ -342,37 +342,6 @@ test.describe("Default Assistant Tests", () => {
       }
     });
   });
-
-  test.describe("Admin Configuration", () => {
-    test.skip("should have admin configuration page for default assistant", async ({
-      page,
-    }) => {
-      // This test is marked as skip since admin configuration might not be implemented yet
-      // Navigate to admin configuration
-      await page.goto(
-        "http://localhost:3000/admin/configuration/default-assistant"
-      );
-
-      // Wait for page to load
-      await page.waitForLoadState("networkidle");
-
-      // Verify configuration options are present
-      const configForm = await page.waitForSelector(
-        '[data-testid="assistant-config-form"]',
-        { timeout: 5000 }
-      );
-      expect(configForm).toBeTruthy();
-
-      // Check for tool configuration options
-      const searchToggle = await page.$(TOOL_IDS.adminSearchConfig);
-      const webSearchToggle = await page.$(TOOL_IDS.adminWebSearchConfig);
-      const imageGenToggle = await page.$(TOOL_IDS.adminImageGenConfig);
-
-      expect(searchToggle).toBeTruthy();
-      expect(webSearchToggle).toBeTruthy();
-      expect(imageGenToggle).toBeTruthy();
-    });
-  });
 });
 
 test.describe("End-to-End Default Assistant Flow", () => {

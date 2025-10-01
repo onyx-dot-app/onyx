@@ -1137,7 +1137,9 @@ class GoogleDriveConnector(
                         convert_func,
                         (
                             [file.user_email, self.primary_admin_email]
-                            + get_file_owners(file.drive_file),
+                            + get_file_owners(
+                                file.drive_file, self.primary_admin_email
+                            ),
                             file.drive_file,
                         ),
                     )

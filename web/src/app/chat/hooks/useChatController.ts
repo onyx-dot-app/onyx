@@ -16,6 +16,7 @@ import {
   upsertMessages,
   SYSTEM_NODE_ID,
   buildImmediateMessages,
+  buildEmptyMessage,
 } from "../services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
@@ -488,6 +489,8 @@ export function useChatController({
         updateChatStateAction(frozenSessionId, "input");
         return;
       }
+      // When editing (messageIdToResend exists but no regenerationRequest), use the new message
+      // When regenerating (regenerationRequest exists), use the original message
       let currMessage = regenerationRequest
         ? messageToResend?.message || message
         : message;
@@ -511,15 +514,38 @@ export function useChatController({
 
       // Add user message immediately to the message tree so that the chat
       // immediately reflects the user message
-      const { initialUserNode, initialAssistantNode } = buildImmediateMessages(
-        parentMessage?.nodeId || SYSTEM_NODE_ID,
-        message,
-        messageToResend
-      );
+      let initialUserNode: Message;
+      let initialAssistantNode: Message;
+
+      if (regenerationRequest) {
+        // For regeneration: keep the existing user message, only create new assistant
+        initialUserNode = regenerationRequest.parentMessage;
+        initialAssistantNode = buildEmptyMessage(
+          "assistant",
+          initialUserNode.nodeId,
+          undefined,
+          1
+        );
+      } else {
+        // For new messages or editing: create/update user message and assistant
+        const parentNodeIdForMessage = messageToResend
+          ? messageToResend.parentNodeId || SYSTEM_NODE_ID
+          : parentMessage?.nodeId || SYSTEM_NODE_ID;
+        const result = buildImmediateMessages(
+          parentNodeIdForMessage,
+          currMessage,
+          messageToResend
+        );
+        initialUserNode = result.initialUserNode;
+        initialAssistantNode = result.initialAssistantNode;
+      }
 
       // make messages appear + clear input bar
+      const messagesToUpsert = regenerationRequest
+        ? [initialAssistantNode] // Only upsert the new assistant for regeneration
+        : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
       const newMessageDetails = upsertToCompleteMessageTree({
-        messages: [initialUserNode, initialAssistantNode],
+        messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
@@ -562,10 +588,15 @@ export function useChatController({
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
           fileDescriptors: overrideFileDescriptors,
-          parentMessageId:
-            regenerationRequest?.parentMessage.messageId ||
-            messageToResendParent?.messageId ||
-            lastSuccessfulMessageId,
+          parentMessageId: (() => {
+            const parentId =
+              regenerationRequest?.parentMessage.messageId ||
+              messageToResendParent?.messageId ||
+              lastSuccessfulMessageId;
+            // Don't send SYSTEM_MESSAGE_ID (-3) as parent, use null instead
+            // The backend expects null for "the first message in the chat"
+            return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
+          })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
             filterManager.selectedSources,

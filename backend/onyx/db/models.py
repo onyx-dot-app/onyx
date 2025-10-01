@@ -63,6 +63,8 @@ from onyx.db.enums import (
     SyncStatus,
     MCPAuthenticationType,
     UserFileStatus,
+    MCPAuthenticationPerformer,
+    MCPTransport,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -3468,9 +3470,17 @@ class MCPServer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
+    # Transport type for connecting to the MCP server
+    transport: Mapped[MCPTransport] = mapped_column(
+        Enum(MCPTransport, native_enum=False), nullable=False
+    )
     # Auth type: "none", "api_token", or "oauth"
     auth_type: Mapped[MCPAuthenticationType] = mapped_column(
         Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    )
+    # Who performs authentication for this server (ADMIN or PER_USER)
+    auth_performer: Mapped[MCPAuthenticationPerformer] = mapped_column(
+        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=False
     )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth

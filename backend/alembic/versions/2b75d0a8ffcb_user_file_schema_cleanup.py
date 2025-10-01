@@ -128,7 +128,7 @@ def upgrade() -> None:
                     AND a.attname = 'cc_pair_id'
                   )
               ) LOOP
-                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT %I', r.conname);
+                EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
         """
