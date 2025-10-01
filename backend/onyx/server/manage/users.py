@@ -314,7 +314,7 @@ def download_users_csv(
     writer = csv.writer(output)
 
     # Write CSV header
-    writer.writerow(["id", "email", "role"])
+    writer.writerow(["Email", "Role", "Status"])
 
     # Write user data
     for user in users:
@@ -322,6 +322,7 @@ def download_users_csv(
             [
                 user.email,
                 user.role.value if user.role else "",
+                "Active" if user.is_active else "Inactive",
             ]
         )
 
