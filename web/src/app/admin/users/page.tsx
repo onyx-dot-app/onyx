@@ -29,6 +29,30 @@ const UsersTables = ({
   q: string;
   setPopup: (spec: PopupSpec) => void;
 }) => {
+  const downloadAllUsers = async () => {
+    try {
+      const response = await fetch("/api/manage/users/download");
+      if (!response.ok) {
+        throw new Error("Failed to download all users");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor_tag = document.createElement("a");
+      anchor_tag.href = url;
+      anchor_tag.download = "users.csv";
+      document.body.appendChild(anchor_tag);
+      anchor_tag.click();
+      //Clean up URL after download to avoid memory leaks
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(anchor_tag);
+    } catch (error) {
+      setPopup({
+        message: `Failed to download all users - ${error}`,
+        type: "error",
+      });
+    }
+  };
+
   const {
     data: invitedUsers,
     error: invitedUsersError,
@@ -80,7 +104,15 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <CardTitle>Current Users</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Current Users</CardTitle>
+              <Button className="w-fit" onClick={() => downloadAllUsers()}>
+                <div className="flex">
+                  <FiPlusSquare className="my-auto mr-2" />
+                  Download all users
+                </div>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <SignedUpUserTable
@@ -137,42 +169,12 @@ const SearchableTables = () => {
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
 
-  const downloadAllUsers = async () => {
-    try {
-      const response = await fetch("/api/manage/users/download");
-      if (!response.ok) {
-        throw new Error("Failed to download all users");
-      }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const anchor_tag = document.createElement("a");
-      anchor_tag.href = url;
-      anchor_tag.download = "users.csv";
-      document.body.appendChild(anchor_tag);
-      anchor_tag.click();
-      //Clean up URL after download to avoid memory leaks
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(anchor_tag);
-    } catch (error) {
-      setPopup({
-        message: `Failed to download all users - ${error}`,
-        type: "error",
-      });
-    }
-  };
-
   return (
     <div>
       {popup}
       <div className="flex flex-col gap-y-4">
         <div className="flex gap-x-4">
           <AddUserButton setPopup={setPopup} />
-          <Button className="my-auto w-fit" onClick={() => downloadAllUsers()}>
-            <div className="flex">
-              <FiPlusSquare className="my-auto mr-2" />
-              Download all users
-            </div>
-          </Button>
           <div className="flex-grow">
             <SearchBar
               query={query}
