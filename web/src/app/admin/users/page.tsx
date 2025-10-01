@@ -143,6 +143,13 @@ const SearchableTables = () => {
       <div className="flex flex-col gap-y-4">
         <div className="flex gap-x-4">
           <AddUserButton setPopup={setPopup} />
+          {/* TODO: Add a button to download all users */}
+          <Button className="my-auto w-fit" onClick={() => downloadAllUsers()}>
+            <div className="flex">
+              <FiPlusSquare className="my-auto mr-2" />
+              Download all users
+            </div>
+          </Button>
           <div className="flex-grow">
             <SearchBar
               query={query}
