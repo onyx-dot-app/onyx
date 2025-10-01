@@ -23,6 +23,7 @@ RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # curl included just for users' convenience
 # zip for Vespa step futher down
 # ca-certificates for HTTPS
+
 RUN apt-get update && \
     apt-get install -y \
         cmake \

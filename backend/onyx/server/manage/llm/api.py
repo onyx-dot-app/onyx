@@ -35,6 +35,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -44,6 +45,7 @@ from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.httpx.httpx_pool import HttpxPool
 
 logger = setup_logger()
 
@@ -473,4 +475,51 @@ def get_bedrock_available_models(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Unexpected error fetching Bedrock models: {e}"
+        )
+
+
+@admin_router.post("/openrouter/available-models")
+def get_openrouter_available_models(
+    request: OpenRouterModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[str]:
+    """Fetch available OpenRouter models.
+
+    Uses OpenRouter's /models endpoint. We filter out embeddings and
+    non-chat models, and return the vendor/model id form (without the
+    leading "openrouter/") so it fits our UI convention.
+    """
+    base = request.api_base or "https://openrouter.ai/api/v1"
+    url = f"{base.rstrip('/')}/models"
+    try:
+        client = HttpxPool.get("openrouter")
+        resp = client.get(url, headers={"Authorization": f"Bearer {request.api_key}"}, timeout=30)
+        if resp.status_code != 200:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to fetch OpenRouter models ({resp.status_code}): {detail}",
+            )
+        data = resp.json() or {}
+        models = data.get("data") or data.get("models") or []
+        ids: list[str] = []
+        for m in models:
+            mid = m.get("id") or m.get("model") or ""
+            if not isinstance(mid, str) or not mid:
+                continue
+            cleaned = mid.split("openrouter/", 1)[-1]
+            if "embed" in cleaned.lower():
+                continue
+            ids.append(cleaned)
+        unique_sorted = sorted({*ids})
+        return unique_sorted
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error fetching OpenRouter models")
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected error fetching OpenRouter models: {e}"
         )
