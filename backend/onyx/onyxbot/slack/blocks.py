@@ -20,7 +20,7 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
+from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -48,19 +48,6 @@ from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
-
-
-def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
-    """Convert document timestamps to a human friendly relative string."""
-    if updated_at is None:
-        return None
-
-    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
-        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
-    else:
-        aware_updated_at = updated_at.astimezone(pytz.utc)
-
-    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
@@ -253,7 +240,7 @@ def get_restate_blocks(
 def _build_documents_blocks(
     documents: list[SavedSearchDoc],
     message_id: int | None,
-    num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
+    num_docs_to_display: int = DANSWER_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     header_text = (
         "Retrieved Documents" if DISABLE_GENERATIVE_AI else "Reference Documents"
@@ -281,9 +268,10 @@ def _build_documents_blocks(
             header_line = f"<{d.link}|{doc_sem_id}>\n"
 
         updated_at_line = ""
-        updated_at_str = _format_doc_updated_at(d.updated_at)
-        if updated_at_str:
-            updated_at_line = f"_Updated {updated_at_str}_\n"
+        if d.updated_at is not None:
+            updated_at_line = (
+                f"_Updated {timeago.format(d.updated_at, datetime.now(pytz.utc))}_\n"
+            )
 
         body_text = f">{remove_slack_text_interactions(match_str)}"
 
@@ -311,7 +299,7 @@ def _build_documents_blocks(
 
 def _build_sources_blocks(
     cited_documents: list[tuple[int, SavedSearchDoc]],
-    num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
+    num_docs_to_display: int = DANSWER_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     if not cited_documents:
         return [
@@ -344,7 +332,11 @@ def _build_sources_blocks(
         )
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
-        days_ago_str = _format_doc_updated_at(d.updated_at)
+        days_ago_str = (
+            timeago.format(d.updated_at, datetime.now(pytz.utc))
+            if d.updated_at
+            else None
+        )
         final_metadata_str = " | ".join(
             ([owner_str] if owner_str else [])
             + ([days_ago_str] if days_ago_str else [])

@@ -97,15 +97,14 @@ def _execute_with_retry(request: Any) -> Any:
     raise Exception(f"Failed to execute request after {max_attempts} attempts")
 
 
-def get_file_owners(file: GoogleDriveFileType, primary_admin_email: str) -> list[str]:
+def get_file_owners(file: GoogleDriveFileType) -> list[str]:
     """
     Get the owners of a file if the attribute is present.
     """
     return [
-        email
+        owner.get("emailAddress")
         for owner in file.get("owners", [])
-        if (email := owner.get("emailAddress"))
-        and email.split("@")[-1] == primary_admin_email.split("@")[-1]
+        if owner.get("emailAddress")
     ]
 
 

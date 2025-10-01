@@ -13,8 +13,8 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - onyx_default
+      - onyx-stack_default
 networks:
-  onyx_default:
-    name: onyx_default
+  onyx-stack_default:
+    name: onyx-stack_default
     external: true

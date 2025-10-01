@@ -17,6 +17,7 @@ import {
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "@/app/chat/interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -54,13 +55,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
-import Projects from "./Projects";
 
 interface HistorySidebarProps {
   liveAssistant?: MinimalPersonaSnapshot | null;
   page: pageType;
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
+  folders?: Folder[];
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
@@ -180,6 +181,7 @@ export const HistorySidebar = React.memo(
         page,
         existingChats,
         currentChatSession,
+        folders,
         explicitlyUntoggle,
         toggleSidebar,
         removeToggle,
@@ -282,7 +284,7 @@ export const HistorySidebar = React.memo(
               />
             </div>
             {page == "chat" && (
-              <div className="px-4 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center">
+              <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
                 <Link
                   className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
                   href={`/${page}`}
@@ -298,6 +300,18 @@ export const HistorySidebar = React.memo(
                   <NewChatIcon size={20} className="flex-none" />
                   <p className="my-auto flex font-normal  items-center ">
                     New Chat
+                  </p>
+                </Link>
+                <Link
+                  className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                  href="/chat/my-documents"
+                >
+                  <KnowledgeGroupIcon
+                    size={20}
+                    className="flex-none text-text-history-sidebar-button"
+                  />
+                  <p className="my-auto flex font-normal items-center text-base">
+                    My Documents
                   </p>
                 </Link>
                 {user?.preferences?.shortcut_enabled && (
@@ -316,92 +330,87 @@ export const HistorySidebar = React.memo(
                 )}
               </div>
             )}
-
-            <div className="h-full relative overflow-x-hidden overflow-y-auto flex flex-col gap-y-2">
-              <div>
-                <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
-                  Assistants
-                </div>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                  modifiers={[restrictToVerticalAxis]}
-                >
-                  <SortableContext
-                    items={pinnedAssistants.map((a) =>
-                      a.id === 0 ? "assistant-0" : a.id
-                    )}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="flex px-0 mr-4 flex-col gap-y-1 mt-1">
-                      {pinnedAssistants.map(
-                        (assistant: MinimalPersonaSnapshot) => (
-                          <SortableAssistant
-                            key={
-                              assistant.id === 0 ? "assistant-0" : assistant.id
-                            }
-                            assistant={assistant}
-                            active={assistant.id === liveAssistant?.id}
-                            onClick={() => {
-                              router.push(
-                                buildChatUrl(searchParams, null, assistant.id)
-                              );
-                            }}
-                            onPinAction={async (e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              await toggleAssistantPinnedStatus(
-                                pinnedAssistants.map((a) => a.id),
-                                assistant.id,
-                                false
-                              );
-                              await refreshAssistants();
-                            }}
-                          />
-                        )
-                      )}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-                {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
-                  liveAssistant &&
-                  // filter out the default assistant
-                  liveAssistant.id !== 0 && (
-                    <div className="w-full mt-1 pr-4">
-                      <SortableAssistant
-                        pinned={false}
-                        assistant={liveAssistant}
-                        active={liveAssistant.id === liveAssistant?.id}
-                        onClick={() => {
-                          router.push(
-                            buildChatUrl(searchParams, null, liveAssistant.id)
-                          );
-                        }}
-                        onPinAction={async (e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          await toggleAssistantPinnedStatus(
-                            [...pinnedAssistants.map((a) => a.id)],
-                            liveAssistant.id,
-                            true
-                          );
-                          await refreshAssistants();
-                        }}
-                      />
-                    </div>
-                  )}
-
-                <div className="w-full px-4">
-                  <button
-                    aria-label="Explore Assistants"
-                    onClick={() => setShowAssistantsModal(true)}
-                    className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-                  >
-                    Explore Assistants
-                  </button>
-                </div>
+            <div className="h-full  relative overflow-x-hidden overflow-y-auto">
+              <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
+                Assistants
               </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+                modifiers={[restrictToVerticalAxis]}
+              >
+                <SortableContext
+                  items={pinnedAssistants.map((a) =>
+                    a.id === 0 ? "assistant-0" : a.id
+                  )}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
+                    {pinnedAssistants.map(
+                      (assistant: MinimalPersonaSnapshot) => (
+                        <SortableAssistant
+                          key={
+                            assistant.id === 0 ? "assistant-0" : assistant.id
+                          }
+                          assistant={assistant}
+                          active={assistant.id === liveAssistant?.id}
+                          onClick={() => {
+                            router.push(
+                              buildChatUrl(searchParams, null, assistant.id)
+                            );
+                          }}
+                          onPinAction={async (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            await toggleAssistantPinnedStatus(
+                              pinnedAssistants.map((a) => a.id),
+                              assistant.id,
+                              false
+                            );
+                            await refreshAssistants();
+                          }}
+                        />
+                      )
+                    )}
+                  </div>
+                </SortableContext>
+              </DndContext>
+              {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
+                liveAssistant &&
+                // filter out the default assistant
+                liveAssistant.id !== 0 && (
+                  <div className="w-full mt-1 pr-4">
+                    <SortableAssistant
+                      pinned={false}
+                      assistant={liveAssistant}
+                      active={liveAssistant.id === liveAssistant?.id}
+                      onClick={() => {
+                        router.push(
+                          buildChatUrl(searchParams, null, liveAssistant.id)
+                        );
+                      }}
+                      onPinAction={async (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        await toggleAssistantPinnedStatus(
+                          [...pinnedAssistants.map((a) => a.id)],
+                          liveAssistant.id,
+                          true
+                        );
+                        await refreshAssistants();
+                      }}
+                    />
+                  </div>
+                )}
 
-              <Projects />
+              <div className="w-full px-4">
+                <button
+                  aria-label="Explore Assistants"
+                  onClick={() => setShowAssistantsModal(true)}
+                  className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
+                >
+                  Explore Assistants
+                </button>
+              </div>
 
               <PagesTab
                 toggleChatSessionSearchModal={toggleChatSessionSearchModal}
@@ -410,6 +419,7 @@ export const HistorySidebar = React.memo(
                 closeSidebar={removeToggle}
                 existingChats={existingChats}
                 currentChatId={currentChatId}
+                folders={folders}
               />
             </div>
           </div>

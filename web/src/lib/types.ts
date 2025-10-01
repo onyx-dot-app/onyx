@@ -413,13 +413,11 @@ export type SlackBot = {
   }>;
   bot_token: string;
   app_token: string;
-  user_token?: string;
 };
 
 export interface SlackBotTokens {
   bot_token: string;
   app_token: string;
-  user_token?: string;
 }
 
 /* EE Only Types */
@@ -456,7 +454,6 @@ export enum ValidSources {
   Hubspot = "hubspot",
   Document360 = "document360",
   File = "file",
-  UserFile = "user_file",
   GoogleSites = "google_sites",
   Loopio = "loopio",
   Dropbox = "dropbox",
@@ -519,7 +516,6 @@ export type ConfigurableSources = Exclude<
   | ValidSources.NotApplicable
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
-  | ValidSources.UserFile
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

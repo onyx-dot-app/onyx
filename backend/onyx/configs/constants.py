@@ -7,8 +7,6 @@ from enum import Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
-SLACK_USER_TOKEN_PREFIX = "xoxp-"
-SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 SOURCE_TYPE = "source_type"
@@ -78,9 +76,6 @@ POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
-POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
-    "celery_worker_user_file_processing"
-)
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -117,6 +112,7 @@ CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
+CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
@@ -207,8 +203,6 @@ class DocumentSource(str, Enum):
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
-    # Special case for user files
-    USER_FILE = "user_file"
 
 
 class FederatedConnectorSource(str, Enum):
@@ -304,7 +298,6 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
-    USER_FILE = "user_file"
 
 
 class FileType(str, Enum):
@@ -350,9 +343,6 @@ class OnyxCeleryQueues:
     # Indexing queue
     USER_FILES_INDEXING = "user_files_indexing"
 
-    # User file processing queue
-    USER_FILE_PROCESSING = "user_file_processing"
-    USER_FILE_PROJECT_SYNC = "user_file_project_sync"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -378,7 +368,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
-
+    CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
@@ -399,12 +389,6 @@ class OnyxRedisLocks:
 
     # KG processing
     KG_PROCESSING_LOCK = "da_lock:kg_processing"
-
-    # User file processing
-    USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
-    USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
-    USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
-    USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
 
 
 class OnyxRedisSignals:
@@ -464,6 +448,8 @@ class OnyxCeleryTask:
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
     )
 
+    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
+
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -471,12 +457,7 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
-
-    # User file processing
-    CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"
-    PROCESS_SINGLE_USER_FILE = "process_single_user_file"
-    CHECK_FOR_USER_FILE_PROJECT_SYNC = "check_for_user_file_project_sync"
-    PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
+    CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
@@ -509,15 +490,12 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
-    USER_FILE_DOCID_MIGRATION = "user_file_docid_migration"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
 
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
-
-    EVAL_RUN_TASK = "eval_run_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"

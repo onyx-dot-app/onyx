@@ -440,7 +440,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   xenforo: null,
   google_sites: null,
   file: null,
-  user_file: null,
   wikipedia: null,
   mediawiki: null,
   web: null,

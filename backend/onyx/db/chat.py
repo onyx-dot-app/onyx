@@ -28,11 +28,13 @@ from onyx.agents.agent_search.shared_graph_utils.models import (
 from onyx.agents.agent_search.utils import create_citation_format_list
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
+from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.db.models import AgentSearchMetrics
 from onyx.db.models import AgentSubQuery
 from onyx.db.models import AgentSubQuestion
@@ -45,15 +47,17 @@ from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import SubQueryDetail
 from onyx.server.query_and_chat.models import SubQuestionDetail
-from onyx.tools.models import ToolCallFinalResult
+from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -169,8 +173,6 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
-    project_id: int | None = None,
-    only_non_project_chats: bool = False,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
@@ -184,11 +186,6 @@ def get_chat_sessions_by_user(
 
     if limit:
         stmt = stmt.limit(limit)
-
-    if project_id is not None:
-        stmt = stmt.where(ChatSession.project_id == project_id)
-    elif only_non_project_chats:
-        stmt = stmt.where(ChatSession.project_id.is_(None))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()
@@ -263,7 +260,6 @@ def create_chat_session(
     prompt_override: PromptOverride | None = None,
     onyxbot_flow: bool = False,
     slack_thread_id: str | None = None,
-    project_id: int | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
         user_id=user_id,
@@ -273,7 +269,6 @@ def create_chat_session(
         prompt_override=prompt_override,
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
-        project_id=project_id,
     )
 
     db_session.add(chat_session)
@@ -864,6 +859,90 @@ def get_db_search_doc_by_document_id(
     return search_doc
 
 
+def create_search_doc_from_user_file(
+    db_user_file: UserFile, associated_chat_file: InMemoryChatFile, db_session: Session
+) -> SearchDoc:
+    """Create a SearchDoc in the database from a UserFile and return it.
+    This ensures proper ID generation by SQLAlchemy and prevents duplicate key errors.
+    """
+    blurb = ""
+    if associated_chat_file and associated_chat_file.content:
+        try:
+            # Try to decode as UTF-8, but handle errors gracefully
+            content_sample = associated_chat_file.content[:100]
+            # Remove null bytes which can cause SQL errors
+            content_sample = content_sample.replace(b"\x00", b"")
+
+            # NOTE(rkuo): this used to be "replace" instead of strict, but
+            # that would bypass the binary handling below
+            blurb = content_sample.decode("utf-8", errors="strict")
+        except Exception:
+            # If decoding fails completely, provide a generic description
+            blurb = f"[Binary file: {db_user_file.name}]"
+
+    db_search_doc = SearchDoc(
+        document_id=db_user_file.document_id,
+        chunk_ind=0,  # Default to 0 for user files
+        semantic_id=db_user_file.name,
+        link=db_user_file.link_url,
+        blurb=blurb,
+        source_type=DocumentSource.FILE,  # Assuming internal source for user files
+        boost=0,  # Default boost
+        hidden=False,  # Default visibility
+        doc_metadata={},  # Empty metadata
+        score=0.0,  # Default score of 0.0 instead of None
+        is_relevant=None,  # No relevance initially
+        relevance_explanation=None,  # No explanation initially
+        match_highlights=[],  # No highlights initially
+        updated_at=db_user_file.created_at,  # Use created_at as updated_at
+        primary_owners=[],  # Empty list instead of None
+        secondary_owners=[],  # Empty list instead of None
+        is_internet=False,  # Not from internet
+    )
+
+    db_session.add(db_search_doc)
+    db_session.flush()  # Get the ID but don't commit yet
+
+    return db_search_doc
+
+
+def translate_db_user_file_to_search_doc(
+    db_user_file: UserFile, associated_chat_file: InMemoryChatFile
+) -> SearchDoc:
+    blurb = ""
+    if associated_chat_file and associated_chat_file.content:
+        try:
+            # Try to decode as UTF-8, but handle errors gracefully
+            content_sample = associated_chat_file.content[:100]
+            # Remove null bytes which can cause SQL errors
+            content_sample = content_sample.replace(b"\x00", b"")
+            blurb = content_sample.decode("utf-8", errors="replace")
+        except Exception:
+            # If decoding fails completely, provide a generic description
+            blurb = f"[Binary file: {db_user_file.name}]"
+
+    return SearchDoc(
+        # Don't set ID - let SQLAlchemy auto-generate it
+        document_id=db_user_file.document_id,
+        chunk_ind=0,  # Default to 0 for user files
+        semantic_id=db_user_file.name,
+        link=db_user_file.link_url,
+        blurb=blurb,
+        source_type=DocumentSource.FILE,  # Assuming internal source for user files
+        boost=0,  # Default boost
+        hidden=False,  # Default visibility
+        doc_metadata={},  # Empty metadata
+        score=0.0,  # Default score of 0.0 instead of None
+        is_relevant=None,  # No relevance initially
+        relevance_explanation=None,  # No explanation initially
+        match_highlights=[],  # No highlights initially
+        updated_at=db_user_file.created_at,  # Use created_at as updated_at
+        primary_owners=[],  # Empty list instead of None
+        secondary_owners=[],  # Empty list instead of None
+        is_internet=False,  # Not from internet
+    )
+
+
 def translate_db_search_doc_to_server_search_doc(
     db_search_doc: SearchDoc,
     remove_doc_content: bool = False,
@@ -1068,7 +1147,7 @@ def log_agent_sub_question_results(
             db_session.add(sub_query_object)
             db_session.commit()
 
-            search_docs = ServerSearchDoc.from_chunks_or_sections(
+            search_docs = chunks_or_sections_to_search_docs(
                 sub_query.retrieved_documents
             )
             for doc in search_docs:
@@ -1144,29 +1223,12 @@ def create_search_doc_from_inference_section(
 def create_search_doc_from_saved_search_doc(
     saved_search_doc: SavedSearchDoc,
 ) -> SearchDoc:
-    """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
-    return SearchDoc(
-        document_id=saved_search_doc.document_id,
-        chunk_ind=saved_search_doc.chunk_ind,
-        # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null
-        semantic_id=saved_search_doc.semantic_identifier or "Unknown",
-        link=saved_search_doc.link,
-        blurb=saved_search_doc.blurb,
-        source_type=saved_search_doc.source_type,
-        boost=saved_search_doc.boost,
-        hidden=saved_search_doc.hidden,
-        # Map metadata -> doc_metadata (DB column name)
-        doc_metadata=saved_search_doc.metadata,
-        # SavedSearchDoc.score exists and defaults to 0.0
-        score=saved_search_doc.score or 0.0,
-        match_highlights=saved_search_doc.match_highlights,
-        updated_at=saved_search_doc.updated_at,
-        primary_owners=saved_search_doc.primary_owners,
-        secondary_owners=saved_search_doc.secondary_owners,
-        is_internet=saved_search_doc.is_internet,
-        is_relevant=saved_search_doc.is_relevant,
-        relevance_explanation=saved_search_doc.relevance_explanation,
-    )
+    """Convert SavedSearchDoc to SearchDoc by excluding the additional fields"""
+    data = saved_search_doc.model_dump()
+    # Remove the fields that are specific to SavedSearchDoc
+    data.pop("db_doc_id", None)
+    # Keep score since SearchDoc has it as an optional field
+    return SearchDoc(**data)
 
 
 def update_db_session_with_messages(
@@ -1189,6 +1251,7 @@ def update_db_session_with_messages(
     research_answer_purpose: ResearchAnswerPurpose | None = None,
     commit: bool = False,
 ) -> ChatMessage:
+
     chat_message = (
         db_session.query(ChatMessage)
         .filter(

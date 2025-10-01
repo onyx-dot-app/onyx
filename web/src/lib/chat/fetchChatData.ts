@@ -17,6 +17,7 @@ import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
 import { Settings } from "@/app/admin/settings/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { cookies, headers } from "next/headers";
 import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
@@ -30,7 +31,6 @@ import {
 } from "../constants";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
-import { Project } from "@/app/chat/projects/projectsService";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -40,14 +40,15 @@ interface FetchChatDataResult {
   documentSets: DocumentSetSummary[];
   tags: Tag[];
   llmProviders: LLMProviderDescriptor[];
+  folders: Folder[];
   availableTools: ToolSnapshot[];
+  openedFolders: Record<string, boolean>;
   defaultAssistantId?: number;
   sidebarInitiallyVisible: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
-  projects: Project[];
 }
 
 export async function fetchChatData(searchParams: {
@@ -62,9 +63,9 @@ export async function fetchChatData(searchParams: {
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
     fetchLLMProvidersSS(),
+    fetchSS("/folder"),
     fetchSS("/input_prompt?include_public=true"),
     fetchToolsSS(),
-    fetchSS("/user/projects/"),
   ];
 
   let results: (
@@ -78,8 +79,7 @@ export async function fetchChatData(searchParams: {
     | null
     | InputPrompt[]
     | ToolSnapshot[]
-    | Project[]
-  )[] = [null, null, null, null, null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -95,22 +95,16 @@ export async function fetchChatData(searchParams: {
 
   const tagsResponse = results[5] as Response | null;
   const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
+  const foldersResponse = results[7] as Response | null;
 
   let inputPrompts: InputPrompt[] = [];
-  if (results[7] instanceof Response && results[7].ok) {
-    inputPrompts = await results[7].json();
+  if (results[8] instanceof Response && results[8].ok) {
+    inputPrompts = await results[8].json();
   } else {
     console.log("Failed to fetch input prompts");
   }
 
-  const availableTools = (results[8] || []) as ToolSnapshot[];
-
-  let projects: Project[] = [];
-  if (results[9] instanceof Response && results[9].ok) {
-    projects = await results[9].json();
-  } else {
-    console.log("Failed to fetch projects");
-  }
+  const availableTools = (results[9] || []) as ToolSnapshot[];
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
@@ -237,6 +231,18 @@ export async function fetchChatData(searchParams: {
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval
 
+  let folders: Folder[] = [];
+  if (foldersResponse?.ok) {
+    folders = (await foldersResponse.json()).folders as Folder[];
+  } else {
+    console.log(`Failed to fetch folders - ${foldersResponse?.status}`);
+  }
+
+  const openedFoldersCookie = requestCookies.get("openedFolders");
+  const openedFolders = openedFoldersCookie
+    ? JSON.parse(openedFoldersCookie.value)
+    : {};
+
   return {
     user,
     chatSessions,
@@ -246,12 +252,13 @@ export async function fetchChatData(searchParams: {
     tags,
     llmProviders,
     availableTools,
+    folders,
+    openedFolders,
     defaultAssistantId,
     finalDocumentSidebarInitialWidth,
     sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     inputPrompts,
     proSearchToggled,
-    projects,
   };
 }

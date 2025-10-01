@@ -7,10 +7,8 @@ import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 
 export function useAssistantController({
   selectedChatSession,
-  onAssistantSelect,
 }: {
   selectedChatSession: ChatSession | null | undefined;
-  onAssistantSelect?: () => void;
 }) {
   const searchParams = useSearchParams();
   const { assistants: availableAssistants, pinnedAssistants } =
@@ -79,9 +77,8 @@ export function useAssistantController({
       }
 
       setSelectedAssistant(newAssistant);
-      onAssistantSelect?.();
     },
-    [availableAssistants, defaultAssistantId, onAssistantSelect]
+    [availableAssistants, defaultAssistantId]
   );
 
   return {

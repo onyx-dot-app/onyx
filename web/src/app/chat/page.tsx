@@ -1,3 +1,4 @@
+import { DocumentsProvider } from "./my-documents/DocumentsContext";
 import { SEARCH_PARAMS } from "@/lib/extension/constants";
 import ChatLayout from "./WrappedChat";
 
@@ -10,9 +11,11 @@ export default async function Page(props: {
     searchParams[SEARCH_PARAMS.DEFAULT_SIDEBAR_OFF] === "true";
 
   return (
-    <ChatLayout
-      firstMessage={firstMessage}
-      defaultSidebarOff={defaultSidebarOff}
-    />
+    <DocumentsProvider>
+      <ChatLayout
+        firstMessage={firstMessage}
+        defaultSidebarOff={defaultSidebarOff}
+      />
+    </DocumentsProvider>
   );
 }

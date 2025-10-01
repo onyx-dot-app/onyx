@@ -1,11 +1,11 @@
 apiVersion: v2
-name: onyx
+name: onyx-stack
 description: A Helm chart for Kubernetes
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.3.3
+version: 0.2.11
 appVersion: latest
 annotations:
   category: Productivity

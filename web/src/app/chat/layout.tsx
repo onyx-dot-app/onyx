@@ -29,6 +29,8 @@ export default async function Layout({
     documentSets,
     tags,
     llmProviders,
+    folders,
+    openedFolders,
     availableTools,
     sidebarInitiallyVisible,
     defaultAssistantId,
@@ -36,7 +38,6 @@ export default async function Layout({
     ccPairs,
     inputPrompts,
     proSearchToggled,
-    projects,
   } = data;
 
   return (
@@ -54,10 +55,11 @@ export default async function Layout({
           availableDocumentSets: documentSets,
           availableTags: tags,
           llmProviders,
+          folders,
+          openedFolders,
           availableTools,
           shouldShowWelcomeModal,
           defaultAssistantId,
-          projects,
         }}
       >
         {children}

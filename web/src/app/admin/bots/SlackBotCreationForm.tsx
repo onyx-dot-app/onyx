@@ -15,7 +15,6 @@ export const NewSlackBotForm = ({}: {}) => {
     enabled: true,
     bot_token: "",
     app_token: "",
-    user_token: "",
   });
   const { popup, setPopup } = usePopup();
   const router = useRouter();

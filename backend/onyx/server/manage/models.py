@@ -183,13 +183,11 @@ class SlackBotCreationRequest(BaseModel):
 
     bot_token: str
     app_token: str
-    user_token: str | None = None
 
 
 class SlackBotTokens(BaseModel):
     bot_token: str
     app_token: str
-    user_token: str | None = None
     model_config = ConfigDict(frozen=True)
 
 
@@ -294,7 +292,6 @@ class SlackBot(BaseModel):
 
     bot_token: str
     app_token: str
-    user_token: str | None = None
 
     @classmethod
     def from_model(cls, slack_bot_model: SlackAppModel) -> "SlackBot":
@@ -302,10 +299,9 @@ class SlackBot(BaseModel):
             id=slack_bot_model.id,
             name=slack_bot_model.name,
             enabled=slack_bot_model.enabled,
-            configs_count=len(slack_bot_model.slack_channel_configs),
             bot_token=slack_bot_model.bot_token,
             app_token=slack_bot_model.app_token,
-            user_token=slack_bot_model.user_token,
+            configs_count=len(slack_bot_model.slack_channel_configs),
         )
 
 

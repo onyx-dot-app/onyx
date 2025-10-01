@@ -3,6 +3,7 @@ import os
 INPUT_PROMPT_YAML = "./onyx/seeding/input_prompts.yaml"
 PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
 PERSONAS_YAML = "./onyx/seeding/personas.yaml"
+USER_FOLDERS_YAML = "./onyx/seeding/user_folders.yaml"
 NUM_RETURNED_HITS = 50
 # Used for LLM filtering and reranking
 # We want this to be approximately the number of results we want to show on the first page
@@ -90,6 +91,8 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
 # Internet Search
 EXA_API_KEY = os.environ.get("EXA_API_KEY") or None
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or None
+GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID") or None
 
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)

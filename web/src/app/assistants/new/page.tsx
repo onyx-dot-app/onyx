@@ -2,7 +2,6 @@ import CardSection from "@/components/admin/CardSection";
 import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ProjectsProvider } from "@/app/chat/projects/ProjectsContext";
 
 export default async function Page() {
   const [values, error] = await fetchAssistantEditorInfoSS();
@@ -32,9 +31,5 @@ export default async function Page() {
     );
   }
 
-  return (
-    <ProjectsProvider>
-      <div>{body}</div>
-    </ProjectsProvider>
-  );
+  return <div>{body}</div>;
 }

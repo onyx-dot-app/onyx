@@ -1,6 +1,5 @@
 import copy
 import time
-from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
@@ -14,9 +13,6 @@ from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     time_str_to_utc,
-)
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -51,30 +47,14 @@ class ZendeskCredentialsNotSetUpError(PermissionError):
 
 
 class ZendeskClient:
-    def __init__(
-        self,
-        subdomain: str,
-        email: str,
-        token: str,
-        calls_per_minute: int | None = None,
-    ):
+    def __init__(self, subdomain: str, email: str, token: str):
         self.base_url = f"https://{subdomain}.zendesk.com/api/v2"
         self.auth = (f"{email}/token", token)
-        self.make_request = request_with_rate_limit(self, calls_per_minute)
 
-
-def request_with_rate_limit(
-    client: ZendeskClient, max_calls_per_minute: int | None = None
-) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
     @retry_builder()
-    @(
-        rate_limit_builder(max_calls=max_calls_per_minute, period=60)
-        if max_calls_per_minute
-        else lambda x: x
-    )
-    def make_request(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
+    def make_request(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         response = requests.get(
-            f"{client.base_url}/{endpoint}", auth=client.auth, params=params
+            f"{self.base_url}/{endpoint}", auth=self.auth, params=params
         )
 
         if response.status_code == 429:
@@ -91,8 +71,6 @@ def request_with_rate_limit(
 
         response.raise_for_status()
         return response.json()
-
-    return make_request
 
 
 class ZendeskPageResponse(BaseModel):
@@ -381,13 +359,11 @@ class ZendeskConnector(
     def __init__(
         self,
         content_type: str = "articles",
-        calls_per_minute: int | None = None,
     ) -> None:
         self.content_type = content_type
         self.subdomain = ""
         # Fetch all tags ahead of time
         self.content_tags: dict[str, str] = {}
-        self.calls_per_minute = calls_per_minute
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # Subdomain is actually the whole URL
@@ -399,10 +375,7 @@ class ZendeskConnector(
         self.subdomain = subdomain
 
         self.client = ZendeskClient(
-            subdomain,
-            credentials["zendesk_email"],
-            credentials["zendesk_token"],
-            calls_per_minute=self.calls_per_minute,
+            subdomain, credentials["zendesk_email"], credentials["zendesk_token"]
         )
         return None
 

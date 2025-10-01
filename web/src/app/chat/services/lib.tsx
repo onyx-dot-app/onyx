@@ -105,8 +105,7 @@ export async function updateTemperatureOverrideForChatSession(
 
 export async function createChatSession(
   personaId: number,
-  description: string | null,
-  projectId: number | null
+  description: string | null
 ): Promise<string> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
@@ -118,7 +117,6 @@ export async function createChatSession(
       body: JSON.stringify({
         persona_id: personaId,
         description,
-        project_id: projectId,
       }),
     }
   );
@@ -161,7 +159,7 @@ export type PacketType =
 export interface SendMessageParams {
   regenerate: boolean;
   message: string;
-  fileDescriptors?: FileDescriptor[];
+  fileDescriptors: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: Filters | null;
@@ -175,7 +173,8 @@ export interface SendMessageParams {
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
-  currentMessageFiles?: FileDescriptor[];
+  userFileIds?: number[];
+  userFolderIds?: number[];
   useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
@@ -185,7 +184,8 @@ export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
-  currentMessageFiles,
+  userFileIds,
+  userFolderIds,
   parentMessageId,
   chatSessionId,
   filters,
@@ -216,7 +216,8 @@ export async function* sendMessage({
     prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
-    current_message_files: currentMessageFiles,
+    user_file_ids: userFileIds,
+    user_folder_ids: userFolderIds,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
@@ -345,19 +346,6 @@ export async function deleteAllChatSessions() {
     },
   });
   return response;
-}
-
-export async function getAvailableContextTokens(
-  chatSessionId: string
-): Promise<number> {
-  const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}`
-  );
-  if (!response.ok) {
-    return 0;
-  }
-  const data = (await response.json()) as { available_tokens: number };
-  return data?.available_tokens ?? 0;
 }
 
 export async function* simulateLLMResponse(input: string, delay: number = 30) {
@@ -605,8 +593,6 @@ const PARAMS_TO_SKIP = [
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
   SEARCH_PARAM_NAMES.PERSONA_ID,
-  // do not persist project context in the URL after navigation
-  "projectid",
 ];
 
 export function buildChatUrl(

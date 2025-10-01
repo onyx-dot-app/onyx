@@ -10,14 +10,9 @@ from onyx.configs.app_configs import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
-from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class UnsupportedImageFormatError(ValueError):
-    """Raised when an image uses a MIME type unsupported by the summarization flow."""
 
 
 def prepare_image_bytes(image_data: bytes) -> str:
@@ -79,14 +74,7 @@ def summarize_image_with_error_handling(
     user_prompt = (
         f"The image has the file name '{context_name}'.\n{user_prompt_template}"
     )
-    try:
-        return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
-    except UnsupportedImageFormatError:
-        logger.info(
-            "Skipping image summarization due to unsupported MIME type for %s",
-            context_name,
-        )
-        return None
+    return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
 
 
 def _summarize_image(
@@ -121,17 +109,10 @@ def _summarize_image(
 
 
 def _encode_image_for_llm_prompt(image_data: bytes) -> str:
-    """Prepare a data URL with the correct MIME type for the LLM message."""
-    try:
-        mime_type = get_image_type_from_bytes(image_data)
-    except ValueError as exc:
-        raise UnsupportedImageFormatError(
-            "Unsupported image format for summarization"
-        ) from exc
-
+    """Getting the base64 string."""
     base64_encoded_data = base64.b64encode(image_data).decode("utf-8")
 
-    return f"data:{mime_type};base64,{base64_encoded_data}"
+    return f"data:image/jpeg;base64,{base64_encoded_data}"
 
 
 def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:

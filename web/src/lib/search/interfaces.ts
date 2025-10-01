@@ -139,7 +139,6 @@ export interface SourceMetadata {
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;
-  uniqueKey?: string;
   // For federated connectors, this stores the base source type for the icon
   baseSourceType?: ValidSources;
 }
@@ -153,6 +152,8 @@ export interface Filters {
   source_type: string[] | null;
   document_set: string[] | null;
   time_cutoff: Date | null;
+  user_file_ids: number[] | null;
+  // user_folder_ids: number[] | null;
 }
 
 export interface SearchRequestArgs {

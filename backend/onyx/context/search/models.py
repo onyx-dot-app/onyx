@@ -1,7 +1,5 @@
-from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -121,8 +119,8 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    user_file_ids: list[UUID] | None = None
-    project_id: int | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class IndexFilters(BaseFilters, UserFileFilters):
@@ -356,44 +354,6 @@ class SearchDoc(BaseModel):
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
     is_internet: bool = False
-
-    @classmethod
-    def from_chunks_or_sections(
-        cls,
-        items: "Sequence[InferenceChunk | InferenceSection] | None",
-    ) -> list["SearchDoc"]:
-        """Convert a sequence of InferenceChunk or InferenceSection objects to SearchDoc objects."""
-        if not items:
-            return []
-
-        search_docs = [
-            cls(
-                document_id=(
-                    chunk := (
-                        item.center_chunk
-                        if isinstance(item, InferenceSection)
-                        else item
-                    )
-                ).document_id,
-                chunk_ind=chunk.chunk_id,
-                semantic_identifier=chunk.semantic_identifier or "Unknown",
-                link=chunk.source_links[0] if chunk.source_links else None,
-                blurb=chunk.blurb,
-                source_type=chunk.source_type,
-                boost=chunk.boost,
-                hidden=chunk.hidden,
-                metadata=chunk.metadata,
-                score=chunk.score,
-                match_highlights=chunk.match_highlights,
-                updated_at=chunk.updated_at,
-                primary_owners=chunk.primary_owners,
-                secondary_owners=chunk.secondary_owners,
-                is_internet=False,
-            )
-            for item in items
-        ]
-
-        return search_docs
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(*args, **kwargs)  # type: ignore

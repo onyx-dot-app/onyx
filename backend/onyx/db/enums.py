@@ -62,14 +62,6 @@ class MCPAuthenticationType(str, PyEnum):
     OAUTH = "OAUTH"
 
 
-class MCPTransport(str, PyEnum):
-    """MCP transport types"""
-
-    STDIO = "STDIO"  # TODO: currently unsupported, need to add a user guide for setup
-    SSE = "SSE"  # Server-Sent Events (deprecated but still used)
-    STREAMABLE_HTTP = "STREAMABLE_HTTP"  # Modern HTTP streaming
-
-
 class MCPAuthenticationPerformer(str, PyEnum):
     ADMIN = "ADMIN"
     PER_USER = "PER_USER"
@@ -139,10 +131,3 @@ class EmbeddingPrecision(str, PyEnum):
     # good reason to specify anything else
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
-
-
-class UserFileStatus(str, PyEnum):
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELED = "CANCELED"

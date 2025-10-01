@@ -23,8 +23,6 @@ import {
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
-import { useCurrentMessageTree } from "../../stores/useChatSessionStore";
-import { FiFileText } from "react-icons/fi";
 import { copyAll, handleCopy } from "../copyingUtils";
 import RegenerateOption from "../../components/RegenerateOption";
 import { MessageSwitcher } from "../MessageSwitcher";
@@ -201,6 +199,7 @@ export function AIMessage({
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
+
   // Calculate unique source count
   const uniqueSourceCount = useMemo(() => {
     const uniqueDocIds = new Set<string>();

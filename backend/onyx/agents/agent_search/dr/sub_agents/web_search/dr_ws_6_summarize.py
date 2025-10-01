@@ -27,9 +27,9 @@ logger = setup_logger()
 
 
 def is_summarize(
-    state: SummarizeInput,
-    config: RunnableConfig,
-    writer: StreamWriter = lambda _: None,
+        state: SummarizeInput,
+        config: RunnableConfig,
+        writer: StreamWriter = lambda _: None,
 ) -> BranchUpdate:
     """
     LangGraph node to perform a internet search as part of the DR process.
@@ -40,6 +40,7 @@ def is_summarize(
     # build branch iterations from fetch inputs
     url_to_raw_document: dict[str, InferenceSection] = {}
     for raw_document in state.raw_documents:
+        # NOTE: raw_document.center_chunk.semantic_identifier is the URL link
         url_to_raw_document[raw_document.center_chunk.semantic_identifier] = (
             raw_document
         )
@@ -51,8 +52,52 @@ def is_summarize(
         raise ValueError("available_tools is not set")
     is_tool_info = state.available_tools[state.tools_used[-1]]
 
+    # --- Start of Fix ---
+
+    # Safely build the list of documents, skipping any URL that was not fetched.
+    cited_raw_documents: list[InferenceSection] = []
+    for url in urls:
+        if url in url_to_raw_document:
+            cited_raw_documents.append(url_to_raw_document[url])
+        else:
+            # This logs the skipped URL, which resolves the KeyError
+            logger.warning(
+                f"Skipping document citation for unfetched/blocked URL: {url}. "
+                "Document was not found in url_to_raw_document map."
+            )
+
+    if not cited_raw_documents:
+        # If no documents were successfully fetched, return an empty answer
+        return BranchUpdate(
+            branch_iteration_responses=[
+                IterationAnswer(
+                    tool=is_tool_info.llm_path,
+                    tool_id=is_tool_info.tool_id,
+                    iteration_nr=current_iteration,
+                    parallelization_nr=0,
+                    question=state.branch_question,
+                    answer="No relevant content could be retrieved from the internet.",
+                    claims=[],
+                    cited_documents={},
+                    reasoning="All cited URLs were blocked or failed to load.",
+                    additional_data=None,
+                )
+            ],
+            log_messages=[
+                get_langgraph_node_log_string(
+                    graph_component="internet_search",
+                    node_name="summarizing (no content)",
+                    node_start_time=node_start_time,
+                )
+            ],
+        )
+
+    # --- End of Fix ---
+
     if research_type == ResearchType.DEEP:
-        cited_raw_documents = [url_to_raw_document[url] for url in urls]
+        # The list comprehension causing the error has been replaced by the safe loop above
+        # cited_raw_documents = [url_to_raw_document[url] for url in urls] # <-- Removed
+
         document_texts = _create_document_texts(cited_raw_documents)
         search_prompt = INTERNAL_SEARCH_PROMPTS[research_type].build(
             search_query=state.branch_question,
@@ -77,6 +122,8 @@ def is_summarize(
             answer_string,
             claims,
         ) = extract_document_citations(answer_string, claims)
+
+        # NOTE: This indexing is now safe because cited_raw_documents only contains fetched docs
         cited_documents = {
             citation_number: cited_raw_documents[citation_number - 1]
             for citation_number in citation_numbers
@@ -86,7 +133,11 @@ def is_summarize(
         answer_string = ""
         reasoning = ""
         claims = []
-        cited_raw_documents = [url_to_raw_document[url] for url in urls]
+
+        # The list comprehension causing the error has been replaced by the safe loop above
+        # cited_raw_documents = [url_to_raw_document[url] for url in urls] # <-- Removed
+
+        # NOTE: cited_raw_documents is now the safely filtered list
         cited_documents = {
             doc_num + 1: retrieved_doc
             for doc_num, retrieved_doc in enumerate(cited_raw_documents)

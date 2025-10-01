@@ -5,7 +5,6 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 from typing import Protocol
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +18,6 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import PromptConfig
@@ -37,7 +35,6 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
@@ -66,13 +63,9 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.projects import get_project_instructions
-from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
@@ -108,7 +101,6 @@ from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
-
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
@@ -125,55 +117,6 @@ class PartialResponse(Protocol):
         error: str | None,
         tool_call: ToolCall | None,
     ) -> ChatMessage: ...
-
-
-def _build_project_llm_docs(
-    project_file_ids: list[str] | None,
-    in_memory_user_files: list[InMemoryChatFile] | None,
-) -> list[LlmDoc]:
-    """Construct `LlmDoc` objects for project-scoped user files for citation flow."""
-    project_llm_docs: list[LlmDoc] = []
-    if not project_file_ids or not in_memory_user_files:
-        return project_llm_docs
-
-    project_file_id_set = set(project_file_ids)
-    for f in in_memory_user_files:
-        # Only include files that belong to the project (not ad-hoc uploads)
-        if project_file_id_set and (f.file_id in project_file_id_set):
-            try:
-                text_content = f.content.decode("utf-8", errors="ignore")
-            except Exception:
-                text_content = ""
-
-            # Build a short blurb from the file content for better UI display
-            blurb = (
-                (text_content[:200] + "...")
-                if len(text_content) > 200
-                else text_content
-            )
-
-            # Provide basic metadata to improve SavedSearchDoc display
-            file_metadata: dict[str, str | list[str]] = {
-                "filename": f.filename or str(f.file_id),
-                "file_type": f.file_type.value,
-            }
-
-            project_llm_docs.append(
-                LlmDoc(
-                    document_id=str(f.file_id),
-                    content=text_content,
-                    blurb=blurb,
-                    semantic_identifier=f.filename or str(f.file_id),
-                    source_type=DocumentSource.USER_FILE,
-                    metadata=file_metadata,
-                    updated_at=None,
-                    link=build_frontend_file_url(str(f.file_id)),
-                    source_links=None,
-                    match_highlights=None,
-                )
-            )
-
-    return project_llm_docs
 
 
 def _translate_citations(
@@ -493,29 +436,26 @@ def stream_chat_message_objects(
         files = load_all_chat_files(history_msgs, new_msg_req.file_descriptors)
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
-        user_file_ids: list[UUID] = []
+        user_file_ids = new_msg_req.user_file_ids or []
+        user_folder_ids = new_msg_req.user_folder_ids or []
 
         if persona.user_files:
-            for uf in persona.user_files:
-                user_file_ids.append(uf.id)
-
-        if new_msg_req.current_message_files:
-            for fd in new_msg_req.current_message_files:
-                uid = fd.get("user_file_id")
-                if uid is not None:
-                    user_file_id = UUID(uid)
-                    user_file_ids.append(user_file_id)
+            for file in persona.user_files:
+                user_file_ids.append(file.id)
+        if persona.user_folders:
+            for folder in persona.user_folders:
+                user_folder_ids.append(folder.id)
 
         # Load in user files into memory and create search tool override kwargs if needed
-        # if we have enough tokens, we don't need to use search
+        # if we have enough tokens and no folders, we don't need to use search
         # we can just pass them into the prompt directly
         (
             in_memory_user_files,
             user_file_models,
             search_tool_override_kwargs_for_user_files,
         ) = parse_user_files(
-            user_file_ids=user_file_ids or [],
-            project_id=chat_session.project_id,
+            user_file_ids=user_file_ids,
+            user_folder_ids=user_folder_ids,
             db_session=db_session,
             persona=persona,
             actual_user_input=message_text,
@@ -524,36 +464,15 @@ def stream_chat_message_objects(
         if not search_tool_override_kwargs_for_user_files:
             latest_query_files.extend(in_memory_user_files)
 
-        project_file_ids = []
-        if chat_session.project_id:
-            project_file_ids.extend(
-                [
-                    file.file_id
-                    for file in get_user_files_from_project(
-                        chat_session.project_id, user_id, db_session
-                    )
-                ]
-            )
-
-        # we don't want to attach project files to the user message
         if user_message:
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[
-                    new_file.to_file_descriptor()
-                    for new_file in latest_query_files
-                    if project_file_ids is not None
-                    and (new_file.file_id not in project_file_ids)
+                    new_file.to_file_descriptor() for new_file in latest_query_files
                 ],
                 db_session=db_session,
                 commit=False,
             )
-
-        # Build project context docs for citation flow if project files are present
-        project_llm_docs: list[LlmDoc] = _build_project_llm_docs(
-            project_file_ids=project_file_ids,
-            in_memory_user_files=in_memory_user_files,
-        )
 
         selected_db_search_docs = None
         selected_sections: list[InferenceSection] | None = None
@@ -640,22 +559,12 @@ def stream_chat_message_objects(
         else:
             prompt_config = PromptConfig.from_model(persona)
 
-        # Retrieve project-specific instructions if this chat session is associated with a project.
-        project_instructions: str | None = (
-            get_project_instructions(
-                db_session=db_session, project_id=chat_session.project_id
-            )
-            if persona.is_default_persona
-            else None
-        )  # if the persona is not default, we don't want to use the project instructions
-
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
             ),
             structured_response_format=new_msg_req.structured_response_format,
         )
-        has_project_files = project_file_ids is not None and len(project_file_ids) > 0
 
         tool_dict = construct_tools(
             persona=persona,
@@ -665,17 +574,9 @@ def stream_chat_message_objects(
             llm=llm,
             fast_llm=fast_llm,
             run_search_setting=(
-                OptionalSearchSetting.NEVER
-                if (
-                    chat_session.project_id
-                    and not has_project_files
-                    and persona.is_default_persona
-                )
-                else (
-                    retrieval_options.run_search
-                    if retrieval_options
-                    else OptionalSearchSetting.AUTO
-                )
+                retrieval_options.run_search
+                if retrieval_options
+                else OptionalSearchSetting.AUTO
             ),
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
@@ -702,7 +603,6 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
-            slack_context=new_msg_req.slack_context,  # Pass Slack context from request
         )
 
         tools: list[Tool] = []
@@ -717,7 +617,6 @@ def stream_chat_message_objects(
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
-
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             yield UserKnowledgeFilePacket(
                 user_files=[
@@ -725,8 +624,6 @@ def stream_chat_message_objects(
                         id=str(file.file_id), type=file.file_type, name=file.filename
                     )
                     for file in in_memory_user_files
-                    if project_file_ids is not None
-                    and (file.file_id not in project_file_ids)
                 ]
             )
 
@@ -744,10 +641,6 @@ def stream_chat_message_objects(
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
-
-        if project_llm_docs and not search_tool_override_kwargs_for_user_files:
-            # Store for downstream streaming to wire citations and final_documents
-            prompt_builder.context_llm_docs = project_llm_docs
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(
@@ -777,7 +670,6 @@ def stream_chat_message_objects(
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
-            project_instructions=project_instructions,
         )
 
         # Process streamed packets using the new packet processing module

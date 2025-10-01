@@ -61,16 +61,14 @@ export function Citation({
   if (!document_info && !question_info) {
     return <>{children}</>;
   }
-  const sourceType = document_info?.document?.source_type;
   const icon = document_info?.document
     ? getFileIconFromFileNameAndLink(
         document_info.document.semantic_identifier || "",
-        sourceType === ValidSources.UserFile
-          ? ""
-          : document_info.document.link || ""
+        document_info.document.link || ""
       )
     : null;
 
+  const sourceType = document_info?.document?.source_type;
   const title = document_info?.document?.semantic_identifier;
   const citationText =
     (sourceType && sourceType != ValidSources.Web

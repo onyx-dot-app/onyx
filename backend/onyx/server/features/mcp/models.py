@@ -1,5 +1,3 @@
-from enum import Enum
-from typing import Any
 from typing import List
 from typing import NotRequired
 from typing import Optional
@@ -12,35 +10,20 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
-
-
-# This should be updated along with MCPConnectionData
-class MCPOAuthKeys(str, Enum):
-    """MCP OAuth keys types"""
-
-    CLIENT_INFO = "client_info"
-    TOKENS = "tokens"
-    METADATA = "metadata"
 
 
 class MCPConnectionData(TypedDict):
     """TypedDict to allow use as a type hint for a JSONB column
     in Postgres"""
 
+    refresh_token: NotRequired[str]
+    access_token: NotRequired[str]
     headers: dict[str, str]
     header_substitutions: NotRequired[dict[str, str]]
-
-    # For OAuth only
-    # Note: Update MCPOAuthKeys if necessary when modifying these
-    # Unfortunately we can't use the actual models here because basemodels aren't compatible
-    # with SQLAlchemy
-    client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
-    tokens: NotRequired[dict[str, Any]]  # OAuthToken
-    metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
-
-    # the actual models are defined in mcp.shared.auth
-    # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+    client_id: NotRequired[str]
+    client_secret: NotRequired[str]
+    registration_access_token: NotRequired[str]
+    registration_client_uri: NotRequired[str]
 
 
 class MCPAuthTemplate(BaseModel):
@@ -65,17 +48,14 @@ class MCPToolCreateRequest(BaseModel):
     description: Optional[str] = Field(None, description="Description of the MCP tool")
     server_url: str = Field(..., description="URL of the MCP server")
     auth_type: MCPAuthenticationType = Field(..., description="Authentication type")
-    auth_performer: MCPAuthenticationPerformer = Field(
-        ..., description="Who performs authentication"
+    auth_performer: Optional[MCPAuthenticationPerformer] = Field(
+        None, description="Who performs authentication"
     )
     api_token: Optional[str] = Field(
         None, description="API token for api_token auth type"
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
-    transport: MCPTransport | None = Field(
-        None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
-    )
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Template configuration for per-user authentication"
     )
@@ -124,9 +104,15 @@ class MCPToolCreateRequest(BaseModel):
                     "admin_credentials is required when auth_performer is 'per_user'"
                 )
 
-        # OAuth client ID/secret are optional. If provided, they will seed the
-        # OAuth client info; otherwise, the MCP client will attempt dynamic
-        # client registration.
+        if self.auth_type == MCPAuthenticationType.OAUTH and not self.oauth_client_id:
+            raise ValueError("oauth_client_id is required when auth_type is 'oauth'")
+        if (
+            self.auth_type == MCPAuthenticationType.OAUTH
+            and not self.oauth_client_secret
+        ):
+            raise ValueError(
+                "oauth_client_secret is required when auth_type is 'oauth'"
+            )
 
         return self
 
@@ -154,7 +140,7 @@ class MCPToolResponse(BaseModel):
     is_authenticated: bool
 
 
-class MCPOAuthConnectRequest(BaseModel):
+class MCPOAuthInitiateRequest(BaseModel):
     name: str = Field(..., description="Name of the MCP tool")
     description: Optional[str] = Field(None, description="Description of the MCP tool")
     server_url: str = Field(..., description="URL of the MCP server")
@@ -166,33 +152,32 @@ class MCPOAuthConnectRequest(BaseModel):
     )
 
 
-class MCPOAuthConnectResponse(BaseModel):
+class MCPOAuthInitiateResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
     state: str = Field(..., description="OAuth state parameter")
     pending_tool: dict = Field(..., description="Pending tool configuration")
 
 
-class MCPUserOAuthConnectRequest(BaseModel):
+class MCPUserOAuthInitiateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
     include_resource_param: bool = Field(..., description="Include resource parameter")
-    oauth_client_id: str | None = Field(
-        None, description="OAuth client ID (optional for DCR)"
-    )
-    oauth_client_secret: str | None = Field(
-        None, description="OAuth client secret (optional for DCR)"
-    )
 
     @model_validator(mode="after")
-    def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
+    def validate_return_path(self) -> "MCPUserOAuthInitiateRequest":
         if not self.return_path.startswith("/"):
             raise ValueError("return_path must start with a slash")
         return self
 
 
-class MCPUserOAuthConnectResponse(BaseModel):
-    server_id: int
+class MCPUserOAuthInitiateResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
+    state: str = Field(..., description="OAuth state parameter")
+    server_id: int = Field(..., description="Server ID")
+    server_name: str = Field(..., description="Server name")
+    code_verifier: Optional[str] = Field(
+        None, description="PKCE code verifier to be used at callback"
+    )
 
 
 class MCPOAuthCallbackRequest(BaseModel):
@@ -209,6 +194,7 @@ class MCPOAuthCallbackResponse(BaseModel):
     message: str
     server_id: int
     server_name: str
+    authenticated: bool
     redirect_url: str
 
 
@@ -269,7 +255,6 @@ class MCPServer(BaseModel):
     name: str
     description: Optional[str] = None
     server_url: str
-    transport: MCPTransport
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer
     is_authenticated: bool

@@ -42,7 +42,6 @@ from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.llm.utils import check_number_of_tokens
-from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
 from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
@@ -226,7 +225,7 @@ def closer(
 
     research_type = graph_config.behavior.research_type
 
-    assistant_system_prompt: str = state.assistant_system_prompt or ""
+    assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
 
     uploaded_context = state.uploaded_test_context or ""
@@ -349,13 +348,6 @@ def closer(
         chat_history_string=chat_history_string,
         uploaded_context=uploaded_context,
     )
-
-    if graph_config.inputs.project_instructions:
-        assistant_system_prompt = (
-            assistant_system_prompt
-            + PROJECT_INSTRUCTIONS_SEPARATOR
-            + (graph_config.inputs.project_instructions or "")
-        )
 
     all_context_llmdocs = [
         llm_doc_from_inference_section(inference_section)

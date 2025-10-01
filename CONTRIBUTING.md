@@ -84,6 +84,10 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
+> **Note:**
+> This virtual environment MUST NOT be set up WITHIN the onyx directory if you plan on using mypy within certain IDEs.
+> For simplicity, we recommend setting up the virtual environment outside of the onyx directory.
+
 _For Windows, activate the virtual environment using Command Prompt:_
 
 ```bash
@@ -171,7 +175,7 @@ You will need Docker installed to run these containers.
 First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
 
 ```bash
-docker compose up -d index relational_db cache minio
+docker compose -f docker-compose.dev.yml -p onyx-stack up -d index relational_db cache minio
 ```
 
 (index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)
@@ -253,7 +257,7 @@ You can run the full Onyx application stack from pre-built images including all 
 Navigate to `onyx/deployment/docker_compose` and run:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.dev.yml -p onyx-stack up -d
 ```
 
 After Docker pulls and starts these containers, navigate to `http://localhost:3000` to use Onyx.
@@ -261,7 +265,7 @@ After Docker pulls and starts these containers, navigate to `http://localhost:30
 If you want to make changes to Onyx and run those changes in Docker, you can also build a local version of the Onyx container images that incorporates your changes like so:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.dev.yml -p onyx-stack up -d --build
 ```
 
 

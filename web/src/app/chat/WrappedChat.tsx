@@ -2,7 +2,6 @@
 
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPage } from "./components/ChatPage";
-import { ProjectsProvider } from "./projects/ProjectsContext";
 import { useCallback, useState } from "react";
 
 export default function ChatLayout({
@@ -14,7 +13,7 @@ export default function ChatLayout({
   // we don't want to show the sidebar by default when the user opens the side panel
   defaultSidebarOff?: boolean;
 }) {
-  const { sidebarInitiallyVisible, projects } = useChatContext();
+  const { sidebarInitiallyVisible } = useChatContext();
 
   const [sidebarVisible, setSidebarVisible] = useState(
     (sidebarInitiallyVisible && !defaultSidebarOff) ?? false
@@ -27,7 +26,7 @@ export default function ChatLayout({
   }, []);
 
   return (
-    <ProjectsProvider initialProjects={projects}>
+    <>
       <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
         <ChatPage
           toggle={toggle}
@@ -35,6 +34,6 @@ export default function ChatLayout({
           firstMessage={firstMessage}
         />
       </div>
-    </ProjectsProvider>
+    </>
   );
 }

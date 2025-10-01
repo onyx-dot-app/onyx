@@ -91,7 +91,7 @@ from onyx.db.credentials import create_credential
 from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
-from onyx.db.document import get_document_counts_for_cc_pairs_batched_parallel
+from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -722,6 +722,14 @@ def get_connector_indexing_status(
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
 
+    # TODO: We currently materialize all connectors in memory to calculate summary info
+    # and display them in descending order per source. This is acceptable for now since
+    # the number of connectors is relatively small, and load time is under 1s.
+    # However, this approach will likely become very slow if the query includes user files,
+    # such as "My Documents", where each file is its own connector. In large deployments,
+    # this could result in 100k+ connectors. Consider optimizing with pagination or
+    # reevaluating the need for the summary to improve performance in the future.
+
     if MOCK_CONNECTOR_FILE_PATH:
         import json
 
@@ -795,14 +803,15 @@ def get_connector_indexing_status(
         list[IndexAttempt], latest_finished_index_attempts
     )
 
-    document_count_info = get_document_counts_for_cc_pairs_batched_parallel(
+    document_count_info = get_document_counts_for_cc_pairs(
+        db_session=db_session,
         cc_pairs=[
             ConnectorCredentialPairIdentifier(
                 connector_id=cc_pair.connector_id,
                 credential_id=cc_pair.credential_id,
             )
             for cc_pair in non_editable_cc_pairs + editable_cc_pairs
-        ]
+        ],
     )
 
     # Create lookup dictionaries for efficient access

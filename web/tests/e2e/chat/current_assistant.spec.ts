@@ -68,8 +68,6 @@ test("Assistant Drag and Drop", async ({ page }) => {
   await dragElementAbove(secondAssistant, firstAssistant, page);
 
   // Check new order
-  // wait a second to make sure that the order has been applied
-  await page.waitForTimeout(500);
   const orderAfterDragUp = await getAssistantOrder();
   expect(orderAfterDragUp[0]).toBe(initialOrder[1]);
   expect(orderAfterDragUp[1]).toBe(initialOrder[0]);
@@ -84,8 +82,6 @@ test("Assistant Drag and Drop", async ({ page }) => {
   await dragElementBelow(lastAssistant, secondPosition, page);
 
   // Check new order
-  // wait a second to make sure that the order has been applied
-  await page.waitForTimeout(500);
   const orderAfterDragDown = await getAssistantOrder();
   expect(orderAfterDragDown[1]).toBe(initialOrder[lastIndex]);
 

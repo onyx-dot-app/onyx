@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "onyx.fullname" . }}-background
+  name: {{ include "onyx-stack.fullname" . }}-background
   labels:
-    {{- include "onyx.labels" . | nindent 4 }}
+    {{- include "onyx-stack.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx.fullname" . }}
+    name: {{ include "onyx-stack.fullname" . }}
   minReplicas: {{ .Values.background.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.background.autoscaling.maxReplicas }}
   metrics:

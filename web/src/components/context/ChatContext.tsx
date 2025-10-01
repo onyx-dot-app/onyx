@@ -9,10 +9,10 @@ import {
 } from "@/lib/types";
 import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { Project } from "@/app/chat/projects/projectsService";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
@@ -25,16 +25,17 @@ interface ChatContextProps {
   availableTags: Tag[];
   availableTools: ToolSnapshot[];
   llmProviders: LLMProviderDescriptor[];
+  folders: Folder[];
+  openedFolders: Record<string, boolean>;
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;
-  refreshChatSessions: (options?: {
-    skipRedirectOnMissing?: boolean;
-  }) => Promise<void>;
+  refreshChatSessions: () => Promise<void>;
+  reorderFolders: (displayPriorityMap: Record<number, number>) => void;
+  refreshFolders: () => Promise<void>;
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
-  projects: Project[];
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
@@ -44,7 +45,11 @@ const ChatContext = createContext<ChatContextProps | undefined>(undefined);
 export const ChatProvider: React.FC<{
   value: Omit<
     ChatContextProps,
-    "refreshChatSessions" | "refreshAvailableAssistants" | "refreshInputPrompts"
+    | "refreshChatSessions"
+    | "refreshAvailableAssistants"
+    | "reorderFolders"
+    | "refreshFolders"
+    | "refreshInputPrompts"
   >;
   children: React.ReactNode;
 }> = ({ value, children }) => {
@@ -52,10 +57,23 @@ export const ChatProvider: React.FC<{
   const searchParams = useSearchParams();
   const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
   const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
+  const [folders, setFolders] = useState(value?.folders || []);
 
-  const refreshChatSessions = async (options?: {
-    skipRedirectOnMissing?: boolean;
-  }) => {
+  const reorderFolders = (displayPriorityMap: Record<number, number>) => {
+    setFolders(
+      folders.map((folder) => {
+        if (folder.folder_id) {
+          const display_priority = displayPriorityMap[folder.folder_id];
+          if (display_priority !== undefined) {
+            folder.display_priority = display_priority;
+          }
+        }
+        return folder;
+      })
+    );
+  };
+
+  const refreshChatSessions = async () => {
     try {
       const response = await fetch("/api/chat/get-user-chat-sessions");
       if (!response.ok) throw new Error("Failed to fetch chat sessions");
@@ -69,15 +87,18 @@ export const ChatProvider: React.FC<{
           (session: ChatSession) => session.id === currentSessionId
         )
       ) {
-        if (!options?.skipRedirectOnMissing) {
-          router.replace("/chat");
-        }
+        router.replace("/chat");
       }
     } catch (error) {
       console.error("Error refreshing chat sessions:", error);
     }
   };
-
+  const refreshFolders = async () => {
+    const response = await fetch("/api/folder");
+    if (!response.ok) throw new Error("Failed to fetch folders");
+    const { folders } = await response.json();
+    setFolders(folders);
+  };
   const refreshInputPrompts = async () => {
     const response = await fetch("/api/input_prompt");
     if (!response.ok) throw new Error("Failed to fetch input prompts");
@@ -92,7 +113,10 @@ export const ChatProvider: React.FC<{
         inputPrompts,
         refreshInputPrompts,
         chatSessions,
+        folders,
+        reorderFolders,
         refreshChatSessions,
+        refreshFolders,
       }}
     >
       {children}

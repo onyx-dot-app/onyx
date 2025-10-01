@@ -62,9 +62,6 @@ from onyx.db.enums import (
     SyncType,
     SyncStatus,
     MCPAuthenticationType,
-    UserFileStatus,
-    MCPAuthenticationPerformer,
-    MCPTransport,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -212,6 +209,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
     )
+    chat_folders: Mapped[list["ChatFolder"]] = relationship(
+        "ChatFolder", back_populates="user"
+    )
 
     input_prompts: Mapped[list["InputPrompt"]] = relationship(
         "InputPrompt", back_populates="user"
@@ -229,8 +229,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
-    projects: Mapped[list["UserProject"]] = relationship(
-        "UserProject", back_populates="user"
+    folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
     # MCP servers accessible to this user
@@ -537,6 +537,10 @@ class ConnectorCredentialPair(Base):
         "User",
         back_populates="cc_pairs",
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
+    )
+
+    user_file: Mapped["UserFile"] = relationship(
+        "UserFile", back_populates="cc_pair", uselist=False
     )
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
@@ -1455,6 +1459,9 @@ class FederatedConnector(Base):
 
 
 class FederatedConnectorOAuthToken(Base):
+    """NOTE: in the future, can be made more general to support OAuth tokens
+    for actions."""
+
     __tablename__ = "federated_connector_oauth_token"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -2030,19 +2037,14 @@ class ChatSession(Base):
         Enum(ChatSessionSharedStatus, native_enum=False),
         default=ChatSessionSharedStatus.PRIVATE,
     )
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_folder.id"), nullable=True
+    )
 
     current_alternate_model: Mapped[str | None] = mapped_column(String, default=None)
 
     slack_thread_id: Mapped[str | None] = mapped_column(
         String, nullable=True, default=None
-    )
-
-    project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_project.id"), nullable=True
-    )
-
-    project: Mapped["UserProject"] = relationship(
-        "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
     )
 
     # the latest "overrides" specified by the user. These take precedence over
@@ -2070,6 +2072,9 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
+    folder: Mapped["ChatFolder"] = relationship(
+        "ChatFolder", back_populates="chat_sessions"
+    )
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
     )
@@ -2171,6 +2176,33 @@ class ChatMessage(Base):
     research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
         Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
+
+
+class ChatFolder(Base):
+    """For organizing chat sessions"""
+
+    __tablename__ = "chat_folder"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Only null if auth is off
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
+
+    user: Mapped[User] = relationship("User", back_populates="chat_folders")
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession", back_populates="folder"
+    )
+
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, ChatFolder):
+            return NotImplemented
+        if self.display_priority == other.display_priority:
+            # Bigger ID (created later) show earlier
+            return self.id > other.id
+        return self.display_priority < other.display_priority
 
 
 class AgentSubQuestion(Base):
@@ -2604,6 +2636,11 @@ class Persona(Base):
         secondary="persona__user_file",
         back_populates="assistants",
     )
+    user_folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder",
+        secondary="persona__user_folder",
+        back_populates="assistants",
+    )
     labels: Mapped[list["PersonaLabel"]] = relationship(
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
@@ -2621,11 +2658,20 @@ class Persona(Base):
     )
 
 
+class Persona__UserFolder(Base):
+    __tablename__ = "persona__user_folder"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_folder_id: Mapped[int] = mapped_column(
+        ForeignKey("user_folder.id"), primary_key=True
+    )
+
+
 class Persona__UserFile(Base):
     __tablename__ = "persona__user_file"
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    user_file_id: Mapped[UUID] = mapped_column(
+    user_file_id: Mapped[int] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
 
@@ -2737,7 +2783,6 @@ class SlackBot(Base):
 
     bot_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
     app_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
-    user_token: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
         "SlackChannelConfig",
@@ -3231,37 +3276,23 @@ class InputPrompt__User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
-class Project__UserFile(Base):
-    __tablename__ = "project__user_file"
-
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("user_project.id"), primary_key=True
-    )
-    user_file_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user_file.id"), primary_key=True
-    )
-
-
-class UserProject(Base):
-    __tablename__ = "user_project"
+class UserFolder(Base):
+    __tablename__ = "user_folder"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
-    description: Mapped[str] = mapped_column(nullable=True)
+    description: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    user: Mapped["User"] = relationship(back_populates="projects")
-    user_files: Mapped[list["UserFile"]] = relationship(
-        "UserFile",
-        secondary=Project__UserFile.__table__,
-        back_populates="projects",
+    user: Mapped["User"] = relationship(back_populates="folders")
+    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFolder.__table__,
+        back_populates="user_folders",
     )
-    chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        "ChatSession", back_populates="project", lazy="selectin"
-    )
-    instructions: Mapped[str] = mapped_column(String)
 
 
 class UserDocument(str, Enum):
@@ -3273,13 +3304,17 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
         secondary=Persona__UserFile.__table__,
         back_populates="user_files",
     )
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+
     file_id: Mapped[str] = mapped_column(nullable=False)
     document_id: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
@@ -3287,38 +3322,17 @@ class UserFile(Base):
         default=datetime.datetime.utcnow
     )
     user: Mapped["User"] = relationship(back_populates="files")
+    folder: Mapped["UserFolder"] = relationship(back_populates="files")
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    file_type: Mapped[str] = mapped_column(String, nullable=False)
-
-    status: Mapped[UserFileStatus] = mapped_column(
-        Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
-        nullable=False,
-        default=UserFileStatus.PROCESSING,
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
     )
-    needs_project_sync: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", back_populates="user_file"
     )
-    last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    last_accessed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    document_id_migrated: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-
-    projects: Mapped[list["UserProject"]] = relationship(
-        "UserProject",
-        secondary=Project__UserFile.__table__,
-        back_populates="user_files",
-        lazy="selectin",
-    )
 
 
 """
@@ -3470,17 +3484,9 @@ class MCPServer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
-    # Transport type for connecting to the MCP server
-    transport: Mapped[MCPTransport] = mapped_column(
-        Enum(MCPTransport, native_enum=False), nullable=False
-    )
     # Auth type: "none", "api_token", or "oauth"
     auth_type: Mapped[MCPAuthenticationType] = mapped_column(
         Enum(MCPAuthenticationType, native_enum=False), nullable=False
-    )
-    # Who performs authentication for this server (ADMIN or PER_USER)
-    auth_performer: Mapped[MCPAuthenticationPerformer] = mapped_column(
-        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=False
     )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth

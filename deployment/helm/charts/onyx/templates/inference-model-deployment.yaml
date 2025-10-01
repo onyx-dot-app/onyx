@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-inference-model
+  name: {{ include "onyx-stack.fullname" . }}-inference-model
   labels:
     {{- range .Values.inferenceCapability.labels }}
     {{ .key }}: {{ .value }}
@@ -16,8 +16,6 @@ spec:
       {{- end }}
   template:
     metadata:
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- range .Values.inferenceCapability.podLabels }}
         {{ .key }}: {{ .value }}
@@ -44,7 +42,7 @@ spec:
         - configMapRef:
             name: {{ .Values.config.envConfigMapName }}
         env:
-          {{- include "onyx.envSecrets" . | nindent 12}}
+          {{- include "onyx-stack.envSecrets" . | nindent 12}}
         {{- if .Values.inferenceCapability.securityContext }}
         securityContext:
           {{- toYaml .Values.inferenceCapability.securityContext | nindent 10 }}

@@ -61,16 +61,16 @@ logger = setup_logger()
 def _validate_user_knowledge_enabled(
     persona_upsert_request: PersonaUpsertRequest, action: str
 ) -> None:
-    """Check if user knowledge is enabled when user files/projects are provided."""
+    """Check if user knowledge is enabled when user files/folders are provided."""
     settings = load_settings()
     if not settings.user_knowledge_enabled:
-        # Only user files are supported going forward; keep getattr for backward compat
-        if persona_upsert_request.user_file_ids or getattr(
-            persona_upsert_request, "user_project_ids", None
+        if (
+            persona_upsert_request.user_file_ids
+            or persona_upsert_request.user_folder_ids
         ):
             raise HTTPException(
                 status_code=400,
-                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
+                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or folders.",
             )
 
 

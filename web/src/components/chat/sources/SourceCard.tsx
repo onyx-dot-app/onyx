@@ -5,12 +5,7 @@ import { ValidSources } from "@/lib/types";
 import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
-// Minimal shape needed locally for file icon rendering
-type FileResponse = {
-  id: number;
-  name: string;
-  link_url?: string | null;
-};
+import { FileResponse } from "@/app/chat/my-documents/DocumentsContext";
 
 export const ResultIcon = ({
   doc,

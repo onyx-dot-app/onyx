@@ -7,20 +7,13 @@ import {
   IconProps,
   MoreActionsIcon,
 } from "@/components/icons/icons";
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ToolSnapshot,
@@ -31,54 +24,16 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useSourcePreferences } from "@/lib/hooks";
-import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
   FiChevronRight,
-  FiChevronLeft,
   FiKey,
   FiLock,
   FiCheck,
   FiLoader,
 } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
-import { ValidSources } from "@/lib/types";
-import { SourceMetadata } from "@/lib/search/interfaces";
-import { SourceIcon } from "@/components/SourceIcon";
 import { useChatContext } from "@/components/context/ChatContext";
-import { useTheme } from "next-themes";
-
-// Get source metadata for configured sources - deduplicated by source type
-function getConfiguredSources(
-  availableSources: ValidSources[]
-): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
-  const allSources = listSourceMetadata();
-
-  const seenSources = new Set<string>();
-  const configuredSources: Array<
-    SourceMetadata & { originalName: string; uniqueKey: string }
-  > = [];
-
-  availableSources.forEach((sourceName) => {
-    // Handle federated connectors by removing the federated_ prefix
-    const cleanName = sourceName.replace("federated_", "");
-    // Skip if we've already seen this source type
-    if (seenSources.has(cleanName)) return;
-    seenSources.add(cleanName);
-    const source = allSources.find(
-      (source) => source.internalName === cleanName
-    );
-    if (source) {
-      configuredSources.push({
-        ...source,
-        originalName: sourceName,
-        uniqueKey: cleanName,
-      });
-    }
-  });
-  return configuredSources;
-}
 
 interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -88,7 +43,6 @@ interface ActionItemProps {
   isForced: boolean;
   onToggle: () => void;
   onForceToggle: () => void;
-  onSourceManagementOpen?: () => void;
 }
 
 export function ActionItem({
@@ -99,111 +53,88 @@ export function ActionItem({
   isForced,
   onToggle,
   onForceToggle,
-  onSourceManagementOpen,
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const label = tool ? tool.display_name || tool.name : providedLabel!;
   // Generate test ID based on tool name if available
   const toolName = tool?.name || providedLabel || "";
+  const testIdBase = toolName
+    .toLowerCase()
+    .replace(/tool$/i, "")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            data-testid={`tool-option-${toolName}`}
-            className={`
-            group
-            flex 
-            items-center 
-            justify-between 
-            px-2 
-            cursor-pointer 
-            hover:bg-background-100 
-            dark:hover:bg-neutral-800
-            dark:text-neutral-300
-            rounded-lg 
-            py-2 
-            mx-1
-            ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
-          `}
-            onClick={() => {
-              // If disabled, un-disable the tool
-              if (onToggle && disabled) {
-                onToggle();
-              }
+    <div
+      data-testid={`tool-option-${testIdBase}`}
+      className={`
+      group
+      flex 
+      items-center 
+      justify-between 
+      px-2 
+      cursor-pointer 
+      hover:bg-background-100 
+      dark:hover:bg-neutral-800
+      dark:text-neutral-300
+      rounded-lg 
+      py-2 
+      mx-1
+      ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
+    `}
+      onClick={() => {
+        // If disabled, un-disable the tool
+        if (onToggle && disabled) {
+          onToggle();
+        }
 
-              onForceToggle();
-            }}
-          >
-            <div
-              className={`flex items-center gap-2 flex-1 ${
-                disabled ? "opacity-50" : ""
-              } ${isForced && "text-blue-500"}`}
-            >
-              <Icon
-                size={16}
-                className={
-                  isForced
-                    ? "text-blue-500"
-                    : "text-text-500 dark:text-neutral-400"
-                }
-              />
-              <span
-                className={`text-sm font-medium select-none ${
-                  disabled ? "line-through" : ""
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className={`
-                  flex
-                  items-center
-                  gap-2
-                  transition-opacity
-                  duration-200
-                  ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
-                `}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle();
-                }}
-              >
-                <DisableIcon
-                  className={`transition-colors cursor-pointer ${
-                    disabled
-                      ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
-                      : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-                  }`}
-                />
-              </div>
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSourceManagementOpen?.();
-                  }}
-                >
-                  <FiChevronRight
-                    size={16}
-                    className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </TooltipTrigger>
-        {tool?.description && (
-          <TooltipContent side="left" width="max-w-xs">
-            <p className="text-wrap">{tool.description}</p>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+        onForceToggle();
+      }}
+    >
+      <div
+        className={`flex items-center gap-2 flex-1 ${
+          disabled ? "opacity-50" : ""
+        } ${isForced && "text-blue-500"}`}
+      >
+        <Icon
+          size={16}
+          className={
+            isForced ? "text-blue-500" : "text-text-500 dark:text-neutral-400"
+          }
+        />
+        <span
+          className={`text-sm font-medium select-none ${
+            disabled ? "line-through" : ""
+          }`}
+        >
+          {label}
+        </span>
+      </div>
+      <div
+        className={`
+          flex
+          items-center
+          gap-2
+          transition-opacity
+          duration-200
+          ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+        `}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
+        <DisableIcon
+          className={`transition-colors cursor-pointer ${
+            disabled
+              ? "text-text-900 hover:text-text-500"
+              : "text-text-500 hover:text-text-900"
+          }`}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -291,9 +222,7 @@ function MCPServerItem({
         {getServerIcon()}
         <span className="text-sm font-medium select-none">{server.name}</span>
         {isAuthenticated && tools.length > 0 && (
-          <span className="text-xs text-neutral-400 dark:text-neutral-500">
-            ({tools.length} tools)
-          </span>
+          <span className="text-xs text-text-400">({tools.length} tools)</span>
         )}
       </div>
       {isAuthenticated && tools.length > 0 && (
@@ -312,7 +241,6 @@ interface MCPToolsListProps {
   onClose: () => void;
   selectedAssistant: MinimalPersonaSnapshot;
   preventMainPopupClose: () => void;
-  onSourceManagementOpen?: () => void;
 }
 
 function MCPToolsList({
@@ -321,7 +249,6 @@ function MCPToolsList({
   onClose,
   selectedAssistant,
   preventMainPopupClose,
-  onSourceManagementOpen,
 }: MCPToolsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const {
@@ -341,11 +268,6 @@ function MCPToolsList({
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
     });
-
-    // If we're disabling a tool that is currently forced, remove it from forced tools
-    if (!disabled && forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-    }
   };
 
   const toggleForcedTool = (toolId: number) => {
@@ -434,7 +356,6 @@ function MCPToolsList({
               isForced={forcedToolIds.includes(tool.id)}
               onToggle={() => toggleToolForCurrentAssistant(tool.id)}
               onForceToggle={() => toggleForcedTool(tool.id)}
-              onSourceManagementOpen={onSourceManagementOpen}
             />
           ))
         )}
@@ -445,36 +366,12 @@ function MCPToolsList({
 
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
-  availableSources?: ValidSources[];
-  filterManager: FilterManager;
 }
 
-export function ActionToggle({
-  selectedAssistant,
-  availableSources = [],
-  filterManager,
-}: ActionToggleProps) {
-  const { theme } = useTheme();
+export function ActionToggle({ selectedAssistant }: ActionToggleProps) {
   const [open, setOpen] = useState(false);
-  const [showSourceManagement, setShowSourceManagement] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sourceSearchTerm, setSourceSearchTerm] = useState("");
-  const [showFadeMask, setShowFadeMask] = useState(false);
-  const [showTopShadow, setShowTopShadow] = useState(false);
-  const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-
-  const {
-    sourcesInitialized,
-    enableAllSources,
-    disableAllSources,
-    toggleSource,
-    isSourceEnabled,
-  } = useSourcePreferences({
-    availableSources,
-    selectedSources,
-    setSelectedSources,
-  });
   const [mcpToolsPopup, setMcpToolsPopup] = useState<{
     serverId: number | null;
     serverName: string;
@@ -530,11 +427,6 @@ export function ActionToggle({
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
     });
-
-    // If we're disabling a tool that is currently forced, remove it from forced tools
-    if (!disabled && forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-    }
   };
 
   const toggleForcedTool = (toolId: number) => {
@@ -546,39 +438,6 @@ export function ActionToggle({
       setForcedToolIds([toolId]);
     }
   };
-
-  // Simple and clean overflow detection
-  const checkScrollState = useCallback((element: HTMLElement) => {
-    const hasOverflow = element.scrollHeight > element.clientHeight;
-    const isAtBottom =
-      element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
-    const isAtTop = element.scrollTop <= 1;
-
-    const shouldShowBottomMask = hasOverflow && !isAtBottom;
-    const shouldShowTopShadow = hasOverflow && !isAtTop;
-
-    setShowFadeMask(shouldShowBottomMask);
-    setShowTopShadow(shouldShowTopShadow);
-  }, []);
-
-  // Check scroll state when search term changes or when entering source management
-  useEffect(() => {
-    if (showSourceManagement) {
-      const timer = setTimeout(() => {
-        const scrollContainer = document.getElementById(
-          "chat-scroll-container"
-        ) as HTMLElement;
-        if (scrollContainer) {
-          checkScrollState(scrollContainer);
-        }
-      }, 50);
-      return () => clearTimeout(timer);
-    } else {
-      // Reset masks when not in source management
-      setShowFadeMask(false);
-      setShowTopShadow(false);
-    }
-  }, [sourceSearchTerm, showSourceManagement, checkScrollState]);
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
@@ -659,7 +518,7 @@ export function ActionToggle({
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
       try {
-        const response = await fetch("/api/mcp/oauth/connect", {
+        const response = await fetch("/api/mcp/oauth/initiate", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -798,8 +657,6 @@ export function ActionToggle({
           // Clear search when closing
           if (!newOpen) {
             setSearchTerm("");
-            setSourceSearchTerm("");
-            setShowSourceManagement(false);
             setMcpToolsPopup({
               serverId: null,
               serverName: "",
@@ -815,14 +672,15 @@ export function ActionToggle({
             relative 
             cursor-pointer 
             flex 
-            items-center justify-center leading-none
+            items-center 
             group 
             rounded-lg 
             text-input-text 
             hover:bg-background-chat-hover 
             hover:text-neutral-900 
             dark:hover:text-neutral-50
-            p-2
+            py-1.5 
+            px-2 
             flex-none 
             whitespace-nowrap 
             overflow-hidden 
@@ -831,11 +689,10 @@ export function ActionToggle({
             data-testid="action-management-toggle"
             title={open ? undefined : "Configure actions"}
           >
-            <SlidersVerticalIcon size={16} className="block flex-none" />
+            <SlidersVerticalIcon size={16} className="my-auto flex-none" />
           </button>
         </PopoverTrigger>
         <PopoverContent
-          data-testid="tool-options"
           side="top"
           align="start"
           // Keep main popover open when interacting with nested MCP popup
@@ -859,277 +716,57 @@ export function ActionToggle({
           className="
             w-[244px] 
             max-h-[300px]
-            text-neutral-600 dark:text-neutral-400
+            text-text-600 
             text-sm 
             p-0 
+            bg-background 
+            border 
+            border-border 
+            rounded-xl 
+            shadow-xl 
             overflow-hidden
             flex
             flex-col
-            bg-white dark:bg-neutral-900
-            border border-neutral-200 dark:border-transparent
-            shadow-lg dark:shadow-xl dark:shadow-[0_0_8px_rgba(255,255,255,0.05)]
           "
-          style={{
-            borderRadius: "var(--Radius-12, 12px)",
-          }}
         >
           {/* Search Input */}
-          {!showSourceManagement && (
-            <div className="pt-1 mx-1">
-              <div className="relative">
-                <SearchIcon
-                  size={16}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Search Menu"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="
-                    w-full
-                    pl-9
-                    pr-3
-                    py-2
-                    bg-transparent
-                    rounded-lg
-                    text-sm
-                    outline-none
-                    text-neutral-700 dark:text-neutral-300
-                    placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                  "
-                  autoFocus
-                />
-              </div>
+          <div className="pt-1 mx-1">
+            <div className="relative">
+              <SearchIcon
+                size={16}
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-400"
+              />
+              <input
+                type="text"
+                placeholder="Search Menu"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="
+                  w-full 
+                  pl-9 
+                  pr-3 
+                  py-2 
+                  bg-background-50 
+                  rounded-lg 
+                  text-sm 
+                  outline-none 
+                  text-text-700
+                  placeholder:text-text-400
+                  dark:placeholder:text-neutral-600
+                  dark:bg-neutral-950
+                "
+                autoFocus
+              />
             </div>
-          )}
+          </div>
 
           {/* Options */}
-          <div className="pt-2 flex-1 flex flex-col mx-1 relative overflow-hidden">
-            {showSourceManagement ? (
-              <>
-                {/* Fixed Header */}
-                <div className="bg-transparent flex-shrink-0">
-                  <div className="mx-1">
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowSourceManagement(false)}
-                        className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
-                        style={{ borderRadius: "8px" }}
-                      >
-                        <FiChevronLeft size={16} />
-                      </button>
-                      <input
-                        type="text"
-                        placeholder="Search Filters"
-                        value={sourceSearchTerm}
-                        onChange={(e) => setSourceSearchTerm(e.target.value)}
-                        className="
-                          w-full
-                          pl-7
-                          pr-3
-                          py-2
-                          bg-transparent
-                          rounded-lg
-                          text-sm
-                          outline-none
-                          text-neutral-700 dark:text-neutral-300
-                          placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                        "
-                      />
-                    </div>
-                    {(() => {
-                      const allSourceIds = getConfiguredSources(
-                        availableSources
-                      ).map((source) => source.uniqueKey);
-                      const anyEnabled = selectedSources.length > 0;
-                      if (anyEnabled) {
-                        return (
-                          <div className="relative mt-1">
-                            <input
-                              type="text"
-                              placeholder="Disable All Sources"
-                              readOnly
-                              onClick={disableAllSources}
-                              className="
-                                w-full
-                                pl-7
-                                pr-9
-                                py-2
-                                bg-transparent
-                                rounded-lg
-                                text-sm
-                                outline-none
-                                text-neutral-700 dark:text-neutral-300
-                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                                cursor-pointer
-                              "
-                            />
-                            <img
-                              src="/unplug.svg"
-                              alt="Disable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-                              style={{
-                                filter:
-                                  theme === "dark"
-                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
-                                opacity: theme === "dark" ? 0.9 : 0.8,
-                              }}
-                            />
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="relative mt-1">
-                            <input
-                              type="text"
-                              placeholder="Enable All Sources"
-                              readOnly
-                              onClick={enableAllSources}
-                              className="
-                                w-full
-                                pl-7
-                                pr-9
-                                py-2
-                                bg-transparent
-                                rounded-lg
-                                text-sm
-                                outline-none
-                                text-neutral-700 dark:text-neutral-300
-                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                                cursor-pointer
-                              "
-                            />
-                            <img
-                              src="/plug.svg"
-                              alt="Enable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-                              style={{
-                                filter:
-                                  theme === "dark"
-                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
-                                opacity: theme === "dark" ? 0.9 : 0.8,
-                              }}
-                            />
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                  {/* Separator line - always visible, full width like sources */}
-                  <div className="border-b border-border mx-1 mt-1" />
-                  {/* Shadow below separator - only when scrolled down */}
-                  <div
-                    className="mx-1 h-2 -mb-2 transition-opacity ease-out"
-                    style={{
-                      background:
-                        "linear-gradient(to bottom, rgba(0, 0, 0, 0.06), transparent)",
-                      opacity: showTopShadow ? 1 : 0,
-                    }}
-                  />
-                </div>
-
-                {/* Scrollable Content */}
-                <div
-                  id="chat-scroll-container"
-                  className="flex-1 overflow-y-auto min-h-0 relative"
-                  onScroll={(e) => checkScrollState(e.currentTarget)}
-                  onLoad={(e) => checkScrollState(e.currentTarget)}
-                >
-                  <div className="space-y-1.5 pb-2 pt-2">
-                    {getConfiguredSources(availableSources)
-                      .filter((source) => {
-                        if (!sourceSearchTerm) return true;
-                        const searchLower = sourceSearchTerm.toLowerCase();
-                        return source.displayName
-                          .toLowerCase()
-                          .includes(searchLower);
-                      })
-                      .map((source) => (
-                        <div
-                          key={source.uniqueKey}
-                          className="flex items-center justify-between px-1 py-1 mx-1 rounded-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <SourceIcon
-                              sourceType={source.internalName}
-                              iconSize={16}
-                            />
-                            <div>
-                              <div
-                                className={`text-sm font-medium ${
-                                  isSourceEnabled(source.uniqueKey)
-                                    ? "text-neutral-700 dark:text-neutral-300"
-                                    : "text-neutral-400 dark:text-neutral-500"
-                                }`}
-                              >
-                                {source.displayName}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => toggleSource(source.uniqueKey)}
-                            className={`relative transition-colors ${
-                              isSourceEnabled(source.uniqueKey)
-                                ? "bg-blue-500"
-                                : "bg-neutral-300 dark:bg-neutral-700"
-                            }`}
-                            style={{
-                              width: "28px",
-                              height: "16px",
-                              borderRadius: "var(--Radius-Round, 1000px)",
-                              transition: "background-color 0.2s ease-in-out",
-                            }}
-                          >
-                            <div
-                              className={`absolute transition-transform duration-200 ease-in-out ${
-                                isSourceEnabled(source.uniqueKey)
-                                  ? "bg-white"
-                                  : "bg-white dark:bg-neutral-900"
-                              }`}
-                              style={{
-                                width: "12px",
-                                height: "12px",
-                                borderRadius: "var(--Radius-Round, 1000px)",
-                                boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
-                                top: "2px",
-                                left: "2px",
-                                transform: isSourceEnabled(source.uniqueKey)
-                                  ? "translateX(12px)"
-                                  : "translateX(0px)",
-                              }}
-                            ></div>
-                          </button>
-                        </div>
-                      ))}
-                    {getConfiguredSources(availableSources).filter((source) => {
-                      if (!sourceSearchTerm) return true;
-                      const searchLower = sourceSearchTerm.toLowerCase();
-                      return source.displayName
-                        .toLowerCase()
-                        .includes(searchLower);
-                    }).length === 0 && (
-                      <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
-                        {sourceSearchTerm
-                          ? "No matching sources found"
-                          : "No configured sources found"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* Fade mask - only when content overflows and not at bottom */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
-                  style={{
-                    opacity: showFadeMask ? 1 : 0,
-                  }}
-                />
-              </>
-            ) : filteredTools.length === 0 &&
-              filteredMCPServers.length === 0 ? (
-              <div className="text-center py-1 text-neutral-400 dark:text-neutral-500">
+          <div
+            data-testid="tool-options"
+            className="pt-2 flex-1 overflow-y-auto mx-1 pb-2 relative"
+          >
+            {filteredTools.length === 0 && filteredMCPServers.length === 0 ? (
+              <div className="text-center py-1 text-text-400">
                 No matching actions found
               </div>
             ) : (
@@ -1146,7 +783,6 @@ export function ActionToggle({
                       toggleForcedTool(tool.id);
                       setOpen(false);
                     }}
-                    onSourceManagementOpen={() => setShowSourceManagement(true)}
                   />
                 ))}
 
@@ -1210,51 +846,51 @@ export function ActionToggle({
                     />
                   );
                 })}
-                {/* More Connectors & Actions. Only show if user is admin or curator, since
-                they are the only ones who can manage actions. */}
-                {(isAdmin || isCurator) && (
-                  <>
-                    <div className="border-b border-border mx-3.5" />
-                    <Link href="/admin/actions">
-                      <button
-                        className="
-                        w-full
-                        flex
-                        items-center
-                        justify-between
-                        text-text-400
-                        text-sm
-                        mt-2.5
-                      "
-                      >
-                        <div
-                          className="
-                          mx-2 
-                          mb-2 
-                          px-2 
-                          py-1.5 
-                          flex 
-                          items-center 
-                          text-text-500
-                          dark:text-neutral-500
-                          dark:hover:bg-neutral-800
-                          hover:bg-background-100
-                          hover:text-text-500
-                          transition-colors
-                          rounded-lg
-                          w-full
-                        "
-                        >
-                          <MoreActionsIcon className="text-text-500 dark:text-neutral-200" />
-                          <div className="ml-2">More Actions</div>
-                        </div>
-                      </button>
-                    </Link>
-                  </>
-                )}
               </>
             )}
           </div>
+
+          <div className="border-b border-border mx-3.5" />
+
+          {/* More Connectors & Actions. Only show if user is admin or curator, since
+        they are the only ones who can manage actions. */}
+          {(isAdmin || isCurator) && (
+            <Link href="/admin/actions">
+              <button
+                className="
+                w-full 
+                flex 
+                items-center 
+                justify-between 
+                text-text-400
+                text-sm
+                mt-2.5
+              "
+              >
+                <div
+                  className="
+                  mx-2 
+                  mb-2 
+                  px-2 
+                  py-1.5 
+                  flex 
+                  items-center 
+                  text-text-500
+                  dark:text-neutral-500
+                  dark:hover:bg-neutral-800
+                  hover:bg-background-100
+                  hover:text-text-500
+                  transition-colors
+                  rounded-lg
+                  w-full
+                "
+                >
+                  <MoreActionsIcon className="text-text-500 dark:text-neutral-200" />
+                  <div className="ml-2">More Actions</div>
+                </div>
+              </button>
+            </Link>
+          )}
         </PopoverContent>
       </Popover>
 
@@ -1290,18 +926,10 @@ export function ActionToggle({
         (() => {
           const rect = mcpToolsPopup.anchorElement.getBoundingClientRect();
           // Anchor the popup to the server element using viewport coordinates
-          // Ensure the popup never falls off-screen vertically.
-          const POPUP_MAX_HEIGHT = 300; // matches max-h-[300px]
-          const MARGIN = 8; // small offset from edges and trigger
-          const clampedTop = Math.max(
-            MARGIN,
-            Math.min(rect.top, window.innerHeight - POPUP_MAX_HEIGHT - MARGIN)
-          );
-
           const positioning = {
             position: "fixed" as const,
-            left: rect.right + MARGIN,
-            top: clampedTop,
+            left: rect.right + 8,
+            top: rect.top,
             zIndex: 1000,
           };
 
@@ -1333,7 +961,6 @@ export function ActionToggle({
                 preventMainPopupClose={() => {
                   preventCloseRef.current = true;
                 }}
-                onSourceManagementOpen={() => setShowSourceManagement(true)}
               />
             </div>,
             document.body

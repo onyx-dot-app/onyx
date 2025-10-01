@@ -28,7 +28,6 @@ from onyx.server.manage.models import SlackChannelConfig
 from onyx.server.manage.models import SlackChannelConfigCreationRequest
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
-from onyx.server.manage.validate_tokens import validate_user_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
@@ -248,7 +247,6 @@ def create_bot(
 
     validate_app_token(slack_bot_creation_request.app_token)
     validate_bot_token(slack_bot_creation_request.bot_token)
-    validate_user_token(slack_bot_creation_request.user_token)
 
     slack_bot_model = insert_slack_bot(
         db_session=db_session,
@@ -256,7 +254,6 @@ def create_bot(
         enabled=slack_bot_creation_request.enabled,
         bot_token=slack_bot_creation_request.bot_token,
         app_token=slack_bot_creation_request.app_token,
-        user_token=slack_bot_creation_request.user_token,
     )
 
     # Create a default Slack channel config
@@ -294,7 +291,6 @@ def patch_bot(
 ) -> SlackBot:
     validate_bot_token(slack_bot_creation_request.bot_token)
     validate_app_token(slack_bot_creation_request.app_token)
-    validate_user_token(slack_bot_creation_request.user_token)
     slack_bot_model = update_slack_bot(
         db_session=db_session,
         slack_bot_id=slack_bot_id,
@@ -302,7 +298,6 @@ def patch_bot(
         enabled=slack_bot_creation_request.enabled,
         bot_token=slack_bot_creation_request.bot_token,
         app_token=slack_bot_creation_request.app_token,
-        user_token=slack_bot_creation_request.user_token,
     )
     return SlackBot.from_model(slack_bot_model)
 

@@ -26,7 +26,6 @@ import Text from "@/components/ui/text";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
-  MCPTransportType,
 } from "@/lib/tools/interfaces";
 import {
   PerUserAuthTemplateConfig,
@@ -70,12 +69,12 @@ const validationSchema = Yup.object().shape({
   }),
   oauth_client_id: Yup.string().when("auth_type", {
     is: MCPAuthenticationType.OAUTH,
-    then: (schema) => schema.notRequired(),
+    then: (schema) => schema.required("OAuth client ID is required"),
     otherwise: (schema) => schema.notRequired(),
   }),
   oauth_client_secret: Yup.string().when("auth_type", {
     is: MCPAuthenticationType.OAUTH,
-    then: (schema) => schema.notRequired(),
+    then: (schema) => schema.required("OAuth client secret is required"),
     otherwise: (schema) => schema.notRequired(),
   }),
 });
@@ -93,7 +92,6 @@ export default function NewMCPToolPage() {
     name: "",
     description: "",
     server_url: "",
-    transport: MCPTransportType.STREAMABLE_HTTP,
     auth_type: MCPAuthenticationType.NONE,
     auth_performer: MCPAuthenticationPerformer.ADMIN,
     api_token: "",
@@ -102,8 +100,20 @@ export default function NewMCPToolPage() {
   });
   const fetchedServerRef = useRef<string | null>(null);
 
-  // We no longer probe by listing tools; OAuth connection state
-  // is inferred from presence of return data in sessionStorage.
+  const probeOAuthConnection = async (id: number) => {
+    setCheckingOAuthStatus(true);
+    try {
+      const resp = await fetch(`/api/admin/mcp/server/${id}/tools`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      setOauthConnected(resp.ok);
+    } catch (e) {
+      setOauthConnected(false);
+    } finally {
+      setCheckingOAuthStatus(false);
+    }
+  };
 
   // Memoize the server ID to prevent unnecessary re-renders
   const serverId = useMemo(() => searchParams.get("server_id"), [searchParams]);
@@ -119,7 +129,10 @@ export default function NewMCPToolPage() {
 
         // Set the form values and mark OAuth as connected
         setInitialValues(formValues);
-        setOauthConnected(true);
+        if (returnServerId) {
+          // Actively probe connectivity instead of assuming connected
+          probeOAuthConnection(Number(returnServerId));
+        }
 
         // Update URL to include the server ID
         router.push(`/admin/actions/edit-mcp?server_id=${returnServerId}`);
@@ -153,16 +166,18 @@ export default function NewMCPToolPage() {
           auth_template = server.auth_template;
         }
 
+        if (server.auth_type === MCPAuthenticationType.OAUTH) {
+          // Probe by listing tools with current configuration
+          probeOAuthConnection(Number(serverId));
+        }
+
         setInitialValues({
           name: server.name,
           description: server.description || "",
           server_url: server.server_url,
-          transport: server.transport,
           auth_type: server.auth_type,
           auth_performer:
-            server.auth_type === MCPAuthenticationType.OAUTH
-              ? MCPAuthenticationPerformer.PER_USER
-              : server.auth_performer || MCPAuthenticationPerformer.ADMIN,
+            server.auth_performer || MCPAuthenticationPerformer.ADMIN,
           api_token: server.admin_credentials?.api_key || "",
           auth_template,
           user_credentials: server.user_credentials || {},
@@ -188,6 +203,7 @@ export default function NewMCPToolPage() {
     setCheckingOAuthStatus(true);
     try {
       // First, create the MCP server if it doesn't exist
+      console.log("option 1");
       const createResponse = await fetch("/api/admin/mcp/servers/create", {
         method: "POST",
         headers: {
@@ -197,10 +213,8 @@ export default function NewMCPToolPage() {
           name: values.name,
           description: values.description,
           server_url: values.server_url,
-          transport: values.transport,
           auth_type: values.auth_type,
-          // OAuth currently only supports per-user auth
-          auth_performer: MCPAuthenticationPerformer.PER_USER,
+          auth_performer: values.auth_performer,
           oauth_client_id: values.oauth_client_id,
           oauth_client_secret: values.oauth_client_secret,
           existing_server_id: serverId ? parseInt(serverId) : undefined,
@@ -213,11 +227,9 @@ export default function NewMCPToolPage() {
       }
 
       const currServerId = (await createResponse.json()).server_id;
-      // Update the URL immediately so subsequent interactions use the server id.
-      router.replace(`/admin/actions/edit-mcp?server_id=${currServerId}`);
 
       // Initiate OAuth flow
-      const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
+      const oauthResponse = await fetch("/api/admin/mcp/oauth/initiate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -323,29 +335,6 @@ export default function NewMCPToolPage() {
                           placeholder="https://your-mcp-server.com"
                           width="min-w-96"
                         />
-                        <div>
-                          <Label htmlFor="transport">Transport</Label>
-                          <Select
-                            value={values.transport}
-                            onValueChange={(value) =>
-                              setFieldValue("transport", value)
-                            }
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select transport" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem
-                                value={MCPTransportType.STREAMABLE_HTTP}
-                              >
-                                Streamable HTTP
-                              </SelectItem>
-                              <SelectItem value={MCPTransportType.SSE}>
-                                SSE
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
                       </div>
                     </div>
 
@@ -360,16 +349,9 @@ export default function NewMCPToolPage() {
                           <Label htmlFor="auth_type">Authentication Type</Label>
                           <Select
                             value={values.auth_type}
-                            onValueChange={(value) => {
-                              setFieldValue("auth_type", value);
-                              // For OAuth, we only support per-user auth. Force performer accordingly.
-                              if (value === MCPAuthenticationType.OAUTH) {
-                                setFieldValue(
-                                  "auth_performer",
-                                  MCPAuthenticationPerformer.PER_USER
-                                );
-                              }
-                            }}
+                            onValueChange={(value) =>
+                              setFieldValue("auth_type", value)
+                            }
                           >
                             <SelectTrigger className="mt-1">
                               <SelectValue placeholder="Select authentication type" />
@@ -395,42 +377,41 @@ export default function NewMCPToolPage() {
                           )}
                         </div>
 
-                        {values.auth_type !== MCPAuthenticationType.NONE &&
-                          values.auth_type !== MCPAuthenticationType.OAUTH && (
-                            <div>
-                              <Label htmlFor="auth_performer">
-                                Who performs authentication?
-                              </Label>
-                              <Select
-                                value={values.auth_performer}
-                                onValueChange={(value) =>
-                                  setFieldValue("auth_performer", value)
-                                }
-                              >
-                                <SelectTrigger className="mt-1">
-                                  <SelectValue placeholder="Select authentication performer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.ADMIN}
-                                  >
-                                    Admin (shared credentials)
-                                  </SelectItem>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.PER_USER}
-                                  >
-                                    Per-user (individual credentials)
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {errors.auth_performer &&
-                                touched.auth_performer && (
-                                  <div className="text-red-500 text-sm mt-1">
-                                    {errors.auth_performer}
-                                  </div>
-                                )}
-                            </div>
-                          )}
+                        {values.auth_type !== MCPAuthenticationType.NONE && (
+                          <div>
+                            <Label htmlFor="auth_performer">
+                              Who performs authentication?
+                            </Label>
+                            <Select
+                              value={values.auth_performer}
+                              onValueChange={(value) =>
+                                setFieldValue("auth_performer", value)
+                              }
+                            >
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Select authentication performer" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem
+                                  value={MCPAuthenticationPerformer.ADMIN}
+                                >
+                                  Admin (shared credentials)
+                                </SelectItem>
+                                <SelectItem
+                                  value={MCPAuthenticationPerformer.PER_USER}
+                                >
+                                  Per-user (individual credentials)
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {errors.auth_performer &&
+                              touched.auth_performer && (
+                                <div className="text-red-500 text-sm mt-1">
+                                  {errors.auth_performer}
+                                </div>
+                              )}
+                          </div>
+                        )}
 
                         {values.auth_type === MCPAuthenticationType.API_TOKEN &&
                           values.auth_performer ===
@@ -474,7 +455,9 @@ export default function NewMCPToolPage() {
                           disabled={
                             checkingOAuthStatus ||
                             !values.name.trim() ||
-                            !values.server_url.trim()
+                            !values.server_url.trim() ||
+                            !values.oauth_client_id?.trim() ||
+                            !values.oauth_client_secret?.trim()
                           }
                           className="flex-1"
                         >

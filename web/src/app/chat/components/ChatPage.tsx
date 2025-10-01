@@ -6,11 +6,7 @@ import { ChatSession, ChatSessionSharedStatus, Message } from "../interfaces";
 import Cookies from "js-cookie";
 import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import {
-  personaIncludesRetrieval,
-  useScrollonStream,
-  getAvailableContextTokens,
-} from "../services/lib";
+import { personaIncludesRetrieval, useScrollonStream } from "../services/lib";
 import {
   useCallback,
   useContext,
@@ -54,9 +50,11 @@ import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
 import AssistantModal from "../../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
+import { FilePickerModal } from "../my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { ChatSearchModal } from "../chat_search/ChatSearchModal";
 import { ErrorBanner } from "../message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -89,14 +87,6 @@ import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { StarterMessageDisplay } from "./starterMessages/StarterMessageDisplay";
 import { MessagesDisplay } from "./MessagesDisplay";
 import { WelcomeMessage } from "./WelcomeMessage";
-import ProjectContextPanel from "./projects/ProjectContextPanel";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import {
-  getProjectTokenCount,
-  getMaxSelectedDocumentTokens,
-} from "@/app/chat/projects/projectsService";
-
-import ProjectChatSessionList from "./projects/ProjectChatSessionList";
 
 export function ChatPage({
   toggle,
@@ -135,19 +125,21 @@ export function ChatPage({
     tags,
     documentSets,
     llmProviders,
+    folders,
     shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
 
   const {
+    selectedFiles,
+    selectedFolders,
+    addSelectedFolder,
+    clearSelectedItems,
+    folders: userFolders,
+    files: allUserFiles,
     currentMessageFiles,
     setCurrentMessageFiles,
-    setCurrentProjectId,
-    currentProjectId,
-    currentProjectDetails,
-    lastFailedFiles,
-    clearLastFailedFiles,
-  } = useProjectsContext();
+  } = useDocumentsContext();
 
   const { height: screenHeight } = useScreenSize();
 
@@ -157,6 +149,8 @@ export function ChatPage({
   // available in server-side components
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
+
+  const [toggleDocSelection, setToggleDocSelection] = useState(false);
 
   const isInitialLoad = useRef(true);
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
@@ -204,6 +198,8 @@ export function ChatPage({
     if (message) {
       onSubmit({
         message,
+        selectedFiles,
+        selectedFolders,
         currentMessageFiles,
         useAgentSearch: deepResearchEnabled,
       });
@@ -213,17 +209,6 @@ export function ChatPage({
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
     useAssistantController({
       selectedChatSession,
-      onAssistantSelect: () => {
-        // Only remove project context if user explicitly selected an assistant
-        // (i.e., assistantId is present). Avoid clearing project when assistantId was removed.
-        const newSearchParams = new URLSearchParams(
-          searchParams?.toString() || ""
-        );
-        if (newSearchParams.has("assistantId")) {
-          newSearchParams.delete("projectid");
-          router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-        }
-      },
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -273,37 +258,40 @@ export function ChatPage({
 
   const { popup, setPopup } = usePopup();
 
-  // Show popup if any files failed in ProjectsContext reconciliation
   useEffect(() => {
-    if (lastFailedFiles && lastFailedFiles.length > 0) {
-      const names = lastFailedFiles.map((f) => f.name).join(", ");
-      setPopup({
-        type: "error",
-        message:
-          lastFailedFiles.length === 1
-            ? `File failed and was removed: ${names}`
-            : `Files failed and were removed: ${names}`,
-      });
-      clearLastFailedFiles();
-    }
-  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
+    const userFolderId = searchParams?.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID);
+    const allMyDocuments = searchParams?.get(
+      SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS
+    );
 
-  useEffect(() => {
-    const projectId = searchParams?.get("projectid");
-    if (projectId) {
-      console.log("setting project id", projectId);
-      setCurrentProjectId(parseInt(projectId));
-    } else {
-      console.log("clearing project id");
-      setCurrentProjectId(null);
+    if (userFolderId) {
+      const userFolder = userFolders.find(
+        (folder) => folder.id === parseInt(userFolderId)
+      );
+      if (userFolder) {
+        addSelectedFolder(userFolder);
+      }
+    } else if (allMyDocuments === "true" || allMyDocuments === "1") {
+      // Clear any previously selected folders
+
+      clearSelectedItems();
+
+      // Add all user folders to the current context
+      userFolders.forEach((folder) => {
+        addSelectedFolder(folder);
+      });
     }
-  }, [searchParams?.get("projectid"), setCurrentProjectId]);
+  }, [
+    userFolders,
+    searchParams?.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID),
+    searchParams?.get(SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS),
+    addSelectedFolder,
+    clearSelectedItems,
+  ]);
 
   const [message, setMessage] = useState(
     searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
   );
-
-  const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
@@ -524,26 +512,26 @@ export function ChatPage({
       setSelectedAssistantFromId,
     });
 
-  const { onMessageSelection, currentSessionFileTokenCount, projectFiles } =
-    useChatSessionController({
-      existingChatSessionId,
-      searchParams,
-      filterManager,
-      firstMessage,
-      setSelectedAssistantFromId,
-      setSelectedDocuments,
-      setCurrentMessageFiles,
-      chatSessionIdRef,
-      loadedIdSessionRef,
-      textAreaRef,
-      scrollInitialized,
-      isInitialLoad,
-      submitOnLoadPerformed,
-      hasPerformedInitialScroll,
-      clientScrollToBottom,
-      refreshChatSessions,
-      onSubmit,
-    });
+  const { onMessageSelection } = useChatSessionController({
+    existingChatSessionId,
+    searchParams,
+    filterManager,
+    firstMessage,
+    setSelectedAssistantFromId,
+    setSelectedDocuments,
+    setCurrentMessageFiles,
+    chatSessionIdRef,
+    loadedIdSessionRef,
+    textAreaRef,
+    scrollInitialized,
+    isInitialLoad,
+    submitOnLoadPerformed,
+    hasPerformedInitialScroll,
+    clientScrollToBottom,
+    clearSelectedItems,
+    refreshChatSessions,
+    onSubmit,
+  });
 
   const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
@@ -573,9 +561,10 @@ export function ChatPage({
   const reset = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
+    clearSelectedItems();
     // TODO: move this into useChatController
     // setLoadingError(null);
-  }, [setMessage, setCurrentMessageFiles]);
+  }, [setMessage, setCurrentMessageFiles, clearSelectedItems]);
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
@@ -680,6 +669,8 @@ export function ChatPage({
     // We call onSubmit, passing a `messageOverride`
     onSubmit({
       message: lastUserMsg.message,
+      selectedFiles: selectedFiles,
+      selectedFolders: selectedFolders,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
@@ -705,12 +696,22 @@ export function ChatPage({
     redirect("/auth/login");
   }
 
+  const clearSelectedDocuments = useCallback(() => {
+    setSelectedDocuments([]);
+    clearSelectedItems();
+  }, [clearSelectedItems]);
+
   const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
       prev.some((d) => d.document_id === document.document_id)
         ? prev.filter((d) => d.document_id !== document.document_id)
         : [...prev, document]
     );
+  }, []);
+
+  // Memoized callbacks for ChatInputBar
+  const handleToggleDocSelection = useCallback(() => {
+    setToggleDocSelection(true);
   }, []);
 
   const handleShowApiKeyModal = useCallback(() => {
@@ -720,10 +721,19 @@ export function ChatPage({
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
+      selectedFiles: selectedFiles,
+      selectedFolders: selectedFolders,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
     });
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    message,
+    onSubmit,
+    selectedFiles,
+    selectedFolders,
+    currentMessageFiles,
+    deepResearchEnabled,
+  ]);
 
   // Memoized callbacks for Header
   const handleToggleUserSettings = useCallback(() => {
@@ -749,81 +759,6 @@ export function ChatPage({
     !isFetchingChatMessages &&
     !loadingError &&
     !submittedMessage;
-
-  // Only show the centered hero layout when there is NO project selected
-  // and there are no messages yet. If a project is selected, prefer a top layout.
-  const showCenteredHero = currentProjectId === null && showCenteredInput;
-
-  useEffect(() => {
-    if (currentProjectId !== null && showCenteredInput) {
-      setProjectPanelVisible(true);
-    }
-    if (!showCenteredInput) {
-      setProjectPanelVisible(false);
-    }
-  }, [currentProjectId, showCenteredInput]);
-
-  // When no chat session exists but a project is selected, fetch the
-  // total tokens for the project's files so upload UX can compare
-  // against available context similar to session-based flows.
-  const [projectContextTokenCount, setProjectContextTokenCount] = useState(0);
-  // Fetch project-level token count when no chat session exists.
-  // Note: useEffect cannot be async, so we define an inner async function (run)
-  // and invoke it. The `cancelled` guard prevents setting state after the
-  // component unmounts or when the dependencies change and a newer effect run
-  // supersedes an older in-flight request.
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!existingChatSessionId && currentProjectId !== null) {
-        try {
-          const total = await getProjectTokenCount(currentProjectId);
-          if (!cancelled) setProjectContextTokenCount(total || 0);
-        } catch {
-          if (!cancelled) setProjectContextTokenCount(0);
-        }
-      } else {
-        setProjectContextTokenCount(0);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [existingChatSessionId, currentProjectId, currentProjectDetails?.files]);
-
-  // Available context tokens source of truth:
-  // - If a chat session exists, fetch from session API (dynamic per session/model)
-  // - If no session, derive from the default/current persona's max document tokens
-  const [availableContextTokens, setAvailableContextTokens] =
-    useState<number>(128_000);
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      try {
-        if (existingChatSessionId) {
-          const available = await getAvailableContextTokens(
-            existingChatSessionId
-          );
-          if (!cancelled) setAvailableContextTokens(available ?? 0);
-        } else {
-          const personaId = (selectedAssistant || liveAssistant)?.id;
-          if (personaId !== undefined && personaId !== null) {
-            const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-            if (!cancelled) setAvailableContextTokens(maxTokens ?? 128_000);
-          } else if (!cancelled) {
-            setAvailableContextTokens(128_000);
-          }
-        }
-      } catch (e) {
-        if (!cancelled) setAvailableContextTokens(128_000);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [existingChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
   // handle error case where no assistants are available
   if (noAssistants) {
@@ -877,6 +812,18 @@ export function ChatPage({
         />
       )}
 
+      {toggleDocSelection && (
+        <FilePickerModal
+          setPresentingDocument={setPresentingDocument}
+          buttonContent="Set as Context"
+          isOpen={true}
+          onClose={() => setToggleDocSelection(false)}
+          onSave={() => {
+            setToggleDocSelection(false);
+          }}
+        />
+      )}
+
       <ChatSearchModal
         open={isChatSearchModalOpen}
         onCloseModal={() => setIsChatSearchModalOpen(false)}
@@ -899,7 +846,7 @@ export function ChatPage({
               closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={() => setSelectedDocuments([])}
+              clearSelectedDocuments={clearSelectedDocuments}
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
@@ -997,6 +944,7 @@ export function ChatPage({
                   toggled={sidebarVisible}
                   existingChats={chatSessions}
                   currentChatSession={selectedChatSession}
+                  folders={folders}
                   removeToggle={removeToggle}
                   showShareModal={setSharedChatSession}
                 />
@@ -1035,6 +983,10 @@ export function ChatPage({
                 duration-300
                 ease-in-out
                 bg-transparent
+                transition-all
+                duration-300
+                ease-in-out
+                h-full
                 ${
                   documentSidebarVisible && !settings?.isMobile
                     ? "w-[400px]"
@@ -1052,7 +1004,7 @@ export function ChatPage({
               closeSidebar={handleDesktopDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={() => setSelectedDocuments([])}
+              clearSelectedDocuments={clearSelectedDocuments}
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
@@ -1104,7 +1056,7 @@ export function ChatPage({
                   noClick
                 >
                   {({ getRootProps }) => (
-                    <div className="flex w-full h-full">
+                    <div className="flex h-full w-full">
                       {!settings?.isMobile && (
                         <div
                           style={{ transition: "width 0.30s ease-out" }}
@@ -1157,6 +1109,8 @@ export function ChatPage({
                             liveAssistant={liveAssistant}
                             llmManager={llmManager}
                             deepResearchEnabled={deepResearchEnabled}
+                            selectedFiles={selectedFiles}
+                            selectedFolders={selectedFolders}
                             currentMessageFiles={currentMessageFiles}
                             setPresentingDocument={setPresentingDocument}
                             setCurrentFeedback={setCurrentFeedback}
@@ -1184,11 +1138,9 @@ export function ChatPage({
                         <div
                           ref={inputRef}
                           className={`absolute pointer-events-none z-10 w-full ${
-                            showCenteredHero
+                            showCenteredInput
                               ? "inset-0"
-                              : currentProjectId !== null && showCenteredInput
-                                ? "top-0 left-0 right-0"
-                                : "bottom-0 left-0 right-0 translate-y-0"
+                              : "bottom-0 left-0 right-0 translate-y-0"
                           }`}
                         >
                           {!showCenteredInput && aboveHorizon && (
@@ -1204,37 +1156,26 @@ export function ChatPage({
 
                           <div
                             className={`pointer-events-auto w-[95%] mx-auto relative text-text-600 ${
-                              showCenteredHero
+                              showCenteredInput
                                 ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
                                 : "mb-8"
                             }`}
                           >
-                            {currentProjectId == null && showCenteredInput && (
+                            {showCenteredInput && (
                               <WelcomeMessage assistant={liveAssistant} />
                             )}
                             <div
-                              className={showCenteredHero ? "row-start-2" : ""}
+                              className={showCenteredInput ? "row-start-2" : ""}
                             >
-                              {currentProjectId !== null &&
-                                projectPanelVisible && (
-                                  <ProjectContextPanel
-                                    projectTokenCount={projectContextTokenCount}
-                                    availableContextTokens={
-                                      availableContextTokens
-                                    }
-                                    setPresentingDocument={
-                                      setPresentingDocument
-                                    }
-                                  />
-                                )}
                               <ChatInputBar
                                 deepResearchEnabled={deepResearchEnabled}
                                 toggleDeepResearch={toggleDeepResearch}
                                 toggleDocumentSidebar={toggleDocumentSidebar}
                                 filterManager={filterManager}
                                 llmManager={llmManager}
-                                removeDocs={() => setSelectedDocuments([])}
+                                removeDocs={clearSelectedDocuments}
                                 retrievalEnabled={retrievalEnabled}
+                                toggleDocSelection={handleToggleDocSelection}
                                 showConfigureAPIKey={handleShowApiKeyModal}
                                 selectedDocuments={selectedDocuments}
                                 message={message}
@@ -1242,12 +1183,6 @@ export function ChatPage({
                                 stopGenerating={stopGenerating}
                                 onSubmit={handleChatInputSubmit}
                                 chatState={currentChatState}
-                                currentSessionFileTokenCount={
-                                  existingChatSessionId
-                                    ? currentSessionFileTokenCount
-                                    : projectContextTokenCount
-                                }
-                                availableContextTokens={availableContextTokens}
                                 selectedAssistant={
                                   selectedAssistant || liveAssistant
                                 }
@@ -1255,21 +1190,13 @@ export function ChatPage({
                                   handleMessageSpecificFileUpload
                                 }
                                 textAreaRef={textAreaRef}
-                                setPresentingDocument={setPresentingDocument}
-                                setPopup={setPopup}
                               />
                             </div>
-
-                            {currentProjectId !== null && (
-                              <div className="transition-all duration-700 ease-out">
-                                <ProjectChatSessionList />
-                              </div>
-                            )}
 
                             {liveAssistant.starter_messages &&
                               liveAssistant.starter_messages.length > 0 &&
                               messageHistory.length === 0 &&
-                              showCenteredHero && (
+                              showCenteredInput && (
                                 <div className="mt-6 row-start-3">
                                   <StarterMessageDisplay
                                     starterMessages={
@@ -1278,6 +1205,8 @@ export function ChatPage({
                                     onSelectStarterMessage={(message) => {
                                       onSubmit({
                                         message: message,
+                                        selectedFiles: selectedFiles,
+                                        selectedFolders: selectedFolders,
                                         currentMessageFiles:
                                           currentMessageFiles,
                                         useAgentSearch: deepResearchEnabled,
@@ -1301,12 +1230,12 @@ export function ChatPage({
                               )}
                             {enterpriseSettings &&
                               enterpriseSettings.use_custom_logotype && (
-                                <div className="hidden lg:block absolute right-0 bottom-0">
+                                <div className="hidden lg:block fixed right-12 bottom-8 pointer-events-none z-10">
                                   <img
                                     src="/api/enterprise-settings/logotype"
                                     alt="logotype"
                                     style={{ objectFit: "contain" }}
-                                    className="w-fit h-8"
+                                    className="w-fit h-9"
                                   />
                                 </div>
                               )}

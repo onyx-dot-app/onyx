@@ -4,9 +4,9 @@ from typing import cast
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
+from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
@@ -76,7 +76,6 @@ def default_build_user_message(
         if prompt_config.task_prompt
         else user_query
     )
-
     user_prompt = user_prompt.strip()
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
@@ -132,10 +131,6 @@ class AnswerPromptBuilder:
         self.raw_user_query = raw_user_query
         self.raw_user_uploaded_files = raw_user_uploaded_files
         self.single_message_history = single_message_history
-
-        # Optional: if the prompt includes explicit context documents (e.g., project files),
-        # store them here so downstream streaming can reference them for citation mapping.
-        self.context_llm_docs: list[LlmDoc] | None = None
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:
@@ -201,6 +196,10 @@ class AnswerPromptBuilder:
 
 
 # Stores some parts of a prompt builder as needed for tool calls
+class PromptSnapshot(BaseModel):
+    raw_message_history: list[PreviousMessage]
+    raw_user_query: str
+    built_prompt: list[BaseMessage]
 
 
 # TODO: rename this? AnswerConfig maybe?

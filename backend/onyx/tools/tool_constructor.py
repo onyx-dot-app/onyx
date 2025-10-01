@@ -30,6 +30,7 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
+from onyx.db.mcp import get_mcp_server_auth_performer
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
@@ -38,7 +39,6 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
@@ -192,7 +192,6 @@ def construct_tools(
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
-    slack_context: SlackContext | None = None,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs.
 
@@ -258,7 +257,6 @@ def construct_tools(
                     ),
                     rerank_settings=search_tool_config.rerank_settings,
                     bypass_acl=search_tool_config.bypass_acl,
-                    slack_context=slack_context,  # Pass the Slack context
                 )
                 tool_dict[db_tool_model.id] = [search_tool]
 
@@ -387,7 +385,10 @@ def construct_tools(
                 or mcp_server.auth_type == MCPAuthenticationType.OAUTH
             ):
                 # If server has a per-user template, only use that user's config
-                if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
+                if (
+                    get_mcp_server_auth_performer(mcp_server)
+                    == MCPAuthenticationPerformer.PER_USER
+                ):
                     connection_config = get_user_connection_config(
                         mcp_server.id, user_email, db_session
                     )
@@ -416,7 +417,7 @@ def construct_tools(
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
-                if saved_tool.id == db_tool_model.id:
+                if saved_tool.name == expected_tool_name:
                     tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
             if db_tool_model.id not in tool_dict:
                 logger.warning(

@@ -65,19 +65,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "false").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
 )
 PASSWORD_REQUIRE_LOWERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "false").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
 )
 PASSWORD_REQUIRE_DIGIT = (
-    os.environ.get("PASSWORD_REQUIRE_DIGIT", "false").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
 )
 PASSWORD_REQUIRE_SPECIAL_CHAR = (
-    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "false").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
 )
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
@@ -354,26 +354,6 @@ except ValueError:
 CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
 )
-
-CELERY_WORKER_PRIMARY_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
-)
-
-CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
-    os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
-)
-CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT = 4
-try:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
-        os.environ.get(
-            "CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY",
-            CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT,
-        )
-    )
-except ValueError:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = (
-        CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT
-    )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
@@ -678,8 +658,8 @@ LOG_ALL_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ALL_MODEL_INTERACTIONS", "").lower() == "true"
 )
 # Logs Onyx only model interactions like prompts, responses, messages etc.
-LOG_ONYX_MODEL_INTERACTIONS = (
-    os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
+LOG_DANSWER_MODEL_INTERACTIONS = (
+    os.environ.get("LOG_DANSWER_MODEL_INTERACTIONS", "").lower() == "true"
 )
 LOG_INDIVIDUAL_MODEL_TOKENS = (
     os.environ.get("LOG_INDIVIDUAL_MODEL_TOKENS", "").lower() == "true"
@@ -696,17 +676,6 @@ LOG_POSTGRES_CONN_COUNTS = (
 )
 # Anonymous usage telemetry
 DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
-
-#####
-# Braintrust Configuration
-#####
-# Enable Braintrust tracing for LangGraph/LangChain applications
-BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
-# Braintrust project name
-BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
-BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
-# Maximum concurrency for Braintrust evaluations
-BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
