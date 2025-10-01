@@ -90,6 +90,10 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
 # Internet Search
 EXA_API_KEY = os.environ.get("EXA_API_KEY") or None
+FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY") or None
+
+GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_SEARCH_API_KEY") or None
+GOOGLE_SEARCH_CX = os.environ.get("GOOGLE_SEARCH_CX") or None
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY") or None
 
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)

@@ -37,3 +37,15 @@ class InternetSearchProvider(ABC):
     @abstractmethod
     def contents(self, urls: list[str]) -> list[InternetContent]:
         pass
+
+
+class InternetSearchInterface(ABC):
+    @abstractmethod
+    def search(self, query: str) -> list[InternetSearchResult]:
+        pass
+
+
+class InternetContentInterface(ABC):
+    @abstractmethod
+    def contents(self, urls: list[str]) -> list[InternetContent]:
+        pass
