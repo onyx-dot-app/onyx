@@ -637,7 +637,19 @@ function AppSidebarInner() {
                 </NavigationTab>
               </SidebarSection>
 
-              <SidebarSection title="Projects">
+              <SidebarSection
+                title="Projects"
+                action={
+                  <IconButton
+                    icon={SvgFolderPlus}
+                    internal
+                    tooltip="New Project"
+                    onClick={() =>
+                      toggleModal(ModalIds.CreateProjectModal, true)
+                    }
+                  />
+                }
+              >
                 <Projects />
               </SidebarSection>
 

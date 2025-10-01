@@ -6,6 +6,7 @@ import {
   useProjectsContext,
 } from "@/app/chat/projects/ProjectsContext";
 import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Text from "@/refresh-components/Text";
 import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import { PopoverMenu } from "@/components/ui/popover";
@@ -18,6 +19,8 @@ import SvgFolderPlus from "@/icons/folder-plus";
 import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
+import { OpenFolderIcon } from "@/components/icons/CustomIcons";
+import { SvgProps } from "@/icons";
 
 interface ProjectFolderProps {
   project: Project;
@@ -27,6 +30,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
   const route = useAppRouter();
   const params = useAppParams();
   const [open, setOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
@@ -41,6 +45,29 @@ function ProjectFolder({ project }: ProjectFolderProps) {
     setIsEditing(false);
     await renameProject(project.id, newName);
   }
+
+  // Determine which icon to show based on open/closed state and hover
+  const getFolderIcon = (): React.FunctionComponent<SvgProps> => {
+    if (open) {
+      return isHovering
+        ? SvgFolder
+        : (OpenFolderIcon as React.FunctionComponent<SvgProps>);
+    } else {
+      return isHovering
+        ? (OpenFolderIcon as React.FunctionComponent<SvgProps>)
+        : SvgFolder;
+    }
+  };
+
+  const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setOpen((prev) => !prev);
+  };
+
+  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    route({ projectId: project.id });
+  };
 
   return (
     <>
@@ -74,12 +101,11 @@ function ProjectFolder({ project }: ProjectFolderProps) {
 
       {/* Project Folder */}
       <NavigationTab
-        icon={SvgFolder}
+        icon={getFolderIcon()}
         active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
-        onClick={() => {
-          setOpen((prev) => !prev);
-          route({ projectId: project.id });
-        }}
+        onIconClick={handleIconClick}
+        onIconHover={setIsHovering}
+        onTextClick={handleTextClick}
         popover={
           <PopoverMenu>
             {[
@@ -118,6 +144,13 @@ function ProjectFolder({ project }: ProjectFolderProps) {
             project={project}
           />
         ))}
+      {open && project.chat_sessions.length === 0 && (
+        <div className="flex justify-center items-center">
+          <Text mainMuted text01>
+            No chat sessions yet.
+          </Text>
+        </div>
+      )}
     </>
   );
 }
@@ -131,13 +164,15 @@ export default function Projects() {
         <ProjectFolder key={project.id} project={project} />
       ))}
 
-      <NavigationTab
-        icon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        lowlight
-      >
-        New Project
-      </NavigationTab>
+      {projects.length === 0 && (
+        <NavigationTab
+          icon={SvgFolderPlus}
+          onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+          lowlight
+        >
+          New Project
+        </NavigationTab>
+      )}
     </>
   );
 }
