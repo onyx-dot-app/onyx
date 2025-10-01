@@ -1,3 +1,5 @@
+import csv
+import io
 import re
 from datetime import datetime
 from datetime import timedelta
@@ -14,6 +16,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -294,6 +297,46 @@ def list_all_users(
         accepted_pages=(accepted_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
         invited_pages=(invited_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
         slack_users_pages=(slack_users_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
+    )
+
+
+@router.get("/manage/users/download")
+def download_users_csv(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Download all users as a CSV file."""
+    # Get all users from the database
+    users = get_all_users(db_session)
+
+    # Create CSV content in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write CSV header
+    writer.writerow(["id", "email", "role"])
+
+    # Write user data
+    for user in users:
+        writer.writerow(
+            [
+                user.email,
+                user.role.value if user.role else "",
+            ]
+        )
+
+    # Prepare the CSV content for download
+    csv_content = output.getvalue()
+    output.close()
+
+    # Generate filename with current timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"users_{timestamp}.csv"
+
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
