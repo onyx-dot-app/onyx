@@ -137,13 +137,35 @@ const SearchableTables = () => {
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
 
+  const downloadAllUsers = async () => {
+    try {
+      const response = await fetch("/api/manage/users/download");
+      if (!response.ok) {
+        throw new Error("Failed to download all users");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "users.csv";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      setPopup({
+        message: `Failed to download all users - ${error}`,
+        type: "error",
+      });
+    }
+  };
+
   return (
     <div>
       {popup}
       <div className="flex flex-col gap-y-4">
         <div className="flex gap-x-4">
           <AddUserButton setPopup={setPopup} />
-          {/* TODO: Add a button to download all users */}
           <Button className="my-auto w-fit" onClick={() => downloadAllUsers()}>
             <div className="flex">
               <FiPlusSquare className="my-auto mr-2" />
