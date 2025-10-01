@@ -82,40 +82,27 @@ export interface LLMProviderDescriptor {
   model_configurations: ModelConfiguration[];
 }
 
-export interface ProviderFetchModelsButtonConfig {
-  buttonText: string;
-  loadingText: string;
-  helperText: string | React.ReactNode;
-  isDisabled: (values: any) => boolean;
-}
-
-export interface FetchModelsButtonProps {
-  llmProviderDescriptor: WellKnownLLMProviderDescriptor;
-  existingLlmProvider?: LLMProviderView;
-  values: any;
-  setFieldValue: any;
-  isFetchingModels: boolean;
-  setIsFetchingModels: (loading: boolean) => void;
-  fetchModelsError: string;
-  setFetchModelsError: (error: string) => void;
-  setPopup?: (popup: PopupSpec) => void;
-}
-
 export interface OllamaModelResponse {
   name: string;
   max_input_tokens: number;
   supports_image_input: boolean;
 }
 
-export interface FetchModelsConfig<
+export interface DynamicProviderConfig<
   TApiResponse = any,
   TProcessedResponse = ModelConfiguration,
 > {
   endpoint: string;
-  validationCheck: () => boolean;
-  validationError: string;
-  requestBody: () => Record<string, any>;
-  processResponse: (data: TApiResponse) => TProcessedResponse[];
+  isDisabled: (values: any) => boolean;
+  disabledReason: string;
+  buildRequestBody: (args: {
+    values: any;
+    existingLlmProvider?: LLMProviderView;
+  }) => Record<string, any>;
+  processResponse: (
+    data: TApiResponse,
+    llmProviderDescriptor: WellKnownLLMProviderDescriptor
+  ) => TProcessedResponse[];
   getModelNames: (data: TApiResponse) => string[];
   successMessage: (count: number) => string;
 }

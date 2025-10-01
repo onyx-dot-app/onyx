@@ -5,6 +5,7 @@ import Text from "@/components/ui/text";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Form, Formik } from "formik";
+import type { FormikProps } from "formik";
 import { FiTrash } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
@@ -13,18 +14,78 @@ import {
   MultiSelectField,
   FileUploadFormField,
 } from "@/components/Field";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
-import { FetchModelsButton } from "./FetchModelsButton";
+import { dynamicProviderConfigs, fetchModels } from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+
+function AutoFetchModelsOnEdit({
+  llmProviderDescriptor,
+  existingLlmProvider,
+  values,
+  setFieldValue,
+  setIsFetchingModels,
+  setFetchModelsError,
+  setPopup,
+}: {
+  llmProviderDescriptor: WellKnownLLMProviderDescriptor;
+  existingLlmProvider?: LLMProviderView;
+  values: any;
+  setFieldValue: FormikProps<any>["setFieldValue"];
+  setIsFetchingModels: (loading: boolean) => void;
+  setFetchModelsError: (error: string) => void;
+  setPopup?: (popup: PopupSpec) => void;
+}) {
+  const hasAutoFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!existingLlmProvider) {
+      return;
+    }
+
+    const config = dynamicProviderConfigs[llmProviderDescriptor.name];
+    if (!config) {
+      return;
+    }
+
+    if (hasAutoFetchedRef.current) {
+      return;
+    }
+
+    if (config.isDisabled(values)) {
+      return;
+    }
+
+    hasAutoFetchedRef.current = true;
+    fetchModels(
+      llmProviderDescriptor,
+      existingLlmProvider,
+      values,
+      setFieldValue,
+      setIsFetchingModels,
+      setFetchModelsError,
+      setPopup
+    );
+  }, [
+    existingLlmProvider,
+    llmProviderDescriptor,
+    setFieldValue,
+    setFetchModelsError,
+    setIsFetchingModels,
+    setPopup,
+    values,
+  ]);
+
+  return null;
+}
 
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
@@ -350,9 +411,20 @@ export function LLMProviderUpdateForm({
         const currentModelConfigurations = getCurrentModelConfigurations(
           formikProps.values
         );
+        const dynamicConfig =
+          dynamicProviderConfigs[llmProviderDescriptor.name];
 
         return (
           <Form className="gap-y-4 items-stretch mt-6">
+            <AutoFetchModelsOnEdit
+              llmProviderDescriptor={llmProviderDescriptor}
+              existingLlmProvider={existingLlmProvider}
+              values={formikProps.values}
+              setFieldValue={formikProps.setFieldValue}
+              setIsFetchingModels={setIsFetchingModels}
+              setFetchModelsError={setFetchModelsError}
+              setPopup={setPopup}
+            />
             {!firstTimeConfiguration && (
               <TextFormField
                 name="name"
@@ -439,19 +511,49 @@ export function LLMProviderUpdateForm({
                 }
               }
             )}
-
             {/* Fetch models button - automatically shows for supported providers */}
-            <FetchModelsButton
-              llmProviderDescriptor={llmProviderDescriptor}
-              existingLlmProvider={existingLlmProvider}
-              values={formikProps.values}
-              setFieldValue={formikProps.setFieldValue}
-              isFetchingModels={isFetchingModels}
-              setIsFetchingModels={setIsFetchingModels}
-              fetchModelsError={fetchModelsError}
-              setFetchModelsError={setFetchModelsError}
-              setPopup={setPopup}
-            />
+            {dynamicConfig && (
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    fetchModels(
+                      llmProviderDescriptor,
+                      existingLlmProvider,
+                      formikProps.values,
+                      formikProps.setFieldValue,
+                      setIsFetchingModels,
+                      setFetchModelsError,
+                      setPopup
+                    )
+                  }
+                  disabled={
+                    isFetchingModels ||
+                    dynamicConfig.isDisabled(formikProps.values)
+                  }
+                  className="w-fit"
+                >
+                  {isFetchingModels ? (
+                    <>
+                      <LoadingAnimation size="text-sm" />
+                      <span className="ml-2">Fetching models...</span>
+                    </>
+                  ) : (
+                    "Fetch Available Models"
+                  )}
+                </Button>
+
+                {fetchModelsError && (
+                  <Text className="text-red-600 text-sm">
+                    {fetchModelsError}
+                  </Text>
+                )}
+
+                <Text className="text-sm text-gray-600">
+                  Retrieve the latest available models for this provider.
+                </Text>
+              </div>
+            )}
 
             {!firstTimeConfiguration && (
               <>
