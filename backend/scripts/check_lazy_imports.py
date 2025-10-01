@@ -169,20 +169,7 @@ def should_check_file_for_module(
     rel_path = file_path.relative_to(backend_dir)
     rel_path_str = rel_path.as_posix()
 
-    # Check if this file path matches any pattern in the ignore list
-    for ignore_pattern in settings.ignore_files:
-        # Check for exact match
-        if rel_path_str == ignore_pattern:
-            return False
-        # Check if the pattern matches the end of the path (for partial paths)
-        if rel_path_str.endswith(ignore_pattern):
-            # Ensure it's a proper path match, not just string suffix
-            # e.g., "connectors/factory.py" should match "onyx/connectors/factory.py"
-            # but not "my_connectors/factory.py"
-            if rel_path_str.endswith("/" + ignore_pattern):
-                return False
-
-    return True
+    return rel_path_str not in settings.ignore_files
 
 
 def main(modules_to_lazy_import: Dict[str, LazyImportSettings]) -> None:
