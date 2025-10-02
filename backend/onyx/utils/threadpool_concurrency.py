@@ -288,7 +288,9 @@ def run_async_sync(coro: Awaitable[T]) -> T:
     """
     context = contextvars.copy_context()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future: concurrent.futures.Future[T] = executor.submit(context.run, asyncio.run, coro)
+        future: concurrent.futures.Future[T] = executor.submit(
++            context.run, asyncio.run, coro
++        )
         return future.result()
 
 class TimeoutThread(threading.Thread, Generic[R]):
