@@ -21,12 +21,8 @@ MCP_SERVER_PORT = 8000
 MCP_SERVER_URL = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}/mcp"
 MCP_HELLO_TOOL = "hello"
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
 MCP_SERVER_SCRIPT = (
-    REPO_ROOT
-    / "backend"
-    / "tests"
-    / "integration"
+    Path(__file__).resolve().parents[2]
     / "mock_services"
     / "mcp_test_server"
     / "run_mcp_server_no_auth.py"
@@ -59,7 +55,7 @@ def _wait_for_port(
 def mcp_no_auth_server() -> Generator[None, None, None]:
     process = subprocess.Popen(
         [sys.executable, str(MCP_SERVER_SCRIPT)],
-        cwd=REPO_ROOT,
+        cwd=MCP_SERVER_SCRIPT.parent,
     )
 
     try:
