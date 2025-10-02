@@ -919,10 +919,10 @@ class OnyxConfluence:
         response = self.post(url, data=data)
         logger.debug(f"jsonrpc response: {response}")
         if not response.get("result"):
-            logger.warning(
-                f"No jsonrpc response for space permissions for space {space_key}"
-                f"\nResponse: {response}"
+            logger.info(
+                f"No jsonrpc result for space permissions for space {space_key}; likely insufficient permissions."
             )
+            return []
 
         return response.get("result", [])
 
