@@ -219,12 +219,19 @@ def _get_batch_rate_limited(
 
 
 def _get_userinfo(user: NamedUser) -> dict[str, str]:
+    def _safe_get(attr_name: str) -> str | None:
+        try:
+            return cast(str | None, getattr(user, attr_name))
+        except GithubException:
+            logger.debug(f"Error getting {attr_name} for user")
+            return None
+
     return {
         k: v
         for k, v in {
-            "login": user.login,
-            "name": user.name,
-            "email": user.email,
+            "login": _safe_get("login"),
+            "name": _safe_get("name"),
+            "email": _safe_get("email"),
         }.items()
         if v is not None
     }
