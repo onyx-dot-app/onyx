@@ -330,12 +330,10 @@ def download_users_csv(
     csv_content = output.getvalue()
     output.close()
 
-    filename = "users.csv"
-
     return StreamingResponse(
         io.BytesIO(csv_content.encode("utf-8")),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": "attachment;"},
     )
 
 
