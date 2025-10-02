@@ -37,6 +37,8 @@ def confluence_doc_sync(
     confluence_connector = ConfluenceConnector(
         **cc_pair.connector.connector_specific_config
     )
+    # Set permission mode from the connector's access type; only SYNC enables enumeration
+    confluence_connector.set_permission_mode(cc_pair.access_type)
 
     provider = OnyxDBCredentialsProvider(
         get_current_tenant_id(), "confluence", cc_pair.credential_id
