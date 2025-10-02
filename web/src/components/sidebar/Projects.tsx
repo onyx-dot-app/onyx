@@ -18,9 +18,10 @@ import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import SvgFolderPlus from "@/icons/folder-plus";
 import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { noProp } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import { OpenFolderIcon } from "@/components/icons/CustomIcons";
 import { SvgProps } from "@/icons";
+import { useDroppable } from "@dnd-kit/core";
 
 interface ProjectFolderProps {
   project: Project;
@@ -36,6 +37,16 @@ function ProjectFolder({ project }: ProjectFolderProps) {
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
+
+  // Make project droppable
+  const dropId = `project-${project.id}`;
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId,
+    data: {
+      type: "project",
+      project,
+    },
+  });
 
   async function submitRename(renamedValue: string) {
     const newName = renamedValue.trim();
@@ -100,40 +111,48 @@ function ProjectFolder({ project }: ProjectFolderProps) {
       )}
 
       {/* Project Folder */}
-      <NavigationTab
-        icon={getFolderIcon()}
-        active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
-        onIconClick={handleIconClick}
-        onIconHover={setIsHovering}
-        onTextClick={handleTextClick}
-        popover={
-          <PopoverMenu>
-            {[
-              <NavigationTab
-                key="rename-project"
-                icon={SvgEdit}
-                onClick={noProp(() => setIsEditing(true))}
-              >
-                Rename Project
-              </NavigationTab>,
-              null,
-              <NavigationTab
-                key="delete-project"
-                icon={SvgTrash}
-                onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-                danger
-              >
-                Delete Project
-              </NavigationTab>,
-            ]}
-          </PopoverMenu>
-        }
-        renaming={isEditing}
-        setRenaming={setIsEditing}
-        submitRename={submitRename}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "transition-colors duration-200",
+          isOver && "bg-background-tint-03 rounded-08"
+        )}
       >
-        {name}
-      </NavigationTab>
+        <NavigationTab
+          icon={getFolderIcon()}
+          active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
+          onIconClick={handleIconClick}
+          onIconHover={setIsHovering}
+          onTextClick={handleTextClick}
+          popover={
+            <PopoverMenu>
+              {[
+                <NavigationTab
+                  key="rename-project"
+                  icon={SvgEdit}
+                  onClick={noProp(() => setIsEditing(true))}
+                >
+                  Rename Project
+                </NavigationTab>,
+                null,
+                <NavigationTab
+                  key="delete-project"
+                  icon={SvgTrash}
+                  onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+                  danger
+                >
+                  Delete Project
+                </NavigationTab>,
+              ]}
+            </PopoverMenu>
+          }
+          renaming={isEditing}
+          setRenaming={setIsEditing}
+          submitRename={submitRename}
+        >
+          {name}
+        </NavigationTab>
+      </div>
 
       {/* Project Chat-Sessions */}
       {open &&
@@ -142,6 +161,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
             key={chatSession.id}
             chatSession={chatSession}
             project={project}
+            draggable
           />
         ))}
       {open && project.chat_sessions.length === 0 && (
