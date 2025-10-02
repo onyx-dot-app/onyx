@@ -686,7 +686,7 @@ class ConfluenceConnector(
                 self.low_timeout_confluence_client.get_space(self.space)
             except ApiError as e:
                 raise ConnectorValidationError(
-                    "Invalid Confluence space key provided."
+                    "Invalid Confluence space key provided"
                 ) from e
 
         if not spaces or not spaces.get("results"):
