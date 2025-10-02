@@ -56,7 +56,7 @@ class MCPTool(BaseTool):
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = f"mcp_{mcp_server.name}_{tool_name}"
+        self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
 
     @property
     def id(self) -> int:
