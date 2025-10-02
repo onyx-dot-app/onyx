@@ -389,6 +389,8 @@ class JiraConnector(
         self.jql_query = jql_query
         self.scoped_token = scoped_token
         self._jira_client: JIRA | None = None
+        # Cache project permissions to avoid fetching them repeatedly across runs
+        self._project_permissions_cache: dict[str, Any] = {}
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -406,6 +408,21 @@ class JiraConnector(
         if not self.jira_project:
             return ""
         return f'"{self.jira_project}"'
+
+    def _get_project_permissions(self, project_key: str) -> Any:
+        """Get project permissions with caching.
+
+        Args:
+            project_key: The Jira project key
+
+        Returns:
+            The external access permissions for the project
+        """
+        if project_key not in self._project_permissions_cache:
+            self._project_permissions_cache[project_key] = get_project_permissions(
+                jira_client=self.jira_client, jira_project=project_key
+            )
+        return self._project_permissions_cache[project_key]
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
@@ -512,8 +529,8 @@ class JiraConnector(
                     if include_permissions:
                         project_key = get_jira_project_key_from_issue(issue=issue)
                         if project_key:
-                            document.external_access = get_project_permissions(
-                                jira_client=self.jira_client, jira_project=project_key
+                            document.external_access = self._get_project_permissions(
+                                project_key
                             )
                     yield document
 
@@ -572,6 +589,7 @@ class JiraConnector(
         prev_offset = 0
         current_offset = 0
         slim_doc_batch = []
+
         while checkpoint.has_more:
             for issue in _perform_jql_search(
                 jira_client=self.jira_client,
@@ -589,12 +607,11 @@ class JiraConnector(
 
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
                 id = build_jira_url(self.jira_base, issue_key)
+
                 slim_doc_batch.append(
                     SlimDocument(
                         id=id,
-                        external_access=get_project_permissions(
-                            jira_client=self.jira_client, jira_project=project_key
-                        ),
+                        external_access=self._get_project_permissions(project_key),
                     )
                 )
                 current_offset += 1
