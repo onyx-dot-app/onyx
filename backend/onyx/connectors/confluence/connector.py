@@ -106,6 +106,9 @@ class ConfluenceConnector(
         # pages.
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
+        # Optional per-connector overrides for attachment processing limits
+        attachment_size_threshold_bytes: int | None = None,
+        attachment_char_count_threshold: int | None = None,
         scoped_token: bool = False,
     ) -> None:
         self.wiki_base = wiki_base
@@ -122,6 +125,9 @@ class ConfluenceConnector(
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
         self.allow_images = False
+        # Store optional per-connector overrides
+        self.attachment_size_threshold_bytes = attachment_size_threshold_bytes
+        self.attachment_char_count_threshold = attachment_char_count_threshold
 
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
@@ -421,6 +427,8 @@ class ConfluenceConnector(
                     attachment=attachment,
                     page_id=page["id"],
                     allow_images=self.allow_images,
+                    attachment_size_threshold_bytes=self.attachment_size_threshold_bytes,
+                    attachment_char_count_threshold=self.attachment_char_count_threshold,
                 )
                 if response is None:
                     continue
@@ -474,6 +482,22 @@ class ConfluenceConnector(
                     primary_owners=primary_owners,
                 )
                 attachment_docs.append(attachment_doc)
+            except ValueError as e:
+                # Handle size limit errors specifically and continue with next attachment
+                logger.warning(
+                    f"Attachment '{attachment['title']}' skipped due to size limits: {e}"
+                )
+                attachment_failures.append(
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=object_url,
+                            document_link=object_url,
+                        ),
+                        failure_message=f"Attachment '{attachment['title']}' was skipped due to size limits: {e}",
+                        exception=None,
+                    )
+                )
+                continue
             except Exception as e:
                 logger.error(
                     f"Failed to extract/summarize attachment {attachment['title']}",
