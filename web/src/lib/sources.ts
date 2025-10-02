@@ -391,7 +391,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "File",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/file",
-    isPopular: true,
+    isPopular: false, // Needs to be false to hide from the Add Connector page
   },
 
   // Other
