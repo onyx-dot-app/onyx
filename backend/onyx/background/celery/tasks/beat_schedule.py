@@ -41,7 +41,7 @@ beat_task_templates: list[dict] = [
         "task": OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
         "schedule": timedelta(minutes=1),
         "options": {
-            "priority": OnyxCeleryPriority.LOW,
+            "priority": OnyxCeleryPriority.HIGH,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.USER_FILE_PROCESSING,
         },
