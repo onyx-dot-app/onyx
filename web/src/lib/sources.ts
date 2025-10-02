@@ -387,11 +387,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   user_file: {
+    // TODO: write docs for projects and link them here
     icon: FileIcon2,
     displayName: "File",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/file",
-    isPopular: true,
+    isPopular: false, // Needs to be false to hide from the Add Connector page
   },
 
   // Other
