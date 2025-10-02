@@ -25,7 +25,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -359,7 +359,9 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
     offset: int | None = None
 
 
-class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnector):
+class JiraConnector(
+    CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint], SlimConnector
+):
     def __init__(
         self,
         jira_base_url: str,
@@ -449,15 +451,37 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
         try:
-            return self._load_from_checkpoint(jql, checkpoint)
+            return self._load_from_checkpoint(
+                jql, checkpoint, include_permissions=False
+            )
         except Exception as e:
             if is_atlassian_date_error(e):
                 jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(jql, checkpoint)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=False
+                )
+            raise e
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JiraConnectorCheckpoint,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        """Load documents from checkpoint with permission information included."""
+        jql = self._get_jql_query(start, end)
+        try:
+            return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
+        except Exception as e:
+            if is_atlassian_date_error(e):
+                jql = self._get_jql_query(start - ONE_HOUR, end)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=True
+                )
             raise e
 
     def _load_from_checkpoint(
-        self, jql: str, checkpoint: JiraConnectorCheckpoint
+        self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         # Get the current offset from checkpoint or start at 0
         starting_offset = checkpoint.offset or 0
@@ -484,6 +508,13 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                 ):
+                    # Add permission information to the document if requested
+                    if include_permissions:
+                        project_key = get_jira_project_key_from_issue(issue=issue)
+                        if project_key:
+                            document.external_access = get_project_permissions(
+                                jira_client=self.jira_client, jira_project=project_key
+                            )
                     yield document
 
             except Exception as e:
