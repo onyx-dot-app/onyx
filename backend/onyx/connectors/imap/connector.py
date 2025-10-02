@@ -533,7 +533,7 @@ def _extract_attachments(
             # Process image attachments
             if content_type.startswith("image/") and is_valid_image_type(content_type):
                 try:
-                    section, file_name = store_image_and_create_section(
+                    section, _ = store_image_and_create_section(
                         image_data=raw_payload,
                         file_id=f"{email_headers.id}_{filename}",
                         display_name=filename,
