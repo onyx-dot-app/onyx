@@ -1,3 +1,4 @@
+import os
 import socket
 import subprocess
 import sys
@@ -16,8 +17,8 @@ from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
-MCP_SERVER_HOST = "127.0.0.1"
-MCP_SERVER_PORT = 8000
+MCP_SERVER_HOST = os.getenv("TEST_WEB_HOSTNAME", "127.0.0.1")
+MCP_SERVER_PORT = int(os.getenv("MCP_SERVER_PORT", "8000"))
 MCP_SERVER_URL = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}/mcp"
 MCP_HELLO_TOOL = "hello"
 
