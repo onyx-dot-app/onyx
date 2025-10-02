@@ -1534,7 +1534,16 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
           "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes.",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include attachments?",
+        label: "Include Attachments",
+        name: "include_attachments",
+        optional: true,
+        default: false,
+      },
+    ],
   },
 };
 export function createConnectorInitialValues(
@@ -1854,4 +1863,5 @@ export interface ImapConfig {
   host: string;
   port?: number;
   mailboxes?: string[];
+  index_attachments?: boolean;
 }

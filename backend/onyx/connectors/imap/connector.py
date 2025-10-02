@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import email
 import imaplib
@@ -8,6 +10,7 @@ from datetime import timezone
 from email.message import Message
 from email.utils import parseaddr
 from enum import Enum
+from io import BytesIO
 from typing import Any
 from typing import cast
 
@@ -15,7 +18,9 @@ import bs4
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
+from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.imap.models import EmailHeaders
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -25,7 +30,14 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
+from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.file_validation import is_valid_image_type
+from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -72,10 +84,12 @@ class ImapConnector(
         host: str,
         port: int = _DEFAULT_IMAP_PORT_NUMBER,
         mailboxes: list[str] | None = None,
+        include_attachments: bool = False,
     ) -> None:
         self._host = host
         self._port = port
         self._mailboxes = mailboxes
+        self._include_attachments = include_attachments
         self._credentials: dict[str, Any] | None = None
 
     @property
@@ -197,6 +211,7 @@ class ImapConnector(
                 email_msg=email_msg,
                 email_headers=email_headers,
                 include_perm_sync=include_perm_sync,
+                include_attachments=self._include_attachments,
             )
 
         return checkpoint
@@ -332,6 +347,7 @@ def _convert_email_headers_and_body_into_document(
     email_msg: Message,
     email_headers: EmailHeaders,
     include_perm_sync: bool,
+    include_attachments: bool = False,
 ) -> Document:
     sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = (
@@ -363,13 +379,23 @@ def _convert_email_headers_and_body_into_document(
         else None
     )
 
+    # Start with the email body as the first section
+    sections: list[TextSection | ImageSection] = [TextSection(text=email_body)]
+
+    # Process attachments only if include_attachments is enabled
+    if include_attachments:
+        attachments = _extract_attachments(
+            email_msg=email_msg, email_headers=email_headers
+        )
+        sections.extend(attachments)
+
     return Document(
         id=email_headers.id,
         title=email_headers.subject,
         semantic_identifier=email_headers.subject,
         metadata={},
         source=DocumentSource.IMAP,
-        sections=[TextSection(text=email_body)],
+        sections=sections,
         primary_owners=primary_owners,
         external_access=external_access,
     )
@@ -384,6 +410,10 @@ def _parse_email_body(
         if part.is_multipart():
             # Multipart parts are *containers* for other parts, not the actual content itself.
             # Therefore, we skip until we find the individual parts instead.
+            continue
+
+        # Skip attachments when extracting body
+        if part.get_content_disposition() == "attachment":
             continue
 
         charset = part.get_content_charset() or "utf-8"
@@ -411,6 +441,131 @@ def _parse_email_body(
     soup = bs4.BeautifulSoup(markup=body, features="html.parser")
 
     return " ".join(str_section for str_section in soup.stripped_strings)
+
+
+def _validate_attachment(
+    filename: str,
+    content_type: str,
+    file_size: int,
+) -> bool:
+    """
+    Validates if an attachment should be processed based on file type and size.
+
+    Args:
+        filename: The name of the attachment file
+        content_type: The MIME type of the attachment
+        file_size: The size of the attachment in bytes
+
+    Returns:
+        True if the attachment should be processed, False otherwise
+    """
+    # Check file size
+    if file_size > MAX_FILE_SIZE_BYTES:
+        logger.info(
+            f"Skipping attachment {filename}: size {file_size} bytes exceeds limit {MAX_FILE_SIZE_BYTES} bytes"
+        )
+        return False
+
+    # For images, validate image type
+    if content_type.startswith("image/"):
+        if not is_valid_image_type(content_type):
+            logger.debug(
+                f"Skipping attachment {filename}: unsupported image type {content_type}"
+            )
+            return False
+        return True
+
+    # For other files, check if extension is accepted
+    extension = get_file_ext(filename)
+    if not is_accepted_file_ext(
+        extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+    ):
+        logger.debug(
+            f"Skipping attachment {filename}: unsupported file extension {extension}"
+        )
+        return False
+
+    return True
+
+
+def _extract_attachments(
+    email_msg: Message,
+    email_headers: EmailHeaders,
+) -> list[TextSection | ImageSection]:
+    """
+    Extract attachments from email message and convert them to sections.
+    """
+    sections: list[TextSection | ImageSection] = []
+
+    for part in email_msg.walk():
+        if part.is_multipart():
+            continue
+
+        # Only process parts marked as attachments
+        if part.get_content_disposition() != "attachment":
+            continue
+
+        filename = part.get_filename()
+        if not filename:
+            logger.debug("Skipping attachment without filename")
+            continue
+
+        content_type = part.get_content_type()
+
+        try:
+            raw_payload = part.get_payload(decode=True)
+            if not isinstance(raw_payload, bytes):
+                logger.warning(
+                    f"Attachment payload for {filename} is not bytes, skipping"
+                )
+                continue
+
+            file_size = len(raw_payload)
+
+            # Validate attachment before processing
+            if not _validate_attachment(filename, content_type, file_size):
+                continue
+
+            logger.info(
+                f"Processing email attachment: {filename} ({content_type}, {file_size} bytes)"
+            )
+
+            # Process image attachments
+            if content_type.startswith("image/") and is_valid_image_type(content_type):
+                try:
+                    section, file_name = store_image_and_create_section(
+                        image_data=raw_payload,
+                        file_id=f"{email_headers.id}_{filename}",
+                        display_name=filename,
+                        media_type=content_type,
+                        file_origin=FileOrigin.CONNECTOR,
+                    )
+                    logger.info(f"Stored image attachment: {filename}")
+                    sections.append(section)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to process image attachment {filename}: {e}"
+                    )
+
+            # Process document attachments
+            else:
+                try:
+                    text = extract_file_text(
+                        file=BytesIO(raw_payload),
+                        file_name=filename,
+                    )
+                    if text:
+                        sections.append(TextSection(text=text))
+                        logger.info(
+                            f"Extracted text from attachment {filename} ({len(text)} chars)"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to extract text from {filename}: {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to process attachment {filename}: {e}")
+
+    return sections
 
 
 def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
@@ -448,6 +603,7 @@ if __name__ == "__main__":
 
     host = os.environ.get("IMAP_HOST")
     mailboxes_str = os.environ.get("IMAP_MAILBOXES")
+    include_attachments = os.environ.get("IMAP_INCLUDE_ATTACHMENTS")
     username = os.environ.get("IMAP_USERNAME")
     password = os.environ.get("IMAP_PASSWORD")
 
@@ -463,6 +619,7 @@ if __name__ == "__main__":
     imap_connector = ImapConnector(
         host=host,
         mailboxes=mailboxes,
+        include_attachments=include_attachments == "true",
     )
 
     imap_connector.set_credentials_provider(
