@@ -5,6 +5,7 @@ import contextvars
 import copy
 import threading
 import uuid
+from collections.abc import Awaitable
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import MutableMapping
@@ -14,7 +15,7 @@ from concurrent.futures import FIRST_COMPLETED
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait
-from typing import Any, Awaitable
+from typing import Any
 from typing import cast
 from typing import Generic
 from typing import overload
@@ -281,6 +282,7 @@ def run_functions_in_parallel(
 
     return results
 
+
 def run_async_sync(coro: Awaitable[T]) -> T:
     """
     async-to-sync converter. Basically just executes asyncio.run in a separate thread.
@@ -288,10 +290,11 @@ def run_async_sync(coro: Awaitable[T]) -> T:
     """
     context = contextvars.copy_context()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future: concurrent.futures.Future[T] = executor.submit(  # type: ignore[arg-type]
+        future: concurrent.futures.Future[T] = executor.submit(  # type: ignore
             context.run, asyncio.run, coro
         )
         return future.result()
+
 
 class TimeoutThread(threading.Thread, Generic[R]):
     def __init__(
