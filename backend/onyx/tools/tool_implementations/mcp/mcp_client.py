@@ -25,6 +25,7 @@ from mcp.types import TextResourceContents
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
+from onyx.utils.threadpool_concurrency import run_async_sync
 from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
 
@@ -203,13 +204,7 @@ def _call_mcp_client_function_sync(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        # Run the async function in a new event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(run_client_function())
-        finally:
-            loop.close()
+        return run_async_sync(run_client_function())
     except Exception as e:
         logger.error(f"Failed to call MCP client function: {e}")
         if isinstance(e, ExceptionGroup):
