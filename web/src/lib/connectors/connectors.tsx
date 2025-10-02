@@ -1863,5 +1863,5 @@ export interface ImapConfig {
   host: string;
   port?: number;
   mailboxes?: string[];
-  index_attachments?: boolean;
+  include_attachments?: boolean;
 }
