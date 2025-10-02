@@ -221,14 +221,21 @@ def is_valid_url(url: str) -> bool:
 
 def _same_site(base_url: str, candidate_url: str) -> bool:
     base, candidate = urlparse(base_url), urlparse(candidate_url)
-    if base.netloc.lower().lstrip("www.") != candidate.netloc.lower().lstrip("www."):
+    base_netloc = base.netloc.lower().removeprefix("www.")
+    candidate_netloc = candidate.netloc.lower().removeprefix("www.")
+    if base_netloc != candidate_netloc:
         return False
 
     base_path = (base.path or "/").rstrip("/")
     if base_path in ("", "/"):
         return True
 
-    return (candidate.path or "/").startswith(base_path)
+    candidate_path = candidate.path or "/"
+    if candidate_path == base_path:
+        return True
+
+    boundary = f"{base_path}/"
+    return candidate_path.startswith(boundary)
 
 
 def get_internal_links(
