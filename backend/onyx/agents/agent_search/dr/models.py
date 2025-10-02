@@ -20,9 +20,14 @@ class OrchestratorDecisonsNoPlan(BaseModel):
     next_step: OrchestratorStep
 
 
+class ClaimAnalysisFriction(BaseModel):
+    description: str
+    claim_numbers: list[str]
+
+
 class ClaimTensionResponse(BaseModel):
-    contradictions: list[dict]
-    clarification_needs: list[dict]
+    contradictions: list[ClaimAnalysisFriction]
+    clarification_needs: list[ClaimAnalysisFriction]
 
 
 class OrchestrationPlan(BaseModel):

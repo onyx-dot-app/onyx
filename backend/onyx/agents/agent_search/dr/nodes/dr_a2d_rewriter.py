@@ -4,13 +4,16 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.models import ClaimTensionResponse
 from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.prompts.dr_prompts import CLAIM_CONTRADICTION_PROMPT
 from onyx.utils.logger import setup_logger
 
 
@@ -47,7 +50,7 @@ def rewriter(
 
     all_cited_documents = state.all_cited_documents
 
-    # iteration_responses = state.iteration_responses
+    state.iteration_responses
 
     claims: list[str] = []
 
@@ -65,16 +68,22 @@ def rewriter(
 
     print(claim_str)
 
-    # claim_tension_prompt = CLAIM_CONTRADICTION_PROMPT.build(
-    #     claim_str=claim_str,
-    # )
+    claim_tension_prompt = CLAIM_CONTRADICTION_PROMPT.build(
+        claim_str=claim_str,
+    )
 
-    # claim_tension_response = invoke_llm_json(
-    #     claim_tension_prompt,
-    #     model=graph_config.inputs.llm_config.model,
-    #     max_tokens=graph_config.inputs.llm_config.max_tokens,
-    #     schema=ClaimTensionResponse,
-    # )
+    claim_tension_response = invoke_llm_json(
+        llm=graph_config.tooling.primary_llm,
+        prompt=claim_tension_prompt,
+        max_tokens=graph_config.tooling.primary_llm.config.max_input_tokens,
+        schema=ClaimTensionResponse,
+    )
+
+    contradictions = claim_tension_response.contradictions
+    clarification_needs = claim_tension_response.clarification_needs
+
+    print(contradictions[0].description)
+    print(clarification_needs[0].description)
 
     return FinalUpdate(
         final_answer=final_answer,

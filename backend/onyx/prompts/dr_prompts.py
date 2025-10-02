@@ -1906,13 +1906,13 @@ Format:
 {{
     "contradictions": <a list of dictionaries, one for each contradiction. Each contradiction shopuld have the format:\
       {{
-        "contradiction": <contradiction description. This description will be sent to another tool for verification.>,
+        "description": <contradiction description. This description will be sent to another tool for verification.>,
         "claim_numbers": <the numbers of the claims that are in contradiction. These can be two or more.>
       }}>,
     "clarification_needs": <a list of clarification needs, one for each clarification. Each clarification shopuld have the \
 format:\
       {{
-        "clarification": <clarification description. This description will be sent to another tool for clarification.>,
+        "description": <clarification description. This description will be sent to another tool for clarification.>,
         "claim_numbers": <the numbers of the claims that are involved in the clarification requirement. These can be ONE or more.>
       }}>,
 }}
