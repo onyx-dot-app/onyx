@@ -5,6 +5,7 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
+from atlassian.errors import ApiError  # type: ignore
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
@@ -679,6 +680,14 @@ class ConfluenceConnector(
             raise UnexpectedValidationError(
                 f"Unexpected error while validating Confluence settings: {e}"
             )
+
+        if self.space:
+            try:
+                self.low_timeout_confluence_client.get_space(self.space)
+            except ApiError as e:
+                raise ConnectorValidationError(
+                    "Invalid Confluence space key provided"
+                ) from e
 
         if not spaces or not spaces.get("results"):
             raise ConnectorValidationError(
