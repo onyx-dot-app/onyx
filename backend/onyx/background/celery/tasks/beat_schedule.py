@@ -85,9 +85,9 @@ beat_task_templates: list[dict] = [
     {
         "name": "check-for-index-attempt-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
-        "schedule": timedelta(hours=1),
+        "schedule": timedelta(minutes=30),
         "options": {
-            "priority": OnyxCeleryPriority.LOW,
+            "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
