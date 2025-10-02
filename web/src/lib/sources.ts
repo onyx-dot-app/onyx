@@ -387,6 +387,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   user_file: {
+    // TODO: write docs for projects and link them here
     icon: FileIcon2,
     displayName: "File",
     category: SourceCategory.Other,
