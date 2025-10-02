@@ -130,6 +130,7 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -189,6 +190,7 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
 
   integration-tests:
     needs:
@@ -230,9 +232,9 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
@@ -257,7 +259,7 @@ jobs:
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
             cache \
@@ -273,7 +275,7 @@ jobs:
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -317,7 +319,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running integration tests for ${{ matrix.test-dir.path }}..."
-            docker run --rm --network onyx-stack_default \
+            docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
@@ -354,13 +356,13 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
 
       - name: Dump all-container logs (optional)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+          docker compose logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
         if: always()
@@ -374,7 +376,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+          docker compose down -v
 
 
   multitenant-tests:
@@ -405,9 +407,9 @@ jobs:
 
       - name: Pull Docker images
         run: |
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
           wait
           docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
           docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
@@ -423,7 +425,7 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           DEV_MODE=true \
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up \
+          docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
             cache \
@@ -438,7 +440,7 @@ jobs:
       - name: Wait for service to be ready (multi-tenant)
         run: |
           echo "Starting wait-for-service script for multi-tenant..."
-          docker logs -f onyx-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
           start_time=$(date +%s)
           timeout=300
           while true; do
@@ -464,7 +466,7 @@ jobs:
       - name: Run Multi-Tenant Integration Tests
         run: |
           echo "Running multi-tenant integration tests..."
-          docker run --rm --network onyx-stack_default \
+          docker run --rm --network onyx_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
@@ -493,13 +495,13 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server_multitenant.log || true
+          docker compose -f docker-compose.multitenant-dev.yml logs --no-color api_server > $GITHUB_WORKSPACE/api_server_multitenant.log || true
 
       - name: Dump all-container logs (multi-tenant)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
+          docker compose -f docker-compose.multitenant-dev.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
 
       - name: Upload logs (multi-tenant)
         if: always()
@@ -512,7 +514,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack down -v
+          docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required: 
     runs-on: blacksmith-2vcpu-ubuntu-2404-arm

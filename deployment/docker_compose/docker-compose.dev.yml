@@ -49,6 +49,8 @@ services:
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       - BING_API_KEY=${BING_API_KEY:-}
       - EXA_API_KEY=${EXA_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
       - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       # if set, allows for the use of the token budget system
@@ -115,7 +117,11 @@ services:
 
       # Analytics Configs
       - SENTRY_DSN=${SENTRY_DSN:-}
-
+      #DALL-E
+      - AZURE_DALLE_API_BASE=${AZURE_DALLE_API_BASE:-}
+      - AZURE_DALLE_API_KEY=${AZURE_DALLE_API_KEY:-}
+      - AZURE_DALLE_API_VERSION=${AZURE_DALLE_API_VERSION:-}
+      - AZURE_DALLE_DEPLOYMENT_NAME=${AZURE_DALLE_DEPLOYMENT_NAME:-}
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
 
@@ -186,6 +192,8 @@ services:
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       - BING_API_KEY=${BING_API_KEY:-}
       - EXA_API_KEY=${EXA_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
       - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
@@ -419,6 +427,7 @@ services:
   index:
     image: vespaengine/vespa:8.526.15
     restart: unless-stopped
+    pids_limit: 65535
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
