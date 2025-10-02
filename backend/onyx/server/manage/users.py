@@ -330,9 +330,7 @@ def download_users_csv(
     csv_content = output.getvalue()
     output.close()
 
-    # Generate filename with current timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"users_{timestamp}.csv"
+    filename = "users.csv"
 
     return StreamingResponse(
         io.BytesIO(csv_content.encode("utf-8")),
