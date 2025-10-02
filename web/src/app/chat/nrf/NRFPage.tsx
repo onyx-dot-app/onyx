@@ -24,7 +24,7 @@ import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
@@ -355,7 +355,6 @@ export default function NRFPage({
                 anonymousUserEnabled: null,
               }}
               nextUrl="/nrf"
-              searchParams={{}}
             />
           ) : (
             <div className="flex flex-col items-center">

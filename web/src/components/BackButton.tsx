@@ -1,31 +1,24 @@
 "use client";
 
+import SvgArrowLeft from "@/icons/arrow-left";
+import Button from "@/refresh-components/buttons/Button";
 import { useRouter } from "next/navigation";
 
-import { FiChevronLeft } from "react-icons/fi";
+export interface BackButtonProps {
+  behaviorOverride?: () => void;
+  routerOverride?: string;
+}
 
 export function BackButton({
   behaviorOverride,
   routerOverride,
-}: {
-  behaviorOverride?: () => void;
-  routerOverride?: string;
-}) {
+}: BackButtonProps) {
   const router = useRouter();
 
   return (
-    <div
-      className={`
-        my-auto 
-        flex 
-        mb-1 
-        hover:bg-accent-background 
-        w-fit 
-        p-1
-        pr-2 
-        cursor-pointer 
-        rounded-lg 
-        text-sm`}
+    <Button
+      leftIcon={SvgArrowLeft}
+      tertiary
       onClick={() => {
         if (behaviorOverride) {
           behaviorOverride();
@@ -36,8 +29,7 @@ export function BackButton({
         }
       }}
     >
-      <FiChevronLeft className="mr-1 my-auto" />
       Back
-    </div>
+    </Button>
   );
 }

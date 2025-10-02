@@ -1,7 +1,7 @@
 "use client";
 
 import * as Yup from "yup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Form, Formik } from "formik";
@@ -153,14 +153,7 @@ export const CreateRateLimitModal = ({
               type="number"
               placeholder=""
             />
-            <Button
-              type="submit"
-              variant="submit"
-              size="sm"
-              disabled={isSubmitting}
-            >
-              Create!
-            </Button>
+            <Button disabled={isSubmitting}>Create</Button>
           </Form>
         )}
       </Formik>

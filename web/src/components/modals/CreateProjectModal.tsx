@@ -1,94 +1,77 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { FolderPlus } from "lucide-react";
+import { useRef } from "react";
+import Button from "@/refresh-components/buttons/Button";
+import SvgFolderPlus from "@/icons/folder-plus";
+import CoreModal from "@/refresh-components/modals/CoreModal";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useEscape, useKeyPress } from "@/hooks/useKeyPress";
+import FieldInput from "@/refresh-components/inputs/FieldInput";
+import { useAppRouter } from "@/hooks/appNavigation";
+import Text from "@/refresh-components/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
 
-interface CreateProjectModalProps {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  onCreate?: (name: string) => void | Promise<void>;
-}
+export default function CreateProjectModal() {
+  const { createProject } = useProjectsContext();
+  const { toggleModal, isOpen } = useModal();
+  const fieldInputRef = useRef<HTMLInputElement>(null);
+  const route = useAppRouter();
+  const onClose = () => toggleModal(ModalIds.CreateProjectModal, false);
+  const open = isOpen(ModalIds.CreateProjectModal);
 
-export default function CreateProjectModal({
-  open,
-  setOpen,
-  onCreate,
-}: CreateProjectModalProps) {
-  const [projectName, setProjectName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    const name = projectName.trim();
+  async function handleSubmit() {
+    if (!fieldInputRef.current) return;
+    const name = fieldInputRef.current.value.trim();
     if (!name) return;
-    try {
-      setIsSubmitting(true);
-      await onCreate?.(name);
-      setOpen(false);
-      setProjectName("");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+    try {
+      const newProject = await createProject(name);
+      route({ projectId: newProject.id });
+    } catch (e) {
+      console.error(`Failed to create the project ${name}`);
     }
-  };
+
+    toggleModal(ModalIds.CreateProjectModal, false);
+  }
+
+  useKeyPress(handleSubmit, "Enter", open);
+  useEscape(onClose, open);
+
+  if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-[95%] max-w-2xl">
-        <DialogHeader>
-          <FolderPlus size={26} className="mb-2" />
-          <DialogTitle>Create New Project</DialogTitle>
-          <DialogDescription>
-            Projects help keep your chats organized. Add files and instructions
-            to easily start new conversations on the same topic.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="bg-background-100 dark:bg-transparent -mx-6 px-6 py-4 space-y-2">
-          <Label htmlFor="project-name">Project Name</Label>
-          <Input
-            id="project-name"
-            autoFocus
-            autoComplete="off"
-            placeholder="What are you working on?"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            removeFocusRing
-          />
+    <CoreModal
+      className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
+      onClickOutside={() => onClose()}
+    >
+      <div className="flex flex-col items-center justify-center gap-spacing-interline p-spacing-paragraph">
+        <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
+          <SvgFolderPlus className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+          <IconButton icon={SvgX} internal onClick={onClose} />
         </div>
-        <div className="flex justify-end gap-3 pt-2 w-full">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setOpen(false)}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || projectName.trim().length === 0}
-          >
-            Create Project
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        <Text headingH3 text04 className="w-full text-left">
+          Create New Project
+        </Text>
+        <Text text03>
+          Use projects to organize your files and chats in one place, and add
+          custom instructions for ongoing work.
+        </Text>
+      </div>
+      <div className="bg-background-tint-01 p-spacing-paragraph">
+        <FieldInput
+          label="Project Name"
+          placeholder="What are you working on?"
+          ref={fieldInputRef}
+        />
+      </div>
+      <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">
+        <Button secondary onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit}>Create Project</Button>
+      </div>
+    </CoreModal>
   );
 }

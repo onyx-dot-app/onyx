@@ -31,7 +31,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useSourcePreferences } from "@/lib/hooks";
+import { FilterManager, useFilters, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -46,8 +46,11 @@ import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useTheme } from "next-themes";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgSliders from "@/icons/sliders";
+import Text from "@/refresh-components/Text";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -199,7 +202,7 @@ export function ActionItem({
         </TooltipTrigger>
         {tool?.description && (
           <TooltipContent side="left" width="max-w-xs">
-            <p className="text-wrap">{tool.description}</p>
+            <Text inverted>{tool.description}</Text>
           </TooltipContent>
         )}
       </Tooltip>
@@ -446,14 +449,13 @@ function MCPToolsList({
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
   availableSources?: ValidSources[];
-  filterManager: FilterManager;
 }
 
 export function ActionToggle({
   selectedAssistant,
   availableSources = [],
-  filterManager,
 }: ActionToggleProps) {
+  const filterManager = useFilters();
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [showSourceManagement, setShowSourceManagement] = useState(false);
@@ -464,17 +466,12 @@ export function ActionToggle({
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
 
-  const {
-    sourcesInitialized,
-    enableAllSources,
-    disableAllSources,
-    toggleSource,
-    isSourceEnabled,
-  } = useSourcePreferences({
-    availableSources,
-    selectedSources,
-    setSelectedSources,
-  });
+  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
+    useSourcePreferences({
+      availableSources,
+      selectedSources,
+      setSelectedSources,
+    });
   const [mcpToolsPopup, setMcpToolsPopup] = useState<{
     serverId: number | null;
     serverName: string;
@@ -809,30 +806,14 @@ export function ActionToggle({
         }}
       >
         <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="
-            relative 
-            cursor-pointer 
-            flex 
-            items-center justify-center leading-none
-            group 
-            rounded-lg 
-            text-input-text 
-            hover:bg-background-chat-hover 
-            hover:text-neutral-900 
-            dark:hover:text-neutral-50
-            p-2
-            flex-none 
-            whitespace-nowrap 
-            overflow-hidden 
-            focus:outline-none
-          "
-            data-testid="action-management-toggle"
-            title={open ? undefined : "Configure actions"}
-          >
-            <SlidersVerticalIcon size={16} className="block flex-none" />
-          </button>
+          <div>
+            <IconButton
+              icon={SvgSliders}
+              tertiary
+              data-testid="action-management-toggle"
+              tooltip="Manage Actions"
+            />
+          </div>
         </PopoverTrigger>
         <PopoverContent
           data-testid="tool-options"

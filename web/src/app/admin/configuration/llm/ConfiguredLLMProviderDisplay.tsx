@@ -7,7 +7,7 @@ import { useState } from "react";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
@@ -123,7 +123,8 @@ function LLMProviderDisplay({
 
         <div className="ml-auto">
           <Button
-            variant={existingLlmProvider ? "success-reverse" : "navigate"}
+            action={!existingLlmProvider}
+            secondary={!!existingLlmProvider}
             onClick={() => setFormIsVisible(true)}
           >
             {existingLlmProvider ? "Edit" : "Set up"}

@@ -1,11 +1,10 @@
 import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/Text";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
-import { FiTrash } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
@@ -24,6 +23,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import SvgTrash from "@/icons/trash";
 
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
@@ -511,7 +511,6 @@ export function LLMProviderUpdateForm({
           {llmProviderDescriptor.name === "bedrock" && (
             <div className="flex flex-col gap-2">
               <Button
-                type="button"
                 onClick={() =>
                   fetchBedrockModels(
                     formikProps.values,
@@ -522,12 +521,12 @@ export function LLMProviderUpdateForm({
                   isFetchingModels ||
                   !formikProps.values.custom_config?.AWS_REGION_NAME
                 }
-                className="w-fit"
               >
                 {isFetchingModels ? (
                   <>
-                    <LoadingAnimation size="text-sm" />
-                    <span className="ml-2">Fetching Models...</span>
+                    <Text inverted>
+                      <LoadingAnimation text="Fetching Models" />
+                    </Text>
                   </>
                 ) : (
                   "Fetch Available Models for Region"
@@ -535,10 +534,12 @@ export function LLMProviderUpdateForm({
               </Button>
 
               {fetchModelsError && (
-                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+                <Text secondaryBody className="text-action-danger-05">
+                  {fetchModelsError}
+                </Text>
               )}
 
-              <Text className="text-sm text-gray-600">
+              <Text secondaryBody>
                 Enter your AWS region, then click this button to fetch available
                 Bedrock models.
                 <br />
@@ -659,10 +660,12 @@ export function LLMProviderUpdateForm({
           {/* NOTE: this is above the test button to make sure it's visible */}
           {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-          <div className="flex w-full mt-4">
-            <Button type="submit" variant="submit">
+          <div className="flex w-full mt-4 gap-spacing-interline">
+            <Button disabled={isTesting}>
               {isTesting ? (
-                <LoadingAnimation text="Testing" />
+                <Text inverted>
+                  <LoadingAnimation text="Testing" />
+                </Text>
               ) : existingLlmProvider ? (
                 "Update"
               ) : (
@@ -671,10 +674,8 @@ export function LLMProviderUpdateForm({
             </Button>
             {existingLlmProvider && (
               <Button
-                type="button"
-                variant="destructive"
-                className="ml-3"
-                icon={FiTrash}
+                danger
+                leftIcon={SvgTrash}
                 onClick={async () => {
                   const response = await fetch(
                     `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,

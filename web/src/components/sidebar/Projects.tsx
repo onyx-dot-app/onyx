@@ -1,353 +1,198 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import React, { useState } from "react";
 import {
-  Plus,
-  Folder as FolderIcon,
-  FileText,
-  FolderOpen,
-  FolderPlus,
-  Pencil,
-  Trash2,
-  Check,
-  X,
-} from "lucide-react";
-import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import { DeleteEntityModal } from "@/components/DeleteEntityModal";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import type { ChatSession } from "@/app/chat/interfaces";
-import { ChatSessionDisplay } from "./ChatSessionDisplay";
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+  Project,
+  useProjectsContext,
+} from "@/app/chat/projects/ProjectsContext";
+import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Text from "@/refresh-components/Text";
+import SvgFolder from "@/icons/folder";
+import SvgEdit from "@/icons/edit";
+import { PopoverMenu } from "@/components/ui/popover";
+import SvgTrash from "@/icons/trash";
+import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import Button from "@/refresh-components/buttons/Button";
+import { ChatButton } from "@/sections/sidebar/AppSidebar";
+import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
+import SvgFolderPlus from "@/icons/folder-plus";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { cn, noProp } from "@/lib/utils";
+import { OpenFolderIcon } from "@/components/icons/CustomIcons";
+import { SvgProps } from "@/icons";
+import { useDroppable } from "@dnd-kit/core";
 
-interface ProjectsProps {
-  onOpenProject?: (projectId: string) => void;
+interface ProjectFolderProps {
+  project: Project;
 }
 
-function CollapsibleFolder({
-  title,
-  children,
-  defaultOpen = true,
-  onToggle,
-  onNameClick,
-  onRename,
-  onDeleteClick,
-  isSelected,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  onToggle?: (open: boolean) => void;
-  onNameClick?: () => void;
-  onRename?: (newName: string) => Promise<void> | void;
-  onDeleteClick?: () => void;
-  isSelected?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [hoveringIcon, setHoveringIcon] = useState(false);
+function ProjectFolder({ project }: ProjectFolderProps) {
+  const route = useAppRouter();
+  const params = useAppParams();
+  const [open, setOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
+    useState(false);
+  const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(title);
-  const [isSaving, setIsSaving] = useState(false);
+  const [name, setName] = useState(project.name);
+
+  // Make project droppable
+  const dropId = `project-${project.id}`;
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId,
+    data: {
+      type: "project",
+      project,
+    },
+  });
+
+  async function submitRename(renamedValue: string) {
+    const newName = renamedValue.trim();
+    if (newName === "") return;
+
+    setName(newName);
+    setIsEditing(false);
+    await renameProject(project.id, newName);
+  }
+
+  // Determine which icon to show based on open/closed state and hover
+  const getFolderIcon = (): React.FunctionComponent<SvgProps> => {
+    if (open) {
+      return isHovering
+        ? SvgFolder
+        : (OpenFolderIcon as React.FunctionComponent<SvgProps>);
+    } else {
+      return isHovering
+        ? (OpenFolderIcon as React.FunctionComponent<SvgProps>)
+        : SvgFolder;
+    }
+  };
+
+  const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setOpen((prev) => !prev);
+  };
+
+  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    route({ projectId: project.id });
+  };
+
   return (
-    <div className="w-full">
+    <>
+      {/* Confirmation Modal (only for deletion) */}
+      {deleteConfirmationModalOpen && (
+        <ConfirmationModal
+          title="Delete Project"
+          icon={SvgTrash}
+          onClose={() => setDeleteConfirmationModalOpen(false)}
+          description="Are you sure you want to delete this project? This action cannot be undone."
+        >
+          <div className="flex flex-row justify-end items-center gap-spacing-interline">
+            <Button
+              onClick={() => setDeleteConfirmationModalOpen(false)}
+              secondary
+            >
+              Cancel
+            </Button>
+            <Button
+              danger
+              onClick={() => {
+                setDeleteConfirmationModalOpen(false);
+                deleteProject(project.id);
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </ConfirmationModal>
+      )}
+
+      {/* Project Folder */}
       <div
-        className={`w-full group flex items-center gap-x-1 px-1 rounded-md hover:bg-background-chat-hover ${isSelected ? "bg-background-chat-selected" : ""}`}
-      >
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() =>
-            setOpen((v) => {
-              const next = !v;
-              onToggle?.(next);
-              return next;
-            })
-          }
-          onMouseEnter={() => setHoveringIcon(true)}
-          onMouseLeave={() => setHoveringIcon(false)}
-          className="cursor-pointer text-base rounded-md p-1"
-        >
-          {open || hoveringIcon ? (
-            <FolderOpen
-              size={18}
-              className="flex-none text-text-history-sidebar-button"
-            />
-          ) : (
-            <FolderIcon
-              size={18}
-              className="flex-none text-text-history-sidebar-button"
-            />
-          )}
-        </button>
-        {isEditing ? (
-          <input
-            className="w-full text-base bg-transparent outline-none text-black dark:text-[#D4D4D4] py-1 rounded-md border-b border-transparent focus:border-accent-background-hovered"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={async (e) => {
-              if (e.key === "Enter") {
-                if (!onRename) return;
-                const nextName = editValue.trim();
-                if (!nextName || nextName === title) {
-                  setIsEditing(false);
-                  setEditValue(title);
-                  return;
-                }
-                try {
-                  setIsSaving(true);
-                  await onRename(nextName);
-                } finally {
-                  setIsSaving(false);
-                  setIsEditing(false);
-                }
-              } else if (e.key === "Escape") {
-                setIsEditing(false);
-                setEditValue(title);
-              }
-            }}
-            autoFocus
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setOpen((v) => {
-                const next = !v;
-                onToggle?.(next);
-                return next;
-              });
-              onNameClick?.();
-            }}
-            className="w-full text-left text-base text-black dark:text-[#D4D4D4] py-1  rounded-md"
-          >
-            <span className="truncate">{title}</span>
-          </button>
+        ref={setNodeRef}
+        className={cn(
+          "transition-colors duration-200",
+          isOver && "bg-background-tint-03 rounded-08"
         )}
-        <div
-          className={`ml-2 flex items-center gap-x-1 transition-opacity ${isEditing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-        >
-          {isEditing ? (
-            <>
-              <button
-                type="button"
-                aria-label="Save name"
-                disabled={isSaving}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (!onRename) return;
-                  const nextName = editValue.trim();
-                  if (!nextName || nextName === title) {
-                    setIsEditing(false);
-                    setEditValue(title);
-                    return;
-                  }
-                  try {
-                    setIsSaving(true);
-                    await onRename(nextName);
-                  } finally {
-                    setIsSaving(false);
-                    setIsEditing(false);
-                  }
-                }}
-                className="p-1 rounded hover:bg-accent-background-hovered text-green-600 disabled:opacity-50"
-              >
-                <Check size={16} />
-              </button>
-              <button
-                type="button"
-                aria-label="Cancel rename"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditing(false);
-                  setEditValue(title);
-                }}
-                className="p-1 rounded hover:bg-accent-background-hovered text-red-600"
-              >
-                <X size={16} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                aria-label="Rename project"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditing(true);
-                  setEditValue(title);
-                }}
-                className="p-1 rounded hover:bg-accent-background-hovered text-text-history-sidebar-button"
-              >
-                <Pencil size={16} />
-              </button>
-              {onDeleteClick && (
-                <button
-                  type="button"
-                  aria-label="Delete project"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteClick();
-                  }}
-                  className="p-1 rounded hover:bg-accent-background-hovered text-text-history-sidebar-button"
+      >
+        <NavigationTab
+          icon={getFolderIcon()}
+          active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
+          onIconClick={handleIconClick}
+          onIconHover={setIsHovering}
+          onTextClick={handleTextClick}
+          popover={
+            <PopoverMenu>
+              {[
+                <NavigationTab
+                  key="rename-project"
+                  icon={SvgEdit}
+                  onClick={noProp(() => setIsEditing(true))}
                 >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
+                  Rename Project
+                </NavigationTab>,
+                null,
+                <NavigationTab
+                  key="delete-project"
+                  icon={SvgTrash}
+                  onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+                  danger
+                >
+                  Delete Project
+                </NavigationTab>,
+              ]}
+            </PopoverMenu>
+          }
+          renaming={isEditing}
+          setRenaming={setIsEditing}
+          submitRename={submitRename}
+        >
+          {name}
+        </NavigationTab>
       </div>
 
-      <div
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
-          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="pl-6 pr-2 py-1 space-y-1">{children}</div>
+      {/* Project Chat-Sessions */}
+      {open &&
+        project.chat_sessions.map((chatSession) => (
+          <ChatButton
+            key={chatSession.id}
+            chatSession={chatSession}
+            project={project}
+            draggable
+          />
+        ))}
+      {open && project.chat_sessions.length === 0 && (
+        <div className="flex justify-center items-center">
+          <Text mainMuted text01>
+            No chat sessions yet.
+          </Text>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
-export default function Projects({ onOpenProject }: ProjectsProps) {
-  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
-  const {
-    createProject,
-    projects,
-    currentProjectId,
-    currentProjectDetails,
-    renameProject,
-    deleteProject,
-  } = useProjectsContext();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const chatSessionId = searchParams?.get("chatId");
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: number;
-    name: string;
-  } | null>(null);
+export default function Projects() {
+  const { projects } = useProjectsContext();
+  const { toggleModal } = useModal();
   return (
-    <div className="flex flex-col">
-      <div className="group flex justify-between px-4 ">
-        <p className="my-auto font-normal text-sm leading-normal text-text-500/80 dark:text-[#D4D4D4]">
-          Projects
-        </p>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="Create project"
-                onClick={() => setIsCreateProjectOpen(true)}
-                className={cn(
-                  "p-1.5",
-                  "group-hover:opacity-100",
-                  "opacity-0",
-                  "transition",
-                  "duration-200",
-                  "cursor-pointer",
-                  "hover:bg-accent-background-hovered",
-                  "rounded-md"
-                )}
-              >
-                <FolderPlus size={18} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Create Project</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+    <>
+      {projects.map((project) => (
+        <ProjectFolder key={project.id} project={project} />
+      ))}
 
-      <div className="ml-2 px-2 gap-y-1 flex flex-col text-text-history-sidebar-button items-center">
-        {projects.map((p) => (
-          <CollapsibleFolder
-            key={p.id}
-            title={p.name}
-            defaultOpen={false}
-            isSelected={p.id == currentProjectId}
-            onNameClick={() => {
-              const params = new URLSearchParams(
-                searchParams?.toString() || ""
-              );
-              // Set the new project ID and remove any assistant selection
-              params.set("projectid", String(p.id));
-              if (params.has("assistantId")) {
-                params.delete("assistantId");
-              }
-              if (params.has("chatId")) {
-                params.delete("chatId");
-              }
-              router.push(`${pathname}?${params.toString()}`);
-            }}
-            onRename={async (newName: string) => {
-              await renameProject(p.id, newName);
-            }}
-            onDeleteClick={() => {
-              setDeleteTarget({ id: p.id, name: p.name });
-            }}
-          >
-            {p.chat_sessions && p.chat_sessions.length > 0 ? (
-              p.chat_sessions.map((chatSession) => (
-                <ChatSessionDisplay
-                  key={chatSession.id}
-                  chatSession={chatSession}
-                  isSelected={chatSession.id == chatSessionId}
-                  showDragHandle={false}
-                  projectId={p.id}
-                  isCustomAssistant={
-                    currentProjectId === p.id &&
-                    !!currentProjectDetails?.persona_id_to_is_default &&
-                    currentProjectDetails.persona_id_to_is_default[
-                      chatSession.persona_id
-                    ] === false
-                  }
-                />
-              ))
-            ) : (
-              <div className="text-xs text-neutral-500 px-2 py-1">
-                This project doesn’t have any chat sessions yet.
-              </div>
-            )}
-          </CollapsibleFolder>
-        ))}
-        {projects.length === 0 && (
-          <p className="text-xs text-neutral-500 px-2">No projects yet.</p>
-        )}
-      </div>
-      <CreateProjectModal
-        open={isCreateProjectOpen}
-        setOpen={setIsCreateProjectOpen}
-        onCreate={async (_name) => {
-          await createProject(_name);
-        }}
-      />
-      <DeleteEntityModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={async () => {
-          if (!deleteTarget) return;
-          const targetId = deleteTarget.id;
-          await deleteProject(targetId);
-          setDeleteTarget(null);
-          const params = new URLSearchParams(searchParams?.toString() || "");
-          if (params.get("projectid") === String(targetId)) {
-            params.delete("projectid");
-            if (params.has("chatId")) params.delete("chatId");
-            router.push(`${pathname}?${params.toString()}`);
-          }
-        }}
-        entityType="folder"
-        entityName={deleteTarget?.name || ""}
-      />
-    </div>
+      {projects.length === 0 && (
+        <NavigationTab
+          icon={SvgFolderPlus}
+          onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+          lowlight
+        >
+          New Project
+        </NavigationTab>
+      )}
+    </>
   );
 }

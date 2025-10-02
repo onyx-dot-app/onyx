@@ -228,16 +228,15 @@ export function ChatSessionDisplay({
                         </div>
                       </CustomTooltip>
                     )}
-                    {isHovered && (
-                      <ChatSessionMorePopup
-                        chatSession={chatSession}
-                        projectId={projectId}
-                        isRenamingChat={isRenamingChat}
-                        setIsRenamingChat={setIsRenamingChat}
-                        showShareModal={showShareModal}
-                        search={search}
-                      />
-                    )}
+                    <ChatSessionMorePopup
+                      chatSession={chatSession}
+                      projectId={projectId}
+                      isRenamingChat={isRenamingChat}
+                      setIsRenamingChat={setIsRenamingChat}
+                      showShareModal={showShareModal}
+                      search={search}
+                      isVisible={isHovered}
+                    />
                   </div>
                 )}
               </div>

@@ -1,0 +1,915 @@
+"use client";
+
+import React, { useCallback, useState, memo, useMemo, useEffect } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { OnyxLogoTypeIcon, OnyxIcon } from "@/components/icons/icons";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import Text from "@/refresh-components/Text";
+import { DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  pointerWithin,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  restrictToFirstScrollableAncestor,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import SvgSidebar from "@/icons/sidebar";
+import SvgEditBig from "@/icons/edit-big";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
+import SvgLightbulbSimple from "@/icons/lightbulb-simple";
+import Settings from "@/sections/sidebar/Settings";
+import { SidebarSection } from "@/sections/sidebar/components";
+import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import AgentsModal from "@/sections/AgentsModal";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import SvgBubbleText from "@/icons/bubble-text";
+import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import { ChatSession } from "@/app/chat/interfaces";
+import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import SvgTrash from "@/icons/trash";
+import SvgShare from "@/icons/share";
+import SvgEdit from "@/icons/edit";
+import Button from "@/refresh-components/buttons/Button";
+import SvgPin from "@/icons/pin";
+import { cn, noProp } from "@/lib/utils";
+import { PopoverMenu } from "@/components/ui/popover";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgFolderPlus from "@/icons/folder-plus";
+import SvgOnyxOctagon from "@/icons/onyx-octagon";
+import Projects from "@/components/sidebar/Projects";
+import CreateProjectModal from "@/components/modals/CreateProjectModal";
+import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import {
+  Project,
+  moveChatSession,
+  removeChatSessionFromProject,
+} from "@/app/chat/projects/projectsService";
+import { useSearchParams } from "next/navigation";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import SvgFolderIn from "@/icons/folder-in";
+import SvgFolder from "@/icons/folder";
+import SvgChevronLeft from "@/icons/chevron-left";
+import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import { UNNAMED_CHAT } from "@/lib/constants";
+import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import { usePopup } from "@/components/admin/connectors/Popup";
+
+import {
+  DRAG_TYPES,
+  LOCAL_STORAGE_KEYS,
+  DEFAULT_PERSONA_ID,
+} from "./constants";
+import {
+  shouldShowMoveModal,
+  showErrorNotification,
+  handleMoveOperation,
+} from "./sidebarUtils";
+
+// Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
+// OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
+function buildVisibleAgents(
+  pinnedAgents: MinimalPersonaSnapshot[],
+  currentAgent: MinimalPersonaSnapshot | null
+): [MinimalPersonaSnapshot[], boolean] {
+  if (!currentAgent) return [pinnedAgents, false];
+  const currentAgentIsPinned = pinnedAgents.some(
+    (pinnedAgent) => pinnedAgent.id === currentAgent.id
+  );
+  const visibleAgents = currentAgentIsPinned
+    ? pinnedAgents
+    : [...pinnedAgents, currentAgent];
+  return [visibleAgents, currentAgentIsPinned];
+}
+
+export interface PopoverSearchInputProps {
+  setShowMoveOptions: (show: boolean) => void;
+  onSearch: (term: string) => void;
+}
+
+export function PopoverSearchInput({
+  setShowMoveOptions,
+  onSearch,
+}: PopoverSearchInputProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    onSearch(value);
+  };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setShowMoveOptions(false);
+    }
+  };
+
+  const handleClickBackButton = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    setShowMoveOptions(false);
+    setSearchTerm("");
+  };
+
+  return (
+    <div className="flex flex-row justify-center items-center p-spacing-inline gap-spacing-inline rounded-08 bg-transparent w-full">
+      <div className="flex-1 h-[1.8rem] flex flex-row items-center gap-spacing-interline">
+        <button
+          className="w-[1.2rem] h-[1.2rem] flex items-center justify-center"
+          onClick={handleClickBackButton}
+        >
+          <SvgChevronLeft className="h-[1.2rem] w-[1.2rem] stroke-text-02 hover:stroke-text-03" />
+        </button>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Search Projects"
+          className="bg-transparent outline-none resize-none overflow-x-hidden overflow-y-hidden whitespace-nowrap no-scrollbar font-main-body w-full text-text-03 placeholder-text-02"
+          onClick={noProp()}
+          autoFocus
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ChatButtonProps {
+  chatSession: ChatSession;
+  project?: Project;
+  draggable?: boolean;
+}
+
+function ChatButtonInner({
+  chatSession,
+  project,
+  draggable = false,
+}: ChatButtonProps) {
+  const route = useAppRouter();
+  const params = useAppParams();
+  const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
+  const [renaming, setRenaming] = useState(false);
+  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
+    useState(false);
+  const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const { refreshChatSessions } = useChatContext();
+  const {
+    refreshCurrentProjectDetails,
+    projects,
+    fetchProjects,
+    currentProjectId,
+  } = useProjectsContext();
+
+  const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
+    number | null
+  >(null);
+  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
+    useState(false);
+  const isChatUsingDefaultAssistant =
+    chatSession.persona_id === DEFAULT_PERSONA_ID;
+
+  // Drag and drop setup for chat sessions
+  const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
+
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm) return projects;
+    const term = searchTerm.toLowerCase();
+    return projects.filter((project) =>
+      project.name.toLowerCase().includes(term)
+    );
+  }, [projects, searchTerm]);
+
+  async function submitRename(renamingValue: string) {
+    const newName = renamingValue.trim();
+    if (newName === "" || newName === chatSession.name) return;
+
+    setName(newName);
+    try {
+      await renameChatSession(chatSession.id, newName);
+      await refreshChatSessions();
+    } catch (error) {
+      console.error("Failed to rename chat:", error);
+    }
+  }
+
+  useEffect(() => {
+    if (!showMoveOptions) {
+      const popoverItems = [
+        <NavigationTab key="share" icon={SvgShare} onClick={noProp()}>
+          Share
+        </NavigationTab>,
+        <NavigationTab
+          key="rename"
+          icon={SvgEdit}
+          onClick={noProp(() => setRenaming(true))}
+        >
+          Rename
+        </NavigationTab>,
+        <NavigationTab
+          key="move"
+          icon={SvgFolderIn}
+          onClick={noProp(() => setShowMoveOptions(true))}
+        >
+          Move to Project
+        </NavigationTab>,
+        project && (
+          <NavigationTab
+            key="remove"
+            icon={SvgFolder}
+            onClick={noProp(() => handleRemoveFromProject())}
+          >
+            {`Remove from ${project.name}`}
+          </NavigationTab>
+        ),
+        null,
+        <NavigationTab
+          key="delete"
+          icon={SvgTrash}
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+          danger
+        >
+          Delete
+        </NavigationTab>,
+      ];
+      setPopoverItems(popoverItems);
+    } else {
+      const popoverItems = [
+        <PopoverSearchInput
+          key="search"
+          setShowMoveOptions={setShowMoveOptions}
+          onSearch={setSearchTerm}
+        />,
+        ...filteredProjects
+          .filter((candidateProject) => candidateProject.id !== project?.id)
+          .map((targetProject) => (
+            <NavigationTab
+              key={targetProject.id}
+              icon={SvgFolder}
+              onClick={noProp(() => handleChatMove(targetProject))}
+            >
+              {targetProject.name}
+            </NavigationTab>
+          )),
+      ];
+      setPopoverItems(popoverItems);
+    }
+  }, [
+    showMoveOptions,
+    filteredProjects,
+    refreshChatSessions,
+    fetchProjects,
+    currentProjectId,
+    refreshCurrentProjectDetails,
+    project,
+    chatSession.id,
+  ]);
+
+  const { popup, setPopup } = usePopup();
+
+  async function handleChatDelete() {
+    try {
+      await deleteChatSession(chatSession.id);
+
+      if (project) {
+        await fetchProjects();
+        await refreshCurrentProjectDetails();
+
+        // Only route if the deleted chat is the currently opened chat session
+        if (params(SEARCH_PARAM_NAMES.CHAT_ID) == chatSession.id) {
+          route({ projectId: project.id });
+        }
+      }
+      await refreshChatSessions();
+    } catch (error) {
+      console.error("Failed to delete chat:", error);
+      showErrorNotification(
+        setPopup,
+        "Failed to delete chat. Please try again."
+      );
+    }
+  }
+
+  async function performMove(targetProjectId: number) {
+    try {
+      await moveChatSession(targetProjectId, chatSession.id);
+      await handleMoveOperation(
+        {
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        },
+        setPopup
+      );
+      setShowMoveOptions(false);
+      setSearchTerm("");
+    } catch (error) {
+      // handleMoveOperation already handles error notification
+      console.error("Failed to move chat:", error);
+    }
+  }
+
+  async function handleChatMove(targetProject: Project) {
+    if (shouldShowMoveModal(chatSession)) {
+      setPendingMoveProjectId(targetProject.id);
+      setShowMoveCustomAgentModal(true);
+      return;
+    }
+
+    await performMove(targetProject.id);
+  }
+
+  async function handleRemoveFromProject() {
+    try {
+      await removeChatSessionFromProject(chatSession.id);
+      const projectRefreshPromise = currentProjectId
+        ? refreshCurrentProjectDetails()
+        : fetchProjects();
+      await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+      setShowMoveOptions(false);
+      setSearchTerm("");
+    } catch (error) {
+      console.error("Failed to remove chat from project:", error);
+    }
+  }
+
+  const navTab = (
+    <NavigationTab
+      icon={project ? () => <></> : SvgBubbleText}
+      onClick={() => route({ chatSessionId: chatSession.id })}
+      active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+      popover={<PopoverMenu>{popoverItems}</PopoverMenu>}
+      onPopoverChange={(open) => !open && setShowMoveOptions(false)}
+      renaming={renaming}
+      setRenaming={setRenaming}
+      submitRename={submitRename}
+    >
+      {name}
+    </NavigationTab>
+  );
+
+  return (
+    <>
+      {deleteConfirmationModalOpen && (
+        <ConfirmationModal
+          title="Delete Chat"
+          icon={SvgTrash}
+          description="Are you sure you want to delete this chat? This action cannot be undone."
+          onClose={() => setDeleteConfirmationModalOpen(false)}
+        >
+          <div className="flex flex-row justify-end items-center gap-spacing-interline">
+            <Button
+              onClick={() => setDeleteConfirmationModalOpen(false)}
+              secondary
+            >
+              Cancel
+            </Button>
+            <Button
+              danger
+              onClick={() => {
+                setDeleteConfirmationModalOpen(false);
+                handleChatDelete();
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </ConfirmationModal>
+      )}
+
+      <MoveCustomAgentChatModal
+        isOpen={showMoveCustomAgentModal}
+        onCancel={() => {
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveProjectId(null);
+        }}
+        onConfirm={async (doNotShowAgain: boolean) => {
+          if (doNotShowAgain && typeof window !== "undefined") {
+            window.localStorage.setItem(
+              LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
+              "true"
+            );
+          }
+          const target = pendingMoveProjectId;
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveProjectId(null);
+          if (target != null) {
+            await performMove(target);
+          }
+        }}
+      />
+
+      {draggable ? (
+        <div
+          ref={setNodeRef}
+          style={{
+            transform: transform
+              ? `translate3d(0px, ${transform.y}px, 0)`
+              : undefined,
+            opacity: isDragging ? 0.5 : 1,
+          }}
+          {...attributes}
+          {...listeners}
+        >
+          {navTab}
+        </div>
+      ) : (
+        navTab
+      )}
+    </>
+  );
+}
+
+export const ChatButton = memo(ChatButtonInner);
+
+interface AgentsButtonProps {
+  visibleAgent: MinimalPersonaSnapshot;
+}
+
+function AgentsButtonInner({ visibleAgent }: AgentsButtonProps) {
+  const route = useAppRouter();
+  const params = useAppParams();
+  const { currentAgent, pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const pinned = pinnedAgents.some(
+    (pinnedAgent) => pinnedAgent.id === visibleAgent.id
+  );
+
+  return (
+    <SortableItem id={visibleAgent.id}>
+      <div className="flex flex-col w-full h-full">
+        <NavigationTab
+          key={visibleAgent.id}
+          icon={SvgLightbulbSimple}
+          onClick={() => route({ agentId: visibleAgent.id })}
+          active={
+            params(SEARCH_PARAM_NAMES.PERSONA_ID) === String(visibleAgent.id)
+          }
+          popover={
+            <PopoverMenu>
+              {[
+                <NavigationTab
+                  key="pin-unpin-chat"
+                  icon={SvgPin}
+                  onClick={noProp(() =>
+                    togglePinnedAgent(visibleAgent, !pinned)
+                  )}
+                >
+                  {pinned ? "Unpin chat" : "Pin chat"}
+                </NavigationTab>,
+              ]}
+            </PopoverMenu>
+          }
+          highlight
+        >
+          {visibleAgent.name}
+        </NavigationTab>
+      </div>
+    </SortableItem>
+  );
+}
+
+const AgentsButton = memo(AgentsButtonInner);
+
+interface RecentsSectionProps {
+  isHistoryEmpty: boolean;
+  chatSessions: ChatSession[];
+}
+
+function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: DRAG_TYPES.RECENTS,
+    data: {
+      type: DRAG_TYPES.RECENTS,
+    },
+  });
+
+  return (
+    <div ref={setNodeRef}>
+      <SidebarSection
+        title="Recents"
+        className={cn(
+          "transition-colors duration-200 rounded-08",
+          isOver && "bg-background-tint-03"
+        )}
+      >
+        {isHistoryEmpty ? (
+          <Text text01 className="px-padding-button">
+            Try sending a message! Your chat history will appear here.
+          </Text>
+        ) : (
+          chatSessions.map((chatSession) => (
+            <ChatButton
+              key={chatSession.id}
+              chatSession={chatSession}
+              draggable
+            />
+          ))
+        )}
+      </SidebarSection>
+    </div>
+  );
+}
+
+interface SortableItemProps {
+  id: number;
+  children?: React.ReactNode;
+}
+
+function SortableItem({ id, children }: SortableItemProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        ...(isDragging && { zIndex: 1000, position: "relative" as const }),
+      }}
+      {...attributes}
+      {...listeners}
+      className="flex items-center group"
+    >
+      {children}
+    </div>
+  );
+}
+
+function AppSidebarInner() {
+  const route = useAppRouter();
+  const searchParams = useSearchParams();
+  const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
+  const { folded, setFolded } = useAppSidebarContext();
+  const { toggleModal } = useModal();
+  const { chatSessions, refreshChatSessions } = useChatContext();
+  const combinedSettings = useSettingsContext();
+  const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
+    useProjectsContext();
+
+  // State for custom agent modal
+  const [pendingMoveChatSession, setPendingMoveChatSession] =
+    useState<ChatSession | null>(null);
+  const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
+    number | null
+  >(null);
+  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
+    useState(false);
+
+  const [visibleAgents, currentAgentIsPinned] = useMemo(
+    () => buildVisibleAgents(pinnedAgents, currentAgent),
+    [pinnedAgents, currentAgent]
+  );
+  const visibleAgentIds = useMemo(
+    () => visibleAgents.map((agent) => agent.id),
+    [visibleAgents]
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle agent drag and drop
+  const handleAgentDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+      if (active.id === over.id) return;
+
+      setPinnedAgents((prev) => {
+        const activeIndex = visibleAgentIds.findIndex(
+          (agentId) => agentId === active.id
+        );
+        const overIndex = visibleAgentIds.findIndex(
+          (agentId) => agentId === over.id
+        );
+
+        if (currentAgent && !currentAgentIsPinned) {
+          // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
+          // This is an indication that we WANT to pin this agent!
+          if (activeIndex === visibleAgentIds.length - 1) {
+            const prevWithVisible = [...prev, currentAgent];
+            return arrayMove(prevWithVisible, activeIndex, overIndex);
+          }
+        }
+
+        return arrayMove(prev, activeIndex, overIndex);
+      });
+    },
+    [visibleAgentIds, setPinnedAgents, currentAgent, currentAgentIsPinned]
+  );
+
+  // Perform the actual move
+  async function performChatMove(
+    targetProjectId: number,
+    chatSession: ChatSession
+  ) {
+    try {
+      await moveChatSession(targetProjectId, chatSession.id);
+      const projectRefreshPromise = currentProjectId
+        ? refreshCurrentProjectDetails()
+        : fetchProjects();
+      await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+    } catch (error) {
+      console.error("Failed to move chat:", error);
+    }
+  }
+
+  // Handle chat to project drag and drop
+  const handleChatProjectDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeData = active.data.current;
+      const overData = over.data.current;
+
+      // Check if we're dragging a chat onto a project
+      if (
+        activeData?.type === DRAG_TYPES.CHAT &&
+        overData?.type === DRAG_TYPES.PROJECT
+      ) {
+        const chatSession = activeData.chatSession as ChatSession;
+        const targetProject = overData.project as Project;
+        const sourceProjectId = activeData.projectId;
+
+        // Don't do anything if dropping on the same project
+        if (sourceProjectId === targetProject.id) {
+          return;
+        }
+
+        const hideModal =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem(
+            LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+          ) === "true";
+
+        const isChatUsingDefaultAssistant =
+          chatSession.persona_id === DEFAULT_PERSONA_ID;
+
+        if (!isChatUsingDefaultAssistant && !hideModal) {
+          setPendingMoveChatSession(chatSession);
+          setPendingMoveProjectId(targetProject.id);
+          setShowMoveCustomAgentModal(true);
+          return;
+        }
+
+        await performChatMove(targetProject.id, chatSession);
+      }
+
+      // Check if we're dragging a chat from a project to the Recents section
+      if (
+        activeData?.type === DRAG_TYPES.CHAT &&
+        overData?.type === DRAG_TYPES.RECENTS
+      ) {
+        const chatSession = activeData.chatSession as ChatSession;
+        const sourceProjectId = activeData.projectId;
+
+        // Only remove from project if it was in a project
+        if (sourceProjectId) {
+          try {
+            await removeChatSessionFromProject(chatSession.id);
+            const projectRefreshPromise = currentProjectId
+              ? refreshCurrentProjectDetails()
+              : fetchProjects();
+            await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+          } catch (error) {
+            console.error("Failed to remove chat from project:", error);
+          }
+        }
+      }
+    },
+    [
+      currentProjectId,
+      refreshChatSessions,
+      refreshCurrentProjectDetails,
+      fetchProjects,
+    ]
+  );
+
+  const isHistoryEmpty = useMemo(
+    () => !chatSessions || chatSessions.length === 0,
+    [chatSessions]
+  );
+
+  if (!combinedSettings) {
+    return null;
+  }
+
+  return (
+    <>
+      <AgentsModal />
+      <CreateProjectModal />
+
+      {/* Modal for moving custom agent chats */}
+      <MoveCustomAgentChatModal
+        isOpen={showMoveCustomAgentModal}
+        onCancel={() => {
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveChatSession(null);
+          setPendingMoveProjectId(null);
+        }}
+        onConfirm={async (doNotShowAgain: boolean) => {
+          if (doNotShowAgain && typeof window !== "undefined") {
+            window.localStorage.setItem(
+              LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
+              "true"
+            );
+          }
+          const chatSession = pendingMoveChatSession;
+          const projectId = pendingMoveProjectId;
+          setShowMoveCustomAgentModal(false);
+          setPendingMoveChatSession(null);
+          setPendingMoveProjectId(null);
+          if (chatSession && projectId != null) {
+            await performChatMove(projectId, chatSession);
+          }
+        }}
+      />
+
+      <SidebarWrapper folded={folded} className="group/AppSidebar">
+        <div
+          className={cn(
+            "flex flex-row items-center px-spacing-interline py-spacing-inline flex-shrink-0",
+            folded ? "justify-center" : "justify-between"
+          )}
+        >
+          {folded ? (
+            <div className="h-[2rem] flex flex-col justify-center items-center">
+              <>
+                <IconButton
+                  icon={SvgSidebar}
+                  tertiary
+                  onClick={() => setFolded(false)}
+                  className="hidden group-hover/AppSidebar:flex"
+                />
+                <OnyxIcon
+                  size={24}
+                  className="visible group-hover/AppSidebar:hidden"
+                />
+              </>
+            </div>
+          ) : (
+            <>
+              <OnyxLogoTypeIcon size={88} />
+              <IconButton
+                icon={SvgSidebar}
+                tertiary
+                onClick={() => setFolded(true)}
+              />
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-spacing-interline">
+          <NavigationTab
+            icon={SvgEditBig}
+            className="!w-full"
+            folded={folded}
+            onClick={() => route({})}
+            active={Array.from(searchParams).length === 0}
+            tooltip
+          >
+            New Session
+          </NavigationTab>
+
+          {folded && (
+            <>
+              <NavigationTab
+                icon={SvgOnyxOctagon}
+                folded
+                tooltip
+                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+              >
+                Agents
+              </NavigationTab>
+              <NavigationTab
+                icon={SvgFolderPlus}
+                folded
+                tooltip
+                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+              >
+                New Project
+              </NavigationTab>
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-padding-content flex-1 overflow-y-scroll">
+          {!folded && (
+            <>
+              {/* Agents */}
+              <SidebarSection title="Agents">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleAgentDragEnd}
+                >
+                  <SortableContext
+                    items={visibleAgentIds}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {visibleAgents.map((visibleAgent) => (
+                      <AgentsButton
+                        key={visibleAgent.id}
+                        visibleAgent={visibleAgent}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+                <NavigationTab
+                  icon={SvgMoreHorizontal}
+                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                  lowlight
+                >
+                  More Agents
+                </NavigationTab>
+              </SidebarSection>
+
+              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={pointerWithin}
+                modifiers={[
+                  restrictToFirstScrollableAncestor,
+                  restrictToVerticalAxis,
+                ]}
+                onDragEnd={handleChatProjectDragEnd}
+              >
+                <SidebarSection
+                  title="Projects"
+                  action={
+                    <IconButton
+                      icon={SvgFolderPlus}
+                      internal
+                      tooltip="New Project"
+                      onClick={() =>
+                        toggleModal(ModalIds.CreateProjectModal, true)
+                      }
+                    />
+                  }
+                >
+                  <Projects />
+                </SidebarSection>
+
+                {/* Recents */}
+                <RecentsSection
+                  isHistoryEmpty={isHistoryEmpty}
+                  chatSessions={chatSessions}
+                />
+              </DndContext>
+            </>
+          )}
+        </div>
+
+        {/* Bottom */}
+        <div className="flex flex-col">
+          <Settings folded={folded} />
+        </div>
+      </SidebarWrapper>
+    </>
+  );
+}
+
+const AppSidebar = memo(AppSidebarInner);
+AppSidebar.displayName = "AppSidebar";
+
+export default AppSidebar;

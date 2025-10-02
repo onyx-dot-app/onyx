@@ -96,10 +96,8 @@ const PendingUsersTable = ({
           onClose={() => setUserToApprove(null)}
           onSubmit={() => handleAcceptRequest(userToApprove)}
           actionButtonText="Approve"
-          actionText="approve the join request of"
+          action="approve the join request of"
           additionalDetails={`${userToApprove} has requested to join the team. Approving will add them as a user in this team.`}
-          variant="action"
-          accent
           removeConfirmationText
         />
       )}

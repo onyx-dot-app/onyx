@@ -166,7 +166,7 @@ const SignedUpUserTable = ({
           <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-background-50">
+          <SelectContent className="bg-background-tint-00">
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="true">Active</SelectItem>
             <SelectItem value="false">Inactive</SelectItem>
@@ -180,7 +180,7 @@ const SignedUpUserTable = ({
                 : "All Roles"}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="bg-background-50">
+          <SelectContent className="bg-background-tint-00">
             {Object.entries(USER_ROLE_LABELS)
               .filter(([role]) => role !== UserRole.EXT_PERM_USER)
               .map(([role, label]) => (

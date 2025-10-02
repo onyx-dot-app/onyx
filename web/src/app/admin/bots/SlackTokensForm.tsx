@@ -4,7 +4,7 @@ import { TextFormField } from "@/components/Field";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import { useEffect } from "react";
 
@@ -129,17 +129,14 @@ export const SlackTokensForm = ({
           />
           <div className="flex justify-end w-full mt-4">
             <Button
-              type="submit"
               disabled={
                 isSubmitting ||
                 !values.bot_token ||
                 !values.app_token ||
                 !values.name
               }
-              variant="submit"
-              size="default"
             >
-              {isUpdate ? "Update!" : "Create!"}
+              {isUpdate ? "Update" : "Create"}
             </Button>
           </div>
         </Form>

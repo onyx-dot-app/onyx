@@ -2,13 +2,16 @@
 
 import React, { useContext } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import Text from "@/refresh-components/Text";
 
-export const LoginText = () => {
+export default function LoginText() {
   const settings = useContext(SettingsContext);
   return (
-    <>
-      Log In to{" "}
-      {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
-    </>
+    <div className="w-full flex flex-col items-center justify-center">
+      <Text headingH3>
+        Log In to{" "}
+        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+      </Text>
+    </div>
   );
-};
+}

@@ -5,7 +5,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import useSWR from "swr";
 import { ModelPreview } from "../../../../components/embedding/ModelSelector";
 import {
@@ -168,11 +168,11 @@ function Main() {
             )}
           </CardSection>
 
-          <Link href="/admin/embeddings">
-            <Button variant="navigate" className="mt-8">
+          <div className="mt-4">
+            <Button action href="/admin/embeddings">
               Update Search Settings
             </Button>
-          </Link>
+          </div>
         </>
       ) : (
         <UpgradingPage futureEmbeddingModel={futureEmbeddingModel} />

@@ -38,7 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import CreateButton from "@/components/ui/createButton";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
@@ -406,10 +406,9 @@ const Main = () => {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <CreateButton
-          href="/admin/documents/sets/new"
-          text="New Document Set"
-        />
+        <CreateButton href="/admin/documents/sets/new">
+          New Document Set
+        </CreateButton>
       </div>
 
       {documentSets.length > 0 && (

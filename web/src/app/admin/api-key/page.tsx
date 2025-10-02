@@ -27,7 +27,7 @@ import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
 import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
-import CreateButton from "@/components/ui/createButton";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 
@@ -108,10 +108,9 @@ function Main() {
   }
 
   const newApiKeyButton = (
-    <CreateButton
-      onClick={() => setShowCreateUpdateForm(true)}
-      text="Create API Key"
-    />
+    <CreateButton onClick={() => setShowCreateUpdateForm(true)}>
+      Create API Key
+    </CreateButton>
   );
 
   if (apiKeys.length === 0) {

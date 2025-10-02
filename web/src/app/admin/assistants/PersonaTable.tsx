@@ -1,6 +1,6 @@
 "use client";
 
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
@@ -15,9 +15,10 @@ import {
   togglePersonaVisibility,
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
-import { TrashIcon } from "@/components/icons/icons";
 import { useUser } from "@/components/user/UserProvider";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgTrash from "@/icons/trash";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -176,12 +177,11 @@ export function PersonasTable({
 
       {defaultModalOpen && personaToToggleDefault && (
         <ConfirmEntityModal
-          variant="action"
           entityType="Assistant"
           entityName={personaToToggleDefault.name}
           onClose={closeDefaultModal}
           onSubmit={handleToggleDefault}
-          actionText={
+          action={
             personaToToggleDefault.is_default_persona
               ? "remove the featured status of"
               : "set as featured"
@@ -288,14 +288,13 @@ export function PersonasTable({
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
                   {!persona.builtin_persona && isEditable ? (
-                    <div
-                      className="hover:bg-accent-background-hovered rounded p-1 cursor-pointer"
+                    <IconButton
+                      icon={SvgTrash}
+                      tertiary
                       onClick={() => openDeleteModal(persona)}
-                    >
-                      <TrashIcon />
-                    </div>
+                    />
                   ) : (
-                    "-"
+                    <Text>-</Text>
                   )}
                 </div>
               </div>,

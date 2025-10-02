@@ -4,7 +4,7 @@ import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Link from "next/link";
 import {
   useCallback,
@@ -33,6 +33,8 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Text from "@/refresh-components/Text";
 
 function SourceTileTooltipWrapper({
   sourceMetadata,
@@ -116,17 +118,17 @@ function SourceTileTooltipWrapper({
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
           {existingFederatedConnector && !hasExistingSlackCredentials ? (
-            <p className="text-xs">
+            <Text inverted secondaryBody>
               <strong>Federated connector already configured.</strong> Click to
               edit the existing connector.
-            </p>
+            </Text>
           ) : hasExistingSlackCredentials ? (
-            <p className="text-xs">
+            <Text inverted secondaryBody>
               <strong>Existing Slack credentials found.</strong> Click to manage
               the traditional Slack connector.
-            </p>
+            </Text>
           ) : sourceMetadata.federated ? (
-            <p className="text-xs">
+            <Text inverted secondaryBody>
               {sourceMetadata.federatedTooltip ? (
                 sourceMetadata.federatedTooltip
               ) : (
@@ -135,7 +137,7 @@ function SourceTileTooltipWrapper({
                   latency and lower search quality.
                 </>
               )}
-            </p>
+            </Text>
           ) : null}
         </TooltipContent>
       </Tooltip>
@@ -273,27 +275,25 @@ export default function Page() {
         icon={<ConnectorIcon size={32} />}
         title="Add Connector"
         farRightElement={
-          <Link href="/admin/indexing/status">
-            <Button variant="success-reverse">See Connectors</Button>
-          </Link>
+          <Button href="/admin/indexing/status" primary>
+            See Connectors
+          </Button>
         }
       />
 
-      <input
+      <InputTypeIn
         type="text"
+        placeholder="Search Connectors"
         ref={searchInputRef}
-        placeholder="Search connectors..."
         value={rawSearchTerm} // keep the input bound to immediate state
-        onChange={(e) => setSearchTerm(e.target.value)}
+        onChange={(event) => setSearchTerm(event.target.value)}
         onKeyDown={handleKeyPress}
-        className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="w-96"
       />
 
       {dedupedPopular.length > 0 && (
-        <div className="mb-8">
-          <div className="flex mt-8">
-            <Title>Popular</Title>
-          </div>
+        <div className="pt-8">
+          <Text headingH3>Popular</Text>
           <div className="flex flex-wrap gap-4 p-4">
             {dedupedPopular.map((source) => (
               <SourceTileTooltipWrapper
@@ -311,10 +311,8 @@ export default function Page() {
       {Object.entries(categorizedSources)
         .filter(([_, sources]) => sources.length > 0)
         .map(([category, sources], categoryInd) => (
-          <div key={category} className="mb-8">
-            <div className="flex mt-8">
-              <Title>{category}</Title>
-            </div>
+          <div key={category} className="pt-8">
+            <Text headingH3>{category}</Text>
             <div className="flex flex-wrap gap-4 p-4">
               {sources.map((source, sourceInd) => (
                 <SourceTileTooltipWrapper

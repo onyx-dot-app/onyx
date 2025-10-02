@@ -10,11 +10,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import { SortIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgFilter from "@/icons/filter";
 
 export interface FilterOptions {
   accessType: AccessType[] | null;
@@ -87,24 +88,6 @@ export const FilterComponent = forwardRef<
     setSelectedStatuses(newStatuses);
   };
 
-  const handleDocsFilterChange = () => {
-    if (docsOperator && docsValue) {
-      const newFilters = {
-        ...filters,
-        accessType: selectedAccessTypes.length > 0 ? selectedAccessTypes : null,
-        lastStatus: selectedStatuses.length > 0 ? selectedStatuses : null,
-        docsCountFilter: {
-          operator: docsOperator,
-          value: parseInt(docsValue),
-        },
-      };
-
-      setFilters(newFilters);
-      onFilterChange(newFilters);
-      setIsOpen(false);
-    }
-  };
-
   const applyFilters = () => {
     const newFilters = {
       ...filters,
@@ -119,25 +102,6 @@ export const FilterComponent = forwardRef<
     setFilters(newFilters);
     onFilterChange(newFilters);
     setIsOpen(false);
-  };
-
-  const clearFilters = () => {
-    setSelectedAccessTypes([]);
-    setSelectedStatuses([]);
-    setDocsOperator(null);
-    setDocsValue("");
-
-    const newFilters = {
-      accessType: null,
-      docsCountFilter: {
-        operator: null,
-        value: null,
-      },
-      lastStatus: null,
-    };
-
-    setFilters(newFilters);
-    onFilterChange(newFilters);
   };
 
   // Sync local state with filters when dropdown opens
@@ -161,31 +125,11 @@ export const FilterComponent = forwardRef<
     (filters.lastStatus && filters.lastStatus.length > 0) ||
     filters.docsCountFilter.operator !== null;
 
-  // Get active filter count for badge
-  const getActiveFilterCount = () => {
-    let count = 0;
-    if (filters.accessType && filters.accessType.length > 0) count++;
-    if (filters.lastStatus && filters.lastStatus.length > 0) count++;
-    if (filters.docsCountFilter.operator !== null) count++;
-    return count;
-  };
-
   return (
     <div className="relative">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`p-2 h-9 ${
-              hasActiveFilters ? "border-primary bg-primary/5" : ""
-            }`}
-          >
-            <SortIcon
-              size={20}
-              className="text-neutral-800 dark:text-neutral-200"
-            />
-          </Button>
+          <IconButton icon={SvgFilter} secondary active={isOpen} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"

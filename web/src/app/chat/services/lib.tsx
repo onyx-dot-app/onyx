@@ -6,7 +6,13 @@ import {
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "@/app/chat/interfaces";
-import { MutableRefObject, RefObject, useEffect, useRef } from "react";
+import {
+  MutableRefObject,
+  RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   BackendMessage,
   ChatSession,
@@ -20,10 +26,10 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalPersonaSnapshot } from "../../admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { Settings } from "../../admin/settings/interfaces";
+import { Settings } from "@/app/admin/settings/interfaces";
 import {
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
@@ -310,6 +316,7 @@ export async function handleChatFeedback(
   });
   return response;
 }
+
 export async function renameChatSession(
   chatSessionId: string,
   newName: string
@@ -605,6 +612,7 @@ const PARAMS_TO_SKIP = [
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
   SEARCH_PARAM_NAMES.PERSONA_ID,
+  SEARCH_PARAM_NAMES.PROJECT_ID,
   // do not persist project context in the URL after navigation
   "projectid",
 ];

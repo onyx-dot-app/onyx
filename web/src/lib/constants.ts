@@ -114,3 +114,8 @@ export const CREDENTIAL_UPLOADED_FILE = "uploaded_file";
 export const CREDENTIAL_FIELD_KEY = "field_key";
 export const CREDENTIAL_TYPE_DEFINITION_KEY = "type_definition_key";
 export const CREDENTIAL_JSON = "credential_json";
+
+export const MODAL_ROOT_ID = "modal-root";
+
+export const ANONYMOUS_USER_NAME = "Anonymous";
+export const UNNAMED_CHAT = "Unnamed Chat";

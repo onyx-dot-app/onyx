@@ -1,11 +1,11 @@
 "use client";
+
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/components/ui/text";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   ArrowLeft,
   ArrowRight,
@@ -49,6 +49,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import SvgArrowLeft from "@/icons/arrow-left";
+import SvgArrowRight from "@/icons/arrow-right";
 
 enum ReindexType {
   REINDEX = "reindex",
@@ -429,8 +431,7 @@ export default function EmbeddingForm() {
         </div>
       ) : (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <button
-            className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+          <Button
             onClick={() => {
               updateSearch();
               navigateToEmbeddingPage("search settings");
@@ -438,7 +439,7 @@ export default function EmbeddingForm() {
             disabled={!isOverallFormValid}
           >
             Update Search
-          </button>
+          </Button>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
               <div className="relative group">
@@ -569,8 +570,7 @@ export default function EmbeddingForm() {
               />
             </CardSection>
             <div className="mt-4 flex w-full justify-end">
-              <button
-                className="enabled:cursor-pointer disabled:cursor-not-allowed disabled:bg-blue-200 bg-blue-400 flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+              <Button
                 onClick={() => {
                   if (
                     selectedProvider.model_name.includes("e5") &&
@@ -582,10 +582,11 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }
                 }}
+                rightIcon={SvgArrowRight}
+                action
               >
                 Continue
-                <ArrowRight />
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -604,10 +605,7 @@ export default function EmbeddingForm() {
                 <li>Nomic nomic-embed-text-v1 for self-hosted</li>
               </div>
               <div className="flex mt-4 justify-between">
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowPoorModel(false)}
-                >
+                <Button secondary onClick={() => setShowPoorModel(false)}>
                   Cancel update
                 </Button>
                 <Button
@@ -663,26 +661,26 @@ export default function EmbeddingForm() {
             </CardSection>
 
             <div className={`mt-4 w-full grid grid-cols-3`}>
-              <button
-                className="border-border-dark mr-auto border flex gap-x-1 items-center text-text p-2.5 text-sm font-regular rounded-sm "
+              <Button
+                leftIcon={SvgArrowLeft}
                 onClick={() => prevFormStep()}
+                secondary
               >
-                <ArrowLeft />
                 Previous
-              </button>
+              </Button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
 
               <div className="flex w-full justify-end">
-                <button
-                  className={`enabled:cursor-pointer enabled:hover:underline disabled:cursor-not-allowed mt-auto enabled:text-text-600 disabled:text-text-400 ml-auto flex gap-x-1 items-center py-2.5 px-3.5 text-sm font-regular rounded-sm`}
+                <Button
                   onClick={() => {
                     nextFormStep();
                   }}
+                  rightIcon={SvgArrowRight}
+                  secondary
                 >
                   Advanced
-                  <ArrowRight />
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -708,14 +706,13 @@ export default function EmbeddingForm() {
             </CardSection>
 
             <div className={`mt-4 grid  grid-cols-3 w-full `}>
-              <button
-                className={`border-border-dark border mr-auto flex gap-x-1 
-                  items-center text-text py-2.5 px-3.5 text-sm font-regular rounded-sm`}
+              <Button
                 onClick={() => prevFormStep()}
+                leftIcon={SvgArrowLeft}
+                secondary
               >
-                <ArrowLeft />
                 Previous
-              </button>
+              </Button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
             </div>

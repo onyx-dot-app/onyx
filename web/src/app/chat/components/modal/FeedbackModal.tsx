@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/modals/Modal";
 import { FilledLikeIcon } from "@/components/icons/icons";
 import { handleChatFeedback } from "../../services/lib";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import SvgThumbsUp from "@/icons/thumbs-up";
+import SvgThumbsDown from "@/icons/thumbs-down";
+import Button from "@/refresh-components/buttons/Button";
+import FieldInput from "@/refresh-components/inputs/FieldInput";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { useKeyPress } from "@/hooks/useKeyPress";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
@@ -21,36 +28,38 @@ const predefinedNegativeFeedbackOptions = process.env
     ];
 
 interface FeedbackModalProps {
-  feedbackType: FeedbackType;
-  messageId: number;
-  onClose: () => void;
   setPopup: (popup: { message: string; type: "success" | "error" }) => void;
 }
 
-export const FeedbackModal = ({
-  feedbackType,
-  messageId,
-  onClose,
-  setPopup,
-}: FeedbackModalProps) => {
-  const [message, setMessage] = useState("");
+export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
+  const { isOpen, toggleModal, getModalData } = useModal();
+  const data = getModalData<{
+    feedbackType: FeedbackType;
+    messageId: number;
+  }>();
   const [predefinedFeedback, setPredefinedFeedback] = useState<
     string | undefined
   >();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const fieldInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePredefinedFeedback = (feedback: string) => {
-    setPredefinedFeedback(feedback);
-  };
+  useEffect(() => {
+    if (!isOpen(ModalIds.FeedbackModal)) {
+      setPredefinedFeedback(undefined);
+    }
+  }, [isOpen(ModalIds.FeedbackModal)]);
 
   const handleSubmit = async () => {
-    setIsSubmitting(true);
+    if (
+      (!predefinedFeedback || predefinedFeedback === "") &&
+      (!fieldInputRef.current || fieldInputRef.current.value === "")
+    )
+      return;
 
     try {
       const response = await handleChatFeedback(
         messageId,
         feedbackType,
-        message,
+        fieldInputRef.current?.value ?? predefinedFeedback!,
         predefinedFeedback
       );
 
@@ -72,117 +81,63 @@ export const FeedbackModal = ({
         message: "Failed to submit feedback - network error",
         type: "error",
       });
-    } finally {
-      setIsSubmitting(false);
-      onClose();
     }
+
+    toggleModal(ModalIds.FeedbackModal, false);
   };
+
+  useEffect(() => {
+    handleSubmit();
+  }, [predefinedFeedback]);
+
+  useKeyPress(handleSubmit, "Enter");
+
+  if (!data) return null;
+  const { feedbackType, messageId } = data;
 
   const predefinedFeedbackOptions =
     feedbackType === "like"
       ? predefinedPositiveFeedbackOptions
       : predefinedNegativeFeedbackOptions;
 
-  return (
-    <Modal onOutsideClick={onClose} width="w-full max-w-3xl">
-      <>
-        <h2 className="text-2xl text-text-darker font-bold mb-4 flex">
-          <div className="mr-1 my-auto">
-            {feedbackType === "like" ? (
-              <FilledLikeIcon
-                size={20}
-                className="text-green-600 my-auto mr-2"
-              />
-            ) : (
-              <FilledLikeIcon
-                size={20}
-                className="rotate-180 text-red-600 my-auto mr-2"
-              />
-            )}
-          </div>
-          Provide additional feedback
-        </h2>
+  const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
 
-        <div className="mb-4 flex flex-wrap justify-start">
+  return (
+    <Modal
+      id={ModalIds.FeedbackModal}
+      title="Provide Additional Feedback"
+      icon={icon}
+      xs
+    >
+      {predefinedFeedbackOptions.length > 0 && (
+        <div className="flex flex-col p-spacing-paragraph gap-spacing-inline">
           {predefinedFeedbackOptions.map((feedback, index) => (
-            <button
+            <LineItem
               key={index}
-              disabled={isSubmitting}
-              className={`
-                bg-background-dark 
-                hover:bg-accent-background-hovered 
-                text-default 
-                py-2 
-                px-4 
-                rounded 
-                m-1 
-                disabled:opacity-50 
-                disabled:cursor-not-allowed
-                ${predefinedFeedback === feedback && "ring-2 ring-accent/20"}
-              `}
-              onClick={() => handlePredefinedFeedback(feedback)}
+              onClick={() => setPredefinedFeedback(feedback)}
             >
               {feedback}
-            </button>
+            </LineItem>
           ))}
         </div>
-
-        <textarea
-          autoFocus
-          disabled={isSubmitting}
-          className={`
-            w-full
-            flex-grow
-            border
-            border-border-strong
-            rounded
-            outline-none
-            placeholder-subtle
-            pl-4
-            pr-4
-            py-4
-            bg-background
-            overflow-hidden
-            h-28
-            whitespace-normal
-            resize-none
-            break-all
-            overscroll-contain
-            disabled:opacity-50
-            disabled:cursor-not-allowed
-          `}
-          role="textarea"
-          aria-multiline
-          placeholder={
-            feedbackType === "like"
-              ? "(Optional) What did you like about this response?"
-              : "(Optional) What was the issue with the response? How could it be improved?"
-          }
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
+      )}
+      <div className="flex flex-col p-spacing-paragraph items-center justify-center bg-background-tint-01">
+        <FieldInput
+          label="Feedback"
+          placeholder={`What did you ${feedbackType} about this response?`}
+          className="!w-full"
+          ref={fieldInputRef}
         />
-
-        <div className="flex mt-2">
-          <button
-            disabled={isSubmitting}
-            className={`
-              bg-agent 
-              text-white 
-              py-2 
-              px-4 
-              rounded 
-              hover:bg-agent/50 
-              focus:outline-none 
-              mx-auto
-              disabled:opacity-50 
-              disabled:cursor-not-allowed
-            `}
-            onClick={handleSubmit}
-          >
-            {isSubmitting ? "Submitting..." : "Submit feedback"}
-          </button>
-        </div>
-      </>
+      </div>
+      <div className="flex flex-row p-spacing-paragraph items-center justify-end w-full gap-spacing-interline">
+        <Button
+          onClick={() => toggleModal(ModalIds.FeedbackModal, false)}
+          secondary
+        >
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit}>Submit</Button>
+      </div>
     </Modal>
   );
 };

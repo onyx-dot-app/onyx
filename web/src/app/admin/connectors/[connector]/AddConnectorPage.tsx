@@ -57,9 +57,10 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import Text from "@/refresh-components/Text";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -516,7 +517,9 @@ export default function AddConnector({
 
           {formStep == 0 && (
             <CardSection>
-              <Title className="mb-2 text-lg">Select a credential</Title>
+              <Text headingH3 className="pb-2">
+                Select a credential
+              </Text>
 
               {connector == ValidSources.Gmail ? (
                 <GmailMain />
@@ -535,8 +538,6 @@ export default function AddConnector({
                     <div className="mt-6 flex space-x-4">
                       {/* Button to pop up a form to manually enter credentials */}
                       <Button
-                        variant="secondary"
-                        className="mt-6 text-sm mr-4"
                         onClick={async () => {
                           if (oauthDetails && oauthDetails.oauth_enabled) {
                             if (oauthDetails.additional_kwargs.length > 0) {
@@ -570,9 +571,8 @@ export default function AddConnector({
                       {oauthSupportedSources.includes(connector) &&
                         (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
                           <Button
-                            variant="navigate"
+                            action
                             onClick={handleAuthorize}
-                            className="mt-6 "
                             disabled={isAuthorizing}
                             hidden={!isAuthorizeVisible}
                           >

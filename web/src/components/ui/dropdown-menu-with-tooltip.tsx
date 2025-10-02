@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 import { cn } from "@/lib/utils";
+import Text from "@/refresh-components/Text";
 
 interface DropdownMenuItemWithTooltipProps
   extends React.ComponentPropsWithoutRef<typeof DropdownMenuItem> {
@@ -45,7 +46,7 @@ const DropdownMenuItemWithTooltip = React.forwardRef<
           </div>
         </TooltipTrigger>
         <TooltipContent showTick={true}>
-          <p>{tooltip}</p>
+          <Text inverted>{tooltip}</Text>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

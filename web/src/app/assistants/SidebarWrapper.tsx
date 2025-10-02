@@ -8,7 +8,7 @@ import FunctionalHeader from "@/components/chat/Header";
 import { useRouter } from "next/navigation";
 import FixedLogo from "../../components/logo/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import AssistantModal from "./mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";

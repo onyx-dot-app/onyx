@@ -12,6 +12,7 @@ import { SubQuestionDetail } from "@/app/chat/interfaces";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
+import Text from "@/refresh-components/Text";
 
 const MAX_CITATION_TEXT_LENGTH = 40;
 
@@ -92,15 +93,15 @@ export function Citation({
                   ? question_info.openQuestion(question_info.question)
                   : null;
             }}
-            className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out"
+            className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out mr-1"
           >
             <span
-              className="flex items-center justify-center px-1 h-4 text-[10px] 
-                         font-medium text-text-700 bg-background-150 rounded-md 
-                         hover:bg-background-900 hover:text-text-100 shadow-sm mr-0.5 ml-0.5"
+              className="flex items-center justify-center p-spacing-inline h-4
+                         bg-background-tint-03 rounded-full
+                         hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              {citationText}
+              <Text figureSmallValue>{citationText}</Text>
             </span>
           </span>
         </TooltipTrigger>

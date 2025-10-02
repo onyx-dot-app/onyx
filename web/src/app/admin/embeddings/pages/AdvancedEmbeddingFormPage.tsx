@@ -2,7 +2,6 @@ import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
 import { TrashIcon } from "@/components/icons/icons";
-import { FaPlus } from "react-icons/fa";
 import {
   AdvancedSearchConfiguration,
   EmbeddingPrecision,
@@ -20,6 +19,8 @@ import useSWR from "swr";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import Button from "@/refresh-components/buttons/Button";
+import SvgPlusCircle from "@/icons/plus-circle";
 
 // Number of tokens to show cost calculation for
 const COST_CALCULATION_TOKENS = 1_000_000;
@@ -256,15 +257,13 @@ const AdvancedEmbeddingFormPage = forwardRef<
                         </div>
                       )
                     )}
-                    <button
-                      type="button"
+                    <Button
+                      leftIcon={SvgPlusCircle}
                       onClick={() => push("")}
-                      className={`mt-2 p-2 bg-rose-500 text-xs text-white rounded-md flex items-center
-                        hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-opacity-50`}
+                      className="bg-rose-500 hover:bg-rose-600"
                     >
-                      <FaPlus className="mr-2" />
                       Add Language
-                    </button>
+                    </Button>
                   </div>
                 )}
               </FieldArray>

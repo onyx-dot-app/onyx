@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
@@ -83,7 +83,7 @@ function DefaultLLMProviderDisplay({
           <div className="font-bold">{providerName}</div>
         </div>
         <div className="ml-auto">
-          <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
+          <Button action onClick={() => setFormIsVisible(true)}>
             Set up
           </Button>
         </div>
@@ -124,7 +124,7 @@ function AddCustomLLMProvider({
   }
 
   return (
-    <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
+    <Button action onClick={() => setFormIsVisible(true)}>
       Add Custom LLM Provider
     </Button>
   );

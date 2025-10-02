@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { FeedbackType, Message, CitationMap } from "../../interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { AIMessage } from "./AIMessage";
+import AIMessage from "./AIMessage";
 import { LlmDescriptor } from "@/lib/hooks";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 

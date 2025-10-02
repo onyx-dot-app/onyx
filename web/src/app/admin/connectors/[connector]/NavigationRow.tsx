@@ -1,6 +1,8 @@
 import { useFormContext } from "@/components/context/FormContext";
-import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
-import { FiPlus } from "react-icons/fi";
+import SvgArrowLeft from "@/icons/arrow-left";
+import SvgArrowRight from "@/icons/arrow-right";
+import SvgPlusCircle from "@/icons/plus-circle";
+import Button from "@/refresh-components/buttons/Button";
 
 const NavigationRow = ({
   noAdvanced,
@@ -16,72 +18,48 @@ const NavigationRow = ({
   activatedCredential: boolean;
 }) => {
   const { formStep, prevFormStep, nextFormStep } = useFormContext();
-  const SquareNavigationButton = ({
-    onClick,
-    disabled,
-    className,
-    children,
-  }: {
-    onClick: () => void;
-    disabled?: boolean;
-    className: string;
-    children: React.ReactNode;
-  }) => (
-    <button
-      className={`flex items-center gap-1 text-sm rounded-sm ${className}`}
-      onMouseDown={() => !disabled && onClick()}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div className="mt-4 w-full grid grid-cols-3">
       <div>
         {((formStep > 0 && !noCredentials) ||
           (formStep > 1 && !noAdvanced)) && (
-          <SquareNavigationButton
-            className="border border-text-400 mr-auto p-2.5"
-            onClick={prevFormStep}
-          >
-            <ArrowLeft />
+          <Button secondary onClick={prevFormStep} leftIcon={SvgArrowLeft}>
             Previous
-          </SquareNavigationButton>
+          </Button>
         )}
       </div>
       <div className="flex justify-center">
         {(formStep > 0 || noCredentials) && (
-          <SquareNavigationButton
-            className="bg-agent text-white py-2.5 px-3.5 disabled:opacity-50"
+          <Button
             disabled={!isValid}
+            rightIcon={SvgPlusCircle}
             onClick={onSubmit}
           >
             Create Connector
-            <FiPlus className="h-4 w-4" />
-          </SquareNavigationButton>
+          </Button>
         )}
       </div>
       <div className="flex justify-end">
         {formStep === 0 && (
-          <SquareNavigationButton
-            className="bg-blue-400 text-white py-2.5 px-3.5 disabled:bg-blue-200 disabled:text-neutral-400"
+          <Button
+            action
             disabled={!activatedCredential}
-            onClick={nextFormStep}
+            rightIcon={SvgArrowRight}
+            onClick={() => nextFormStep()}
           >
             Continue
-            <ArrowRight />
-          </SquareNavigationButton>
+          </Button>
         )}
         {!noAdvanced && formStep === 1 && (
-          <SquareNavigationButton
-            className="text-text-600 disabled:text-text-400 py-2.5 px-3.5"
+          <Button
+            secondary
             disabled={!isValid}
-            onClick={nextFormStep}
+            rightIcon={SvgArrowRight}
+            onClick={() => nextFormStep()}
           >
             Advanced
-            <ArrowRight />
-          </SquareNavigationButton>
+          </Button>
         )}
       </div>
     </div>
