@@ -121,8 +121,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
-    ccPair?.connector?.id || null,
-    ccPair?.credential?.id || null,
+    ccPair?.connector?.id ?? null,
+    ccPair?.credential?.id ?? null,
     ccPairId,
     setPopup
   );
