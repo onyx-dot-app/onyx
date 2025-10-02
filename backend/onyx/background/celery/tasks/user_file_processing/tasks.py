@@ -602,11 +602,12 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                 )
 
                 if doc_id in search_doc_map:
+                    search_docs = search_doc_map[doc_id]
                     task_logger.debug(
-                        f"Found {len(search_doc_map.get(doc_id))} search docs to update for user file {uf.id}"
+                        f"Found {len(search_docs)} search docs to update for user file {uf.id}"
                     )
                     # Update the SearchDoc to use the UserFile's UUID
-                    for search_doc in search_doc_map.get(doc_id):
+                    for search_doc in search_docs:
                         search_doc.document_id = str(uf.id)
                         db_session.add(search_doc)
 
