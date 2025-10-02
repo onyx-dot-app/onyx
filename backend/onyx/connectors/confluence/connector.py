@@ -245,9 +245,26 @@ class ConfluenceConnector(
         page_query += " order by lastmodified asc"
         return page_query
 
-    def _construct_attachment_query(self, confluence_page_id: str) -> str:
+    def _construct_attachment_query(
+        self,
+        confluence_page_id: str,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> str:
         attachment_query = f"type=attachment and container='{confluence_page_id}'"
         attachment_query += self.cql_label_filter
+        # Add time filters to avoid reprocessing unchanged attachments during refresh
+        if start:
+            formatted_start_time = datetime.fromtimestamp(
+                start, tz=self.timezone
+            ).strftime("%Y-%m-%d %H:%M")
+            attachment_query += f" and lastmodified >= '{formatted_start_time}'"
+        if end:
+            formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            attachment_query += f" and lastmodified <= '{formatted_end_time}'"
+        attachment_query += " order by lastmodified asc"
         return attachment_query
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
@@ -351,9 +368,12 @@ class ConfluenceConnector(
             )
 
     def _fetch_page_attachments(
-        self, page: dict[str, Any]
+        self,
+        page: dict[str, Any],
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
     ) -> tuple[list[Document], list[ConnectorFailure]]:
-        attachment_query = self._construct_attachment_query(page["id"])
+        attachment_query = self._construct_attachment_query(page["id"], start, end)
         attachment_failures: list[ConnectorFailure] = []
         attachment_docs: list[Document] = []
 
@@ -513,15 +533,13 @@ class ConfluenceConnector(
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
-            if isinstance(doc_or_failure, ConnectorFailure):
-                yield doc_or_failure
-                continue
-
             # Yield the page document first
             yield doc_or_failure
 
             # Now get attachments for that page as separate documents
-            attachment_docs, attachment_failures = self._fetch_page_attachments(page)
+            attachment_docs, attachment_failures = self._fetch_page_attachments(
+                page, start, end
+            )
 
             # Yield each attachment document
             for a_doc in attachment_docs:
