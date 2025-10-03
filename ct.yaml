@@ -9,6 +9,7 @@ chart-repos:
   - vespa=https://onyx-dot-app.github.io/vespa-helm-charts
   - postgresql=https://cloudnative-pg.github.io/charts
   - redis=https://ot-container-kit.github.io/helm-charts
+  - minio=https://charts.min.io/
   
 # have seen postgres take 10 min to pull ... so 15 min seems like a good timeout?
 helm-extra-args: --debug --timeout 900s

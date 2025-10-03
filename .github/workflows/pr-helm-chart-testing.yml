@@ -69,6 +69,7 @@ jobs:
         helm repo add vespa https://onyx-dot-app.github.io/vespa-helm-charts
         helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
         helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
+        helm repo add minio https://charts.min.io/
         helm repo update
 
     - name: Install Redis operator

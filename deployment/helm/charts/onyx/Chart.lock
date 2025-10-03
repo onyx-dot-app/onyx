@@ -12,7 +12,7 @@ dependencies:
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.16.6
 - name: minio
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 17.0.4
-digest: sha256:aa3456d2410437fd93c21c5d836b2809cba5fc199736e56ef321bc371608a30e
-generated: "2025-10-02T15:18:26.4418-07:00"
+  repository: https://charts.min.io/
+  version: 5.4.0
+digest: sha256:02aa26a26b820cb26f4b9fd4b951c45e5717cc65a1e13fa643d059b60c3a843b
+generated: "2025-10-03T10:56:28.377747-07:00"
