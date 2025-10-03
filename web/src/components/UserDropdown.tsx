@@ -95,22 +95,21 @@ export function UserDropdown({
   }
 
   const handleLogout = () => {
-    logout().then((isSuccess) => {
-      if (!isSuccess) {
+    logout().then((response) => {
+      if (!response?.ok) {
         alert("Failed to logout");
         return;
       }
 
-      // Construct the current URL
       const currentUrl = `${pathname}${
         searchParams?.toString() ? `?${searchParams.toString()}` : ""
       }`;
 
-      // Encode the current URL to use as a redirect parameter
       const encodedRedirect = encodeURIComponent(currentUrl);
 
-      // Redirect to login page with the current page as a redirect parameter
-      router.push(`/auth/login?next=${encodedRedirect}`);
+      router.push(
+        `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
+      );
     });
   };
 
