@@ -64,7 +64,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
@@ -153,7 +153,7 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
-    SlimConnector, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
 ):
     def __init__(
         self,
@@ -1296,7 +1296,7 @@ class GoogleDriveConnector(
                     callback.progress("_extract_slim_docs_from_google_drive", 1)
         yield slim_batch
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

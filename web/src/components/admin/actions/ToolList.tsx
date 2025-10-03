@@ -34,9 +34,6 @@ export function ToolList({
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showToolList, setShowToolList] = useState(
-    searchParams.get("listing_tools") === "true"
-  );
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
@@ -46,14 +43,13 @@ export function ToolList({
     if (
       searchParams.get("listing_tools") === "true" &&
       serverId &&
-      !showToolList &&
       values.name.trim() &&
       values.server_url.trim()
     ) {
       // Only auto-trigger for servers that have required form values and a serverId
       handleListActions(values);
     }
-  }, [searchParams, serverId, showToolList, values.name, values.server_url]);
+  }, [searchParams, serverId, values.name, values.server_url]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -113,10 +109,6 @@ export function ToolList({
         // Update serverId for subsequent operations
         newServerId = serverResult.server_id;
         setCurrentServerId(newServerId);
-        // Ensure URL reflects the created server and listing state to avoid duplicate creation (409)
-        router.replace(
-          `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
-        );
       } else {
         // For OAuth servers, use the existing serverId
         if (!serverId) {
@@ -129,6 +121,11 @@ export function ToolList({
         }
         newServerId = serverId;
       }
+      // Ensure URL reflects the created server and listing state to avoid duplicate creation
+      // and set listing_tools=true so the tool list is shown
+      router.replace(
+        `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
+      );
 
       // List available tools from the saved server
       const promises: Promise<Response>[] = [
@@ -175,7 +172,6 @@ export function ToolList({
         return;
       }
 
-      setShowToolList(true);
       setCurrentPage(1);
 
       // Process available tools
@@ -315,7 +311,7 @@ export function ToolList({
     }
   };
 
-  return !showToolList ? (
+  return listingTools || searchParams.get("listing_tools") !== "true" ? (
     <div className="flex gap-2">
       <Button
         type="button"
@@ -490,7 +486,6 @@ export function ToolList({
             const currentUrl = new URL(window.location.href);
             currentUrl.searchParams.delete("listing_tools");
             router.replace(currentUrl.toString());
-            setShowToolList(false);
           }}
         >
           Back

@@ -955,6 +955,40 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "ai21.jamba-instruct-v1:0": "Jamba Instruct",
   "ai21.j2-ultra-v1": "J2 Ultra",
   "ai21.j2-mid-v1": "J2 Mid",
+
+  // Ollama cloud models
+  "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
+  "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
+  "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
+  "kimi-k2:1t": "Kimi K2 1T Cloud",
+  "qwen3-coder:480b-cloud": "Qwen3-Coder 480B Cloud",
+
+  // Ollama models in litellm map (disjoint from ollama's supported model list)
+  // https://models.litellm.ai --> provider ollama
+  codegeex4: "CodeGeeX 4",
+  codegemma: "CodeGemma",
+  codellama: "CodeLLama",
+  "deepseek-coder-v2-base": "DeepSeek-Coder-v2 Base",
+  "deepseek-coder-v2-instruct": "DeepSeek-Coder-v2 Instruct",
+  "deepseek-coder-v2-lite-base": "DeepSeek-Coder-v2 Lite Base",
+  "deepseek-coder-v2-lite-instruct": "DeepSeek-Coder-v2 Lite Instruct",
+  "internlm2_5-20b-chat": "InternLM 2.5 20B Chat",
+  llama2: "Llama 2",
+  "llama2-uncensored": "Llama 2 Uncensored",
+  "llama2:13b": "Llama 2 13B",
+  "llama2:70b": "Llama 2 70B",
+  "llama2:7b": "Llama 2 7B",
+  llama3: "Llama 3",
+  "llama3:70b": "Llama 3 70B",
+  "llama3:8b": "Llama 3 8B",
+  mistral: "Mistral", // Mistral 7b
+  "mistral-7B-Instruct-v0.1": "Mistral 7B Instruct v0.1",
+  "mistral-7B-Instruct-v0.2": "Mistral 7B Instruct v0.2",
+  "mistral-large-instruct-2407": "Mistral Large Instruct 24.07",
+  "mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B Instruct v0.1",
+  "mixtral8x7B-Instruct-v0.1": "Mixtral 8x7B Instruct v0.1",
+  "orca-mini": "Orca Mini",
+  vicuna: "Vicuna",
 };
 
 export function getDisplayNameForModel(modelName: string): string {
@@ -971,29 +1005,6 @@ export function getDisplayNameForModel(modelName: string): string {
 
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
-
-export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: [
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4.1",
-    "o3-mini",
-    "o1-mini",
-    "o1",
-    "o4-mini",
-    "o3",
-  ],
-  bedrock: [
-    "meta.llama3-1-70b-instruct-v1:0",
-    "meta.llama3-1-8b-instruct-v1:0",
-    "anthropic.claude-3-opus-20240229-v1:0",
-    "mistral.mistral-large-2402-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "anthropic.claude-3-7-sonnet-20250219-v1:0",
-  ],
-  anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
-};
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(

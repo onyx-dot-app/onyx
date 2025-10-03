@@ -16,7 +16,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -164,7 +164,7 @@ def get_slab_url_from_title_id(base_url: str, title: str, page_id: str) -> str:
     return urljoin(urljoin(base_url, "posts/"), url_id)
 
 
-class SlabConnector(LoadConnector, PollConnector, SlimConnector):
+class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
     def __init__(
         self,
         base_url: str,
@@ -239,7 +239,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnector):
             time_filter=lambda t: start_time <= t <= end_time
         )
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

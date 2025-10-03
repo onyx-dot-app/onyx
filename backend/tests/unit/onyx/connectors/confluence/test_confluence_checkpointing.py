@@ -289,7 +289,7 @@ def test_load_from_checkpoint_with_page_processing_error(
         )
 
 
-def test_retrieve_all_slim_documents(
+def test_retrieve_all_slim_docs_perm_sync(
     confluence_connector: ConfluenceConnector,
     create_mock_page: Callable[..., dict[str, Any]],
 ) -> None:
@@ -318,8 +318,8 @@ def test_retrieve_all_slim_documents(
         MagicMock(json=lambda: {"results": []}),
     ]
 
-    # Call retrieve_all_slim_documents
-    batches = list(confluence_connector.retrieve_all_slim_documents(0, 100))
+    # Call retrieve_all_slim_docs_perm_sync
+    batches = list(confluence_connector.retrieve_all_slim_docs_perm_sync(0, 100))
     assert get_mock.call_count == 4
 
     # Check that a batch with 2 documents was returned

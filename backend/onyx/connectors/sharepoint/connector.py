@@ -41,7 +41,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -672,7 +672,7 @@ def _convert_sitepage_to_slim_document(
 
 
 class SharepointConnector(
-    SlimConnector,
+    SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
 ):
     def __init__(
@@ -1597,7 +1597,7 @@ class SharepointConnector(
     ) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint.model_validate_json(checkpoint_json)
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

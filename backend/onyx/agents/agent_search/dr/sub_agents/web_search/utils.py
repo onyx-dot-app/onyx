@@ -34,7 +34,7 @@ def dummy_inference_section_from_internet_content(
             boost=1,
             recency_bias=1.0,
             score=1.0,
-            hidden=False,
+            hidden=(not result.scrape_successful),
             metadata={},
             match_highlights=[],
             doc_summary=truncated_content,

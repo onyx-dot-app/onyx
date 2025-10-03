@@ -5,6 +5,7 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
+from atlassian.errors import ApiError  # type: ignore
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
@@ -41,6 +42,7 @@ from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
@@ -91,6 +93,7 @@ class ConfluenceCheckpoint(ConnectorCheckpoint):
 class ConfluenceConnector(
     CheckpointedConnector[ConfluenceCheckpoint],
     SlimConnector,
+    SlimConnectorWithPermSync,
     CredentialsConnector,
 ):
     def __init__(
@@ -562,7 +565,21 @@ class ConfluenceConnector(
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:
         return ConfluenceCheckpoint.model_validate_json(checkpoint_json)
 
-    def retrieve_all_slim_documents(
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs(
+            start=start,
+            end=end,
+            callback=callback,
+            include_permissions=False,
+        )
+
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -572,12 +589,28 @@ class ConfluenceConnector(
         Return 'slim' docs (IDs + minimal permission data).
         Does not fetch actual text. Used primarily for incremental permission sync.
         """
+        return self._retrieve_all_slim_docs(
+            start=start,
+            end=end,
+            callback=callback,
+            include_permissions=True,
+        )
+
+    def _retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
+    ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
-        space_level_access_info = get_all_space_permissions(
-            self.confluence_client, self.is_cloud
-        )
+        space_level_access_info: dict[str, ExternalAccess] = {}
+        if include_permissions:
+            space_level_access_info = get_all_space_permissions(
+                self.confluence_client, self.is_cloud
+            )
 
         def get_external_access(
             doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
@@ -604,8 +637,10 @@ class ConfluenceConnector(
             doc_metadata_list.append(
                 SlimDocument(
                     id=page_id,
-                    external_access=get_external_access(
-                        page_id, page_restrictions, page_ancestors
+                    external_access=(
+                        get_external_access(page_id, page_restrictions, page_ancestors)
+                        if include_permissions
+                        else None
                     ),
                 )
             )
@@ -640,8 +675,12 @@ class ConfluenceConnector(
                 doc_metadata_list.append(
                     SlimDocument(
                         id=attachment_id,
-                        external_access=get_external_access(
-                            attachment_id, attachment_restrictions, []
+                        external_access=(
+                            get_external_access(
+                                attachment_id, attachment_restrictions, []
+                            )
+                            if include_permissions
+                            else None
                         ),
                     )
                 )
@@ -652,10 +691,10 @@ class ConfluenceConnector(
 
                 if callback and callback.should_stop():
                     raise RuntimeError(
-                        "retrieve_all_slim_documents: Stop signal detected"
+                        "retrieve_all_slim_docs_perm_sync: Stop signal detected"
                     )
                 if callback:
-                    callback.progress("retrieve_all_slim_documents", 1)
+                    callback.progress("retrieve_all_slim_docs_perm_sync", 1)
 
         yield doc_metadata_list
 
@@ -679,6 +718,14 @@ class ConfluenceConnector(
             raise UnexpectedValidationError(
                 f"Unexpected error while validating Confluence settings: {e}"
             )
+
+        if self.space:
+            try:
+                self.low_timeout_confluence_client.get_space(self.space)
+            except ApiError as e:
+                raise ConnectorValidationError(
+                    "Invalid Confluence space key provided"
+                ) from e
 
         if not spaces or not spaces.get("results"):
             raise ConnectorValidationError(
@@ -728,7 +775,7 @@ if __name__ == "__main__":
     end = datetime.now().timestamp()
 
     # Fetch all `SlimDocuments`.
-    for slim_doc in confluence_connector.retrieve_all_slim_documents():
+    for slim_doc in confluence_connector.retrieve_all_slim_docs_perm_sync():
         print(slim_doc)
 
     # Fetch all `Documents`.

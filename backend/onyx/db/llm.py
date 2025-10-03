@@ -112,6 +112,7 @@ def upsert_llm_provider(
                 name=model_configuration.name,
                 is_visible=model_configuration.is_visible,
                 max_input_tokens=model_configuration.max_input_tokens,
+                supports_image_input=model_configuration.supports_image_input,
             )
             .on_conflict_do_nothing()
         )

@@ -579,6 +579,16 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     search_doc_map[doc_id] = []
                 search_doc_map[doc_id].append(sd)
 
+            task_logger.debug(
+                f"Built search doc map with {len(search_doc_map)} entries"
+            )
+            ids_preview = list(search_doc_map.keys())[:5]
+            task_logger.debug(
+                f"First few search_doc_map ids: {ids_preview if ids_preview else 'No ids found'}"
+            )
+            task_logger.debug(
+                f"search_doc_map total items: {sum(len(docs) for docs in search_doc_map.values())}"
+            )
             # Process each UserFile and update matching SearchDocs
             updated_count = 0
             for uf in user_files:
@@ -586,9 +596,18 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                 if doc_id.startswith("USER_FILE_CONNECTOR__"):
                     doc_id = "FILE_CONNECTOR__" + doc_id[len("USER_FILE_CONNECTOR__") :]
 
+                task_logger.debug(f"Processing user file {uf.id} with doc_id {doc_id}")
+                task_logger.debug(
+                    f"doc_id in search_doc_map: {doc_id in search_doc_map}"
+                )
+
                 if doc_id in search_doc_map:
+                    search_docs = search_doc_map[doc_id]
+                    task_logger.debug(
+                        f"Found {len(search_docs)} search docs to update for user file {uf.id}"
+                    )
                     # Update the SearchDoc to use the UserFile's UUID
-                    for search_doc in search_doc_map[doc_id]:
+                    for search_doc in search_docs:
                         search_doc.document_id = str(uf.id)
                         db_session.add(search_doc)
 

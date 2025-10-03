@@ -53,7 +53,7 @@ oauthlib==3.2.2
 openai==1.99.5
 openpyxl==3.1.5
 passlib==1.7.4
-playwright==1.41.2
+playwright==1.55.0
 psutil==5.9.5
 psycopg2-binary==2.9.9
 puremagic==1.28

@@ -124,9 +124,9 @@ def get_space_permission(
         and not space_permissions.external_user_group_ids
     ):
         logger.warning(
-            f"No permissions found for space '{space_key}'. This is very unlikely"
-            "to be correct and is more likely caused by an access token with"
-            "insufficient permissions. Make sure that the access token has Admin"
+            f"No permissions found for space '{space_key}'. This is very unlikely "
+            "to be correct and is more likely caused by an access token with "
+            "insufficient permissions. Make sure that the access token has Admin "
             f"permissions for space '{space_key}'"
         )
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
 
-import { FiPlusSquare } from "react-icons/fi";
+import { FiPlusSquare, FiDownloadCloud } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -22,13 +22,54 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
+import { Spinner } from "@/components/Spinner";
 const UsersTables = ({
   q,
   setPopup,
+  isDownloadingUsers,
+  setIsDownloadingUsers,
 }: {
   q: string;
   setPopup: (spec: PopupSpec) => void;
+  isDownloadingUsers: boolean;
+  setIsDownloadingUsers: (loading: boolean) => void;
 }) => {
+  const downloadAllUsers = async () => {
+    setIsDownloadingUsers(true);
+    const startTime = Date.now();
+    const minDurationMsForSpinner = 1000;
+    try {
+      const response = await fetch("/api/manage/users/download");
+      if (!response.ok) {
+        throw new Error("Failed to download all users");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor_tag = document.createElement("a");
+      anchor_tag.href = url;
+      anchor_tag.download = "users.csv";
+      document.body.appendChild(anchor_tag);
+      anchor_tag.click();
+      //Clean up URL after download to avoid memory leaks
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(anchor_tag);
+    } catch (error) {
+      setPopup({
+        message: `Failed to download all users - ${error}`,
+        type: "error",
+      });
+    } finally {
+      //Ensure spinner is visible for at least 1 second
+      //This is to avoid the spinner disappearing too quickly
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      await new Promise((resolve) =>
+        setTimeout(resolve, minDurationMsForSpinner - duration)
+      );
+      setIsDownloadingUsers(false);
+    }
+  };
+
   const {
     data: invitedUsers,
     error: invitedUsersError,
@@ -80,7 +121,19 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <CardTitle>Current Users</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Current Users</CardTitle>
+              <Button
+                color={"blue"}
+                icon={FiDownloadCloud}
+                size="sm"
+                className="w-fit"
+                disabled={isDownloadingUsers}
+                onClick={() => downloadAllUsers()}
+              >
+                {isDownloadingUsers ? "Downloading..." : "Download CSV"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <SignedUpUserTable
@@ -136,24 +189,33 @@ const SearchableTables = () => {
   const { popup, setPopup } = usePopup();
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
+  const [isDownloadingUsers, setIsDownloadingUsers] = useState(false);
 
   return (
-    <div>
-      {popup}
-      <div className="flex flex-col gap-y-4">
-        <div className="flex gap-x-4">
-          <AddUserButton setPopup={setPopup} />
-          <div className="flex-grow">
-            <SearchBar
-              query={query}
-              setQuery={setQuery}
-              onSearch={() => setQ(query)}
-            />
+    <>
+      {isDownloadingUsers && <Spinner />}
+      <div>
+        {popup}
+        <div className="flex flex-col gap-y-4">
+          <div className="flex gap-x-4">
+            <AddUserButton setPopup={setPopup} />
+            <div className="flex-grow">
+              <SearchBar
+                query={query}
+                setQuery={setQuery}
+                onSearch={() => setQ(query)}
+              />
+            </div>
           </div>
+          <UsersTables
+            q={q}
+            setPopup={setPopup}
+            isDownloadingUsers={isDownloadingUsers}
+            setIsDownloadingUsers={setIsDownloadingUsers}
+          />
         </div>
-        <UsersTables q={q} setPopup={setPopup} />
       </div>
-    </div>
+    </>
   );
 };
 

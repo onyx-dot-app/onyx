@@ -16,6 +16,7 @@ from langchain.schema.messages import AIMessage
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
+from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
@@ -26,6 +27,9 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import LLMProvider
+from onyx.db.models import ModelConfiguration
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -640,6 +644,30 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
+    # TODO: Add support to check model config for any provider
+    # TODO: Circular import means OLLAMA_PROVIDER_NAME is not available here
+
+    if model_provider == "ollama":
+        try:
+            with get_session_with_current_tenant() as db_session:
+                model_config = db_session.scalar(
+                    select(ModelConfiguration)
+                    .join(
+                        LLMProvider,
+                        ModelConfiguration.llm_provider_id == LLMProvider.id,
+                    )
+                    .where(
+                        ModelConfiguration.name == model_name,
+                        LLMProvider.provider == model_provider,
+                    )
+                )
+                if model_config and model_config.supports_image_input is not None:
+                    return model_config.supports_image_input
+        except Exception as e:
+            logger.warning(
+                f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+            )
+
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(

@@ -43,7 +43,9 @@ def test_bitbucket_full_ids_subset_of_slim_ids(
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids: set[str] = set()
-    for slim_doc_batch in bitbucket_connector_for_slim.retrieve_all_slim_documents():
+    for (
+        slim_doc_batch
+    ) in bitbucket_connector_for_slim.retrieve_all_slim_docs_perm_sync():
         all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
 
     # The set of full doc IDs should always be a subset of slim doc IDs

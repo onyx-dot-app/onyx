@@ -54,7 +54,7 @@ def test_confluence_connector_permissions(
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
-    for slim_doc_batch in confluence_connector.retrieve_all_slim_documents():
+    for slim_doc_batch in confluence_connector.retrieve_all_slim_docs_perm_sync():
         all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
 
     # Find IDs that are in full but not in slim

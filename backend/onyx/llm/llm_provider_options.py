@@ -38,6 +38,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     model_configurations: list[ModelConfigurationView]
     default_model: str | None = None
     default_fast_model: str | None = None
+    default_api_base: str | None = None
     # set for providers like Azure, which require a deployment name.
     deployment_name_required: bool = False
     # set for providers like Azure, which support a single model per deployment.
@@ -87,28 +88,20 @@ OPEN_AI_VISIBLE_MODEL_NAMES = [
 BEDROCK_PROVIDER_NAME = "bedrock"
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
-# Cached model names to avoid repeated litellm imports
-_bedrock_model_names_cache: list[str] | None = None
-_anthropic_model_names_cache: list[str] | None = None
+OLLAMA_PROVIDER_NAME = "ollama"
+OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 
 
 def get_bedrock_model_names() -> list[str]:
-    global _bedrock_model_names_cache
+    import litellm
 
-    if _bedrock_model_names_cache is None:
-        import litellm
-
-        # bedrock_converse_models are just extensions of the bedrock_models, not sure why
-        # litellm has split them into two lists :(
-        _bedrock_model_names_cache = [
-            model
-            for model in list(
-                litellm.bedrock_models.union(litellm.bedrock_converse_models)
-            )
-            if "/" not in model and "embed" not in model
-        ][::-1]
-
-    return _bedrock_model_names_cache
+    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
+    # litellm has split them into two lists :(
+    return [
+        model
+        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
+        if "/" not in model and "embed" not in model
+    ][::-1]
 
 
 IGNORABLE_ANTHROPIC_MODELS = [
@@ -120,19 +113,13 @@ ANTHROPIC_PROVIDER_NAME = "anthropic"
 
 
 def get_anthropic_model_names() -> list[str]:
-    """Lazy-load Anthropic model names to avoid importing litellm at module level."""
-    global _anthropic_model_names_cache
+    import litellm
 
-    if _anthropic_model_names_cache is None:
-        import litellm
-
-        _anthropic_model_names_cache = [
-            model
-            for model in litellm.anthropic_models
-            if model not in IGNORABLE_ANTHROPIC_MODELS
-        ][::-1]
-
-    return _anthropic_model_names_cache
+    return [
+        model
+        for model in litellm.anthropic_models
+        if model not in IGNORABLE_ANTHROPIC_MODELS
+    ][::-1]
 
 
 ANTHROPIC_VISIBLE_MODEL_NAMES = [
@@ -189,14 +176,16 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         BEDROCK_PROVIDER_NAME: get_bedrock_model_names(),
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+        OLLAMA_PROVIDER_NAME: [],
     }
 
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
-    BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
+    BEDROCK_PROVIDER_NAME: [],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    OLLAMA_PROVIDER_NAME: [],
 }
 
 
@@ -214,6 +203,28 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=OLLAMA_PROVIDER_NAME,
+            display_name="Ollama",
+            api_key_required=False,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(
+                    name=OLLAMA_API_KEY_CONFIG_KEY,
+                    display_name="Ollama API Key",
+                    description="Optional API key used when connecting to Ollama Cloud (i.e. API base is https://ollama.com).",
+                    is_required=False,
+                    is_secret=True,
+                )
+            ],
+            model_configurations=fetch_model_configurations_for_provider(
+                OLLAMA_PROVIDER_NAME
+            ),
+            default_model=None,
+            default_fast_model=None,
+            default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,
@@ -278,7 +289,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 BEDROCK_PROVIDER_NAME
             ),
-            default_model=BEDROCK_DEFAULT_MODEL,
+            default_model=None,
             default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(

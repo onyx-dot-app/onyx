@@ -315,7 +315,7 @@ def test_load_from_checkpoint_with_skipped_issue(
     assert len(checkpoint_output.items) == 0
 
 
-def test_retrieve_all_slim_documents(
+def test_retrieve_all_slim_docs_perm_sync(
     jira_connector: JiraConnector, create_mock_issue: Any
 ) -> None:
     """Test retrieving all slim documents"""
@@ -341,8 +341,8 @@ def test_retrieve_all_slim_documents(
                 "https://jira.example.com/browse/TEST-2",
             ]
 
-            # Call retrieve_all_slim_documents
-            batches = list(jira_connector.retrieve_all_slim_documents(0, 100))
+            # Call retrieve_all_slim_docs_perm_sync
+            batches = list(jira_connector.retrieve_all_slim_docs_perm_sync(0, 100))
 
             # Check that a batch with 2 documents was returned
             assert len(batches) == 1
