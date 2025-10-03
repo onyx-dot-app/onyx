@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.3.5
+version: 0.4.0
 appVersion: latest
 annotations:
   category: Productivity
@@ -27,10 +27,11 @@ dependencies:
     version: 0.2.24
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
-  - name: nginx
-    version: 15.14.0
-    repository: oci://registry-1.docker.io/bitnamicharts
+  - name: ingress-nginx
+    version: 4.13.3
+    repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
+    alias: nginx
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts

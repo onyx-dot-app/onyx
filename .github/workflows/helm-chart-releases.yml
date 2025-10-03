@@ -25,7 +25,7 @@ jobs:
 
       - name: Add required Helm repositories
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
           helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
