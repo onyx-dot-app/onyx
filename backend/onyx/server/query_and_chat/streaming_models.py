@@ -36,6 +36,12 @@ class MessageDelta(BaseObj):
 """Control Packets"""
 
 
+class PacketException(BaseObj):
+    type: Literal["error"] = "error"
+    exception: Exception
+    model_config = {"arbitrary_types_allowed": True}
+
+
 class OverallStop(BaseObj):
     type: Literal["stop"] = "stop"
 
@@ -58,6 +64,12 @@ class SearchToolDelta(BaseObj):
 
     queries: list[str] | None = None
     documents: list[SavedSearchDoc] | None = None
+
+
+class FetchToolStart(BaseObj):
+    type: Literal["fetch_tool_start"] = "fetch_tool_start"
+
+    documents: list[SavedSearchDoc]
 
 
 class ImageGenerationToolStart(BaseObj):
@@ -182,6 +194,8 @@ PacketObj = Annotated[
         ReasoningDelta,
         CitationStart,
         CitationDelta,
+        PacketException,
+        FetchToolStart,
     ],
     Field(discriminator="type"),
 ]
