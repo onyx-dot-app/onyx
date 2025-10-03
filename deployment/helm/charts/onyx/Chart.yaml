@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.3.3
+version: 0.3.4
 appVersion: latest
 annotations:
   category: Productivity
@@ -18,10 +18,11 @@ annotations:
     - name: vespa
       image: vespaengine/vespa:8.526.15
 dependencies:
-  - name: postgresql
-    version: 14.3.1
-    repository: https://charts.bitnami.com/bitnami
+  - name: cloudnative-pg
+    version: 0.26.0
+    repository: https://cloudnative-pg.github.io/charts
     condition: postgresql.enabled
+    alias: postgresql
   - name: vespa
     version: 0.2.24
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
@@ -31,8 +32,8 @@ dependencies:
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: nginx.enabled
   - name: redis
-    version: 20.1.0
-    repository: https://charts.bitnami.com/bitnami
+    version: 0.16.6
+    repository: https://ot-container-kit.github.io/helm-charts
     condition: redis.enabled
   - name: minio
     version: 17.0.4

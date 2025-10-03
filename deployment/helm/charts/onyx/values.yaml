@@ -9,19 +9,15 @@ global:
   pullPolicy: "IfNotPresent"
 
 postgresql:
-  primary:
-    persistence:
+  enabled: true
+  cluster:
+    instances: 1
+    storage:
       storageClass: ""
       size: 10Gi
-    shmVolume:
-      enabled: true
-      sizeLimit: 2Gi
-  enabled: true
-  auth:
-    existingSecret: onyx-postgresql
-    secretKeys:
-      # overwriting as postgres typically expects 'postgres-password'
-      adminPasswordKey: postgres_password
+    enableSuperuserAccess: true
+    superuserSecret:
+      name: onyx-postgresql  # keep in sync with auth.postgresql
 
 vespa:
   name: da-vespa-0
@@ -707,27 +703,35 @@ celery_worker_docfetching:
 
 redis:
   enabled: true
-  architecture: standalone
-  commonConfiguration: |-
-    # Enable AOF https://redis.io/topics/persistence#append-only-file
-    appendonly no
-    # Disable RDB persistence, AOF persistence already enabled.
-    save ""
-  master:
-    replicaCount: 1
-    image:
-      registry: docker.io
-      repository: bitnami/redis
-      tag: "7.4.0"
-      pullPolicy: IfNotPresent
-    persistence:
-      enabled: false
-  service:
-    type: ClusterIP
-    port: 6379
-  auth:
-    existingSecret: onyx-redis
-    existingSecretPasswordKey: redis_password
+  redisStandalone:
+    image: quay.io/opstree/redis
+    tag: v7.0.15
+    imagePullPolicy: IfNotPresent
+    serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Use existing secret for Redis password
+    redisSecret:
+      secretName: onyx-redis
+      secretKey: redis_password
+  # Redis configuration
+  externalConfig:
+    enabled: true
+    data: |
+      appendonly no
+      save ""
+  storageSpec:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
 
 minio:
   enabled: true
@@ -772,10 +776,13 @@ auth:
     existingSecret: ""
     # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
-      POSTGRES_PASSWORD: "postgres_password"
+      # CloudNativePG requires `username` and `password` keys for the superuser secret.
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
-      postgres_password: "postgres"
+      username: "postgres"
+      password: "postgres"
   redis:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: true

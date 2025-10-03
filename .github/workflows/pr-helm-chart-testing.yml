@@ -67,33 +67,42 @@ jobs:
         echo "=== Adding Helm repositories ==="
         helm repo add bitnami https://charts.bitnami.com/bitnami
         helm repo add vespa https://onyx-dot-app.github.io/vespa-helm-charts
+        helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+        helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
         helm repo update
 
-    - name: Pre-pull critical images
+    - name: Install Redis operator
+      if: steps.list-changed.outputs.changed == 'true'
+      shell: bash
+      run: |
+        echo "=== Installing redis-operator CRDs ==="
+        helm upgrade --install redis-operator ot-container-kit/redis-operator \
+          --namespace redis-operator --create-namespace --wait --timeout 300s
+
+    - name: Pre-pull required images
       if: steps.list-changed.outputs.changed == 'true'
       run: |
-        echo "=== Pre-pulling critical images to avoid timeout ==="
-        # Get kind cluster name
+        echo "=== Pre-pulling required images to avoid timeout ==="
         KIND_CLUSTER=$(kubectl config current-context | sed 's/kind-//')
         echo "Kind cluster: $KIND_CLUSTER"
-        
-        # Pre-pull images that are likely to be used
-        echo "Pre-pulling PostgreSQL image..."
-        docker pull postgres:15-alpine || echo "Failed to pull postgres:15-alpine"
-        kind load docker-image postgres:15-alpine --name $KIND_CLUSTER || echo "Failed to load postgres image"
-        
-        echo "Pre-pulling Redis image..."
-        docker pull redis:7-alpine || echo "Failed to pull redis:7-alpine"
-        kind load docker-image redis:7-alpine --name $KIND_CLUSTER || echo "Failed to load redis image"
-        
-        echo "Pre-pulling Onyx images..."
-        docker pull docker.io/onyxdotapp/onyx-web-server:latest || echo "Failed to pull onyx web server"
-        docker pull docker.io/onyxdotapp/onyx-backend:latest || echo "Failed to pull onyx backend"
-        kind load docker-image docker.io/onyxdotapp/onyx-web-server:latest --name $KIND_CLUSTER || echo "Failed to load onyx web server"
-        kind load docker-image docker.io/onyxdotapp/onyx-backend:latest --name $KIND_CLUSTER || echo "Failed to load onyx backend"
-        
+
+        IMAGES=(
+          "ghcr.io/cloudnative-pg/cloudnative-pg:1.27.0"
+          "quay.io/opstree/redis:v7.0.15"
+          "docker.io/onyxdotapp/onyx-web-server:latest"
+        )
+
+        for image in "${IMAGES[@]}"; do
+          echo "Pre-pulling $image"
+          if docker pull "$image"; then
+            kind load docker-image "$image" --name "$KIND_CLUSTER" || echo "Failed to load $image into kind"
+          else
+            echo "Failed to pull $image"
+          fi
+        done
+
         echo "=== Images loaded into Kind cluster ==="
-        docker exec $KIND_CLUSTER-control-plane crictl images | grep -E "(postgres|redis|onyx)" || echo "Some images may still be loading..."
+        docker exec "$KIND_CLUSTER"-control-plane crictl images | grep -E "(cloudnative-pg|redis|onyx)" || echo "Some images may still be loading..."
 
     - name: Validate chart dependencies
       if: steps.list-changed.outputs.changed == 'true'
@@ -149,6 +158,7 @@ jobs:
         
         # Run the actual installation with detailed logging
         echo "=== Starting ct install ==="
+        set +e
         ct install --all \
           --helm-extra-set-args="\
             --set=nginx.enabled=false \
@@ -156,8 +166,10 @@ jobs:
             --set=vespa.enabled=false \
             --set=slackbot.enabled=false \
             --set=postgresql.enabled=true \
-            --set=postgresql.primary.persistence.enabled=false \
+            --set=postgresql.nameOverride=cloudnative-pg \
+            --set=postgresql.cluster.storage.storageClass=standard \
             --set=redis.enabled=true \
+            --set=redis.storageSpec.volumeClaimTemplate.spec.storageClassName=standard \
             --set=webserver.replicaCount=1 \
             --set=api.replicaCount=0 \
             --set=inferenceCapability.replicaCount=0 \
@@ -173,8 +185,16 @@ jobs:
             --set=celery_worker_user_files_indexing.replicaCount=0" \
           --helm-extra-args="--timeout 900s --debug" \
           --debug --config ct.yaml
-        
-        echo "=== Installation completed successfully ==="
+        CT_EXIT=$?
+        set -e
+
+        if [[ $CT_EXIT -ne 0 ]]; then
+          echo "ct install failed with exit code $CT_EXIT"
+          exit $CT_EXIT
+        else
+          echo "=== Installation completed successfully ==="
+        fi
+
         kubectl get pods --all-namespaces
 
     - name: Post-install verification
@@ -199,7 +219,7 @@ jobs:
         
         echo "=== Recent logs for debugging ==="
         kubectl logs --all-namespaces --tail=50 | grep -i "error\|timeout\|failed\|pull" || echo "No error logs found"
-        
+
         echo "=== Helm releases ==="
         helm list --all-namespaces
       # the following would install only changed charts, but we only have one chart so 
