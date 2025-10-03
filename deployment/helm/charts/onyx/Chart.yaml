@@ -36,6 +36,6 @@ dependencies:
     repository: https://ot-container-kit.github.io/helm-charts
     condition: redis.enabled
   - name: minio
-    version: 17.0.4
-    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 5.4.0
+    repository: https://charts.min.io/
     condition: minio.enabled

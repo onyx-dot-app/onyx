@@ -735,23 +735,22 @@ redis:
 
 minio:
   enabled: true
-  auth:
-    existingSecret: onyx-objectstorage
-    rootUserSecretKey: s3_aws_access_key_id
-    rootPasswordSecretKey: s3_aws_secret_access_key
-  defaultBuckets: "onyx-file-store-bucket"
+  mode: standalone
+  replicas: 1
+  drivesPerNode: 1
+  existingSecret: onyx-objectstorage
+  buckets:
+    - name: onyx-file-store-bucket
   persistence:
     enabled: true
     size: 30Gi
+    storageClass: ""
   service:
     type: ClusterIP
-    ports:
-      api: 9000
-      console: 9001
+    port: 9000
   consoleService:
     type: ClusterIP
-    ports:
-      http: 9001
+    port: 9001
 
 ingress:
   enabled: false
@@ -811,6 +810,8 @@ auth:
     values:
       s3_aws_access_key_id: "minioadmin"
       s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
   oauth:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
