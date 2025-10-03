@@ -5,7 +5,6 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
-import asyncio
 from collections.abc import Awaitable
 from collections.abc import Callable
 from enum import Enum
@@ -25,9 +24,9 @@ from mcp.types import TextResourceContents
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
-from onyx.utils.threadpool_concurrency import run_async_sync
 from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_async_sync
 
 logger = setup_logger()
 
