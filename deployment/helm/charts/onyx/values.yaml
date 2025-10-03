@@ -16,7 +16,8 @@ postgresql:
       storageClass: ""
       size: 10Gi
     enableSuperuserAccess: true
-    superuserSecret: onyx-postgresql  # keep in sync with auth.postgresql
+    superuserSecret:
+      name: onyx-postgresql  # keep in sync with auth.postgresql
 
 vespa:
   name: da-vespa-0
