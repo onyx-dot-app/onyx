@@ -190,6 +190,7 @@ jobs:
 
         if [[ $CT_EXIT -ne 0 ]]; then
           echo "ct install failed with exit code $CT_EXIT"
+          exit $CT_EXIT
         else
           echo "=== Installation completed successfully ==="
         fi
