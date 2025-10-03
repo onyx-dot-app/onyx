@@ -5,7 +5,6 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
-import asyncio
 from collections.abc import Awaitable
 from collections.abc import Callable
 from enum import Enum
@@ -27,6 +26,7 @@ from pydantic import BaseModel
 
 from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_async_sync
 
 logger = setup_logger()
 
@@ -203,13 +203,7 @@ def _call_mcp_client_function_sync(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        # Run the async function in a new event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(run_client_function())
-        finally:
-            loop.close()
+        return run_async_sync(run_client_function())
     except Exception as e:
         logger.error(f"Failed to call MCP client function: {e}")
         if isinstance(e, ExceptionGroup):
