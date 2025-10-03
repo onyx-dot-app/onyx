@@ -40,6 +40,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import ColoredFormatter
+from onyx.utils.logger import get_log_level_from_str
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
 from onyx.utils.logger import setup_logger
@@ -403,6 +404,10 @@ def on_setup_logging(
 ) -> None:
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
+
+    env_log_level = get_log_level_from_str()
+    if env_log_level != loglevel:
+        loglevel = env_log_level
 
     root_logger = logging.getLogger()
     root_logger.handlers = []
