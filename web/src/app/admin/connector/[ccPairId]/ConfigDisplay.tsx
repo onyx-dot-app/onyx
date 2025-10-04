@@ -40,6 +40,11 @@ export function buildConfigEntries(
     return {
       base_url: obj.base_url,
     };
+  } else if (sourceType === ValidSources.Joplin) {
+    // Joplin uses permit policy: hide include_* fields
+    // Code kept for future policy selection feature
+    const { include_folders, include_tags, ...filtered } = obj;
+    return filtered;
   }
   return obj;
 }
