@@ -37,6 +37,19 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
 
+# Azure AD / Entra ID often returns the email attribute under different keys.
+# Keep a list of common variations so we can fall back gracefully if the IdP
+# does not send the plain "email" attribute name.
+EMAIL_ATTRIBUTE_KEYS = {
+    "email",
+    "emailaddress",
+    "mail",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mail",
+    "http://schemas.microsoft.com/identity/claims/emailaddress",
+}
+EMAIL_ATTRIBUTE_KEYS_LOWER = {key.lower() for key in EMAIL_ATTRIBUTE_KEYS}
+
 
 async def upsert_saml_user(email: str) -> User:
     """
@@ -204,16 +217,37 @@ async def _process_saml_callback(
             detail=detail,
         )
 
-    user_email = auth.get_attribute("email")
-    if not user_email:
-        detail = "SAML is not set up correctly, email attribute must be provided."
-        logger.error(detail)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail,
-        )
+    user_email: str | None = None
 
-    user_email = user_email[0]
+    # The OneLogin toolkit normalizes attribute keys, but still performs a
+    # case-sensitive lookup. Try the common keys first and then fall back to a
+    # case-insensitive scan of all returned attributes.
+    for attribute_key in EMAIL_ATTRIBUTE_KEYS:
+        attribute_values = auth.get_attribute(attribute_key)
+        if attribute_values:
+            user_email = attribute_values[0]
+            break
+
+    if not user_email:
+        # Fallback: perform a case-insensitive lookup across all attributes in
+        # case the IdP sent the email claim with a different capitalization.
+        attributes = auth.get_attributes()
+        for key, values in attributes.items():
+            if key.lower() in EMAIL_ATTRIBUTE_KEYS_LOWER:
+                if values:
+                    user_email = values[0]
+                    break
+        if not user_email:
+            detail = "SAML is not set up correctly, email attribute must be provided."
+            logger.error(detail)
+            logger.debug(
+                "Received SAML attributes without email: %s",
+                list(attributes.keys()),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=detail,
+            )
 
     user = await upsert_saml_user(email=user_email)
 
