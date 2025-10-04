@@ -1,5 +1,7 @@
 import { AuthType } from "@/lib/constants";
 import { FaGoogle } from "react-icons/fa";
+import { SiAuth0 } from "react-icons/si";
+
 
 export function SignInButton({
   authorizeUrl,
@@ -18,6 +20,16 @@ export function SignInButton({
         <p className="text-sm font-medium select-none">Continue with Google</p>
       </div>
     );
+  } else if (authType === "auth0") {
+    button = (
+      <div className="mx-auto flex">
+        <div className="my-auto mr-2">
+          <SiAuth0 />
+        </div>
+        <p className="text-sm font-medium select-none">Continue with Auth0</p>
+      </div>
+    );
+
   } else if (authType === "oidc") {
     button = (
       <div className="mx-auto flex">

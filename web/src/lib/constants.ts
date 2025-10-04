@@ -2,6 +2,7 @@ export type AuthType =
   | "disabled"
   | "basic"
   | "google_oauth"
+  | "auth0"
   | "oidc"
   | "saml"
   | "cloud";
