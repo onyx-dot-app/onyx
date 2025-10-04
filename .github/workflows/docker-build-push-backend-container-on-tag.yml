@@ -8,9 +8,9 @@ on:
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
   DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
-  
-  # don't tag cloud images with "latest"
-  LATEST_TAG: ${{ contains(github.ref_name, 'latest') && !contains(github.ref_name, 'cloud') }}
+
+  # tag nightly builds with "edge"
+  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
 
 jobs:
   build-and-push:
@@ -33,7 +33,16 @@ jobs:
         run: |
           platform=${{ matrix.platform }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-          
+
+      - name: Check if stable release version
+        id: check_version
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "${{ github.ref_name }}" != *"cloud"* ]]; then
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -46,7 +55,8 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ github.ref_name }}
-            type=raw,value=${{ env.LATEST_TAG == 'true' && 'latest' || '' }}
+            type=raw,value=${{ steps.check_version.outputs.is_stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ env.EDGE_TAG == 'true' && 'edge' || '' }}
             
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -119,7 +129,8 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ github.ref_name }}
-            type=raw,value=${{ env.LATEST_TAG == 'true' && 'latest' || '' }}
+            type=raw,value=${{ steps.check_version.outputs.is_stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ env.EDGE_TAG == 'true' && 'edge' || '' }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
