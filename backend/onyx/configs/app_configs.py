@@ -24,8 +24,6 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
-SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
-
 #####
 # User Facing Features Configs
 #####

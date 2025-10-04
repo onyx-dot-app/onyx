@@ -1,16 +1,20 @@
 import json
 import os
 from typing import cast
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-from transformers import DistilBertConfig  # type: ignore
-from transformers import DistilBertModel  # type: ignore
-from transformers import DistilBertTokenizer  # type: ignore
+
+
+if TYPE_CHECKING:
+    from transformers import DistilBertConfig  # type: ignore
 
 
 class HybridClassifier(nn.Module):
     def __init__(self) -> None:
+        from transformers import DistilBertConfig, DistilBertModel
+
         super().__init__()
         config = DistilBertConfig()
         self.distilbert = DistilBertModel(config)
@@ -74,7 +78,9 @@ class HybridClassifier(nn.Module):
 
 
 class ConnectorClassifier(nn.Module):
-    def __init__(self, config: DistilBertConfig) -> None:
+    def __init__(self, config: "DistilBertConfig") -> None:
+        from transformers import DistilBertTokenizer, DistilBertModel
+
         super().__init__()
 
         self.config = config
@@ -115,6 +121,8 @@ class ConnectorClassifier(nn.Module):
 
     @classmethod
     def from_pretrained(cls, repo_dir: str) -> "ConnectorClassifier":
+        from transformers import DistilBertConfig
+
         config = cast(
             DistilBertConfig,
             DistilBertConfig.from_pretrained(os.path.join(repo_dir, "config.json")),

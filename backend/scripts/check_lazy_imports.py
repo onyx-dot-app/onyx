@@ -30,11 +30,12 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
     "openai": LazyImportSettings(),
     "markitdown": LazyImportSettings(),
     "tiktoken": LazyImportSettings(),
+    "transformers": LazyImportSettings(ignore_files={"model_server/main.py"}),
+    "setfit": LazyImportSettings(),
     "unstructured": LazyImportSettings(),
     "onyx.llm.litellm_singleton": LazyImportSettings(),
     "litellm": LazyImportSettings(
         ignore_files={
-            "onyx/llm/llm_provider_options.py",
             "onyx/llm/litellm_singleton.py",
         }
     ),
@@ -165,9 +166,8 @@ def should_check_file_for_module(
 
     # Get relative path from backend directory
     rel_path = file_path.relative_to(backend_dir)
-    rel_path_str = str(rel_path)
+    rel_path_str = rel_path.as_posix()
 
-    # Check if this specific file path is in the ignore list
     return rel_path_str not in settings.ignore_files
 
 

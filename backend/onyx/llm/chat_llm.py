@@ -393,6 +393,7 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
         from onyx.llm.litellm_singleton import litellm
+        from litellm.exceptions import Timeout, RateLimitError
 
         try:
             return litellm.completion(
@@ -456,12 +457,13 @@ class DefaultMultiLLM(LLM):
                 **self._model_kwargs,
             )
         except Exception as e:
+
             self._record_error(processed_prompt, e)
             # for break pointing
-            if isinstance(e, litellm.Timeout):
+            if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)
 
-            elif isinstance(e, litellm.RateLimitError):
+            elif isinstance(e, RateLimitError):
                 raise LLMRateLimitError(e)
 
             raise e

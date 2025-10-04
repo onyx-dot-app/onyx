@@ -6,6 +6,10 @@ from urllib.parse import urlparse
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
 
+# Skip model warmup at startup
+# Default to True (skip warmup) if not set, otherwise respect the value
+SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "true").lower() == "true"
+
 MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
 MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
 MODEL_SERVER_PORT = int(os.environ.get("MODEL_SERVER_PORT") or "9000")
