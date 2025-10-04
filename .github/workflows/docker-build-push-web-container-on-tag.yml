@@ -8,8 +8,8 @@ on:
 env:
   REGISTRY_IMAGE: onyxdotapp/onyx-web-server
 
-  # only tag stable releases with "latest" (exclude nightly and beta)
-  LATEST_TAG: ${{ !contains(github.ref_name, 'nightly') && !contains(github.ref_name, 'beta') }}
+  # only tag stable releases with "latest" (must match vX.Y.Z format)
+  LATEST_TAG: ${{ startsWith(github.ref_name, 'v') && !contains(github.ref_name, 'nightly') && !contains(github.ref_name, 'beta') }}
 
   # tag nightly builds with "edge"
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}

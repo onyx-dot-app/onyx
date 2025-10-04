@@ -11,8 +11,8 @@ env:
   BUILDKIT_PROGRESS: plain
   DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
 
-  # only tag stable releases with "latest" (exclude nightly, beta, and cloud)
-  LATEST_TAG: ${{ !contains(github.ref_name, 'nightly') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'cloud') }}
+  # only tag stable releases with "latest" (must match vX.Y.Z format and exclude cloud)
+  LATEST_TAG: ${{ startsWith(github.ref_name, 'v') && !contains(github.ref_name, 'nightly') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'cloud') }}
 
   # tag nightly builds with "edge"
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
