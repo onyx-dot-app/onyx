@@ -144,6 +144,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
+  const [editingConfigField, setEditingConfigField] = useState<string | null>(
+    null
+  );
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
@@ -340,6 +343,59 @@ function Main({ ccPairId }: { ccPairId: number }) {
     }
   };
 
+  const handleConfigFieldEdit = (fieldKey: string) => {
+    setEditingConfigField(fieldKey);
+  };
+
+  const handleConfigFieldSubmit = async (
+    propertyName: string,
+    propertyValue: string
+  ) => {
+    if (!ccPair) return;
+
+    try {
+      const updatedConfig = {
+        ...ccPair.connector.connector_specific_config,
+        [propertyName]: propertyValue.includes(",")
+          ? propertyValue.split(",").map((item) => item.trim())
+          : propertyValue,
+      };
+
+      const updatedConnector = {
+        ...ccPair.connector,
+        connector_specific_config: updatedConfig,
+        access_type: ccPair.access_type,
+        groups: ccPair.connector.groups || [],
+      };
+
+      const response = await fetch(
+        `/api/manage/admin/connector/${ccPair.connector.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedConnector),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      mutate(buildCCPairInfoUrl(ccPairId));
+      setPopup({
+        message: "Connector configuration updated successfully",
+        type: "success",
+      });
+    } catch (error) {
+      setPopup({
+        message: "Failed to update connector configuration",
+        type: "error",
+      });
+    }
+  };
+
   if (isLoadingCCPair || isLoadingIndexAttempts) {
     return <ThreeDotsLoader />;
   }
@@ -399,6 +455,35 @@ function Main({ ccPairId }: { ccPairId: number }) {
           validationSchema={PruneFrequencySchema}
           onSubmit={handlePruningSubmit}
           onClose={() => setEditingPruningFrequency(false)}
+        />
+      )}
+
+      {editingConfigField && (
+        <EditPropertyModal
+          propertyTitle={editingConfigField
+            .split("_")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ")}
+          propertyDetails={`Edit the ${editingConfigField} configuration. For multiple values, use comma-separated format.`}
+          propertyName={editingConfigField}
+          propertyValue={
+            Array.isArray(
+              ccPair.connector.connector_specific_config[editingConfigField]
+            )
+              ? ccPair.connector.connector_specific_config[
+                  editingConfigField
+                ].join(", ")
+              : String(
+                  ccPair.connector.connector_specific_config[
+                    editingConfigField
+                  ] || ""
+                )
+          }
+          validationSchema={Yup.object().shape({
+            propertyValue: Yup.string().required("Value is required"),
+          })}
+          onSubmit={handleConfigFieldSubmit}
+          onClose={() => setEditingConfigField(null)}
         />
       )}
 
@@ -675,6 +760,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.connector_specific_config,
                   ccPair.connector.source
                 )}
+                onEdit={
+                  ccPair.is_editable_for_current_user
+                    ? handleConfigFieldEdit
+                    : undefined
+                }
               />
             </Card>
           </>

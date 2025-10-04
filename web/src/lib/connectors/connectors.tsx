@@ -5,7 +5,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable", "joplin"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -968,6 +968,55 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
     ],
     advanced_values: [],
+  },
+  joplin: {
+    description: "Index your Joplin notes",
+    subtext: "Sync notes from your Joplin instance to make them searchable",
+    values: [
+      {
+        type: "text",
+        label: "Joplin Server URL",
+        name: "base_url",
+        description:
+          "The base URL of your Joplin Web Clipper API (default: http://localhost:41184)",
+        optional: true,
+        default: "http://localhost:41184",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Include Folders",
+        name: "include_folders",
+        description:
+          "Only index notes from these folders (leave empty to include all)",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "Include Tags",
+        name: "include_tags",
+        description:
+          "Only index notes with these tags (leave empty to include all)",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "Exclude Folders",
+        name: "exclude_folders",
+        description:
+          "Exclude notes from these folders (useful to skip private or draft folders)",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "Exclude Tags",
+        name: "exclude_tags",
+        description:
+          "Exclude notes with these tags (useful to skip notes marked as private or draft)",
+        optional: true,
+      },
+    ],
   },
   hubspot: {
     description: "Configure HubSpot connector",
