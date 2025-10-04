@@ -115,7 +115,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": ["onyx.main:app", "--reload", "--port", "8080", "--timeout-graceful-shutdown", "1"],
       "presentation": {
         "group": "2"
       },

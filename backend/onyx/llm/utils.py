@@ -232,6 +232,65 @@ def build_content_with_imgs(
     )
 
 
+def build_content_with_imgs_responses_format(
+    message: str,
+    files: list[InMemoryChatFile] | None = None,
+    img_urls: list[str] | None = None,
+    b64_imgs: list[str] | None = None,
+    message_type: MessageType = MessageType.USER,
+    exclude_images: bool = False,
+) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
+    files = files or []
+
+    # Only include image files for user messages
+    img_files = (
+        [file for file in files if file.file_type == ChatFileType.IMAGE]
+        if message_type == MessageType.USER
+        else []
+    )
+
+    img_urls = img_urls or []
+    b64_imgs = b64_imgs or []
+    message_main_content = _build_content(message, files)
+
+    if exclude_images or (not img_files and not img_urls):
+        return message_main_content
+
+    return cast(
+        list[str | dict[str, Any]],
+        [
+            {
+                "type": "input_text",
+                "text": message_main_content,
+            },
+        ]
+        + [
+            {
+                "type": "input_image",
+                "image_url": (
+                    f"data:{get_image_type_from_bytes(file.content)};"
+                    f"base64,{file.to_base64()}"
+                ),
+            }
+            for file in img_files
+        ]
+        + [
+            {
+                "type": "input_image",
+                "image_url": f"data:{get_image_type(b64_img)};base64,{b64_img}",
+            }
+            for b64_img in b64_imgs
+        ]
+        + [
+            {
+                "type": "input_image",
+                "image_url": url,
+            }
+            for url in img_urls
+        ],
+    )
+
+
 def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
     if isinstance(message.content, str):
         return message.content, []

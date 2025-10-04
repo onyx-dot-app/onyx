@@ -27,7 +27,7 @@ from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PR
 from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
 from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
 from onyx.tools.models import QueryExpansions
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
@@ -124,8 +124,8 @@ def choose_tool(
     expanded_keyword_thread: TimeoutThread[str] | None = None
     expanded_semantic_thread: TimeoutThread[str] | None = None
     # If we have override_kwargs, add them to the tool_args
-    override_kwargs: SearchToolOverrideKwargs = (
-        force_use_tool.override_kwargs or SearchToolOverrideKwargs()
+    override_kwargs: SearchPipelineOverrideKwargs = (
+        force_use_tool.override_kwargs or SearchPipelineOverrideKwargs()
     )
     override_kwargs.original_query = agent_config.inputs.prompt_builder.raw_user_query
 

@@ -9,7 +9,7 @@ from onyx.db.user_file import update_last_accessed_at_for_user_files
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import get_user_files_as_user
 from onyx.file_store.utils import load_in_memory_chat_files
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.utils.logger import setup_logger
 
 
@@ -24,7 +24,7 @@ def parse_user_files(
     project_id: int | None,
     # should only be None if auth is disabled
     user_id: UUID | None,
-) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
+) -> tuple[list[InMemoryChatFile], list[UserFile], SearchPipelineOverrideKwargs | None]:
     """
     Parse user files and project into in-memory chat files and create search tool override kwargs.
     Only creates SearchToolOverrideKwargs if token overflow occurs.
@@ -114,7 +114,7 @@ def parse_user_files(
         return user_files, user_file_models, None
 
     # Token overflow - need to use search tool
-    override_kwargs = SearchToolOverrideKwargs(
+    override_kwargs = SearchPipelineOverrideKwargs(
         force_no_rerank=have_enough_tokens,
         alternate_db_session=None,
         retrieved_sections_callback=None,

@@ -5,7 +5,7 @@ from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -26,7 +26,7 @@ def research(
     with get_session_with_current_tenant() as db_session:
         for tool_response in search_tool.run(
             query=question,
-            override_kwargs=SearchToolOverrideKwargs(
+            override_kwargs=SearchPipelineOverrideKwargs(
                 force_no_rerank=False,
                 alternate_db_session=db_session,
                 retrieved_sections_callback=callback_container.append,

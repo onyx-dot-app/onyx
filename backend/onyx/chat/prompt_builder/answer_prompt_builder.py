@@ -14,7 +14,7 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import build_content_with_imgs
+from onyx.llm.utils import build_content_with_imgs_responses_format
 from onyx.llm.utils import check_message_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.llm.utils import model_supports_image_input
@@ -81,7 +81,7 @@ def default_build_user_message(
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
         content=(
-            build_content_with_imgs(tag_handled_prompt, files)
+            build_content_with_imgs_responses_format(tag_handled_prompt, files)
             if files
             else tag_handled_prompt
         )
