@@ -126,7 +126,9 @@ def test_joplin_exclude_folders(
 
             # Verify excluded folders are not present
             for excluded_folder in exclude_folders_list:
-                assert excluded_folder not in folder_path, (
+                # Check if excluded folder matches exactly or is a path component
+                folder_parts = folder_path.split('/')
+                assert excluded_folder not in folder_parts, (
                     f"Note '{doc.semantic_identifier}' has excluded folder "
                     f"'{excluded_folder}' in path: {folder_path}"
                 )
