@@ -153,21 +153,40 @@ serviceAccount:
 
 nginx:
   enabled: true
-  containerPorts:
-    http: 1024
-  extraEnvVars:
-    - name: DOMAIN
-      value: localhost
-  service:
-    type: LoadBalancer
-    ports:
-      http: 80
-      onyx: 3000
-    targetPort:
-      http: http
-      onyx: http
+  controller:
+    containerPort:
+      http: 1024
 
-  existingServerBlockConfigmap: onyx-nginx-conf
+    # Propagate DOMAIN into nginx so server_name continues to use the same env var
+    extraEnvs:
+      - name: DOMAIN
+        value: localhost
+
+    config:
+      # Expose DOMAIN to the nginx config and pull in our custom snippets
+      main-snippet: |
+        env DOMAIN;
+      http-snippet: |
+        include /etc/nginx/custom-snippets/upstreams.conf;
+      server-snippet: |
+        include /etc/nginx/custom-snippets/server-snippet.conf;
+
+    # Mount the existing nginx ConfigMap that holds the upstream and server snippets
+    extraVolumes:
+      - name: nginx-config
+        configMap:
+          name: onyx-nginx-conf
+    extraVolumeMounts:
+      - name: nginx-config
+        mountPath: /etc/nginx/custom-snippets
+        readOnly: true
+
+    service:
+      type: LoadBalancer
+      ports:
+        http: 80
+      targetPorts:
+        http: http
 
 webserver:
   replicaCount: 1
