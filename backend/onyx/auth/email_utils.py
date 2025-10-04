@@ -362,6 +362,11 @@ def build_user_email_invite(
             "<p>To join the organization, please click the button below to login with Google "
             "and complete your registration.</p>"
         )
+    elif auth_type == AuthType.AUTH0:
+        message += (
+            "<p>To join the organization, please click the button below to login with Auth0 "
+            "and complete your registration.</p>"
+        )
     elif auth_type == AuthType.OIDC or auth_type == AuthType.SAML:
         message += (
             "<p>To join the organization, please click the button below to"
