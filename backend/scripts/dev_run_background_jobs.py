@@ -16,6 +16,9 @@ def monitor_process(process_name: str, process: subprocess.Popen) -> None:
 
 
 def run_jobs() -> None:
+    # Check if we should use lightweight mode, defaults to True, change to False to use separate background workers
+    use_lightweight = True
+
     # command setup
     cmd_worker_primary = [
         "celery",
@@ -45,20 +48,6 @@ def run_jobs() -> None:
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup",
     ]
 
-    cmd_worker_heavy = [
-        "celery",
-        "-A",
-        "onyx.background.celery.versioned_apps.heavy",
-        "worker",
-        "--pool=threads",
-        "--concurrency=6",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=heavy@%n",
-        "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation",
-    ]
-
     cmd_worker_docprocessing = [
         "celery",
         "-A",
@@ -70,45 +59,6 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "--queues=docprocessing",
-    ]
-
-    cmd_worker_user_files = [
-        "celery",
-        "-A",
-        "onyx.background.celery.versioned_apps.user_file_processing",
-        "worker",
-        "--pool=threads",
-        "--concurrency=1",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=user_file_processing@%n",
-        "--queues=user_file_processing,user_file_project_sync",
-    ]
-
-    cmd_worker_monitoring = [
-        "celery",
-        "-A",
-        "onyx.background.celery.versioned_apps.monitoring",
-        "worker",
-        "--pool=threads",
-        "--concurrency=1",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=monitoring@%n",
-        "--queues=monitoring",
-    ]
-
-    cmd_worker_kg_processing = [
-        "celery",
-        "-A",
-        "onyx.background.celery.versioned_apps.kg_processing",
-        "worker",
-        "--pool=threads",
-        "--concurrency=4",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=kg_processing@%n",
-        "--queues=kg_processing",
     ]
 
     cmd_worker_docfetching = [
@@ -132,6 +82,84 @@ def run_jobs() -> None:
         "--loglevel=INFO",
     ]
 
+    # Prepare background worker commands based on mode
+    if use_lightweight:
+        print("Starting workers in LIGHTWEIGHT mode (single background worker)")
+        cmd_worker_background = [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.background",
+            "worker",
+            "--pool=threads",
+            "--concurrency=6",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=background@%n",
+            "-Q",
+            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync",
+        ]
+        background_workers = [("BACKGROUND", cmd_worker_background)]
+    else:
+        print("Starting workers in STANDARD mode (separate background workers)")
+        cmd_worker_heavy = [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.heavy",
+            "worker",
+            "--pool=threads",
+            "--concurrency=4",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=heavy@%n",
+            "-Q",
+            "connector_pruning",
+        ]
+        cmd_worker_kg_processing = [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.kg_processing",
+            "worker",
+            "--pool=threads",
+            "--concurrency=2",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=kg_processing@%n",
+            "-Q",
+            "kg_processing",
+        ]
+        cmd_worker_monitoring = [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.monitoring",
+            "worker",
+            "--pool=threads",
+            "--concurrency=1",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=monitoring@%n",
+            "-Q",
+            "monitoring",
+        ]
+        cmd_worker_user_file_processing = [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.user_file_processing",
+            "worker",
+            "--pool=threads",
+            "--concurrency=2",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=user_file_processing@%n",
+            "-Q",
+            "user_file_processing,user_file_project_sync,connector_doc_permissions_sync,connector_external_group_sync,csv_generation",
+        ]
+        background_workers = [
+            ("HEAVY", cmd_worker_heavy),
+            ("KG_PROCESSING", cmd_worker_kg_processing),
+            ("MONITORING", cmd_worker_monitoring),
+            ("USER_FILE_PROCESSING", cmd_worker_user_file_processing),
+        ]
+
     # spawn processes
     worker_primary_process = subprocess.Popen(
         cmd_worker_primary, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
@@ -141,33 +169,8 @@ def run_jobs() -> None:
         cmd_worker_light, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
 
-    worker_heavy_process = subprocess.Popen(
-        cmd_worker_heavy, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-
     worker_docprocessing_process = subprocess.Popen(
         cmd_worker_docprocessing,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-    worker_user_file_process = subprocess.Popen(
-        cmd_worker_user_files,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-    worker_monitoring_process = subprocess.Popen(
-        cmd_worker_monitoring,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-    worker_kg_processing_process = subprocess.Popen(
-        cmd_worker_kg_processing,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -184,6 +187,14 @@ def run_jobs() -> None:
         cmd_beat, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
 
+    # Spawn background worker processes based on mode
+    background_processes = []
+    for name, cmd in background_workers:
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        )
+        background_processes.append((name, process))
+
     # monitor threads
     worker_primary_thread = threading.Thread(
         target=monitor_process, args=("PRIMARY", worker_primary_process)
@@ -191,46 +202,39 @@ def run_jobs() -> None:
     worker_light_thread = threading.Thread(
         target=monitor_process, args=("LIGHT", worker_light_process)
     )
-    worker_heavy_thread = threading.Thread(
-        target=monitor_process, args=("HEAVY", worker_heavy_process)
-    )
     worker_docprocessing_thread = threading.Thread(
         target=monitor_process, args=("DOCPROCESSING", worker_docprocessing_process)
-    )
-    worker_user_file_thread = threading.Thread(
-        target=monitor_process,
-        args=("USER_FILE_PROCESSING", worker_user_file_process),
-    )
-    worker_monitoring_thread = threading.Thread(
-        target=monitor_process, args=("MONITORING", worker_monitoring_process)
-    )
-    worker_kg_processing_thread = threading.Thread(
-        target=monitor_process, args=("KG_PROCESSING", worker_kg_processing_process)
     )
     worker_docfetching_thread = threading.Thread(
         target=monitor_process, args=("DOCFETCHING", worker_docfetching_process)
     )
     beat_thread = threading.Thread(target=monitor_process, args=("BEAT", beat_process))
 
+    # Create monitor threads for background workers
+    background_threads = []
+    for name, process in background_processes:
+        thread = threading.Thread(target=monitor_process, args=(name, process))
+        background_threads.append(thread)
+
+    # Start all threads
     worker_primary_thread.start()
     worker_light_thread.start()
-    worker_heavy_thread.start()
     worker_docprocessing_thread.start()
-    worker_user_file_thread.start()
-    worker_monitoring_thread.start()
-    worker_kg_processing_thread.start()
     worker_docfetching_thread.start()
     beat_thread.start()
 
+    for thread in background_threads:
+        thread.start()
+
+    # Wait for all threads
     worker_primary_thread.join()
     worker_light_thread.join()
-    worker_heavy_thread.join()
     worker_docprocessing_thread.join()
-    worker_user_file_thread.join()
-    worker_monitoring_thread.join()
-    worker_kg_processing_thread.join()
     worker_docfetching_thread.join()
     beat_thread.join()
+
+    for thread in background_threads:
+        thread.join()
 
 
 if __name__ == "__main__":
