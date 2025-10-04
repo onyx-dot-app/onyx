@@ -405,9 +405,7 @@ def on_setup_logging(
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
 
-    env_log_level = get_log_level_from_str()
-    if env_log_level != loglevel:
-        loglevel = env_log_level
+    loglevel = get_log_level_from_str()
 
     root_logger = logging.getLogger()
     root_logger.handlers = []
