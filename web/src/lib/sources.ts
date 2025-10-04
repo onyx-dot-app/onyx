@@ -18,6 +18,7 @@ import {
   GuruIcon,
   HubSpotIcon,
   JiraIcon,
+  JoplinIcon,
   LinearIcon,
   LoopioIcon,
   NotionIcon,
@@ -106,6 +107,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Notion",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/admin/connectors/official/notion",
+  },
+  joplin: {
+    icon: JoplinIcon,
+    displayName: "Joplin",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/admin/connectors/joplin",
   },
   bookstack: {
     icon: BookstackIcon,
