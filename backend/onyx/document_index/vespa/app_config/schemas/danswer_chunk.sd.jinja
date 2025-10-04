@@ -37,6 +37,7 @@ schema {{ schema_name }} {
         field title type string {
             indexing: summary | index | attribute
             index: enable-bm25
+            match: text
         }
         field content type string {
             indexing: summary | index

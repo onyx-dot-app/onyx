@@ -358,6 +358,72 @@ export const ChatInputBar = React.memo(function ChatInputBar({
     }
   };
 
+  const [typeaheadOpen, setTypeaheadOpen] = useState(false);
+  const [typeaheadLoading, setTypeaheadLoading] = useState(false);
+  const [typeaheadItems, setTypeaheadItems] = useState<
+    Array<{ title: string; source_link?: string | null }>
+  >([]);
+  const typeaheadAbortRef = useRef<AbortController | null>(null);
+  const [typeaheadIndex, setTypeaheadIndex] = useState<number | null>(null);
+  const typeaheadContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const q = (message || "").trim();
+    if (q.length < 1) {
+      setTypeaheadOpen(false);
+      setTypeaheadItems([]);
+      typeaheadAbortRef.current?.abort();
+      return;
+    }
+
+    const tid = setTimeout(async () => {
+      typeaheadAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      typeaheadAbortRef.current = ctrl;
+      setTypeaheadLoading(true);
+      try {
+        const res = await fetch("/api/query/fast-document-search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            message: q,
+            search_type: "keyword",
+            retrieval_options: { limit: 5 },
+            evaluation_type: "unspecified",
+          }),
+        });
+        if (!res.ok) {
+          setTypeaheadOpen(false);
+          setTypeaheadItems([]);
+          return;
+        }
+        const data = await res.json();
+        const items = (data?.top_matching_document_candidates || [])
+          .filter((d: any) => !!d?.source_link)
+          .map((d: any) => ({
+            title: d.title,
+            source_link: d.source_link,
+          }));
+        setTypeaheadItems(items);
+        setTypeaheadOpen(items.length > 0);
+        setTypeaheadIndex(items.length > 0 ? 0 : null);
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          setTypeaheadOpen(false);
+          setTypeaheadItems([]);
+        }
+      } finally {
+        setTypeaheadLoading(false);
+      }
+    }, 25);
+
+    return () => clearTimeout(tid);
+  }, [message]);
+
   return (
     <div id="onyx-chat-input">
       <div className="flex justify-center mx-auto">
@@ -427,7 +493,7 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 border-input-border
                 dark:border-none
                 rounded-xl
-                overflow-hidden
+                overflow-visible
                 text-text-chatbar
                 [&:has(textarea:focus)]::ring-1
                 [&:has(textarea:focus)]::ring-black
@@ -493,6 +559,31 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 }
                 value={message}
                 onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    if (typeaheadOpen && typeaheadItems.length > 0) {
+                      // From input, ArrowDown should jump to first row and move focus into listbox
+                      setTypeaheadIndex(0);
+                      setTimeout(
+                        () => typeaheadContainerRef.current?.focus(),
+                        0
+                      );
+                    }
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    if (typeaheadOpen && typeaheadItems.length > 0) {
+                      // From input, ArrowUp should jump to bottom row and move focus into listbox
+                      setTypeaheadIndex(typeaheadItems.length - 1);
+                      setTimeout(
+                        () => typeaheadContainerRef.current?.focus(),
+                        0
+                      );
+                    }
+                    return;
+                  }
+
                   if (
                     event.key === "Enter" &&
                     !showPrompts &&
@@ -507,6 +598,101 @@ export const ChatInputBar = React.memo(function ChatInputBar({
                 }}
                 suppressContentEditableWarning={true}
               />
+              {/* TODO(andrei): This doesn't look good if you have selected a chat history from the left sidebar. You have to scroll down. */}
+              {typeaheadOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-md border bg-white shadow-lg">
+                  {typeaheadLoading && (
+                    <div className="px-3 py-2 text-sm text-neutral-500">
+                      Searching…
+                    </div>
+                  )}
+                  {!typeaheadLoading && (
+                    <div
+                      ref={typeaheadContainerRef}
+                      role="listbox"
+                      tabIndex={0}
+                      aria-activedescendant={
+                        typeaheadIndex !== null
+                          ? `typeahead-item-${typeaheadIndex}`
+                          : undefined
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          if (typeaheadIndex === null) return;
+                          setTypeaheadIndex((prev) => {
+                            if (prev === null) return 0;
+                            const last = typeaheadItems.length - 1;
+                            if (prev >= last) {
+                              // Move focus back to input from last item
+                              textAreaRef.current?.focus();
+                              return null;
+                            }
+                            return prev + 1;
+                          });
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setTypeaheadIndex((prev) => {
+                            if (prev === null) return 0;
+                            if (prev === 0) {
+                              // Move focus back to input from first item
+                              textAreaRef.current?.focus();
+                              return null;
+                            }
+                            return prev - 1;
+                          });
+                        } else if (e.key === "Enter") {
+                          if (typeaheadIndex !== null) {
+                            const s = typeaheadItems[typeaheadIndex];
+                            if (!s) return;
+                            setTypeaheadOpen(false);
+                            if (s.source_link) {
+                              const url = s.source_link.startsWith("http")
+                                ? s.source_link
+                                : `https://${s.source_link}`;
+                              try {
+                                window.open(url, "_blank");
+                              } catch {
+                                window.location.href = url;
+                              }
+                            } else {
+                              setMessage(s.title);
+                            }
+                          }
+                        }
+                      }}
+                    >
+                      {typeaheadItems.map((s, i) => (
+                        <button
+                          id={`typeahead-item-${i}`}
+                          key={`${s.title}-${i}`}
+                          className={`w-full text-left px-3 py-2 hover:bg-neutral-100 ${
+                            typeaheadIndex === i ? "bg-neutral-100" : ""
+                          }`}
+                          onMouseEnter={() => setTypeaheadIndex(i)}
+                          onClick={() => {
+                            setTypeaheadOpen(false);
+                            if (s.source_link) {
+                              const url = s.source_link.startsWith("http")
+                                ? s.source_link
+                                : `https://${s.source_link}`;
+                              try {
+                                window.open(url, "_blank");
+                              } catch {
+                                window.location.href = url;
+                              }
+                            } else {
+                              setMessage(s.title);
+                            }
+                          }}
+                        >
+                          <div className="text-sm font-medium">{s.title}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {(selectedDocuments.length > 0 ||
                 currentMessageFiles.length > 0 ||

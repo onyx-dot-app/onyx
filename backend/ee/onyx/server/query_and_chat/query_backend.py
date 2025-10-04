@@ -25,6 +25,7 @@ from onyx.chat.models import QADocsResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
@@ -35,6 +36,10 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.vespa.chunk_retrieval import query_vespa
+from onyx.document_index.vespa_constants import VESPA_TIMEOUT
+from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -51,6 +56,18 @@ basic_router = APIRouter(prefix="/query")
 class DocumentSearchResponse(BaseModel):
     top_documents: list[SavedSearchDocWithContent]
     llm_indices: list[int]
+
+
+# TODO(andrei): This should probably be SearchDoc.
+class FastMatchingDocumentCandidate(BaseModel):
+    title: str
+    blurb: str
+    source_link: str
+    # TODO(andrei): Return an image thumbnail? Or at least a link type, which someone else can map to a thumbnail.
+
+
+class FastDocumentSearchResponse(BaseModel):
+    top_matching_document_candidates: list[FastMatchingDocumentCandidate] = []
 
 
 @basic_router.post("/document-search")
@@ -135,6 +152,83 @@ def handle_search_request(
         )
 
     return DocumentSearchResponse(top_documents=deduped_docs, llm_indices=llm_indices)
+
+
+@basic_router.post("/fast-document-search")
+def handle_fast_document_search(
+    search_request: DocumentSearchRequest,  # TODO(andrei): Make a unique request object?
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> FastDocumentSearchResponse:
+    """_summary_
+
+    Args:
+        search_request (DocumentSearchRequest): _description_
+        user (User | None, optional): _description_. Defaults to Depends(current_user).
+        db_session (Session, optional): _description_. Defaults to Depends(get_session).
+
+    Returns:
+        FastDocumentSearchResponse: _description_
+    """
+    query: str = search_request.message
+    logger.info(f"[ANDREI] Received fast document search query: {query}")
+
+    search_settings = get_current_search_settings(db_session)
+
+    # TODO(andrei): Reuse build_vespa_filters? It does some stuff I don't want/understand though.
+    vespa_where_clauses = (
+        '!(hidden=true) and (access_control_list contains "PUBLIC") and '
+    )
+
+    yql = (
+        YQL_BASE.format(
+            index_name=search_settings.index_name
+        )  # TODO(andrei): This could probably be done better.
+        + vespa_where_clauses
+        # NOTE: This is what is supposed to make this search faster than
+        # the implementation of hybrid_retrieval.
+        + "((title contains @query) or (content contains @query))"
+    )
+
+    # We query for more than we need in order to filter out duplicates and still have meaningful results.
+    # TODO(andrei): This could probably be done better.
+    target_hits = max(5 * search_request.retrieval_options.limit, 100)
+
+    # TODO(andrei): I wonder if we can make this a concrete class. Would require a different signature for query_vespa.
+    query_params: dict[str, str | int | float] = {
+        "yql": yql,
+        "query": query,
+        "hits": target_hits,
+        "timeout": VESPA_TIMEOUT,
+    }
+
+    query_results: list[InferenceChunkUncleaned] = query_vespa(query_params)
+
+    logger.info(f"[ANDREI] Results: {query_results}")
+
+    document_search_response_fast = FastDocumentSearchResponse()
+    # We dedup by document_id.
+    query_results_set = set()
+    for query_result in query_results:
+        if (
+            len(document_search_response_fast.top_matching_document_candidates)
+            >= search_request.retrieval_options.limit
+        ):
+            break
+        if query_result.document_id in query_results_set:
+            continue
+        query_results_set.add(query_result.document_id)
+        document_search_response_fast.top_matching_document_candidates.append(
+            FastMatchingDocumentCandidate(
+                title=query_result.title,
+                blurb=query_result.blurb,
+                # TODO(andrei): This makes some assumptions about the structure of this dict.
+                # Maybe change query_vespa to return a class?
+                source_link=query_result.source_links[0],
+            )
+        )
+
+    return document_search_response_fast
 
 
 def get_answer_stream(
