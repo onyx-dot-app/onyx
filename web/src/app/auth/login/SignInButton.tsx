@@ -2,7 +2,6 @@ import { AuthType } from "@/lib/constants";
 import { FaGoogle } from "react-icons/fa";
 import { SiAuth0 } from "react-icons/si";
 
-
 export function SignInButton({
   authorizeUrl,
   authType,

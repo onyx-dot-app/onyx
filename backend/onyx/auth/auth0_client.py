@@ -38,6 +38,8 @@ class Auth0OAuth2(BaseOAuth2[Dict[str, Any]]):
             data = response.json()
             
             user_id = data.get("sub")
+            if user_id is None:
+                raise ValueError("Auth0 response missing required 'sub' field")
             email = data.get("email")
             
             return str(user_id), email

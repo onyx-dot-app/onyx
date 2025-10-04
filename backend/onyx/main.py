@@ -1,10 +1,13 @@
 import logging
 import sys
 import traceback
+import httpx
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
+from typing import Dict, Optional, Tuple
 
 import sentry_sdk
 import uvicorn
@@ -36,14 +39,14 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import AUTH0_CLIENT_ID
+from onyx.configs.app_configs import AUTH0_CLIENT_SECRET
+from onyx.configs.app_configs import AUTH0_DOMAIN
 from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import AUTH0_CLIENT_ID
-from onyx.configs.app_configs import AUTH0_CLIENT_SECRET
-from onyx.configs.app_configs import AUTH0_DOMAIN
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
@@ -144,47 +147,6 @@ file_handlers = [
 
 setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
-import httpx
-from typing import Dict, Optional, Tuple
-
-class Auth0OAuth2(BaseOAuth2[Dict[str, Any]]):
-
-    def __init__(
-        self,
-        client_id: str,
-        client_secret: str,
-        auth0_domain: str,
-        scopes: Optional[list[str]] = None,
-        name: str = "auth0",
-    ):
-        if scopes is None:
-            scopes = ["openid", "email", "profile"]
-        
-        super().__init__(
-            client_id=client_id,
-            client_secret=client_secret,
-            authorize_endpoint=f"https://{auth0_domain}/authorize",
-            access_token_endpoint=f"https://{auth0_domain}/oauth/token",
-            refresh_token_endpoint=f"https://{auth0_domain}/oauth/token",
-            name=name,
-            base_scopes=scopes,
-            token_endpoint_auth_method="client_secret_post",
-        )
-        self.auth0_domain = auth0_domain
-
-    async def get_id_email(self, token: str) -> Tuple[str, Optional[str]]:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://{self.auth0_domain}/userinfo",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            user_id = data.get("sub")
-            email = data.get("email")
-            
-            return str(user_id), email
 
 def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
