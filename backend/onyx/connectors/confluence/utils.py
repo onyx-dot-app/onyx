@@ -110,6 +110,9 @@ def process_attachment(
     attachment: dict[str, Any],
     parent_content_id: str | None,
     allow_images: bool,
+    *,
+    attachment_size_threshold_bytes: int | None = None,
+    attachment_char_count_threshold: int | None = None,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
@@ -144,16 +147,21 @@ def process_attachment(
                     error="Image downloading is not enabled",
                 )
         else:
-            if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+            size_threshold = (
+                attachment_size_threshold_bytes
+                if attachment_size_threshold_bytes is not None
+                else CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+            )
+            if attachment_size > size_threshold:
                 logger.warning(
                     f"Skipping {attachment_link} due to size. "
                     f"size={attachment_size} "
-                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+                    f"threshold={size_threshold}"
                 )
                 return AttachmentProcessingResult(
                     text=None,
                     file_name=None,
-                    error=f"Attachment text too long: {attachment_size} chars",
+                    error=f"Attachment file too large: {attachment_size} bytes (max: {size_threshold} bytes)",
                 )
 
         logger.info(
@@ -195,11 +203,16 @@ def process_attachment(
             )
 
             # Skip if the text is too long
-            if len(text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
+            char_threshold = (
+                attachment_char_count_threshold
+                if attachment_char_count_threshold is not None
+                else CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD
+            )
+            if len(text) > char_threshold:
                 return AttachmentProcessingResult(
                     text=None,
                     file_name=None,
-                    error=f"Attachment text too long: {len(text)} chars",
+                    error=f"Extracted text too long: {len(text)} characters (max: {char_threshold} characters)",
                 )
 
             return AttachmentProcessingResult(text=text, file_name=None, error=None)
@@ -245,6 +258,9 @@ def convert_attachment_to_content(
     attachment: dict[str, Any],
     page_id: str,
     allow_images: bool,
+    *,
+    attachment_size_threshold_bytes: int | None = None,
+    attachment_char_count_threshold: int | None = None,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
@@ -260,8 +276,25 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(confluence_client, attachment, page_id, allow_images)
+    result = process_attachment(
+        confluence_client,
+        attachment,
+        page_id,
+        allow_images,
+        attachment_size_threshold_bytes=attachment_size_threshold_bytes,
+        attachment_char_count_threshold=attachment_char_count_threshold,
+    )
     if result.error is not None:
+        # Check if this is a size limit error that should be reported to users
+        # Catches both "file too large" (bytes) and "text too long" (characters) errors
+        if (
+            "too large" in result.error.lower()
+            or "too long" in result.error.lower()
+            or "size" in result.error.lower()
+        ):
+            # Raise an exception so it can be caught and reported as a failure
+            raise ValueError(f"Size limit exceeded - {result.error}")
+
         logger.warning(
             f"Attachment {attachment['title']} encountered error: {result.error}"
         )
