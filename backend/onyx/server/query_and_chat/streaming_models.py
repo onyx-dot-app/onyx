@@ -36,6 +36,12 @@ class MessageDelta(BaseObj):
 """Control Packets"""
 
 
+class PacketException(BaseObj):
+    type: Literal["error"] = "error"
+    exception: Exception
+    model_config = {"arbitrary_types_allowed": True}
+
+
 class OverallStop(BaseObj):
     type: Literal["stop"] = "stop"
 
@@ -89,6 +95,12 @@ class CustomToolDelta(BaseObj):
     data: dict | list | str | int | float | bool | None = None
     # For file-based responses like image/csv
     file_ids: list[str] | None = None
+
+
+class FetchToolStart(BaseObj):
+    type: Literal["fetch_tool_start"] = "fetch_tool_start"
+
+    documents: list[SavedSearchDoc]
 
 
 """Reasoning Packets"""
@@ -169,6 +181,7 @@ PacketObj = Annotated[
     Union[
         MessageStart,
         MessageDelta,
+        PacketException,
         OverallStop,
         SectionEnd,
         SearchToolStart,
@@ -178,6 +191,7 @@ PacketObj = Annotated[
         ImageGenerationToolHeartbeat,
         CustomToolStart,
         CustomToolDelta,
+        FetchToolStart,
         ReasoningStart,
         ReasoningDelta,
         CitationStart,
@@ -210,3 +224,4 @@ class StreamingType(Enum):
     CITATION_DELTA = "citation_delta"
     CUSTOM_TOOL_START = "custom_tool_start"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    FETCH_TOOL_START = "fetch_tool_start"

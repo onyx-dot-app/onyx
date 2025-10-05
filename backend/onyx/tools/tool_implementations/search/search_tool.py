@@ -41,8 +41,8 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.models import SearchQueryInfo
-from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
@@ -81,7 +81,7 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 """
 
 
-class SearchTool(Tool[SearchToolOverrideKwargs]):
+class SearchTool(Tool[SearchPipelineOverrideKwargs]):
     _NAME = "run_search"
     _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
@@ -299,7 +299,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
     def run(
-        self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
+        self,
+        override_kwargs: SearchPipelineOverrideKwargs | None = None,
+        **llm_kwargs: Any,
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
         original_query = query

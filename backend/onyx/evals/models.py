@@ -78,5 +78,6 @@ class EvalProvider(ABC):
         configuration: EvalConfigurationOptions,
         data: list[dict[str, dict[str, str]]] | None = None,
         remote_dataset_name: str | None = None,
+        no_send_logs: bool = False,
     ) -> EvalationAck:
         pass

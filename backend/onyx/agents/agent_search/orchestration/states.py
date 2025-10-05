@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 from onyx.chat.prompt_builder.schemas import PromptSnapshot
 from onyx.tools.message import ToolCallSummary
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -36,7 +36,9 @@ class ToolChoice(BaseModel):
     tool: Tool
     tool_args: dict
     id: str | None
-    search_tool_override_kwargs: SearchToolOverrideKwargs = SearchToolOverrideKwargs()
+    search_tool_override_kwargs: SearchPipelineOverrideKwargs = (
+        SearchPipelineOverrideKwargs()
+    )
 
     class Config:
         arbitrary_types_allowed = True

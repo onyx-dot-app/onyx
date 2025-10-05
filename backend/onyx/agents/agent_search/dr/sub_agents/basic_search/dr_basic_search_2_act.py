@@ -31,7 +31,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.dr_prompts import BASE_SEARCH_PROCESSING_PROMPT
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -146,7 +146,7 @@ def basic_search(
     user_file_ids: list[UUID] | None = None
     project_id: int | None = None
     if force_use_tool.override_kwargs and isinstance(
-        force_use_tool.override_kwargs, SearchToolOverrideKwargs
+        force_use_tool.override_kwargs, SearchPipelineOverrideKwargs
     ):
         override_kwargs = force_use_tool.override_kwargs
         user_file_ids = override_kwargs.user_file_ids
@@ -158,7 +158,7 @@ def basic_search(
             query=rewritten_query,
             document_sources=specified_source_types,
             time_filter=implied_time_filter,
-            override_kwargs=SearchToolOverrideKwargs(
+            override_kwargs=SearchPipelineOverrideKwargs(
                 force_no_rerank=True,
                 alternate_db_session=search_db_session,
                 retrieved_sections_callback=callback_container.append,

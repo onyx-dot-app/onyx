@@ -23,6 +23,9 @@ export enum PacketType {
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
+  // Fetch tool packets
+  FETCH_TOOL_START = "fetch_tool_start",
+
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
@@ -101,6 +104,12 @@ export interface CustomToolDelta extends BaseObj {
   file_ids?: string[] | null;
 }
 
+// Fetch Tool Packets
+export interface FetchToolStart extends BaseObj {
+  type: "fetch_tool_start";
+  documents: OnyxDocument[];
+}
+
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
@@ -139,7 +148,12 @@ export type ImageGenerationToolObj =
   | ImageGenerationToolDelta
   | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
-export type NewToolObj = SearchToolObj | ImageGenerationToolObj | CustomToolObj;
+export type FetchToolObj = FetchToolStart | SectionEnd;
+export type NewToolObj =
+  | SearchToolObj
+  | ImageGenerationToolObj
+  | CustomToolObj
+  | FetchToolObj;
 
 export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
 
@@ -189,6 +203,11 @@ export interface ImageGenerationToolPacket {
 export interface CustomToolPacket {
   ind: number;
   obj: CustomToolObj;
+}
+
+export interface FetchToolPacket {
+  ind: number;
+  obj: FetchToolObj;
 }
 
 export interface ReasoningPacket {

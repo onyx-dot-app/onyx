@@ -2,11 +2,15 @@ import re
 import time
 import traceback
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import cast
 from typing import Protocol
 from uuid import UUID
 
+from agents import FunctionTool
+from agents.extensions.models.litellm_model import LitellmModel
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
@@ -32,6 +36,10 @@ from onyx.chat.packet_proccessing.process_streamed_packets import (
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.stop_signal_checker import reset
+from onyx.chat.turn import fast_chat_turn
+from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.chat.turn.models import DependenciesToMaybeRemove
 from onyx.chat.user_files.parse_user_files import parse_user_files
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
@@ -89,8 +97,9 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
+from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP_V2
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchPipelineOverrideKwargs
 from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
@@ -199,7 +208,7 @@ def _translate_citations(
 def _get_force_search_settings(
     new_msg_req: CreateChatMessageRequest,
     tools: list[Tool],
-    search_tool_override_kwargs: SearchToolOverrideKwargs | None,
+    search_tool_override_kwargs: SearchPipelineOverrideKwargs | None,
 ) -> ForceUseTool:
     if new_msg_req.forced_tool_ids:
         forced_tools = [
@@ -312,6 +321,7 @@ def stream_chat_message_objects(
     # messages.
     # NOTE: is not stored in the database at all.
     single_message_history: str | None = None,
+    redis_client: Redis | None = None,
 ) -> AnswerStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
@@ -322,6 +332,7 @@ def stream_chat_message_objects(
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
+    reset(new_msg_req.chat_session_id, redis_client)
 
     # Currently surrounding context is not supported for chat
     # Chat is already token heavy and harder for the model to process plus it would roll history over much faster
@@ -779,11 +790,19 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-
-        # Process streamed packets using the new packet processing module
-        yield from process_streamed_packets(
-            answer_processed_output=answer.processed_streamed_output,
-        )
+        if new_msg_req.use_agentic_search:
+            yield from process_streamed_packets(
+                answer_processed_output=answer.processed_streamed_output,
+            )
+        else:
+            yield from fast_message_stream(
+                answer,
+                tools,
+                db_session,
+                redis_client,
+                chat_session_id,
+                reserved_message_id,
+            )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -820,6 +839,70 @@ def stream_chat_message_objects(
         return
 
 
+def fast_message_stream(
+    answer: Answer,
+    tools: list[Tool],
+    db_session: Session,
+    redis_client: Redis,
+    chat_session_id: str,
+    reserved_message_id: str,
+) -> Generator[Packet, None, None]:
+    onyx_tools: list[list[FunctionTool]] = [
+        BUILT_IN_TOOL_MAP_V2[type(tool).__name__]
+        for tool in tools
+        if type(tool).__name__ in BUILT_IN_TOOL_MAP_V2
+    ]
+    flattened_tools: list[FunctionTool] = [
+        onyx_tool for sublist in onyx_tools for onyx_tool in sublist
+    ]
+
+    # Extract specific tool instances for dependency injection
+    from onyx.tools.tool_implementations.images.image_generation_tool import (
+        ImageGenerationTool,
+    )
+    from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+        OktaProfileTool,
+    )
+
+    image_generation_tool_instance = None
+    okta_profile_tool_instance = None
+    for tool in tools:
+        if isinstance(tool, ImageGenerationTool):
+            image_generation_tool_instance = tool
+        elif isinstance(tool, OktaProfileTool):
+            okta_profile_tool_instance = tool
+    # TODO: Rework how sessions handle this
+    converted_message_history = [
+        PreviousMessage.from_langchain_msg(message, 0).to_agent_sdk_msg()
+        for message in answer.graph_inputs.prompt_builder.build()
+        if message.type != "system"
+    ]
+    return fast_chat_turn.fast_chat_turn(
+        # TODO: Use OpenAI SDK managed sessions
+        messages=converted_message_history,
+        dependencies=ChatTurnDependencies(
+            # TODO: Dependency inject this higher up?
+            llm_model=LitellmModel(
+                model=answer.graph_tooling.primary_llm.config.model_name,
+                base_url=answer.graph_tooling.primary_llm.config.api_base,
+                api_key=answer.graph_tooling.primary_llm.config.api_key,
+            ),
+            llm=answer.graph_tooling.primary_llm,
+            tools=flattened_tools,
+            search_pipeline=answer.graph_tooling.search_tool,
+            image_generation_tool=image_generation_tool_instance,
+            okta_profile_tool=okta_profile_tool_instance,
+            db_session=db_session,
+            redis_client=redis_client,
+            dependencies_to_maybe_remove=DependenciesToMaybeRemove(
+                chat_session_id=chat_session_id,
+                message_id=reserved_message_id,
+                research_type=answer.graph_config.behavior.research_type,
+            ),
+        ),
+    )
+
+
 @log_generator_function_time()
 def stream_chat_message(
     new_msg_req: CreateChatMessageRequest,
@@ -844,7 +927,15 @@ def stream_chat_message(
                 document_retrieval_latency = time.time() - start_time
                 logger.debug(f"First doc time: {document_retrieval_latency}")
 
-            yield get_json_line(obj.model_dump())
+            # Convert Pydantic models to dictionaries for JSON serialization
+            if hasattr(obj, "model_dump"):
+                obj_dict = obj.model_dump()
+            elif hasattr(obj, "dict"):
+                obj_dict = obj.dict()
+            else:
+                obj_dict = obj
+
+            yield get_json_line(obj_dict)
 
 
 def remove_answer_citations(answer: str) -> str:

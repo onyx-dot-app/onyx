@@ -23,6 +23,7 @@ from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import EndStepPacketList
+from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -213,6 +214,17 @@ def create_custom_tool_packets(
     return packets
 
 
+def create_fetch_packets(
+    fetches: list[list[SavedSearchDoc]], step_nr: int
+) -> list[Packet]:
+    packets: list[Packet] = []
+    for fetch in fetches:
+        packets.append(Packet(ind=step_nr, obj=FetchToolStart(documents=fetch)))
+        packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+        step_nr += 1
+    return packets
+
+
 def create_search_packets(
     search_queries: list[str],
     saved_search_docs: list[SavedSearchDoc] | None,
@@ -282,18 +294,26 @@ def translate_db_message_to_packets(
             ResearchType.THOUGHTFUL,
             ResearchType.DEEP,
             ResearchType.LEGACY_AGENTIC,
+            ResearchType.FAST,
         ]:
             research_iterations = sorted(
                 chat_message.research_iterations, key=lambda x: x.iteration_nr
             )
             for research_iteration in research_iterations:
-                if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
+                if (
+                    research_iteration.iteration_nr > 1
+                    and research_iteration.reasoning
+                    and chat_message.research_type != ResearchType.FAST
+                ):
                     packet_list.extend(
                         create_reasoning_packets(research_iteration.reasoning, step_nr)
                     )
                     step_nr += 1
 
-                if research_iteration.purpose:
+                if (
+                    research_iteration.purpose
+                    and chat_message.research_type != ResearchType.FAST
+                ):
                     packet_list.extend(
                         create_reasoning_packets(research_iteration.purpose, step_nr)
                     )
@@ -303,6 +323,8 @@ def translate_db_message_to_packets(
                 tasks: list[str] = []
                 tool_call_ids: list[int | None] = []
                 cited_docs: list[SavedSearchDoc] = []
+                fetches: list[list[SavedSearchDoc]] = []
+                has_fetch_claims: bool = False
 
                 for sub_step in sub_steps:
                     tasks.append(sub_step.sub_step_instructions or "")
@@ -331,17 +353,25 @@ def translate_db_message_to_packets(
 
                         cited_docs.extend(sub_step_saved_search_docs)
                     else:
+                        if chat_message.research_type != ResearchType.FAST:
+                            packet_list.extend(
+                                create_reasoning_packets(
+                                    _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
+                                )
+                            )
+                    step_nr += 1
+
+                    if sub_step.claims == ["web_fetch"]:
+                        has_fetch_claims = True
+                        fetches.append(sub_step_saved_search_docs)
+
+                if len(set(tool_call_ids)) > 1:
+                    if chat_message.research_type != ResearchType.FAST:
                         packet_list.extend(
                             create_reasoning_packets(
                                 _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
                             )
                         )
-                    step_nr += 1
-
-                if len(set(tool_call_ids)) > 1:
-                    packet_list.extend(
-                        create_reasoning_packets(_CANNOT_SHOW_STEP_RESULTS_STR, step_nr)
-                    )
                     step_nr += 1
 
                 elif len(sub_steps) == 0:
@@ -364,9 +394,13 @@ def translate_db_message_to_packets(
 
                     elif tool_name == WebSearchTool.__name__:
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, True, step_nr)
-                        )
+                        if has_fetch_claims:
+                            packet_list.extend(create_fetch_packets(fetches, step_nr))
+                        else:
+                            packet_list.extend(
+                                create_search_packets(tasks, cited_docs, True, step_nr)
+                            )
+
                         step_nr += 1
 
                     elif tool_name == ImageGenerationTool.__name__:

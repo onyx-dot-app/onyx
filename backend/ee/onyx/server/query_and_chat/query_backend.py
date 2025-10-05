@@ -6,6 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
@@ -39,6 +40,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
@@ -141,6 +143,7 @@ def get_answer_stream(
     query_request: OneShotQARequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
+    redis_client: Redis = Depends(get_redis_client),
 ) -> AnswerStream:
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
@@ -197,6 +200,7 @@ def get_answer_stream(
         new_msg_req=request,
         user=user,
         db_session=db_session,
+        redis_client=redis_client,
     )
 
     return packets

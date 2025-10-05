@@ -282,8 +282,8 @@ def get_redis_client(
     """
     if tenant_id is None:
         tenant_id = get_current_tenant_id()
-
-    return redis_pool.get_client(tenant_id)
+    client = redis_pool.get_client(tenant_id)
+    return client
 
 
 def get_redis_replica_client(

@@ -1,3 +1,4 @@
+import tracemalloc
 from collections.abc import Callable
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -100,7 +101,9 @@ def run_eval(
     data: list[dict[str, dict[str, str]]] | None = None,
     remote_dataset_name: str | None = None,
     provider: EvalProvider = get_default_provider(),
+    no_send_logs: bool = False,
 ) -> EvalationAck:
+    tracemalloc.start()
     if data is not None and remote_dataset_name is not None:
         raise ValueError("Cannot specify both data and remote_dataset_name")
 
@@ -112,4 +115,5 @@ def run_eval(
         configuration=configuration,
         data=data,
         remote_dataset_name=remote_dataset_name,
+        no_send_logs=no_send_logs,
     )

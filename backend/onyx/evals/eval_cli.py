@@ -42,6 +42,7 @@ def run_local(
     local_data_path: str | None,
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
+    no_send_logs: bool = False,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -67,7 +68,9 @@ def run_local(
 
     if remote_dataset_name:
         score = run_eval(
-            configuration=configuration, remote_dataset_name=remote_dataset_name
+            configuration=configuration,
+            remote_dataset_name=remote_dataset_name,
+            no_send_logs=no_send_logs,
         )
     else:
         if local_data_path is None:
@@ -75,7 +78,9 @@ def run_local(
                 "local_data_path or remote_dataset_name is required for local evaluation"
             )
         data = load_data_local(local_data_path)
-        score = run_eval(configuration=configuration, data=data)
+        score = run_eval(
+            configuration=configuration, data=data, no_send_logs=no_send_logs
+        )
 
     return score
 
@@ -172,6 +177,13 @@ def main() -> None:
         help="Email address to impersonate for the evaluation",
     )
 
+    parser.add_argument(
+        "--no-send-logs",
+        action="store_true",
+        help="Do not send logs to the remote server",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
@@ -215,6 +227,7 @@ def main() -> None:
             local_data_path=args.local_data_path,
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
+            no_send_logs=args.no_send_logs,
         )
 
 
