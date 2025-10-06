@@ -67,7 +67,9 @@ function SettingsPopover({
     }
 
     router.push(
-      `/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`
+      `/auth/login?next=${encodeURIComponent(
+        window.location.pathname + window.location.search
+      )}`
     );
   }
 
@@ -111,7 +113,11 @@ function SettingsPopover({
           icon={SvgBell}
           onClick={onNotificationsClick}
         >
-          {`Notifications ${(notifications && notifications.length) || 0 > 0 ? `(${notifications!.length})` : ""}`}
+          {`Notifications ${
+            (notifications && notifications.length) || 0 > 0
+              ? `(${notifications!.length})`
+              : ""
+          }`}
         </NavigationTab>,
         null,
         showLogout && (

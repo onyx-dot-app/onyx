@@ -158,7 +158,9 @@ export default function AgentCard({
               </Text>
               <Text secondaryBody text02>
                 {agent.tools.length > 0
-                  ? `${agent.tools.length} Action${agent.tools.length > 1 ? "s" : ""}`
+                  ? `${agent.tools.length} Action${
+                      agent.tools.length > 1 ? "s" : ""
+                    }`
                   : "No Actions"}
               </Text>
               <Text secondaryBody text01>

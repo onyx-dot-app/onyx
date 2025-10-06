@@ -57,7 +57,11 @@ export default function ProjectChatSessionList() {
               onMouseLeave={() => setHoveredChatId(null)}
             >
               <div
-                className={`w-full rounded-xl bg-background-background px-1 py-2 transition-colors ${hoveredChatId === chat.id ? "bg-accent-background-hovered" : ""}`}
+                className={`w-full rounded-xl bg-background-background px-1 py-2 transition-colors ${
+                  hoveredChatId === chat.id
+                    ? "bg-accent-background-hovered"
+                    : ""
+                }`}
               >
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">

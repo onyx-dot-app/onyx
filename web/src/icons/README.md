@@ -11,6 +11,7 @@ bunx @svgr/cli ${SVG_FILE} --typescript --no-dimensions --svgo-config '{"plugins
 ```
 
 This command:
+
 - Converts SVG files to TypeScript React components (`--typescript`)
 - Removes width and height from the root SVG tag (`--no-dimensions`)
 - Removes all `stroke` and `strokeOpacity` attributes from SVG elements (`--svgo-config` with `removeAttrs` plugin)

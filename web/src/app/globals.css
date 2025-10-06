@@ -86,15 +86,12 @@
 
 /* Font Family Variables */
 :root {
-  --font-hanken-grotesk:
-    "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
-  --font-dm-mono:
-    "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
-    "Courier New", monospace;
-  --font-sf-pro:
-    "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
+  --font-hanken-grotesk: "Hanken Grotesk", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --font-dm-mono: "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
+    Consolas, "Courier New", monospace;
+  --font-sf-pro: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
 }
 
 /* HEADING STYLES */

@@ -171,7 +171,9 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
               "{serviceName}",
               result.serviceName || "service"
             )
-          : `Your ${result.serviceName || "service"} authorization completed successfully.`;
+          : `Your ${
+              result.serviceName || "service"
+            } authorization completed successfully.`;
 
         setStatusDetails(successDetails);
         setIsSuccess(true);

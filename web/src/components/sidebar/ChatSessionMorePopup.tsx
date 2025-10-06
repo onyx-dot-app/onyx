@@ -166,7 +166,9 @@ export function ChatSessionMorePopup({
             icon={SvgFolder}
             onClick={noProp(() => handleRemoveChatSessionFromProject())}
           >
-            {`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
+            {`Remove from ${
+              projects.find((p) => p.id === projectId)?.name ?? "Project"
+            }`}
           </NavigationTab>
         ),
         null,

@@ -234,7 +234,9 @@ export function ToolList({
       const toolCount = data.updated_tools;
       const action = serverId ? "updated" : "created";
       setPopup({
-        message: `Successfully ${action} ${toolCount} MCP tool${toolCount !== 1 ? "s" : ""}!`,
+        message: `Successfully ${action} ${toolCount} MCP tool${
+          toolCount !== 1 ? "s" : ""
+        }!`,
         type: "success",
       });
       // Clear query params and navigate to actions page

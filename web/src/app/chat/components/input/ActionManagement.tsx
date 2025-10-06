@@ -170,7 +170,11 @@ export function ActionItem({
                   gap-2
                   transition-opacity
                   duration-200
-                  ${disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+                  ${
+                    disabled
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100"
+                  }
                 `}
                 onClick={(e) => {
                   e.stopPropagation();
