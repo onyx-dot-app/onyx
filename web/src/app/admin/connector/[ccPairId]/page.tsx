@@ -703,7 +703,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   <div className="mt-6">
                     <InlineFileManagement
                       connectorId={ccPair.connector.id}
-                      ccPairId={ccPair.id}
                       onRefresh={() => refresh()}
                     />
                   </div>
