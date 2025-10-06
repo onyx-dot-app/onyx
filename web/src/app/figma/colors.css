@@ -310,6 +310,48 @@
   --status-text-info-05: var(--blue-50);
   --status-text-warning-05: var(--orange-55);
   --status-text-error-05: var(--red-50);
+
+  /* Action */
+  --action-link-06: var(--blue-60);
+  --action-link-05: var(--blue-50);
+  --action-link-04: var(--blue-40);
+  --action-link-03: var(--blue-20);
+  --action-link-02: var(--blue-10);
+  --action-link-01: var(--blue-05);
+  --action-danger-06: var(--red-60);
+  --action-danger-05: var(--red-50);
+  --action-danger-04: var(--red-40);
+  --action-danger-03: var(--red-20);
+  --action-danger-02: var(--red-10);
+  --action-danger-01: var(--red-05);
+
+  /* Action / Text */
+  --action-text-link-05: var(--blue-50);
+  --action-text-danger-05: var(--red-50);
+
+  /* Code */
+  --code-code: var(--alpha-grey-100-85);
+  --code-comment: var(--alpha-grey-100-35);
+  --code-keyword: var(--purple-50);
+  --code-string: var(--green-60);
+  --code-number: var(--blue-50);
+  --code-definition: var(--orange-55);
+
+  /* Highlight */
+  --highlight-match: var(--neon-yellow-30);
+  --highlight-selection: var(--neon-sky-30);
+  --highlight-active: var(--neon-amber-60);
+  --highlight-accent: var(--neon-magenta-60);
+
+  /* Shadow */
+  --shadow-01: var(--alpha-grey-100-05);
+  --shadow-02: var(--alpha-grey-100-10);
+  --shadow-03: var(--alpha-grey-100-20);
+
+  /* Mask */
+  --mask-01: var(--alpha-grey-100-10);
+  --mask-02: var(--alpha-grey-100-20);
+  --mask-03: var(--alpha-grey-100-40);
 }
 
 /* Dark Colors */
@@ -396,4 +438,46 @@
   --status-text-info-05: var(--blue-45);
   --status-text-warning-05: var(--orange-50);
   --status-text-error-05: var(--red-45);
+
+  /* Action */
+  --action-link-06: var(--blue-40);
+  --action-link-05: var(--blue-50);
+  --action-link-04: var(--blue-60);
+  --action-link-03: var(--blue-80);
+  --action-link-02: var(--blue-85);
+  --action-link-01: var(--blue-90);
+  --action-danger-06: var(--red-40);
+  --action-danger-05: var(--red-50);
+  --action-danger-04: var(--red-60);
+  --action-danger-03: var(--red-80);
+  --action-danger-02: var(--red-85);
+  --action-danger-01: var(--red-90);
+
+  /* Action / Text */
+  --action-text-link-05: var(--blue-45);
+  --action-text-danger-05: var(--red-45);
+
+  /* Code */
+  --code-code: var(--alpha-grey-00-85);
+  --code-comment: var(--alpha-grey-00-45);
+  --code-keyword: var(--purple-45);
+  --code-string: var(--green-50);
+  --code-number: var(--blue-45);
+  --code-definition: var(--orange-50);
+
+  /* Highlight */
+  --highlight-match: var(--neon-yellow-30);
+  --highlight-selection: var(--neon-sky-30);
+  --highlight-active: var(--neon-amber-60);
+  --highlight-accent: var(--neon-magenta-60);
+
+  /* Shadow */
+  --shadow-01: var(--alpha-grey-00-05);
+  --shadow-02: var(--alpha-grey-00-10);
+  --shadow-03: var(--alpha-grey-00-20);
+
+  /* Mask */
+  --mask-01: var(--alpha-grey-100-10);
+  --mask-02: var(--alpha-grey-100-20);
+  --mask-03: var(--alpha-grey-100-40);
 }
