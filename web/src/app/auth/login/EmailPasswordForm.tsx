@@ -3,7 +3,7 @@
 import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
@@ -143,11 +143,7 @@ export function EmailPasswordForm({
               placeholder="**************"
             />
 
-            <Button
-              className="w-full !bg-theme-primary-05 hover:!bg-theme-primary-04 transition-none"
-              type="submit"
-              disabled={isSubmitting}
-            >
+            <Button className="w-full" disabled={isSubmitting}>
               {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
