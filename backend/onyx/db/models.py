@@ -52,6 +52,7 @@ from onyx.db.enums import (
     IndexingMode,
     SyncType,
     SyncStatus,
+    ValidatorType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -217,6 +218,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+    validators: Mapped[list["Validator"]] = relationship(
+        "Validator", back_populates="user"
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -319,6 +323,13 @@ class Persona__User(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
+
+
+class Persona__Validator(Base):
+    __tablename__ = "persona__validator"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    validator_id: Mapped[int] = mapped_column(ForeignKey("validator.id"), primary_key=True)
 
 
 class DocumentSet__User(Base):
@@ -1173,6 +1184,35 @@ class DocumentByConnectorCredentialPair(Base):
     )
 
 
+class Validator(Base):
+    __tablename__ = "validator"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=True)
+    validator_type: Mapped[ValidatorType] = mapped_column(
+        Enum(ValidatorType, native_enum=False, length=30),
+        nullable=False,
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped[User | None] = relationship("User", back_populates="validators")
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__validator",
+        back_populates="validators"
+    )
+
+
 """
 Messages Tables
 """
@@ -1860,6 +1900,12 @@ class Persona(Base):
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
+    )
+    # Guardrails validators
+    validators: Mapped[list["Validator"]] = relationship(
+        "Validator",
+        secondary="persona__validator",
+        back_populates="personas"
     )
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
