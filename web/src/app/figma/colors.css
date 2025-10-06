@@ -208,7 +208,7 @@
 
   /* Onyx / Chrome */
   --onyx-chrome-20: #cacaca;
-  --onyx-chrome-10-main: #e9e9e9;
+  --onyx-chrome-10: #e9e9e9;
   --onyx-chrome-00: #ffffff;
 
   /* Tint (referencing Stone variables) */
@@ -283,7 +283,7 @@
 
   /* Theme */
   --theme-primary-06: var(--onyx-chrome-00);
-  --theme-primary-05: var(--onyx-chrome-10-main);
+  --theme-primary-05: var(--onyx-chrome-10);
   --theme-primary-04: var(--onyx-chrome-20);
 
   /* Status */
@@ -410,7 +410,7 @@
 
   /* Theme */
   --theme-primary-06: var(--onyx-ink-100);
-  --theme-primary-05: var(--onyx-ink-95-main);
+  --theme-primary-05: var(--onyx-ink-95);
   --theme-primary-04: var(--onyx-ink-90);
 
   /* Status */
