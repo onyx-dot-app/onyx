@@ -149,7 +149,7 @@ CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 # Doc ID migration can be long-running; use a longer TTL and renew periodically
 CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT = 10 * 60  # 10 minutes (in seconds)
 
-CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 20 minutes (in seconds)
+CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
 CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 

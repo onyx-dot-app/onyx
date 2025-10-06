@@ -765,7 +765,7 @@ class VespaIndex(DocumentIndex):
             if fields.hidden is not None:
                 update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
 
-            # document_id update is added ony for migration purposes, ideally we should not be updating this field
+            # document_id update is added only for migration purposes, ideally we should not be updating this field
             if fields.document_id is not None:
                 update_dict["fields"][DOCUMENT_ID] = {"assign": fields.document_id}
 

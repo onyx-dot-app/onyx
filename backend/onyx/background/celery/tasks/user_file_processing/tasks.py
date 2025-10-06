@@ -553,6 +553,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
         )
         return False
 
+    updated_count = 0
     try:
         update_legacy_plaintext_file_records()
         # Track lock renewal
@@ -628,7 +629,6 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                 f"user_file_docid_migration_task - search_doc_map total items: "
                 f"{sum(len(docs) for docs in search_doc_map.values())}"
             )
-            updated_count = 0
             for user_file in user_files:
                 # Periodically renew the Redis lock to prevent expiry mid-run
                 current_time = time.monotonic()
