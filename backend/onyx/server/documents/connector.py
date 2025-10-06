@@ -846,7 +846,7 @@ def update_connector_files(
     file_ids_to_remove: str = Form("[]"),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> FileUploadResponse:
     """
     Update files in a connector by adding new files and/or removing existing ones.
     This is an atomic operation that validates, updates the connector config, and triggers indexing.
@@ -983,6 +983,12 @@ def update_connector_files(
                     )
         except Exception as e:
             logger.error(f"Failed to trigger re-indexing after file update: {e}")
+
+    return FileUploadResponse(
+        file_paths=final_file_locations,
+        file_names=final_file_names,
+        zip_metadata=final_zip_metadata,
+    )
 
 
 @router.get("/admin/connector")
