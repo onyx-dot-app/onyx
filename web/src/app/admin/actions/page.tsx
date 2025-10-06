@@ -8,7 +8,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { FiPlusCircle, FiHelpCircle } from "react-icons/fi";
+import { FiHelpCircle } from "react-icons/fi";
 import {
   Tooltip,
   TooltipContent,
@@ -79,7 +79,7 @@ export default async function Page() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
-                <FiHelpCircle className="h-4 w-4 text-subtle hover:text-emphasis cursor-help" />
+                <FiHelpCircle className="h-4 w-4 cursor-help" />
               </TooltipTrigger>
               <TooltipContent>
                 <Text inverted>
