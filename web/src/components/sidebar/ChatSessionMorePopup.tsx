@@ -13,7 +13,6 @@ import {
   PopoverContent,
   PopoverMenu,
 } from "@/components/ui/popover";
-import { FiMoreHorizontal } from "react-icons/fi";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
@@ -27,6 +26,7 @@ import { cn, noProp } from "@/lib/utils";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -233,7 +233,7 @@ export function ChatSessionMorePopup({
                   : "opacity-0 pointer-events-none"
               )}
             >
-              <FiMoreHorizontal size={iconSize} />
+              <SvgMoreHorizontal className="stroke-text-02 h-4 w-4" />
             </div>
           </PopoverTrigger>
           <PopoverContent
