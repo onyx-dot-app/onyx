@@ -168,8 +168,7 @@ nginx:
         env DOMAIN;
       http-snippet: |
         include /etc/nginx/custom-snippets/upstreams.conf;
-      server-snippet: |
-        include /etc/nginx/custom-snippets/server-snippet.conf;
+        include /etc/nginx/custom-snippets/server.conf;
 
     # Mount the existing nginx ConfigMap that holds the upstream and server snippets
     extraVolumes:
