@@ -411,9 +411,6 @@ class S3BackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
-            if not file_record:
-                return None
-
             s3_client = self._get_s3_client()
             response = s3_client.head_object(
                 Bucket=file_record.bucket_name, Key=file_record.object_key
