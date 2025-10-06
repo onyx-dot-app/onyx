@@ -262,7 +262,6 @@ export function InlineFileManagement({
                         </TableCell>
                       )}
                       <TableCell className="font-medium">
-                      >
                         <span
                           className={
                             isMarkedForRemoval ? "line-through opacity-60" : ""
