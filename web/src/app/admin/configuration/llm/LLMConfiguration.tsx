@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/Text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -78,9 +78,9 @@ function DefaultLLMProviderDisplay({
   return (
     <div>
       {popup}
-      <div className="border border-border p-3 dark:bg-neutral-800 dark:border-neutral-700 rounded w-96 flex shadow-md">
+      <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
         <div className="my-auto">
-          <div className="font-bold">{providerName}</div>
+          <Text headingH3>{providerName}</Text>
         </div>
         <div className="ml-auto">
           <Button action onClick={() => setFormIsVisible(true)}>
