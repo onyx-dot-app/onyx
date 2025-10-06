@@ -114,8 +114,8 @@ function SettingsPopover({
           onClick={onNotificationsClick}
         >
           {`Notifications ${
-            (notifications && notifications.length) || 0 > 0
-              ? `(${notifications!.length})`
+            notifications && notifications.length > 0
+              ? `(${notifications.length})`
               : ""
           }`}
         </NavigationTab>,
