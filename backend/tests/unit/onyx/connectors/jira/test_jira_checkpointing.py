@@ -109,7 +109,9 @@ def test_load_credentials(jira_connector: JiraConnector) -> None:
         result = jira_connector.load_credentials(credentials)
 
         mock_build_client.assert_called_once_with(
-            credentials=credentials, jira_base=jira_connector.jira_base
+            credentials=credentials,
+            jira_base=jira_connector.jira_base,
+            scoped_token=False,
         )
         assert result is None
         assert jira_connector._jira_client == mock_build_client.return_value
@@ -226,7 +228,7 @@ def test_load_from_checkpoint_with_issue_processing_error(
 
     # Mock process_jira_issue to succeed for some issues and fail for others
     def mock_process_side_effect(
-        jira_client: JIRA, issue: Issue, *args: Any, **kwargs: Any
+        jira_base_url: str, issue: Issue, *args: Any, **kwargs: Any
     ) -> Document | None:
         if issue.key in ["TEST-1", "TEST-3"]:
             return Document(
@@ -313,7 +315,7 @@ def test_load_from_checkpoint_with_skipped_issue(
     assert len(checkpoint_output.items) == 0
 
 
-def test_retrieve_all_slim_documents(
+def test_retrieve_all_slim_docs_perm_sync(
     jira_connector: JiraConnector, create_mock_issue: Any
 ) -> None:
     """Test retrieving all slim documents"""
@@ -339,8 +341,8 @@ def test_retrieve_all_slim_documents(
                 "https://jira.example.com/browse/TEST-2",
             ]
 
-            # Call retrieve_all_slim_documents
-            batches = list(jira_connector.retrieve_all_slim_documents(0, 100))
+            # Call retrieve_all_slim_docs_perm_sync
+            batches = list(jira_connector.retrieve_all_slim_docs_perm_sync(0, 100))
 
             # Check that a batch with 2 documents was returned
             assert len(batches) == 1

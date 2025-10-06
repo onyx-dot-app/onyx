@@ -1,3 +1,5 @@
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+
 export interface CustomConfigKey {
   name: string;
   display_name: string;
@@ -10,14 +12,11 @@ export interface CustomConfigKey {
 
 export type CustomConfigKeyType = "text_input" | "file_input";
 
-export interface ModelConfigurationUpsertRequest {
+export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;
-}
-
-export interface ModelConfiguration extends ModelConfigurationUpsertRequest {
-  supports_image_input: boolean;
+  supports_image_input: boolean | null;
 }
 
 export interface WellKnownLLMProviderDescriptor {
@@ -34,6 +33,7 @@ export interface WellKnownLLMProviderDescriptor {
   model_configurations: ModelConfiguration[];
   default_model: string | null;
   default_fast_model: string | null;
+  default_api_base: string | null;
   is_public: boolean;
   groups: number[];
 }
@@ -80,4 +80,29 @@ export interface LLMProviderDescriptor {
   is_public: boolean;
   groups: number[];
   model_configurations: ModelConfiguration[];
+}
+
+export interface OllamaModelResponse {
+  name: string;
+  max_input_tokens: number;
+  supports_image_input: boolean;
+}
+
+export interface DynamicProviderConfig<
+  TApiResponse = any,
+  TProcessedResponse = ModelConfiguration,
+> {
+  endpoint: string;
+  isDisabled: (values: any) => boolean;
+  disabledReason: string;
+  buildRequestBody: (args: {
+    values: any;
+    existingLlmProvider?: LLMProviderView;
+  }) => Record<string, any>;
+  processResponse: (
+    data: TApiResponse,
+    llmProviderDescriptor: WellKnownLLMProviderDescriptor
+  ) => TProcessedResponse[];
+  getModelNames: (data: TApiResponse) => string[];
+  successMessage: (count: number) => string;
 }

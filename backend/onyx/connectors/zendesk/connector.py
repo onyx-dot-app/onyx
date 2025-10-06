@@ -26,7 +26,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
@@ -376,7 +376,7 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
 
 
 class ZendeskConnector(
-    SlimConnector, CheckpointedConnector[ZendeskConnectorCheckpoint]
+    SlimConnectorWithPermSync, CheckpointedConnector[ZendeskConnectorCheckpoint]
 ):
     def __init__(
         self,
@@ -565,7 +565,7 @@ class ZendeskConnector(
         )
         return checkpoint
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

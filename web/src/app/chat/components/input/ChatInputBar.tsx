@@ -436,29 +436,10 @@ function ChatInputBarInner({
         />
 
         {(selectedDocuments.length > 0 ||
-          currentMessageFiles.length > 0 ||
           filterManager.timeRange ||
-          filterManager.selectedDocumentSets.length > 0 ||
-          filterManager.selectedTags.length > 0 ||
-          filterManager.selectedSources.length > 0) && (
+          filterManager.selectedDocumentSets.length > 0) && (
           <div className="flex gap-x-.5 px-2">
             <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
-              {filterManager.selectedTags &&
-                filterManager.selectedTags.map((tag, index) => (
-                  <SourceChip
-                    key={index}
-                    icon={<TagIcon size={12} />}
-                    title={`#${tag.tag_key}_${tag.tag_value}`}
-                    onRemove={() => {
-                      filterManager.setSelectedTags(
-                        filterManager.selectedTags.filter(
-                          (t) => t.tag_key !== tag.tag_key
-                        )
-                      );
-                    }}
-                  />
-                ))}
-
               {filterManager.timeRange && (
                 <SourceChip
                   truncateTitle={false}
@@ -483,26 +464,6 @@ function ChatInputBarInner({
                       filterManager.setSelectedDocumentSets(
                         filterManager.selectedDocumentSets.filter(
                           (ds) => ds !== docSet
-                        )
-                      );
-                    }}
-                  />
-                ))}
-              {filterManager.selectedSources.length > 0 &&
-                filterManager.selectedSources.map((source, index) => (
-                  <SourceChip
-                    key={`source-${index}`}
-                    icon={
-                      <SourceIcon
-                        sourceType={source.internalName}
-                        iconSize={16}
-                      />
-                    }
-                    title={source.displayName}
-                    onRemove={() => {
-                      filterManager.setSelectedSources(
-                        filterManager.selectedSources.filter(
-                          (s) => s.internalName !== source.internalName
                         )
                       );
                     }}

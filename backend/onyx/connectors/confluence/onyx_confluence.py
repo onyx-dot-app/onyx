@@ -41,6 +41,7 @@ from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -87,16 +88,20 @@ class OnyxConfluence:
         url: str,
         credentials_provider: CredentialsProviderInterface,
         timeout: int | None = None,
+        scoped_token: bool = False,
         # should generally not be passed in, but making it overridable for
         # easier testing
         confluence_user_profiles_override: list[dict[str, str]] | None = (
             CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
         ),
     ) -> None:
+        self.base_url = url  #'/'.join(url.rstrip("/").split("/")[:-1])
+        url = scoped_url(url, "confluence") if scoped_token else url
+
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
-
+        self.scoped_token = scoped_token
         self.redis_client: Redis | None = None
         self.static_credentials: dict[str, Any] | None = None
         if self._credentials_provider.is_dynamic():
@@ -218,6 +223,34 @@ class OnyxConfluence:
 
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()
+            if self.scoped_token:
+                # v2 endpoint doesn't always work with scoped tokens, use v1
+                token = credentials["confluence_access_token"]
+                probe_url = f"{self.base_url}/rest/api/space?limit=1"
+                import requests
+
+                logger.info(f"First and Last 5 of token: {token[:5]}...{token[-5:]}")
+
+                try:
+                    r = requests.get(
+                        probe_url,
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=10,
+                    )
+                    r.raise_for_status()
+                except HTTPError as e:
+                    if e.response.status_code == 403:
+                        logger.warning(
+                            "scoped token authenticated but not valid for probe endpoint (spaces)"
+                        )
+                    else:
+                        if "WWW-Authenticate" in e.response.headers:
+                            logger.warning(
+                                f"WWW-Authenticate: {e.response.headers['WWW-Authenticate']}"
+                            )
+                            logger.warning(f"Full error: {e.response.text}")
+                        raise e
+                return
 
             # probe connection with direct client, no retries
             if "confluence_refresh_token" in credentials:
@@ -236,6 +269,7 @@ class OnyxConfluence:
                 logger.info("Probing Confluence with Personal Access Token.")
                 url = self._url
                 if self._is_cloud:
+                    logger.info("running with cloud client")
                     confluence_client_with_minimal_retries = Confluence(
                         url=url,
                         username=credentials["confluence_username"],
@@ -304,7 +338,9 @@ class OnyxConfluence:
             url = f"https://api.atlassian.com/ex/confluence/{credentials['cloud_id']}"
             confluence = Confluence(url=url, oauth2=oauth2_dict, **kwargs)
         else:
-            logger.info("Connecting to Confluence with Personal Access Token.")
+            logger.info(
+                f"Connecting to Confluence with Personal Access Token as user: {credentials['confluence_username']}"
+            )
             if self._is_cloud:
                 confluence = Confluence(
                     url=self._url,

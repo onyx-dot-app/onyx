@@ -105,6 +105,11 @@ pip install -r backend/requirements/ee.txt
 pip install -r backend/requirements/model_server.txt
 ```
 
+Fix vscode/cursor auto-imports:
+```bash
+pip install -e .
+```
+
 Install Playwright for Python (headless browser required by the Web Connector)
 
 In the activated Python virtualenv, install Playwright for Python by running:

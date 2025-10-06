@@ -71,3 +71,15 @@ def test_web_connector_bot_protection() -> None:
     doc = doc_batch[0]
     assert doc.sections[0].text is not None
     assert MERCURY_EXPECTED_QUOTE in doc.sections[0].text
+
+
+def test_web_connector_recursive_www_redirect() -> None:
+    # Check that onyx.app can be recursed if re-directed to www.onyx.app
+    connector = WebConnector(
+        base_url="https://onyx.app",
+        web_connector_type=WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
+    )
+
+    documents = [doc for batch in connector.load_from_state() for doc in batch]
+
+    assert len(documents) > 1

@@ -3,7 +3,6 @@ from typing import Any
 from typing import cast
 from typing import List
 
-from litellm import get_supported_openai_params
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import NUM_PERSONA_PROMPT_GENERATION_CHUNKS
@@ -122,6 +121,8 @@ def generate_starter_messages(
     On failure, returns an empty list (or list with processed starter messages if some messages are processed successfully).
     """
     _, fast_llm = get_default_llms(temperature=0.5)
+
+    from litellm.utils import get_supported_openai_params
 
     provider = fast_llm.config.model_provider
     model = fast_llm.config.model_name

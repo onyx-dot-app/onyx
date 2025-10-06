@@ -157,7 +157,7 @@ def test_slim_docs_retrieval_from_teams_connector(
 ) -> None:
     slim_docs = [
         slim_doc
-        for slim_doc_batch in teams_connector.retrieve_all_slim_documents()
+        for slim_doc_batch in teams_connector.retrieve_all_slim_docs_perm_sync()
         for slim_doc in slim_doc_batch
     ]
 

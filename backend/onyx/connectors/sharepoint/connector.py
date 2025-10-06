@@ -41,7 +41,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -73,7 +73,8 @@ class SiteDescriptor(BaseModel):
     """Data class for storing SharePoint site information.
 
     Args:
-        url: The base site URL (e.g. https://danswerai.sharepoint.com/sites/sharepoint-tests)
+        url: The base site URL (e.g. https://danswerai.sharepoint.com/sites/sharepoint-tests
+             or https://danswerai.sharepoint.com/teams/team-name)
         drive_name: The name of the drive to access (e.g. "Shared Documents", "Other Library")
                    If None, all drives will be accessed.
         folder_path: The folder path within the drive to access (e.g. "test/nested with spaces")
@@ -672,7 +673,7 @@ def _convert_sitepage_to_slim_document(
 
 
 class SharepointConnector(
-    SlimConnector,
+    SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
 ):
     def __init__(
@@ -703,9 +704,11 @@ class SharepointConnector(
 
         # Ensure sites are sharepoint urls
         for site_url in self.sites:
-            if not site_url.startswith("https://") or "/sites/" not in site_url:
+            if not site_url.startswith("https://") or not (
+                "/sites/" in site_url or "/teams/" in site_url
+            ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site)"
+                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
                 )
 
     @property
@@ -720,10 +723,17 @@ class SharepointConnector(
         site_data_list = []
         for url in site_urls:
             parts = url.strip().split("/")
+
+            site_type_index = None
             if "sites" in parts:
-                sites_index = parts.index("sites")
-                site_url = "/".join(parts[: sites_index + 2])
-                remaining_parts = parts[sites_index + 2 :]
+                site_type_index = parts.index("sites")
+            elif "teams" in parts:
+                site_type_index = parts.index("teams")
+
+            if site_type_index is not None:
+                # Extract the base site URL (up to and including the site/team name)
+                site_url = "/".join(parts[: site_type_index + 2])
+                remaining_parts = parts[site_type_index + 2 :]
 
                 # Extract drive name and folder path
                 if remaining_parts:
@@ -745,7 +755,9 @@ class SharepointConnector(
                     )
                 )
             else:
-                logger.warning(f"Site URL '{url}' is not a valid Sharepoint URL")
+                logger.warning(
+                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/ or /teams/)"
+                )
         return site_data_list
 
     def _get_drive_items_for_drive_name(
@@ -1597,7 +1609,7 @@ class SharepointConnector(
     ) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint.model_validate_json(checkpoint_json)
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

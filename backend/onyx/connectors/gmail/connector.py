@@ -28,7 +28,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
@@ -232,7 +232,7 @@ def thread_to_document(
     )
 
 
-class GmailConnector(LoadConnector, PollConnector, SlimConnector):
+class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
 
@@ -397,10 +397,10 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                         if callback:
                             if callback.should_stop():
                                 raise RuntimeError(
-                                    "retrieve_all_slim_documents: Stop signal detected"
+                                    "retrieve_all_slim_docs_perm_sync: Stop signal detected"
                                 )
 
-                            callback.progress("retrieve_all_slim_documents", 1)
+                            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
             except HttpError as e:
                 if _is_mail_service_disabled_error(e):
                     logger.warning(
@@ -431,7 +431,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

@@ -18,7 +18,7 @@ export function useReIndexModal(
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
 
   const showReIndexModal = () => {
-    if (!connectorId || !credentialId || !ccPairId) {
+    if (connectorId == null || credentialId == null || ccPairId == null) {
       return;
     }
     setReIndexPopupVisible(true);
@@ -29,7 +29,7 @@ export function useReIndexModal(
   };
 
   const triggerReIndex = async (fromBeginning: boolean) => {
-    if (!connectorId || !credentialId || !ccPairId) {
+    if (connectorId == null || credentialId == null || ccPairId == null) {
       return;
     }
 
@@ -64,7 +64,10 @@ export function useReIndexModal(
   };
 
   const FinalReIndexModal =
-    reIndexPopupVisible && connectorId && credentialId && ccPairId ? (
+    reIndexPopupVisible &&
+    connectorId != null &&
+    credentialId != null &&
+    ccPairId != null ? (
       <ReIndexModal
         setPopup={setPopup}
         hide={hideReIndexModal}

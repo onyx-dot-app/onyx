@@ -162,7 +162,7 @@ def unlink_user_file_from_project(
         OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
         kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
-        priority=OnyxCeleryPriority.HIGH,
+        priority=OnyxCeleryPriority.HIGHEST,
     )
     logger.info(
         f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"
@@ -210,7 +210,7 @@ def link_user_file_to_project(
         OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
         kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
-        priority=OnyxCeleryPriority.HIGH,
+        priority=OnyxCeleryPriority.HIGHEST,
     )
     logger.info(
         f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"

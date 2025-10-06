@@ -37,7 +37,7 @@ def test_overlapping_connector_creation(reset: None) -> None:
 
     config = {
         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        "space": "DailyConnectorTestSpace",
+        "space": "DailyConne",
         "is_cloud": True,
     }
 
