@@ -663,6 +663,11 @@ def add_files_to_connector(
     current_file_names = current_config.get("file_names", [])
     current_zip_metadata = current_config.get("zip_metadata", {})
 
+    # Normalize file_names for backwards compatibility with legacy data
+    current_file_names = _normalize_file_names_for_backwards_compatibility(
+        current_file_locations, current_file_names
+    )
+
     # Append new files
     new_file_locations = current_file_locations + upload_response.file_paths
     new_file_names = current_file_names + upload_response.file_names
