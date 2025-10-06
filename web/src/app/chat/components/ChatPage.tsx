@@ -70,7 +70,7 @@ import {
 } from "@/app/chat/stores/useChatSessionStore";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
-import { WelcomeMessage } from "@/app/chat/components/WelcomeMessage";
+import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import {
@@ -631,10 +631,6 @@ export function ChatPage({
     });
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
-  const handleHeaderReset = useCallback(() => {
-    setMessage("");
-  }, []);
-
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
     updateCurrentDocumentSidebarVisible(false);
@@ -918,7 +914,7 @@ export function ChatPage({
                       )}
                     >
                       {currentProjectId == null && showCenteredInput && (
-                        <WelcomeMessage assistant={liveAssistant} />
+                        <WelcomeMessage />
                       )}
                       <div
                         className={cn(

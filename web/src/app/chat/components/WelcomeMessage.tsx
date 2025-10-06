@@ -1,16 +1,15 @@
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+// import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Logo } from "@/components/logo/Logo";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { cn } from "@/lib/utils";
+import { AgentIcon } from "@/refresh-components/AgentIcon";
 import Text from "@/refresh-components/Text";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 
-interface WelcomeMessageProps {
-  assistant: MinimalPersonaSnapshot;
-}
+export default function WelcomeMessage() {
+  const { currentAgent } = useAgentsContext();
 
-export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
-  // For the unified assistant (ID 0), show greeting message
-  const isUnifiedAssistant = assistant.id === 0;
+  // If no agent is active OR the current agent is the default one, we show the Onyx logo.
+  const isDefaultAgent = !currentAgent || currentAgent.id === 0;
 
   return (
     <div
@@ -26,14 +25,14 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
       )}
     >
       <div className="flex items-center">
-        {isUnifiedAssistant ? (
+        {isDefaultAgent ? (
           <div data-testid="onyx-logo">
             <Logo size="large" />
           </div>
         ) : (
           <div className="flex flex-row items-center justify-center gap-padding-button">
-            <AssistantIcon assistant={assistant} size="large" />
-            <Text headingH2>{assistant.name}</Text>
+            <AgentIcon agent={currentAgent} />
+            <Text headingH2>{currentAgent.name}</Text>
           </div>
         )}
       </div>

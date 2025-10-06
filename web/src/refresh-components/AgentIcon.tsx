@@ -52,7 +52,8 @@ export function generateIdenticon(str: string, size: number) {
             y={yPos - 0.5}
             width={cellSize + 1}
             height={cellSize + 1}
-            fill="var(--theme-primary-05)"
+            fill="var(--background-neutral-inverted-02)"
+            stroke="var(--background-neutral-inverted-02)"
           />
         );
 
@@ -66,7 +67,8 @@ export function generateIdenticon(str: string, size: number) {
               y={yPos - 0.5}
               width={cellSize + 1}
               height={cellSize + 1}
-              fill="var(--theme-primary-05)"
+              fill="var(--background-neutral-inverted-02)"
+              stroke="var(--background-neutral-inverted-02)"
             />
           );
         }
