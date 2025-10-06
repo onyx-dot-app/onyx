@@ -261,10 +261,7 @@ export function InlineFileManagement({
                           />
                         </TableCell>
                       )}
-                      <TableCell
-                        className={
-                          isMarkedForRemoval ? "font-medium" : "font-medium"
-                        }
+                      <TableCell className="font-medium">
                       >
                         <span
                           className={
