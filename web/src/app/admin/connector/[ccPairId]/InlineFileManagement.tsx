@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FiEdit2, FiTrash2, FiUpload, FiSave, FiX } from "react-icons/fi";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   Table,
   TableBody,
@@ -23,19 +22,17 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
+import SvgEdit from "@/icons/edit";
+import SvgCheck from "@/icons/check";
+import SvgX from "@/icons/x";
+import SvgPlusCircle from "@/icons/plus-circle";
+import SvgTrash from "@/icons/trash";
+import { formatBytes } from "@/lib/utils";
 
 interface InlineFileManagementProps {
   connectorId: number;
   ccPairId: number;
   onRefresh: () => void;
-}
-
-function formatFileSize(bytes: number | undefined): string {
-  if (!bytes) return "Unknown";
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  if (bytes === 0) return "0 Bytes";
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
 }
 
 function formatDate(dateString: string | undefined): string {
@@ -193,36 +190,30 @@ export function InlineFileManagement({
           {!isEditing ? (
             <Button
               onClick={() => setIsEditing(true)}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
+              secondary
+              leftIcon={SvgEdit}
             >
-              <FiEdit2 className="h-4 w-4" />
               Edit
             </Button>
           ) : (
             <>
               <Button
                 onClick={handleCancel}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2"
+                secondary
+                leftIcon={SvgX}
                 disabled={isSaving}
               >
-                <FiX className="h-4 w-4" />
                 Cancel
               </Button>
               <Button
                 onClick={handleSaveClick}
-                variant="default"
-                size="sm"
-                className="flex items-center gap-2"
+                primary
+                leftIcon={SvgCheck}
                 disabled={
                   isSaving ||
                   (selectedFilesToRemove.size === 0 && filesToAdd.length === 0)
                 }
               >
-                <FiSave className="h-4 w-4" />
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </>
@@ -297,7 +288,7 @@ export function InlineFileManagement({
                           isMarkedForRemoval ? "line-through opacity-60" : ""
                         }
                       >
-                        {formatFileSize(file.file_size)}
+                        {formatBytes(file.file_size)}
                       </TableCell>
                       <TableCell
                         className={
@@ -321,9 +312,10 @@ export function InlineFileManagement({
                       <TableCell>
                         <button
                           onClick={() => handleRemoveNewFile(index)}
-                          className="text-error hover:text-error-dark"
+                          className="h-4 w-4 flex items-center justify-center rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                          title="Remove this file"
                         >
-                          <FiX className="h-4 w-4" />
+                          <SvgX className="h-4 w-4 stroke-red-600 dark:stroke-red-400" />
                         </button>
                       </TableCell>
                     )}
@@ -333,7 +325,7 @@ export function InlineFileManagement({
                         New
                       </span>
                     </TableCell>
-                    <TableCell>{formatFileSize(file.size)}</TableCell>
+                    <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
                     {isEditing && <TableCell></TableCell>}
                   </TableRow>
@@ -355,19 +347,14 @@ export function InlineFileManagement({
             className="hidden"
             id={`file-upload-${connectorId}`}
           />
-          <label htmlFor={`file-upload-${connectorId}`}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={() => fileInputRef.current?.click()}
-              type="button"
-              disabled={isSaving}
-            >
-              <FiUpload className="h-4 w-4" />
-              Add Files
-            </Button>
-          </label>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            secondary
+            leftIcon={SvgPlusCircle}
+            disabled={isSaving}
+          >
+            Add Files
+          </Button>
         </div>
       )}
 
@@ -411,16 +398,12 @@ export function InlineFileManagement({
             <div className="flex gap-3 justify-end">
               <Button
                 onClick={() => setShowSaveConfirm(false)}
-                variant="outline"
+                secondary
                 disabled={isSaving}
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleConfirmSave}
-                variant="default"
-                disabled={isSaving}
-              >
+              <Button onClick={handleConfirmSave} primary disabled={isSaving}>
                 {isSaving ? "Saving..." : "Confirm & Save"}
               </Button>
             </div>
