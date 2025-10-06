@@ -30,54 +30,6 @@ export async function listConnectorFiles(
   return await response.json();
 }
 
-export async function addFilesToConnector(
-  connectorId: number,
-  files: File[]
-): Promise<void> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
-
-  const response = await fetch(
-    `/api/manage/admin/connector/${connectorId}/files/add`,
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Failed to add files to connector (${response.status}): ${error.detail || "Unknown error"}`
-    );
-  }
-}
-
-export async function removeFilesFromConnector(
-  connectorId: number,
-  fileIds: string[]
-): Promise<void> {
-  const response = await fetch(
-    `/api/manage/admin/connector/${connectorId}/files/remove`,
-    {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ file_ids: fileIds }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Failed to remove files from connector (${response.status}): ${error.detail || "Unknown error"}`
-    );
-  }
-}
-
 export async function updateConnectorFiles(
   connectorId: number,
   fileIdsToRemove: string[],
