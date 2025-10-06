@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "@/components/context/ChatContext";
+import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
+import { ProjectsProvider } from "./projects/ProjectsContext";
+import AppSidebar from "@/sections/sidebar/AppSidebar";
 
 export default async function Layout({
   children,
@@ -42,25 +44,27 @@ export default async function Layout({
   return (
     <>
       <ChatProvider
-        value={{
-          proSearchToggled,
-          inputPrompts,
-          chatSessions,
-          sidebarInitiallyVisible,
-          availableSources,
-          ccPairs,
-          documentSets,
-          tags,
-          availableDocumentSets: documentSets,
-          availableTags: tags,
-          llmProviders,
-          availableTools,
-          shouldShowWelcomeModal,
-          defaultAssistantId,
-          projects,
-        }}
+        proSearchToggled={proSearchToggled}
+        inputPrompts={inputPrompts}
+        chatSessions={chatSessions}
+        sidebarInitiallyVisible={sidebarInitiallyVisible}
+        availableSources={availableSources}
+        ccPairs={ccPairs}
+        documentSets={documentSets}
+        tags={tags}
+        availableDocumentSets={documentSets}
+        availableTags={tags}
+        llmProviders={llmProviders}
+        availableTools={availableTools}
+        shouldShowWelcomeModal={shouldShowWelcomeModal}
+        defaultAssistantId={defaultAssistantId}
       >
-        {children}
+        <ProjectsProvider initialProjects={projects}>
+          <div className="flex flex-row w-full h-full">
+            <AppSidebar />
+            {children}
+          </div>
+        </ProjectsProvider>
       </ChatProvider>
     </>
   );

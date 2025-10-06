@@ -1,94 +1,62 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { FolderPlus } from "lucide-react";
+import { useRef } from "react";
+import Button from "@/refresh-components/buttons/Button";
+import SvgFolderPlus from "@/icons/folder-plus";
+import Modal from "@/refresh-components/modals/Modal";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useKeyPress } from "@/hooks/useKeyPress";
+import FieldInput from "@/refresh-components/inputs/FieldInput";
+import { useAppRouter } from "@/hooks/appNavigation";
 
-interface CreateProjectModalProps {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  onCreate?: (name: string) => void | Promise<void>;
-}
+export default function CreateProjectModal() {
+  const { createProject } = useProjectsContext();
+  const { toggleModal } = useModal();
+  const fieldInputRef = useRef<HTMLInputElement>(null);
+  const route = useAppRouter();
 
-export default function CreateProjectModal({
-  open,
-  setOpen,
-  onCreate,
-}: CreateProjectModalProps) {
-  const [projectName, setProjectName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    const name = projectName.trim();
+  async function handleSubmit() {
+    if (!fieldInputRef.current) return;
+    const name = fieldInputRef.current.value.trim();
     if (!name) return;
-    try {
-      setIsSubmitting(true);
-      await onCreate?.(name);
-      setOpen(false);
-      setProjectName("");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+    try {
+      const newProject = await createProject(name);
+      route({ projectId: newProject.id });
+    } catch (e) {
+      console.error(`Failed to create the project ${name}`);
     }
-  };
+
+    toggleModal(ModalIds.CreateProjectModal, false);
+  }
+
+  useKeyPress(handleSubmit, "Enter");
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-[95%] max-w-2xl">
-        <DialogHeader>
-          <FolderPlus size={26} className="mb-2" />
-          <DialogTitle>Create New Project</DialogTitle>
-          <DialogDescription>
-            Projects help keep your chats organized. Add files and instructions
-            to easily start new conversations on the same topic.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="bg-background-100 dark:bg-transparent -mx-6 px-6 py-4 space-y-2">
-          <Label htmlFor="project-name">Project Name</Label>
-          <Input
-            id="project-name"
-            autoFocus
-            autoComplete="off"
-            placeholder="What are you working on?"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            removeFocusRing
-          />
-        </div>
-        <div className="flex justify-end gap-3 pt-2 w-full">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setOpen(false)}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || projectName.trim().length === 0}
-          >
-            Create Project
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      id={ModalIds.CreateProjectModal}
+      icon={SvgFolderPlus}
+      title="Create New Project"
+      description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
+      xs
+    >
+      <div className="flex flex-col p-spacing-paragraph bg-background-tint-01">
+        <FieldInput
+          label="Project Name"
+          placeholder="What are you working on?"
+          ref={fieldInputRef}
+        />
+      </div>
+      <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">
+        <Button
+          secondary
+          onClick={() => toggleModal(ModalIds.CreateProjectModal, false)}
+        >
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit}>Create Project</Button>
+      </div>
+    </Modal>
   );
 }

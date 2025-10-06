@@ -1,17 +1,16 @@
 import { cn } from "@/lib/utils";
 
-// Used for all admin page sections
-export default function CardSection({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
+export interface CardSectionProps {
   className?: string;
-}) {
+  children?: React.ReactNode;
+}
+
+// Used for all admin page sections
+export default function CardSection({ children, className }: CardSectionProps) {
   return (
     <div
       className={cn(
-        "p-6 border bg-[#fff] dark:bg-neutral-800 rounded border-neutral-200 dark:border-neutral-700",
+        "p-padding-content bg-background-neutral-00 rounded-16 border",
         className
       )}
     >

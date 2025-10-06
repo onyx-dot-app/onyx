@@ -2,7 +2,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/tools/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
@@ -314,7 +314,6 @@ export function ToolList({
   return listingTools || searchParams.get("listing_tools") !== "true" ? (
     <div className="flex gap-2">
       <Button
-        type="button"
         onClick={() => handleListActions(values)}
         disabled={
           listingTools ||
@@ -322,15 +321,10 @@ export function ToolList({
           !values.server_url.trim() ||
           (values.auth_type === MCPAuthenticationType.OAUTH && !oauthConnected)
         }
-        className="flex-1"
       >
         {listingTools ? "Listing Actions..." : "List Actions"}
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => router.push("/admin/actions")}
-      >
+      <Button secondary onClick={() => router.push("/admin/actions")}>
         Cancel
       </Button>
     </div>
@@ -421,18 +415,14 @@ export function ToolList({
           </Text>
           <div className="flex gap-2 ml-4">
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              secondary
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
               Previous
             </Button>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              secondary
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
@@ -472,15 +462,13 @@ export function ToolList({
       {/* Action buttons */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button
-          type="button"
           onClick={() => handleCreateActions(values)}
           disabled={selectedTools.size === 0 || isSubmitting}
         >
           {verbRoot + (isSubmitting ? "ing..." : "e MCP Server Actions")}
         </Button>
         <Button
-          type="button"
-          variant="outline"
+          secondary
           onClick={() => {
             // Remove listing_tools query parameter when going back to form
             const currentUrl = new URL(window.location.href);

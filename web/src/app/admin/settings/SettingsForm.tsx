@@ -3,10 +3,9 @@
 import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Settings } from "./interfaces";
 import { useRouter } from "next/navigation";
-import { DefaultDropdown, Option } from "@/components/Dropdown";
 import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -42,35 +41,6 @@ export function Checkbox({
         {sublabel && <SubLabel>{sublabel}</SubLabel>}
       </div>
     </label>
-  );
-}
-
-function Selector({
-  label,
-  subtext,
-  options,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  subtext: string;
-  options: Option<string>[];
-  selected: string;
-  onSelect: (value: string | number | null) => void;
-}) {
-  return (
-    <div className="mb-8">
-      {label && <Label>{label}</Label>}
-      {subtext && <SubLabel>{subtext}</SubLabel>}
-
-      <div className="mt-2 w-full max-w-96">
-        <DefaultDropdown
-          options={options}
-          selected={selected}
-          onSelect={onSelect}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -276,10 +246,7 @@ export function SettingsForm() {
               anyone to use Onyx without signing in.
             </p>
             <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowConfirmModal(false)}
-              >
+              <Button secondary onClick={() => setShowConfirmModal(false)}>
                 Cancel
               </Button>
               <Button onClick={handleConfirmAnonymousUsers}>Confirm</Button>
@@ -304,20 +271,10 @@ export function SettingsForm() {
             placeholder="Infinite Retention"
           />
           <div className="mr-auto flex gap-2">
-            <Button
-              onClick={handleSetChatRetention}
-              variant="submit"
-              size="sm"
-              className="mr-auto"
-            >
+            <Button onClick={handleSetChatRetention} className="mr-auto">
               Set Retention Limit
             </Button>
-            <Button
-              onClick={handleClearChatRetention}
-              variant="default"
-              size="sm"
-              className="mr-auto"
-            >
+            <Button onClick={handleClearChatRetention} className="mr-auto">
               Retain All
             </Button>
           </div>
@@ -396,8 +353,6 @@ export function SettingsForm() {
                 <Button
                   onClick={() => updateDefaultVisionProvider(visionLLM)}
                   className="mt-2"
-                  variant="default"
-                  size="sm"
                 >
                   Set Default Vision LLM
                 </Button>

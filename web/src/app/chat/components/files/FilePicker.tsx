@@ -1,5 +1,6 @@
 "use client";
-import React, { useMemo, useRef, useState } from "react";
+
+import React, { useRef, useState } from "react";
 import {
   Menubar,
   MenubarContent,
@@ -8,12 +9,9 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar";
-import { FileUploadIcon } from "@/components/icons/icons";
 import { Files } from "@phosphor-icons/react";
-import { FileIcon, Paperclip, Loader2 } from "lucide-react";
-import { OpenInNewIcon } from "@/components/icons/CustomIcons";
+import { FileIcon, Loader2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ChatInputOption } from "../input/ChatInputOption";
 import FilesList from "./FilesList";
 import {
   Dialog,
@@ -22,8 +20,99 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ProjectFile } from "../../projects/projectsService";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import SvgPaperclip from "@/icons/paperclip";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgPlusCircle from "@/icons/plus-circle";
 
-type FilePickerProps = {
+// Small helper to render an icon + label row
+const Row = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex items-center gap-2">{children}</div>
+);
+
+interface FilePickerContentsProps {
+  recentFiles: ProjectFile[];
+  onPickRecent?: (file: ProjectFile) => void;
+  onFileClick?: (file: ProjectFile) => void;
+  triggerUploadPicker: () => void;
+  setShowRecentFiles: (show: boolean) => void;
+}
+
+export function FilePickerContents({
+  recentFiles,
+  onPickRecent,
+  onFileClick,
+  triggerUploadPicker,
+  setShowRecentFiles,
+}: FilePickerContentsProps) {
+  return (
+    <>
+      {recentFiles.length > 0 && (
+        <>
+          <label className="text-sm font-light text-input-text p-2.5">
+            Recent Files
+          </label>
+
+          {recentFiles.slice(0, 3).map((f) => (
+            <MenubarItem
+              key={f.id}
+              onClick={() =>
+                onPickRecent ? onPickRecent(f) : console.log("Picked recent", f)
+              }
+              className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 group"
+            >
+              <div className="flex items-center justify-between w-full">
+                <Row>
+                  {String(f.status).toLowerCase() === "processing" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileIcon className="h-4 w-4" />
+                  )}
+                  <span className="truncate max-w-[160px]" title={f.name}>
+                    {f.name}
+                  </span>
+                </Row>
+                {onFileClick &&
+                  String(f.status).toLowerCase() !== "processing" && (
+                    <button
+                      title="View file"
+                      aria-label="View file"
+                      className="p-0 bg-transparent border-0 outline-none cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 ml-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onFileClick && onFileClick(f);
+                      }}
+                    >
+                      <Eye className="h-4 w-4 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200" />
+                    </button>
+                  )}
+              </div>
+            </MenubarItem>
+          ))}
+
+          {recentFiles.length > 3 && (
+            <LineItem onClick={() => setShowRecentFiles(true)}>
+              ... All Recent Files
+            </LineItem>
+          )}
+
+          <MenubarSeparator />
+        </>
+      )}
+
+      <LineItem
+        icon={SvgPaperclip}
+        description="Upload a file from your device"
+        onClick={triggerUploadPicker}
+      >
+        Upload Files
+      </LineItem>
+    </>
+  );
+}
+
+interface FilePickerProps {
   className?: string;
   onPickRecent?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
@@ -33,12 +122,7 @@ type FilePickerProps = {
   triggerLabel?: string;
   triggerLabelClassName?: string;
   triggerClassName?: string;
-};
-
-// Small helper to render an icon + label row
-const Row = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex items-center gap-2">{children}</div>
-);
+}
 
 export default function FilePicker({
   className,
@@ -48,8 +132,6 @@ export default function FilePicker({
   handleUploadChange,
   showTriggerLabel = false,
   triggerLabel = "Add Files",
-  triggerLabelClassName = "",
-  triggerClassName = "",
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
@@ -70,41 +152,13 @@ export default function FilePicker({
         <MenubarMenu>
           <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text px-0 h-8">
             {showTriggerLabel ? (
-              <div
-                className={cn(
-                  "flex",
-                  "flex-row",
-                  "gap-2",
-                  "items-center",
-                  "justify-center",
-                  "p-2",
-                  "rounded-md",
-                  "bg-background-dark/75",
-                  "hover:dark:bg-neutral-800/75",
-                  "hover:bg-accent-background-hovered",
-                  "transition-all",
-                  "duration-150",
-                  triggerClassName
-                )}
-              >
-                <FileUploadIcon className="text-text-darker dark:text-text-lighter" />
-                <p
-                  className={cn(
-                    "text-text-darker dark:text-text-lighter",
-                    triggerLabelClassName
-                  )}
-                >
-                  {triggerLabel}
-                </p>
-              </div>
+              <LineItem icon={SvgPlusCircle}>{triggerLabel}</LineItem>
             ) : (
-              <Row>
-                <ChatInputOption
-                  flexPriority="stiff"
-                  Icon={FileUploadIcon}
-                  tooltipContent={"Upload files and attach user files"}
-                />
-              </Row>
+              <IconButton
+                icon={SvgPlusCircle}
+                tooltip="Attach Files"
+                tertiary
+              />
             )}
           </MenubarTrigger>
           <MenubarContent
@@ -112,83 +166,13 @@ export default function FilePicker({
             sideOffset={6}
             className="min-w-[220px] text-input-text"
           >
-            {recentFiles.length > 0 && (
-              <>
-                <label className="text-sm font-light text-input-text p-2.5">
-                  Recent Files
-                </label>
-                {recentFiles.slice(0, 3).map((f) => (
-                  <MenubarItem
-                    key={f.id}
-                    onClick={() =>
-                      onPickRecent
-                        ? onPickRecent(f)
-                        : console.log("Picked recent", f)
-                    }
-                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 group"
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <Row>
-                        {String(f.status).toLowerCase() === "processing" ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <FileIcon className="h-4 w-4" />
-                        )}
-                        <span className="truncate max-w-[160px]" title={f.name}>
-                          {f.name}
-                        </span>
-                      </Row>
-                      {onFileClick &&
-                        String(f.status).toLowerCase() !== "processing" && (
-                          <button
-                            title="View file"
-                            aria-label="View file"
-                            className="p-0 bg-transparent border-0 outline-none cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 ml-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              onFileClick && onFileClick(f);
-                            }}
-                          >
-                            <OpenInNewIcon
-                              size={16}
-                              className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
-                            />
-                          </button>
-                        )}
-                    </div>
-                  </MenubarItem>
-                ))}
-                {recentFiles.length > 3 && (
-                  <MenubarItem
-                    onClick={() => setShowRecentFiles(true)}
-                    className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2 font-normal"
-                  >
-                    <Row>
-                      <span className="truncate font-light">
-                        ... All Recent Files
-                      </span>
-                    </Row>
-                  </MenubarItem>
-                )}
-                <MenubarSeparator />
-              </>
-            )}
-
-            <MenubarItem
-              onClick={triggerUploadPicker}
-              className="m-1 rounded-lg hover:bg-background-chat-hover hover:text-neutral-900 dark:hover:text-neutral-50 text-input-text p-2"
-            >
-              <Row>
-                <Paperclip size={16} />
-                <div className="flex flex-col cursor-pointer">
-                  <span className="font-semibold">Upload Files</span>
-                  <span className="text-xs font-description text-text-400 dark:text-neutral-400">
-                    Upload a file from your device
-                  </span>
-                </div>
-              </Row>
-            </MenubarItem>
+            <FilePickerContents
+              recentFiles={recentFiles}
+              onPickRecent={onPickRecent}
+              onFileClick={onFileClick}
+              triggerUploadPicker={triggerUploadPicker}
+              setShowRecentFiles={setShowRecentFiles}
+            />
           </MenubarContent>
         </MenubarMenu>
       </Menubar>

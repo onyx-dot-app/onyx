@@ -7,15 +7,26 @@ import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/app/chat/projects/projectsService";
-import { DefaultDropdownElement } from "@/components/Dropdown";
-import { HoverDropdown } from "@/components/HoverDropdown";
-import { Popover } from "@/components/popover/Popover";
-import { FiEdit2, FiMoreHorizontal, FiShare2, FiTrash } from "react-icons/fi";
-import { HiOutlineArrowUturnRight } from "react-icons/hi2";
-import { useChatContext } from "@/components/context/ChatContext";
-import { useCallback, useState } from "react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverMenu,
+} from "@/components/ui/popover";
+import { FiMoreHorizontal } from "react-icons/fi";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-
+// PopoverMenu already imported above
+import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import SvgShare from "@/icons/share";
+import SvgFolderIn from "@/icons/folder-in";
+import SvgTrash from "@/icons/trash";
+import SvgFolder from "@/icons/folder";
+import { cn, noProp } from "@/lib/utils";
+import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import Button from "@/refresh-components/buttons/Button";
+import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -31,19 +42,21 @@ interface ChatSessionMorePopupProps {
   afterRemoveFromProject?: () => void;
   search?: boolean;
   iconSize?: number;
+  isVisible?: boolean;
 }
 
 export function ChatSessionMorePopup({
   chatSession,
   projectId,
-  isRenamingChat,
-  setIsRenamingChat,
+  isRenamingChat: _isRenamingChat,
+  setIsRenamingChat: _setIsRenamingChat,
   showShareModal,
   afterDelete,
   afterMove,
   afterRemoveFromProject,
   search,
   iconSize = 16,
+  isVisible = false,
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -59,30 +72,19 @@ export function ChatSessionMorePopup({
   const isChatUsingDefaultAssistant =
     chatSession.persona_id === DEFAULT_PERSONA_ID;
 
-  const handlePopoverOpenChange = useCallback(
-    (open: boolean) => {
-      setPopoverOpen(open);
-      if (!open) {
-        setIsDeleteModalOpen(false);
-      }
-    },
-    [isDeleteModalOpen]
+  const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredProjects = projects.filter((project) =>
+    project.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDeleteClick = useCallback(() => {
-    setIsDeleteModalOpen(true);
-  }, []);
-
-  const handleCancelDelete = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDeleteModalOpen(false);
-    setPopoverOpen(false);
+  const handlePopoverOpenChange = useCallback((open: boolean) => {
+    setPopoverOpen(open);
   }, []);
 
   const handleConfirmDelete = useCallback(
-    async (e: React.MouseEvent) => {
-      e.preventDefault();
+    async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       await deleteChatSession(chatSession.id);
       await refreshChatSessions();
@@ -98,7 +100,7 @@ export function ChatSessionMorePopup({
     async (targetProjectId: number) => {
       await moveChatSessionService(targetProjectId, chatSession.id);
       await fetchProjects();
-      await refreshChatSessions({ skipRedirectOnMissing: true });
+      await refreshChatSessions();
       setPopoverOpen(false);
       afterMove?.();
     },
@@ -106,8 +108,8 @@ export function ChatSessionMorePopup({
   );
 
   const handleMoveChatSession = useCallback(
-    async (item: { id: string; label: string }) => {
-      const targetProjectId = parseInt(item.id);
+    async (item: { id: number; label: string }) => {
+      const targetProjectId = item.id;
       const hideModal =
         typeof window !== "undefined" &&
         window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
@@ -129,6 +131,7 @@ export function ChatSessionMorePopup({
     await fetchProjects();
     await refreshChatSessions();
     afterRemoveFromProject?.();
+    setPopoverOpen(false);
   }, [
     chatSession.id,
     fetchProjects,
@@ -137,123 +140,150 @@ export function ChatSessionMorePopup({
     afterRemoveFromProject,
   ]);
 
+  // Build popover items similar to AppSidebar (no rename here)
+  const popoverItems = useMemo(() => {
+    if (!showMoveOptions) {
+      return [
+        showShareModal && (
+          <NavigationTab
+            key="share"
+            icon={SvgShare}
+            onClick={noProp(() => showShareModal(chatSession))}
+          >
+            Share
+          </NavigationTab>
+        ),
+        <NavigationTab
+          key="move"
+          icon={SvgFolderIn}
+          onClick={noProp(() => setShowMoveOptions(true))}
+        >
+          Move to Project
+        </NavigationTab>,
+        projectId && (
+          <NavigationTab
+            key="remove"
+            icon={SvgFolder}
+            onClick={noProp(() => handleRemoveChatSessionFromProject())}
+          >
+            {`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
+          </NavigationTab>
+        ),
+        null,
+        <NavigationTab
+          key="delete"
+          icon={SvgTrash}
+          onClick={noProp(() => setIsDeleteModalOpen(true))}
+          danger
+        >
+          Delete
+        </NavigationTab>,
+      ];
+    }
+    return [
+      <PopoverSearchInput
+        key="search"
+        setShowMoveOptions={setShowMoveOptions}
+        onSearch={setSearchTerm}
+      />,
+      ...filteredProjects
+        .filter((candidate) => candidate.id !== projectId)
+        .map((target) => (
+          <NavigationTab
+            key={target.id}
+            icon={SvgFolder}
+            onClick={noProp(() =>
+              handleMoveChatSession({ id: target.id, label: target.name })
+            )}
+          >
+            {target.name}
+          </NavigationTab>
+        )),
+    ];
+  }, [
+    showMoveOptions,
+    showShareModal,
+    projects,
+    projectId,
+    filteredProjects,
+    chatSession,
+    setShowMoveOptions,
+    setSearchTerm,
+    handleMoveChatSession,
+    handleRemoveChatSessionFromProject,
+  ]);
+
   return (
     <div>
-      <div
-        onClick={(e) => {
-          e.preventDefault();
-          setPopoverOpen(!popoverOpen);
-        }}
-        className="-my-1"
-      >
-        <Popover
-          open={popoverOpen}
-          onOpenChange={handlePopoverOpenChange}
-          content={
-            <div className="p-1 rounded">
-              <FiMoreHorizontal
-                onClick={() => setPopoverOpen(true)}
-                size={iconSize}
-              />
-            </div>
-          }
-          popover={
+      <div className="-my-1">
+        <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
+          <PopoverTrigger
+            asChild
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handlePopoverOpenChange(!popoverOpen);
+            }}
+          >
             <div
-              className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                isDeleteModalOpen ? "w-64" : "w-48"
-              }`}
-            >
-              {!isDeleteModalOpen ? (
-                <>
-                  {showShareModal && (
-                    <DefaultDropdownElement
-                      name="Share"
-                      icon={FiShare2}
-                      onSelect={() => showShareModal(chatSession)}
-                    />
-                  )}
-                  {!search && (
-                    <DefaultDropdownElement
-                      name="Rename"
-                      icon={FiEdit2}
-                      onSelect={() => setIsRenamingChat(true)}
-                    />
-                  )}
-                  <DefaultDropdownElement
-                    name="Delete"
-                    icon={FiTrash}
-                    onSelect={handleDeleteClick}
-                  />
-                  {projects.length > 0 && (
-                    <HoverDropdown
-                      label="Move to Project"
-                      items={projects
-                        .filter((project) => project.id !== projectId)
-                        .map((project) => ({
-                          id: project.id.toString(),
-                          label: project.name,
-                        }))}
-                      onItemClick={handleMoveChatSession}
-                      emptyMessage="No projects to move to"
-                    />
-                  )}
-                  {projectId && (
-                    <DefaultDropdownElement
-                      name={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
-                      icon={HiOutlineArrowUturnRight}
-                      onSelect={handleRemoveChatSessionFromProject}
-                    />
-                  )}
-                </>
-              ) : (
-                <div className="p-3">
-                  <p className="text-sm mb-3">
-                    Are you sure you want to delete this chat?
-                  </p>
-                  <div className="flex justify-center gap-2">
-                    <button
-                      className="px-3 py-1 text-sm bg-background-200 rounded"
-                      onClick={handleCancelDelete}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="px-3 py-1 text-sm bg-red-500 text-white rounded"
-                      onClick={handleConfirmDelete}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
+              className={cn(
+                "p-1 rounded cursor-pointer select-none transition-opacity duration-150",
+                isVisible || popoverOpen
+                  ? "opacity-100 pointer-events-auto"
+                  : "opacity-0 pointer-events-none"
               )}
+            >
+              <FiMoreHorizontal size={iconSize} />
             </div>
-          }
-          requiresContentPadding
-          sideOffset={6}
-          triggerMaxWidth
-        />
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            side="right"
+            avoidCollisions
+            sideOffset={8}
+          >
+            <PopoverMenu>{popoverItems}</PopoverMenu>
+          </PopoverContent>
+        </Popover>
       </div>
-      <MoveCustomAgentChatModal
-        isOpen={showMoveCustomAgentModal}
-        onCancel={() => {
-          setShowMoveCustomAgentModal(false);
-          setPendingMoveProjectId(null);
-        }}
-        onConfirm={async (doNotShowAgain: boolean) => {
-          if (doNotShowAgain && typeof window !== "undefined") {
-            window.localStorage.setItem(
-              LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
-              "true"
-            );
+      {isDeleteModalOpen && (
+        <ConfirmationModal
+          title="Delete Chat"
+          icon={SvgTrash}
+          onClose={() => setIsDeleteModalOpen(false)}
+          submit={
+            <Button danger onClick={handleConfirmDelete}>
+              Delete
+            </Button>
           }
-          const target = pendingMoveProjectId;
-          setShowMoveCustomAgentModal(false);
-          setPendingMoveProjectId(null);
-          if (target != null) {
-            await performMove(target);
-          }
-        }}
-      />
+        >
+          Are you sure you want to delete this chat? This action cannot be
+          undone.
+        </ConfirmationModal>
+      )}
+
+      {showMoveCustomAgentModal && (
+        <MoveCustomAgentChatModal
+          onCancel={() => {
+            setShowMoveCustomAgentModal(false);
+            setPendingMoveProjectId(null);
+          }}
+          onConfirm={async (doNotShowAgain: boolean) => {
+            if (doNotShowAgain && typeof window !== "undefined") {
+              window.localStorage.setItem(
+                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
+                "true"
+              );
+            }
+            const target = pendingMoveProjectId;
+            setShowMoveCustomAgentModal(false);
+            setPendingMoveProjectId(null);
+            if (target != null) {
+              await performMove(target);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

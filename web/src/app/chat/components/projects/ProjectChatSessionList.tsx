@@ -51,7 +51,7 @@ export default function ProjectChatSessionList() {
           {projectChats.map((chat) => (
             <Link
               key={chat.id}
-              href={`/chat?chatId=${encodeURIComponent(chat.id)}`}
+              href={{ pathname: "/chat", query: { chatId: chat.id } }}
               className="relative flex w-full"
               onMouseEnter={() => setHoveredChatId(chat.id)}
               onMouseLeave={() => setHoveredChatId(null)}
@@ -97,27 +97,26 @@ export default function ProjectChatSessionList() {
                         </span>
                       </div>
                       <div className="flex items-center">
-                        {hoveredChatId === chat.id && (
-                          <ChatSessionMorePopup
-                            chatSession={chat}
-                            projectId={currentProjectId}
-                            isRenamingChat={isRenamingChat === chat.id}
-                            setIsRenamingChat={(value) =>
-                              setIsRenamingChat(value ? chat.id : null)
-                            }
-                            search={false}
-                            afterDelete={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            afterMove={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            afterRemoveFromProject={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            iconSize={20}
-                          />
-                        )}
+                        <ChatSessionMorePopup
+                          chatSession={chat}
+                          projectId={currentProjectId}
+                          isRenamingChat={isRenamingChat === chat.id}
+                          setIsRenamingChat={(value) =>
+                            setIsRenamingChat(value ? chat.id : null)
+                          }
+                          search={false}
+                          afterDelete={() => {
+                            refreshCurrentProjectDetails();
+                          }}
+                          afterMove={() => {
+                            refreshCurrentProjectDetails();
+                          }}
+                          afterRemoveFromProject={() => {
+                            refreshCurrentProjectDetails();
+                          }}
+                          iconSize={20}
+                          isVisible={hoveredChatId === chat.id}
+                        />
                       </div>
                     </div>
                     <span className="text-base text-onyx-muted truncate">

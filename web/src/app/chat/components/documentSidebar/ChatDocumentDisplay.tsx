@@ -9,6 +9,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction } from "react";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
@@ -79,58 +80,48 @@ export function ChatDocumentDisplay({
     document.updated_at || Object.keys(document.metadata).length > 0;
 
   return (
-    <div className="desktop:max-w-[400px] opacity-100 w-full">
-      <div
-        className={`flex relative  flex-col px-3 py-2.5 gap-0.5  rounded-xl my-1 ${
-          isSelected
-            ? "bg-accent-background-hovered"
-            : " hover:bg-accent-background"
-        }`}
-      >
-        <button
-          onClick={() => openDocument(document, setPresentingDocument)}
-          className="cursor-pointer text-left flex flex-col"
-        >
-          <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
-            {document.is_internet ||
-            document.source_type === ValidSources.Web ? (
-              <WebResultIcon url={document.link} />
-            ) : (
-              <SourceIcon sourceType={document.source_type} iconSize={18} />
-            )}
-            <div className="line-clamp-1 text-neutral-900 dark:text-neutral-300 text-sm font-semibold">
-              {(document.semantic_identifier || document.document_id).length >
-              (modal ? 30 : 40)
-                ? `${(document.semantic_identifier || document.document_id)
-                    .slice(0, modal ? 30 : 40)
-                    .trim()}...`
-                : document.semantic_identifier || document.document_id}
-            </div>
-          </div>
-          {hasMetadata && (
-            <DocumentMetadataBlock modal={modal} document={document} />
-          )}
-          <div
-            className={`line-clamp-3 text-sm font-normal leading-snug text-neutral-900 dark:text-neutral-300 ${
-              hasMetadata ? "mt-2" : ""
-            }`}
-          >
-            {buildDocumentSummaryDisplay(
-              document.match_highlights,
-              document.blurb
-            )}
-          </div>
-          <div className="absolute top-2 right-2">
-            {!isInternet && !hideSelection && (
-              <DocumentSelector
-                isSelected={isSelected}
-                handleSelect={() => handleSelect(document.document_id)}
-                isDisabled={tokenLimitReached && !isSelected}
-              />
-            )}
-          </div>
-        </button>
+    <button
+      onClick={() => openDocument(document, setPresentingDocument)}
+      className={cn(
+        "text-left flex w-full relative flex-col p-padding-button rounded-08 my-1 hover:bg-background-tint-02",
+        isSelected && "bg-background-tint-03"
+      )}
+    >
+      <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
+        {document.is_internet || document.source_type === ValidSources.Web ? (
+          <WebResultIcon url={document.link} />
+        ) : (
+          <SourceIcon sourceType={document.source_type} iconSize={18} />
+        )}
+        <div className="line-clamp-1 text-neutral-900 dark:text-neutral-300 text-sm font-semibold">
+          {(document.semantic_identifier || document.document_id).length >
+          (modal ? 30 : 40)
+            ? `${(document.semantic_identifier || document.document_id)
+                .slice(0, modal ? 30 : 40)
+                .trim()}...`
+            : document.semantic_identifier || document.document_id}
+        </div>
       </div>
-    </div>
+      {hasMetadata && (
+        <DocumentMetadataBlock modal={modal} document={document} />
+      )}
+      <div
+        className={cn(
+          "line-clamp-3 text-sm font-normal leading-snug text-neutral-900 dark:text-neutral-300",
+          hasMetadata && "mt-2"
+        )}
+      >
+        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
+      </div>
+      <div className="absolute top-2 right-2">
+        {!isInternet && !hideSelection && (
+          <DocumentSelector
+            isSelected={isSelected}
+            handleSelect={() => handleSelect(document.document_id)}
+            isDisabled={tokenLimitReached && !isSelected}
+          />
+        )}
+      </div>
+    </button>
   );
 }

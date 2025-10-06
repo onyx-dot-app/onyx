@@ -1,355 +1,67 @@
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400&display=swap");
+
+@import "figma/colors.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* BORDER RADII */
   :root {
-    --warning: 38 92% 50%;
-    --warning-foreground: 48 96% 89%;
-
-    --input-text: #6c6c6b;
-
-    /* ---------------------------------
-    
-     * 1. Single set of neutral values
-     * --------------------------------- */
-    --neutral-50: #fafafa;
-    --neutral-100: #f5f5f5;
-    --neutral-125: #f1f2f4; /* You had background-125 & text-125 as #f1f2f4 */
-    --neutral-150: #eaeaea;
-    --neutral-200: #d4d4d4;
-    --neutral-300: #d4d4d4;
-    --neutral-400: #a3a3a3;
-    --neutral-500: #737373;
-    --neutral-600: #525252;
-    --neutral-600-border-dark: #525252;
-    --neutral-600: #525252;
-    --neutral-700: #404040;
-    --neutral-800: #262626;
-    --neutral-900: #111827;
-    --neutral-950: #0a0a0a;
-
-    --hover: var(--neutral-200);
-
-    /* -------------------------------------------------------
-     * 2. Keep special, custom, or near-duplicate background
-     * ------------------------------------------------------- */
-    --background: #fefcfa; /* slightly off-white */
-    --background-50: #fffdfb; /* a little lighter than background but not quite white */
-    --input-background: #fefcfa;
-    --input-border: #f1eee8;
-    --text-text: #f4f2ed;
-    --background-dark: #141414;
-    --new-background: #ebe7de;
-    --new-background-light: #d9d1c0;
-    --background-chatbar: #f5f3ee;
-    --background-chat-hover: #e6e3dd;
-    --background-chat-selected: #e6e3dd;
-    --background-sidebar: #f5f3ee;
-
-    --blue-highlight: #e7effc;
-    --blue-highlight-text: #0052cc;
-
-    /* borders & input (keep if not same as neutral) */
-    --border: #e5e7eb; /* slightly different than #e5e5e5 */
-    --border-light: #f5f5f5;
-    --border-medium: #d4d4d4;
-    --border-strong: #a3a3a3;
-    --border-dark: #525252;
-    --input: 0 0% 89.8%;
-
-    /* Additional single-purpose color vars remain */
-    --foreground: 0 0% 3.9%;
-    --card: #ffffff;
-    --card-foreground: #0c0c0c;
-    --popover: #ffffff;
-    --popover-foreground: #0c0c0c;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --accent-background: #f0eee8;
-    --accent-background-hovered: #e5e3dd;
-    --accent-background-selected: #eae8e2;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem;
-
-    /* Some charts, links, etc. */
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --link: #3b82f6;
-    --link-hover: #1d4ed8;
-
-    /* Status, success, alerts, etc. */
-    --error: #f87171;
-    --undo: #ef4444;
-    --success: #030706;
-    --light-success: #22c55e;
-    --alert: #f59e0b;
-    --accent-hover: #4f46e5;
-    --black: #000000;
-    --white: #ffffff;
-
-    /* Code syntax highlighting */
-    --code-text: #d4d4d4;
-    --token-comment: #608b4e;
-    --token-punctuation: #d4d4d4;
-    --token-property: #569cd6;
-    --token-selector: #e07b53;
-    --token-atrule: #d18ad8;
-    --token-function: #f0e68c;
-    --token-regex: #9cdcfe;
-    --token-attr-name: #9cdcfe;
-
-    /* Misc. custom */
-    --non-selectable: #f8d7da;
-    --non-selectable-border: #f5c2c7;
-    --highlight-text: rgba(255, 245, 180, 0.5);
-    --user-bubble: #f1eee8;
-    --ai-bubble: #272a2d;
-    --document-color: #f43f5e;
-    --scrollbar-track: #f9fafb;
-    --scrollbar-thumb: #e5e7eb;
-    --scrollbar-thumb-hover: #d1d5db;
-    --scrollbar-dark-thumb: #989a9c;
-    --scrollbar-dark-thumb-hover: #c7cdd2;
-
-    /* agent references */
-    --agent-sidebar: #be5d0e;
-    --agent-hovered: #d16b10;
-    --agent: #e47011;
-    --lighter-agent: #f59e0b;
-
-    /* Consolidated color variables */
-    --neutral-100-border-light: #f5f5f5;
-    --neutral-300-border-medium: #d4d4d4;
-    --neutral-400-border-strong: #a3a3a3;
-    --background-input-background: #fefcfa;
-    --background-chatbar-sidebar: #f5f3ee;
-    --background-chat-hover-selected: #e6e3dd;
-    --white-card-popover: #ffffff;
-    --card-popover-foreground: #0c0c0c;
-
-    /* Near-duplicates consolidated */
-    --neutral-200-border: #e5e6e6; /* Average of #e5e5e5 and #e5e7eb */
-    --off-white: #f3f1ec; /* Average of #f4f2ed, #f5f3ee, #f1eee8, #e9e6e0, #ebe7de */
-
-    /* Update references to use new consolidated variables */
-    --neutral-100: var(--neutral-100-border-light);
-    --border-light: var(--neutral-100-border-light);
-    --neutral-300: var(--neutral-300-border-medium);
-    --border-medium: var(--neutral-300-border-medium);
-    --neutral-400: var(--neutral-400-border-strong);
-    --border-strong: var(--neutral-400-border-strong);
-    --neutral-600: var(--neutral-600-border-dark);
-    --border-dark: var(--neutral-600-border-dark);
-    --background: var(--background-input-background);
-    --input-background: var(--background-input-background);
-    --background-chatbar: var(--background-chatbar-sidebar);
-    --background-sidebar: var(--background-chatbar-sidebar);
-    --background-chat-hover: var(--background-chat-hover-selected);
-    --background-chat-selected: var(--background-chat-hover-selected);
-    --white: var(--white-card-popover);
-    --card: var(--white-card-popover);
-    --popover: var(--white-card-popover);
-    --card-foreground: var(--card-popover-foreground);
-    --popover-foreground: var(--card-popover-foreground);
-
-    /* Update near-duplicates */
-    --neutral-200: var(--neutral-200-border);
-    --border: var(--neutral-200-border);
-    --text-text: var(--off-white);
-    --background-dark: var(--off-white);
-    --new-background: var(--off-white);
-    --user-bubble: var(--off-white);
+    --border-radius-02: 0.125rem;
+    --border-radius-04: 0.25rem;
+    --border-radius-08: 0.5rem;
+    --border-radius-12: 0.75rem;
+    --border-radius-16: 1rem;
+    --border-radius-full: 64rem;
   }
 
-  .dark {
-    --tremor-brand-faint: #eff6ff;
-    --tremor-brand-muted: #bfdbfe;
-    --tremor-brand-subtle: #60a5fa;
-    --tremor-brand-default: #3b82f6;
-    --tremor-brand-emphasis: #1d4ed8;
-    --tremor-brand-inverted: #ffffff;
-    --tremor-background-muted: #f9fafb;
-    --tremor-background-subtle: #f3f4f6;
-    --tremor-background-default: #ffffff;
-    --tremor-background-emphasis: #374151;
-    --tremor-content-subtle: #9ca3af;
-    --tremor-content-default: #4b5563;
-    --tremor-content-emphasis: #374151;
-    --tremor-content-strong: #111827;
-    --tremor-content-inverted: #ffffff;
+  /* SPACINGS + PADDINGS */
+  :root {
+    --spacing-inline-mini: 0.12rem;
+    --spacing-inline: 0.25rem;
+    --spacing-interline-mini: 0.38rem;
+    --spacing-interline: 0.5rem;
+    --spacing-paragraph: 1rem;
+    --spacing-headline: 1.5rem;
+    --spacing-headline-large: 2rem;
+    --spacing-block: 2.5rem;
+    --spacing-section: 9rem;
 
-    --dark-tremor-brand-faint: #0b1229;
-    --dark-tremor-brand-muted: #172554;
-    --dark-tremor-brand-subtle: #1e40af;
-    --dark-tremor-brand-emphasis: #60a5fa;
-    --dark-tremor-brand-inverted: #030712;
-    --dark-tremor-background-muted: #131a2b;
-    --dark-tremor-background-subtle: #1f2937;
-    --dark-tremor-background-default: #111827;
-    --dark-tremor-background-emphasis: #d1d5db;
-    --dark-tremor-content-subtle: #6b7280;
-    --dark-tremor-content-default: #d1d5db;
-    --dark-tremor-content-emphasis: #f3f4f6;
-    --dark-tremor-content-strong: #f9fafb;
-    --dark-tremor-content-inverted: #000000;
+    --padding-button: 0.75rem;
+    --padding-content: 1.5rem;
+    --padding-block-end: 2rem;
+    --padding-body-main: 2rem;
+    --padding-section: 4.5rem;
+    --width-outer-shell: 90rem;
+  }
 
-    /* ---------------------------------
-     * 1. Single set of neutral values
-     *    (reversed for dark mode)
-     * --------------------------------- */
-    --inputoption: "#B4B4B4";
-    --neutral-50: #161616; /* darkest */
-    --neutral-100-border-light: #1a1a1a;
-    --neutral-125: #1f1f1f;
-    --neutral-150: #252525;
-    --neutral-200-border: #2c2c2c;
-    --neutral-300-border-medium: #404040;
-    --neutral-400-border-strong: #5a5a5a;
-    --neutral-500: #757575;
-    --neutral--neutral-600-border-dark: #a0a0a0;
-    --neutral-700: #bdbdbd;
-    --neutral-800: #d4d4d4;
-    --neutral-900: #d4d4d4;
-    --neutral-950: #f0f0f0; /* lightest */
-    --hover: #2c2c2c;
+  * {
+    @apply border-border;
+  }
 
-    --input-text: #b4b4b4;
+  body {
+    @apply bg-background text-foreground;
+    overscroll-behavior-y: none;
+    overflow-anchor: none;
+  }
 
-    --text-darker: #f0f0f0;
-    --text-dark: #f0f0f0;
-    /* -------------------------------------------------------
-     * 2. Special / custom backgrounds (shifted to dark)
-     * ------------------------------------------------------- */
-    --background-input-background: #1f1f1f;
-    --input-background: #303030;
-    --input-border: #5a5a5a;
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    align-items: start;
+  }
 
-    --text-text: #1d1d1d;
-    --background-dark: #252525;
-    --background-50: #252525;
-
-    /* --new-background: #fff; */
-    --new-background: #2c2c2c;
-    --new-background-light: #383838;
-
-    --background-chatbar-sidebar: #171717;
-    --background-chat-hover-selected: #3a3a3a;
-    --background-chat-selected: #2f2f2f;
-    --background-sidebar: #171717;
-    --black: #000000;
-
-    /* --accent-background: #181816; */
-    --accent-background: #333333;
-
-    --accent-background-hovered: #2f2f2f;
-    --accent-background-selected: #222222;
-
-    --text-darker: #f0f0f0;
-
-    /* borders & input (reversed scales) */
-    --neutral-200-border: #5a5a5a; /* was #e5e7eb */
-    --neutral-100-border-light: #6a6a6a; /* was #f5f5f5 */
-    --neutral-300-border-medium: #4a4a4a; /* was #d4d4d4 */
-    --neutral-400-border-strong: #3a3a3a; /* was #a3a3a3 */
-    --neutral-600-border-dark: #9ca3af; /* was #525252, now using Tailwind's neutral-400 */
-    --input: 0 0% 15%; /* (HSL) approx #262626 for dark input backgrounds */
-
-    /* Additional single-purpose color vars (inverted where sensible) */
-    --foreground: 0 0% 95%; /* light text on dark bg (was 0 0% 3.9%) */
-    --card: #1f1f1f;
-    --card-foreground: #f3f3f3;
-    --popover: #1f1f1f;
-    --popover-foreground: #f2f2f2;
-
-    /* You can invert "primary"/"secondary" or pick your own scales */
-    --primary: 0 0% 80%; /* lighter gray for emphasis */
-    --primary-foreground: 0 0% 10%; /* dark text if placed on "primary" */
-    --secondary: 0 0% 25%;
-    --secondary-foreground: 0 0% 90%;
-
-    --muted: 0 0% 25%;
-    --muted-foreground: 0 0% 65%; /* e.g. #aaaaaa */
-
-    --accent: 0 0% 25%;
-    --accent-foreground: 0 0% 90%;
-
-    /* Destructive remains red, but you could darken or lighten */
-    --destructive: #b91c1c; /* dark-ish red */
-    --destructive-foreground: #ffffff;
-
-    --ring: #f2f2f2; /* used for focus rings, keep a light highlight on dark bg */
-    --radius: 0.5rem;
-
-    /* Some charts, links, etc. – typically kept as-is, or tweak if desired */
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --link: #3b82f6;
-    --link-hover: #1d4ed8;
-
-    /* Status, success, alerts, etc. – can keep or adjust as needed */
-    --error: #f87171;
-    --undo: #ef4444;
-    --success: #22c55e; /* bright green stands out on dark */
-    --light-success: #86efac;
-    --alert: #f59e0b;
-    --accent-hover: #4f46e5;
-    --black: #ffffff;
-    --white-card-popover: #000000;
-
-    /* Code syntax highlighting – typically brighter/lighter for dark backgrounds */
-    --code-text: #d4d4d4;
-    --token-comment: #608b4e;
-    --token-punctuation: #d4d4d4;
-    --token-property: #569cd6;
-    --token-selector: #e07b53;
-    --token-atrule: #d18ad8;
-    --token-function: #f0e68c;
-    --token-regex: #9cdcfe;
-    --token-attr-name: #9cdcfe;
-
-    /* Misc. custom (tweaked to darker equivalents where it makes sense) */
-    --non-selectable: #5d1a1f; /* was #f8d7da - if needed on dark BG */
-    --non-selectable-border: #4a1215; /* was #f5c2c7 */
-    --highlight-text: rgba(
-      255,
-      245,
-      180,
-      0.5
-    ); /* still stands out as highlight */
-    --tw-prose-bold: #fff;
-
-    --off-white: #2a2a2a; /* was #f1eee8 */
-
-    --ai-bubble: #1f1f1f;
-    --document-color: #f43f5e; /* keep the same bright accent? */
-
-    /* Scrollbars, etc. */
-    --scrollbar-track: #1c1d1e;
-    --scrollbar-thumb: #3a3a3a;
-    --scrollbar-thumb-hover: #4a4a4a;
-    --scrollbar-dark-thumb: #666666;
-    --scrollbar-dark-thumb-hover: #909090;
-
-    /* Agent references */
-    --agent-sidebar: #be5d0e; /* You can keep or lighten/darken if desired */
-    --agent-hovered: #f07c13;
-    --agent: #e47011;
-    --lighter-agent: #f59e0b;
+  ol > li > p,
+  ul > li > p {
+    margin-top: 0;
+    margin-bottom: 0;
+    display: inline;
+    /* Make paragraphs inline to reduce vertical space */
   }
 }
 
@@ -367,6 +79,179 @@
     /* Firefox */
   }
 }
+
+/* TYPOGRAPHY SYSTEM - Imported from Figma Design System */
+
+/* Font Imports */
+
+/* Font Family Variables */
+:root {
+  --font-hanken-grotesk:
+    "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-dm-mono:
+    "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
+    "Courier New", monospace;
+  --font-sf-pro:
+    "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+}
+
+/* HEADING STYLES */
+
+.font-heading-h1 {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 64px;
+  letter-spacing: -0.48px;
+}
+
+.font-heading-h2 {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 36px;
+  letter-spacing: -0.24px;
+}
+
+.font-heading-h3 {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.18px;
+}
+
+.font-heading-h3-muted {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.18px;
+}
+
+/* MAIN CONTENT STYLES */
+
+.font-main-content-body {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 24px;
+  letter-spacing: 0px;
+}
+
+.font-main-content-emphasis {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: 0px;
+}
+
+.font-main-content-muted {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  letter-spacing: 0px;
+}
+
+.font-main-content-mono {
+  font-family: var(--font-dm-mono);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 23px;
+  letter-spacing: 0px;
+}
+
+/* MAIN UI STYLES */
+
+.font-main-ui-body {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0px;
+}
+
+.font-main-ui-muted {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  letter-spacing: 0px;
+}
+
+.font-main-ui-action {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0px;
+}
+
+.font-main-ui-mono {
+  font-family: var(--font-dm-mono);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  letter-spacing: 0px;
+}
+
+/* SECONDARY STYLES */
+
+.font-secondary-body {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0px;
+}
+
+.font-secondary-action {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0px;
+}
+
+.font-secondary-mono {
+  font-family: var(--font-dm-mono);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0px;
+}
+
+/* FIGURE STYLES */
+
+.font-figure-small-label {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  letter-spacing: 0px;
+}
+
+.font-figure-small-value {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 12px;
+  letter-spacing: 0px;
+}
+
+.font-figure-keystroke {
+  font-family: var(--font-sf-pro);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: -0.6px;
+}
+
+/* SCROLL BAR */
 
 .default-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -396,36 +281,6 @@
 .scrollbar {
   width: 100%;
   height: 100%;
-}
-
-/* Styling for textarea scrollbar */
-textarea::-webkit-scrollbar {
-  width: 8px;
-}
-
-textarea::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 4px;
-}
-
-textarea::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
-}
-
-textarea::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
-/* Styling for textarea resize handle */
-textarea {
-  resize: vertical;
-}
-
-/* For Firefox */
-textarea {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .inputscroll::-webkit-scrollbar-track {
@@ -468,6 +323,42 @@ textarea {
   border-radius: 10px;
 }
 
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: transparent;
+  /* background: theme("colors.scrollbar.dark.thumb-hover"); */
+  /* Handle color on hover */
+}
+
+/* TEXTAREA */
+
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* For Firefox */
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
 .nextjs-portal {
   display: none !important;
   visibility: hidden !important;
@@ -482,12 +373,6 @@ textarea {
 
 .nextjs-portal * {
   display: none !important;
-}
-
-.dark-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: transparent;
-  /* background: theme("colors.scrollbar.dark.thumb-hover"); */
-  /* Handle color on hover */
 }
 
 /* Used to create alternatie to React Markdown */
@@ -557,12 +442,8 @@ textarea {
   overscroll-behavior-y: none;
 }
 
-body {
-  overscroll-behavior-y: none;
-  overflow-anchor: none;
-}
+/* CODE BLOCKS */
 
-/* Base styles for code blocks */
 .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   background-color: theme("colors.code-bg");
   font-size: theme("fontSize.code-sm");
@@ -646,27 +527,14 @@ code[class*="language-"] {
   color: theme("colors.token-attr-name");
 }
 
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-  align-items: start;
-}
+/* CUSTOM ANIMATIONS */
 
-ol > li > p,
-ul > li > p {
-  margin-top: 0;
-  margin-bottom: 0;
-  display: inline;
-  /* Make paragraphs inline to reduce vertical space */
-}
-
-/* Custom animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -681,43 +549,20 @@ ul > li > p {
   margin-bottom: 1rem;
 }
 
-@layer components {
-  .text-onyx-ultra-strong {
-    @apply not-italic font-semibold;
-    color: rgba(0, 0, 0, 0.92);
-  }
-  .dark .text-onyx-ultra-strong {
-    color: rgba(255, 255, 255, 0.92);
-  }
-  .text-onyx-strong {
-    @apply not-italic font-semibold;
-    color: rgba(0, 0, 0, 0.8);
-  }
-  .dark .text-onyx-strong {
-    color: rgba(255, 255, 255, 0.92);
-  }
+/* DEBUGGING UTILITIES
 
-  .text-onyx-medium {
-    @apply not-italic font-medium;
-    color: rgba(0, 0, 0, 0.8);
-  }
-  .dark .text-onyx-medium {
-    color: rgba(255, 255, 255, 0.85);
-  }
+If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+This helps with placing things properly on the screen and seeing how they look during active development.
+*/
 
-  .text-onyx-emphasis {
-    @apply not-italic font-semibold;
-    color: rgba(0, 0, 0, 0.6);
-  }
-  .dark .text-onyx-emphasis {
-    color: rgba(255, 255, 255, 0.7);
-  }
+.dbg-red {
+  border: 1px solid red;
+}
 
-  .text-onyx-muted {
-    @apply not-italic font-normal;
-    color: rgba(0, 0, 0, 0.4);
-  }
-  .dark .text-onyx-muted {
-    color: rgba(255, 255, 255, 0.55);
-  }
+.dbg-blue {
+  border: 1px solid blue;
+}
+
+.dbg-green {
+  border: 1px solid green;
 }

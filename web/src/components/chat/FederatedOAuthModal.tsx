@@ -2,13 +2,14 @@
 
 import React, { useContext, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
+import Text from "@/refresh-components/Text";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -17,12 +18,6 @@ export interface FederatedConnectorOAuthStatus {
   has_oauth_token: boolean;
   oauth_token_expires_at?: string;
   authorize_url?: string;
-}
-
-interface FederatedOAuthModalProps {
-  connectors: FederatedConnectorOAuthStatus[];
-  onSkip: () => void;
-  skipCount?: number;
 }
 
 const MAX_SKIP_COUNT = 2;
@@ -160,12 +155,12 @@ export function FederatedOAuthModal() {
       >
         <div className="space-y-4 mt-4">
           <div className="text-center">
-            <h3 className="text-lg font-semibold mb-2">Heads Up!</h3>
-            <p className="text-sm text-muted-foreground">
+            <Text headingH3>Heads Up!</Text>
+            <Text>
               You can always connect your apps later by going to the{" "}
               <strong>User Settings</strong> menu (click your profile icon) and
               selecting <strong>Connectors</strong>.
-            </p>
+            </Text>
           </div>
 
           <div className="flex justify-center pt-2">
@@ -179,10 +174,10 @@ export function FederatedOAuthModal() {
   return (
     <Modal hideCloseButton={true} width="w-full max-w-xl">
       <div className="space-y-4 mt-4">
-        <p className="text-sm text-muted-foreground">
+        <Text>
           Improve answer quality by letting {applicationName} search all your
           connected data.
-        </p>
+        </Text>
 
         <div className="space-y-3">
           {needsAuth.map((connector) => {
@@ -205,7 +200,6 @@ export function FederatedOAuthModal() {
                   </span>
                 </div>
                 <Button
-                  size="sm"
                   onClick={() => {
                     if (connector.authorize_url) {
                       handleAuthorize(connector.authorize_url);
@@ -223,9 +217,7 @@ export function FederatedOAuthModal() {
         {/* Add visual separation and center modal actions */}
         <div className="pt-4 mt-2">
           <div className="flex justify-center gap-3">
-            <Button variant="outline" onClick={onSkip}>
-              Skip for now
-            </Button>
+            <Button onClick={onSkip}>Skip for now</Button>
           </div>
         </div>
       </div>

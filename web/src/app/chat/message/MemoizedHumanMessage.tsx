@@ -1,19 +1,17 @@
 import React, { useCallback } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
-import { HumanMessage } from "./HumanMessage";
+import HumanMessage from "./HumanMessage";
 
 interface BaseMemoizedHumanMessageProps {
   content: string;
   files?: FileDescriptor[];
   messageId?: number | null;
-  nodeId?: number;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
   shared?: boolean;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 interface InternalMemoizedHumanMessageProps
@@ -32,13 +30,11 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   content,
   files,
   messageId,
-  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
-  setPresentingDocument,
   onEdit,
 }: InternalMemoizedHumanMessageProps) {
   return (
@@ -46,13 +42,11 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
       content={content}
       files={files}
       messageId={messageId ?? undefined}
-      nodeId={nodeId}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
-      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );
@@ -62,13 +56,11 @@ export const MemoizedHumanMessage = ({
   content,
   files,
   messageId,
-  nodeId,
   otherMessagesCanSwitchTo,
   onMessageSelection,
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
-  setPresentingDocument,
   handleEditWithMessageId,
 }: MemoizedHumanMessageProps) => {
   const onEdit = useCallback(
@@ -83,13 +75,11 @@ export const MemoizedHumanMessage = ({
       content={content}
       files={files}
       messageId={messageId}
-      nodeId={nodeId}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
-      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );

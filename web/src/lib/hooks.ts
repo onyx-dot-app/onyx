@@ -1,6 +1,6 @@
 "use client";
+
 import {
-  ConnectorIndexingStatus,
   DocumentBoostStatus,
   Tag,
   UserGroup,

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  SlidersVerticalIcon,
   SearchIcon,
   DisableIcon,
   IconProps,
@@ -31,7 +30,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useSourcePreferences } from "@/lib/hooks";
+import { FilterManager, useFilters, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -46,8 +45,13 @@ import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useTheme } from "next-themes";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgSliders from "@/icons/sliders";
+import Text from "@/refresh-components/Text";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { cn } from "@/lib/utils";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -143,12 +147,12 @@ export function ActionItem({
               } ${isForced && "text-blue-500"}`}
             >
               <Icon
-                size={16}
-                className={
+                className={cn(
+                  "h-[1rem] w-[1rem] stroke-text-04",
                   isForced
                     ? "text-blue-500"
                     : "text-text-500 dark:text-neutral-400"
-                }
+                )}
               />
               <span
                 className={`text-sm font-medium select-none ${
@@ -199,7 +203,7 @@ export function ActionItem({
         </TooltipTrigger>
         {tool?.description && (
           <TooltipContent side="left" width="max-w-xs">
-            <p className="text-wrap">{tool.description}</p>
+            <Text inverted>{tool.description}</Text>
           </TooltipContent>
         )}
       </Tooltip>
@@ -446,14 +450,13 @@ function MCPToolsList({
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
   availableSources?: ValidSources[];
-  filterManager: FilterManager;
 }
 
 export function ActionToggle({
   selectedAssistant,
   availableSources = [],
-  filterManager,
 }: ActionToggleProps) {
+  const filterManager = useFilters();
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [showSourceManagement, setShowSourceManagement] = useState(false);
@@ -464,17 +467,12 @@ export function ActionToggle({
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
 
-  const {
-    sourcesInitialized,
-    enableAllSources,
-    disableAllSources,
-    toggleSource,
-    isSourceEnabled,
-  } = useSourcePreferences({
-    availableSources,
-    selectedSources,
-    setSelectedSources,
-  });
+  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
+    useSourcePreferences({
+      availableSources,
+      selectedSources,
+      setSelectedSources,
+    });
   const [mcpToolsPopup, setMcpToolsPopup] = useState<{
     serverId: number | null;
     serverName: string;
@@ -809,30 +807,14 @@ export function ActionToggle({
         }}
       >
         <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="
-            relative 
-            cursor-pointer 
-            flex 
-            items-center justify-center leading-none
-            group 
-            rounded-lg 
-            text-input-text 
-            hover:bg-background-chat-hover 
-            hover:text-neutral-900 
-            dark:hover:text-neutral-50
-            p-2
-            flex-none 
-            whitespace-nowrap 
-            overflow-hidden 
-            focus:outline-none
-          "
-            data-testid="action-management-toggle"
-            title={open ? undefined : "Configure actions"}
-          >
-            <SlidersVerticalIcon size={16} className="block flex-none" />
-          </button>
+          <div>
+            <IconButton
+              icon={SvgSliders}
+              tertiary
+              data-testid="action-management-toggle"
+              tooltip="Manage Actions"
+            />
+          </div>
         </PopoverTrigger>
         <PopoverContent
           data-testid="tool-options"
@@ -875,33 +857,13 @@ export function ActionToggle({
         >
           {/* Search Input */}
           {!showSourceManagement && (
-            <div className="pt-1 mx-1">
-              <div className="relative">
-                <SearchIcon
-                  size={16}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Search Menu"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="
-                    w-full
-                    pl-9
-                    pr-3
-                    py-2
-                    bg-transparent
-                    rounded-lg
-                    text-sm
-                    outline-none
-                    text-neutral-700 dark:text-neutral-300
-                    placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                  "
-                  autoFocus
-                />
-              </div>
-            </div>
+            <InputTypeIn
+              placeholder="Search Menu"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              autoFocus
+              internal
+            />
           )}
 
           {/* Options */}

@@ -1,34 +1,33 @@
 "use client";
 
-import { FiEdit2 } from "react-icons/fi";
 import React, { useEffect, useRef, useState } from "react";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
-import { Hoverable, HoverableIcon } from "@/components/Hoverable";
-import { DocumentPreview } from "../components/files/documents/DocumentPreview";
-import { InMessageImage } from "../components/files/images/InMessageImage";
-import "prismjs/themes/prism-tomorrow.css";
-import "./custom-code-styles.css";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import ToolResult from "../../../components/tools/ToolResult";
-import CsvContent from "../../../components/tools/CSVContent";
+import { DocumentPreview } from "@/app/chat/components/files/documents/DocumentPreview";
+import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
+import ToolResult from "@/components/tools/ToolResult";
+import CsvContent from "@/components/tools/CSVContent";
 import "katex/dist/katex.min.css";
-import { MessageSwitcher } from "./MessageSwitcher";
+import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
+import Text from "@/refresh-components/Text";
+import { cn } from "@/lib/utils";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgEdit from "@/icons/edit";
+import Button from "@/refresh-components/buttons/Button";
+import SvgCopy from "@/icons/copy";
+import { copyAll } from "./copyingUtils";
 
-function FileDisplay({
-  files,
-  alignBubble,
-  setPresentingDocument,
-}: {
+interface FileDisplayProps {
   files: FileDescriptor[];
   alignBubble?: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
-}) {
+}
+
+interface MessageEditingProps {
+  content: string;
+  onSubmitEdit: (editedContent: string) => void;
+  onCancelEdit: () => void;
+}
+
+function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const textFiles = files.filter(
@@ -42,7 +41,7 @@ function FileDisplay({
       {textFiles && textFiles.length > 0 && (
         <div
           id="onyx-file"
-          className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
+          className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
             {textFiles.map((file) => {
@@ -62,7 +61,7 @@ function FileDisplay({
       {imageFiles && imageFiles.length > 0 && (
         <div
           id="onyx-image"
-          className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
+          className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
             {imageFiles.map((file) => {
@@ -72,7 +71,7 @@ function FileDisplay({
         </div>
       )}
       {csvImgFiles && csvImgFiles.length > 0 && (
-        <div className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}>
+        <div className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}>
           <div className="flex flex-col gap-2">
             {csvImgFiles.map((file) => {
               return (
@@ -103,68 +102,114 @@ function FileDisplay({
   );
 }
 
-export const HumanMessage = ({
+function MessageEditing({
   content,
+  onSubmitEdit,
+  onCancelEdit,
+}: MessageEditingProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [editedContent, setEditedContent] = useState(content);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    // Focus the textarea
+    textareaRef.current.focus();
+    textareaRef.current.select();
+  }, []);
+
+  function handleSubmit() {
+    onSubmitEdit(editedContent);
+  }
+
+  function handleCancel() {
+    setEditedContent(content);
+    onCancelEdit();
+  }
+
+  return (
+    <div className="w-full">
+      <div
+        className={cn(
+          "w-full h-full border rounded-16 overflow-hidden p-padding-button flex flex-col gap-spacing-interline"
+        )}
+      >
+        <textarea
+          ref={textareaRef}
+          className={cn(
+            "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-word"
+          )}
+          aria-multiline
+          role="textarea"
+          value={editedContent}
+          style={{ scrollbarWidth: "thin" }}
+          onChange={(e) => {
+            setEditedContent(e.target.value);
+            textareaRef.current!.style.height = "auto";
+            e.target.style.height = `${e.target.scrollHeight}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              handleCancel();
+            }
+            // Submit edit if "Command Enter" is pressed, like in ChatGPT
+            if (e.key === "Enter" && e.metaKey) handleSubmit();
+          }}
+        />
+        <div className="flex justify-end gap-spacing-interline">
+          <Button onClick={handleSubmit}>Submit</Button>
+          <Button secondary onClick={handleCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface HumanMessageProps {
+  // Content and display
+  content: string;
+  files?: FileDescriptor[];
+  shared?: boolean;
+
+  // Message navigation
+  messageId?: number | null;
+  otherMessagesCanSwitchTo?: number[];
+  onMessageSelection?: (messageId: number) => void;
+
+  // Editing functionality
+  onEdit?: (editedContent: string) => void;
+
+  // Streaming and generation
+  stopGenerating?: () => void;
+  disableSwitchingForStreaming?: boolean;
+}
+
+export default function HumanMessage({
+  content: initialContent,
   files,
   messageId,
-  nodeId,
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
-  setPresentingDocument,
-}: {
-  shared?: boolean;
-  content: string;
-  files?: FileDescriptor[];
-  messageId?: number | null;
-  nodeId?: number;
-  otherMessagesCanSwitchTo?: number[];
-  onEdit?: (editedContent: string) => void;
-  onMessageSelection?: (messageId: number) => void;
-  stopGenerating?: () => void;
-  disableSwitchingForStreaming?: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
-}) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+}: HumanMessageProps) {
+  // TODO (@raunakab):
+  //
+  // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
+  // Fix this later.
+  const [content, setContent] = useState(initialContent);
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(content);
 
-  useEffect(() => {
-    if (!isEditing) {
-      setEditedContent(content);
-    }
-  }, [content, isEditing]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      // Focus the textarea
-      textareaRef.current.focus();
-      // Move the cursor to the end of the text
-      textareaRef.current.selectionStart = textareaRef.current.value.length;
-      textareaRef.current.selectionEnd = textareaRef.current.value.length;
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [isEditing]);
-
-  const handleEditSubmit = () => {
-    onEdit?.(editedContent);
-    setIsEditing(false);
-  };
-
-  // Use nodeId for finding position in siblings array since
-  // otherMessagesCanSwitchTo contains nodeIds
-  const currentMessageInd =
-    nodeId !== undefined && nodeId !== null && otherMessagesCanSwitchTo
-      ? (() => {
-          const idx = otherMessagesCanSwitchTo.indexOf(nodeId);
-          return idx === -1 ? undefined : idx;
-        })()
-      : undefined;
+  const currentMessageInd = messageId
+    ? otherMessagesCanSwitchTo?.indexOf(messageId)
+    : undefined;
 
   const getPreviousMessage = () => {
     if (
@@ -196,166 +241,68 @@ export const HumanMessage = ({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`text-user-text mx-auto ${
+        className={cn(
+          "text-user-text mx-auto max-w-[790px]",
           shared ? "w-full" : "w-[90%]"
-        } max-w-[790px]`}
+        )}
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay
-              alignBubble
-              setPresentingDocument={setPresentingDocument}
-              files={files || []}
-            />
+            <FileDisplay alignBubble files={files || []} />
 
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
                 {isEditing ? (
-                  <div className="w-full">
-                    <div
-                      className={`
-                      opacity-100
-                      w-full
-                      flex
-                      flex-col
-                      border 
-                      border-border 
-                      rounded-lg 
-                      pb-2
-                      [&:has(textarea:focus)]::ring-1
-                      [&:has(textarea:focus)]::ring-black
-                    `}
-                    >
-                      <textarea
-                        ref={textareaRef}
-                        className={`
-                        m-0 
-                        w-full 
-                        h-auto
-                        shrink
-                        border-0
-                        rounded-lg 
-                        overflow-y-hidden
-                        whitespace-normal 
-                        break-word
-                        overscroll-contain
-                        outline-none 
-                        placeholder-text-400 
-                        resize-none
-                        text-text-editing-message
-                        pl-4
-                        overflow-y-auto
-                        bg-background
-                        pr-12 
-                        py-4`}
-                        aria-multiline
-                        role="textarea"
-                        value={editedContent}
-                        style={{ scrollbarWidth: "thin" }}
-                        onChange={(e) => {
-                          setEditedContent(e.target.value);
-                          textareaRef.current!.style.height = "auto";
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            e.preventDefault();
-                            setEditedContent(content);
-                            setIsEditing(false);
-                          }
-                          // Submit edit if "Command Enter" is pressed, like in ChatGPT
-                          if (e.key === "Enter" && e.metaKey) {
-                            handleEditSubmit();
-                          }
-                        }}
-                      />
-                      <div className="flex justify-end mt-2 gap-2 pr-4">
-                        <button
-                          className={`
-                          w-fit
-                          bg-agent 
-                          text-inverted 
-                          text-sm
-                          rounded-lg 
-                          inline-flex 
-                          items-center 
-                          justify-center 
-                          flex-shrink-0 
-                          font-medium 
-                          min-h-[38px]
-                          py-2
-                          px-3
-                          hover:bg-agent-hovered
-                        `}
-                          onClick={handleEditSubmit}
-                        >
-                          Submit
-                        </button>
-                        <button
-                          className={`
-                          inline-flex 
-                          items-center 
-                          justify-center 
-                          flex-shrink-0 
-                          font-medium 
-                          min-h-[38px] 
-                          py-2 
-                          px-3 
-                          w-fit 
-                          bg-background-200 
-                          text-sm
-                          rounded-lg
-                          hover:bg-accent-background-hovered-emphasis
-                        `}
-                          onClick={() => {
-                            setEditedContent(content);
-                            setIsEditing(false);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <MessageEditing
+                    content={content}
+                    onSubmitEdit={(editedContent) => {
+                      onEdit?.(editedContent);
+                      setContent(editedContent);
+                      setIsEditing(false);
+                    }}
+                    onCancelEdit={() => setIsEditing(false)}
+                  />
                 ) : typeof content === "string" ? (
                   <>
-                    <div className="ml-auto flex items-center mr-1 mt-2 h-fit mb-auto">
+                    <div className="ml-auto flex items-center mr-1 h-fit mb-auto">
                       {onEdit &&
                       isHovered &&
                       !isEditing &&
                       (!files || files.length === 0) ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <div data-testid="edit-button">
-                                <HoverableIcon
-                                  icon={<FiEdit2 className="text-text-600" />}
-                                  onClick={() => {
-                                    setIsEditing(true);
-                                    setIsHovered(false);
-                                  }}
-                                />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <div className="flex flex-row items-center justify-center gap-spacing-inline">
+                          <IconButton
+                            icon={SvgCopy}
+                            tertiary
+                            tooltip="Copy"
+                            onClick={() => copyAll(content)}
+                          />
+                          <IconButton
+                            icon={SvgEdit}
+                            tertiary
+                            tooltip="Edit"
+                            onClick={() => {
+                              setIsEditing(true);
+                              setIsHovered(false);
+                            }}
+                          />
+                        </div>
                       ) : (
                         <div className="w-7" />
                       )}
                     </div>
 
                     <div
-                      className={`${
+                      className={cn(
+                        "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-spacing-interline px-padding-button",
                         !(
                           onEdit &&
                           isHovered &&
                           !isEditing &&
                           (!files || files.length === 0)
                         ) && "ml-auto"
-                      } relative text-text flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
+                      )}
                     >
-                      {content}
+                      <Text mainContentBody>{content}</Text>
                     </div>
                   </>
                 ) : (
@@ -364,13 +311,15 @@ export const HumanMessage = ({
                     isHovered &&
                     !isEditing &&
                     (!files || files.length === 0) ? (
-                      <div data-testid="edit-button" className="my-auto">
-                        <Hoverable
-                          icon={FiEdit2}
+                      <div className="my-auto">
+                        <IconButton
+                          icon={SvgEdit}
                           onClick={() => {
                             setIsEditing(true);
                             setIsHovered(false);
                           }}
+                          tertiary
+                          tooltip="Edit"
                         />
                       </div>
                     ) : (
@@ -415,4 +364,4 @@ export const HumanMessage = ({
       </div>
     </div>
   );
-};
+}
