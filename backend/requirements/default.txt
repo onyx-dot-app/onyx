@@ -19,6 +19,7 @@ google-api-python-client==2.86.0
 google-cloud-aiplatform==1.58.0
 google-auth-httplib2==0.1.0
 google-auth-oauthlib==1.0.0
+guardrails-ai==0.6.7
 # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
 # will reintroduce this when library version catches up
 # gpt4all==2.0.2
@@ -105,4 +106,3 @@ docxtpl==0.20.0
 minio==7.2.15
 APScheduler==3.11.0
 pyTelegramBotAPI==4.27.0
-vllm
