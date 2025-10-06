@@ -49,14 +49,14 @@ RUN apt-get update && \
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN pip install --no-cache-dir --upgrade \
+RUN pip install --upgrade \
+        --index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
+        --trusted-host pypi.tuna.tsinghua.edu.cn \
         --retries 5 \
         --timeout 30 \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
-    playwright install chromium && \
-    playwright install-deps chromium && \
     ln -s /usr/local/bin/supervisord /usr/bin/supervisord
 
 

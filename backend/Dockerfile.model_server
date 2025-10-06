@@ -15,7 +15,7 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade \
+RUN pip install --upgrade \
         --retries 5 \
         --timeout 30 \
         -r /tmp/requirements.txt
