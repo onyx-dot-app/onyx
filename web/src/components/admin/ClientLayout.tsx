@@ -1,7 +1,6 @@
 "use client";
 
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
-import { UserDropdown } from "@/components/UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -88,9 +87,6 @@ export function ClientLayout({
         enableEnterpriseSS={enableEnterprise}
       />
       <div className="overflow-y-scroll w-full">
-        <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 mb-auto w-full items-start flex justify-end">
-          <UserDropdown toggleUserSettings={toggleUserSettings} />
-        </div>
         <div className="flex pt-10 pb-4 px-4 md:px-12">{children}</div>
       </div>
     </div>
