@@ -1,0 +1,25 @@
+:root {
+  /* Onyx / Ink */
+  --onyx-ink-100: #000000;
+  --onyx-ink-95-main: #1c1c1c;
+  --onyx-ink-90: #333333;
+
+  /* Onyx / Chrome */
+  --onyx-chrome-20: #cacaca;
+  --onyx-chrome-10-main: #e9e9e9;
+  --onyx-chrome-00: #ffffff;
+
+  /* Tint (referencing Stone variables) */
+  --tint-98: var(--stone-98);
+  --tint-95: var(--stone-95);
+  --tint-90: var(--stone-90);
+  --tint-85: var(--stone-85);
+  --tint-80: var(--stone-80);
+  --tint-60: var(--stone-60);
+  --tint-50: var(--stone-50);
+  --tint-40: var(--stone-40);
+  --tint-20: var(--stone-20);
+  --tint-10: var(--stone-10);
+  --tint-05: var(--stone-05);
+  --tint-02: var(--stone-02);
+}
