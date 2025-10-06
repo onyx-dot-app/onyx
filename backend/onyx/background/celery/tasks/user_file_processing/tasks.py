@@ -308,8 +308,10 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             user_file_ids = (
                 db_session.execute(
                     select(UserFile.id).where(
-                        UserFile.needs_project_sync.is_(True)
-                        and UserFile.status == UserFileStatus.COMPLETED
+                        sa.and_(
+                            UserFile.needs_project_sync.is_(True),
+                            UserFile.status == UserFileStatus.COMPLETED,
+                        )
                     )
                 )
                 .scalars()
