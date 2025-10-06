@@ -4,6 +4,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       alembic upgrade head &&
@@ -30,6 +32,7 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://host.docker.internal:3004}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-f526c658-9741-48fa-94cf-a5204927476a}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1a62298f-3d5f-4a22-b48d-d8cdd24d3533}
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
