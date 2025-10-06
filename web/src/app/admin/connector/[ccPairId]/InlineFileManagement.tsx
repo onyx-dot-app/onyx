@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  listConnectorFiles,
   updateConnectorFiles,
   type ConnectorFileInfo,
 } from "@/lib/fileConnector";
@@ -26,12 +25,10 @@ import SvgEdit from "@/icons/edit";
 import SvgCheck from "@/icons/check";
 import SvgX from "@/icons/x";
 import SvgPlusCircle from "@/icons/plus-circle";
-import SvgTrash from "@/icons/trash";
 import { formatBytes } from "@/lib/utils";
 
 interface InlineFileManagementProps {
   connectorId: number;
-  ccPairId: number;
   onRefresh: () => void;
 }
 
@@ -47,7 +44,6 @@ function formatDate(dateString: string | undefined): string {
 
 export function InlineFileManagement({
   connectorId,
-  ccPairId,
   onRefresh,
 }: InlineFileManagementProps) {
   const { setPopup } = usePopup();

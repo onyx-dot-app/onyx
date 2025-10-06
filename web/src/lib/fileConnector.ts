@@ -15,21 +15,6 @@ export interface FileUploadResponse {
   zip_metadata: Record<string, unknown>;
 }
 
-export async function listConnectorFiles(
-  connectorId: number
-): Promise<ConnectorFilesResponse> {
-  const response = await fetch(
-    `/api/manage/admin/connector/${connectorId}/files`
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Failed to list connector files (${response.status}): ${error.detail || "Unknown error"}`
-    );
-  }
-  return await response.json();
-}
-
 export async function updateConnectorFiles(
   connectorId: number,
   fileIdsToRemove: string[],
