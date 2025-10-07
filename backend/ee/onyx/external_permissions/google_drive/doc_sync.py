@@ -34,7 +34,7 @@ def _get_slim_doc_generator(
         else 0.0
     )
 
-    return google_drive_connector.retrieve_all_slim_documents(
+    return google_drive_connector.retrieve_all_slim_docs_perm_sync(
         start=start_time,
         end=current_time.timestamp(),
         callback=callback,

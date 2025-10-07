@@ -54,7 +54,7 @@ def test_confluence_connector_permissions(
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
-    for slim_doc_batch in confluence_connector.retrieve_all_slim_documents():
+    for slim_doc_batch in confluence_connector.retrieve_all_slim_docs_perm_sync():
         all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
 
     # Find IDs that are in full but not in slim
@@ -131,15 +131,15 @@ def test_confluence_connector_restriction_handling(
     }
 
     # if restriction is applied, only should be visible to shared users / groups
-    restricted_emails = {"chris@onyx.app", "hagen@danswer.ai"}
+    restricted_emails = {"chris@onyx.app", "hagen@danswer.ai", "oauth@onyx.app"}
     restricted_user_groups = {"confluence-admins-danswerai"}
 
-    extra_restricted_emails = {"chris@onyx.app"}
+    extra_restricted_emails = {"chris@onyx.app", "oauth@onyx.app"}
     extra_restricted_user_groups: set[str] = set()
 
     # note that this is only allowed since yuhong@onyx.app is a member of the
     # confluence-admins-danswerai group
-    special_restricted_emails = {"chris@onyx.app", "yuhong@onyx.app"}
+    special_restricted_emails = {"chris@onyx.app", "yuhong@onyx.app", "oauth@onyx.app"}
     special_restricted_user_groups: set[str] = set()
 
     # Check Root+Page+2 is public

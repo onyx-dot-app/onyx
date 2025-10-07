@@ -111,7 +111,8 @@ export const MessageTextRenderer: MessageRenderer<
   const { renderedContent } = useMarkdownRenderer(
     // the [*]() is a hack to show a blinking dot when the packet is not complete
     stopPacketSeen ? content : content + " [*]() ",
-    state
+    state,
+    "font-main-content-body"
   );
 
   return children({

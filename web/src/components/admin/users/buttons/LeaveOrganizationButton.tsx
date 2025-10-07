@@ -51,7 +51,6 @@ export const LeaveOrganizationButton = ({
     <>
       {showLeaveModal && (
         <ConfirmEntityModal
-          variant="action"
           actionButtonText="Leave"
           entityType="team"
           entityName="your team"

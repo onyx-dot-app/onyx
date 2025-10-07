@@ -59,7 +59,7 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
 
     for raw_perm in permissions:
         if not hasattr(raw_perm, "raw"):
-            logger.warn(f"Expected a 'raw' field, but none was found: {raw_perm=}")
+            logger.warning(f"Expected a 'raw' field, but none was found: {raw_perm=}")
             continue
 
         permission = Permission(**raw_perm.raw)
@@ -71,14 +71,14 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
         # In order to associate this permission to some Atlassian entity, we need the "Holder".
         # If this doesn't exist, then we cannot associate this permission to anyone; just skip.
         if not permission.holder:
-            logger.warn(
+            logger.warning(
                 f"Expected to find a permission holder, but none was found: {permission=}"
             )
             continue
 
         type = permission.holder.get("type")
         if not type:
-            logger.warn(
+            logger.warning(
                 f"Expected to find the type of permission holder, but none was found: {permission=}"
             )
             continue

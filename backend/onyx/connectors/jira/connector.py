@@ -25,11 +25,11 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
@@ -247,7 +247,7 @@ def _perform_jql_search_v2(
 
 
 def process_jira_issue(
-    jira_client: JIRA,
+    jira_base_url: str,
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
@@ -281,7 +281,7 @@ def process_jira_issue(
         )
         return None
 
-    page_url = build_jira_url(jira_client, issue.key)
+    page_url = build_jira_url(jira_base_url, issue.key)
 
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
@@ -359,7 +359,10 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
     offset: int | None = None
 
 
-class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnector):
+class JiraConnector(
+    CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
+    SlimConnectorWithPermSync,
+):
     def __init__(
         self,
         jira_base_url: str,
@@ -372,15 +375,23 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
+        scoped_token: bool = False,
     ) -> None:
         self.batch_size = batch_size
+
+        # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
+        # when making jira requests but still want correct links to issues in the UI.
+        # So, the user's base url is stored here, but converted to a scoped url when passed
+        # to the jira client.
         self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
         self.jira_project = project_key
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
-
+        self.scoped_token = scoped_token
         self._jira_client: JIRA | None = None
+        # Cache project permissions to avoid fetching them repeatedly across runs
+        self._project_permissions_cache: dict[str, Any] = {}
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -399,10 +410,26 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             return ""
         return f'"{self.jira_project}"'
 
+    def _get_project_permissions(self, project_key: str) -> Any:
+        """Get project permissions with caching.
+
+        Args:
+            project_key: The Jira project key
+
+        Returns:
+            The external access permissions for the project
+        """
+        if project_key not in self._project_permissions_cache:
+            self._project_permissions_cache[project_key] = get_project_permissions(
+                jira_client=self.jira_client, jira_project=project_key
+            )
+        return self._project_permissions_cache[project_key]
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,
+            scoped_token=self.scoped_token,
         )
         return None
 
@@ -442,15 +469,37 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
         try:
-            return self._load_from_checkpoint(jql, checkpoint)
+            return self._load_from_checkpoint(
+                jql, checkpoint, include_permissions=False
+            )
         except Exception as e:
             if is_atlassian_date_error(e):
                 jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(jql, checkpoint)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=False
+                )
+            raise e
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JiraConnectorCheckpoint,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        """Load documents from checkpoint with permission information included."""
+        jql = self._get_jql_query(start, end)
+        try:
+            return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
+        except Exception as e:
+            if is_atlassian_date_error(e):
+                jql = self._get_jql_query(start - ONE_HOUR, end)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=True
+                )
             raise e
 
     def _load_from_checkpoint(
-        self, jql: str, checkpoint: JiraConnectorCheckpoint
+        self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         # Get the current offset from checkpoint or start at 0
         starting_offset = checkpoint.offset or 0
@@ -472,18 +521,25 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             issue_key = issue.key
             try:
                 if document := process_jira_issue(
-                    jira_client=self.jira_client,
+                    jira_base_url=self.jira_base,
                     issue=issue,
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                 ):
+                    # Add permission information to the document if requested
+                    if include_permissions:
+                        project_key = get_jira_project_key_from_issue(issue=issue)
+                        if project_key:
+                            document.external_access = self._get_project_permissions(
+                                project_key
+                            )
                     yield document
 
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=issue_key,
-                        document_link=build_jira_url(self.jira_client, issue_key),
+                        document_link=build_jira_url(self.jira_base, issue_key),
                     ),
                     failure_message=f"Failed to process Jira issue: {str(e)}",
                     exception=e,
@@ -515,7 +571,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             # if we didn't retrieve a full batch, we're done
             checkpoint.has_more = current_offset - starting_offset == page_size
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -534,6 +590,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         prev_offset = 0
         current_offset = 0
         slim_doc_batch = []
+
         while checkpoint.has_more:
             for issue in _perform_jql_search(
                 jira_client=self.jira_client,
@@ -550,13 +607,12 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                     continue
 
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-                id = build_jira_url(self.jira_client, issue_key)
+                id = build_jira_url(self.jira_base, issue_key)
+
                 slim_doc_batch.append(
                     SlimDocument(
                         id=id,
-                        external_access=get_project_permissions(
-                            jira_client=self.jira_client, jira_project=project_key
-                        ),
+                        external_access=self._get_project_permissions(project_key),
                     )
                 )
                 current_offset += 1
@@ -701,7 +757,7 @@ if __name__ == "__main__":
     start = 0
     end = datetime.now().timestamp()
 
-    for slim_doc in connector.retrieve_all_slim_documents(
+    for slim_doc in connector.retrieve_all_slim_docs_perm_sync(
         start=start,
         end=end,
     ):

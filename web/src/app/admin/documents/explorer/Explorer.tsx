@@ -18,6 +18,8 @@ import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Text from "@/refresh-components/Text";
 
 const DocumentDisplay = ({
   document,
@@ -166,45 +168,38 @@ export function Explorer({
   ]);
 
   return (
-    <div>
+    <div className="flex flex-col gap-padding-content">
       {popup}
-      <div className="justify-center pt-2">
-        <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent bg-background-search dark:bg-transparent">
-          <MagnifyingGlass />
-          <textarea
-            autoFocus
-            className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
-            role="textarea"
-            aria-multiline
-            placeholder="Find documents based on title / content..."
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !(event.nativeEvent as any).isComposing
-              ) {
-                onSearch(query);
-                event.preventDefault();
-              }
-            }}
-            suppressContentEditableWarning={true}
-          />
-        </div>
-        <div className="mt-4 border-b border-border">
-          <HorizontalFilters
-            {...filterManager}
-            availableDocumentSets={documentSets}
-            existingSources={connectors.map((connector) => connector.source)}
-            availableTags={[]}
-            toggleFilters={() => {}}
-            filtersUntoggled={false}
-            tagsOnLeft={true}
-          />
-        </div>
+      <div className="flex flex-col justify-center gap-spacing-interline">
+        <InputTypeIn
+          placeholder="Find documents based on title / content..."
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !(event.nativeEvent as any).isComposing
+            ) {
+              onSearch(query);
+              event.preventDefault();
+            }
+          }}
+          role="textarea"
+        />
+
+        <HorizontalFilters
+          {...filterManager}
+          availableDocumentSets={documentSets}
+          existingSources={connectors.map((connector) => connector.source)}
+          availableTags={[]}
+          toggleFilters={() => {}}
+          filtersUntoggled={false}
+          tagsOnLeft={true}
+        />
+        <div className="border-b" />
       </div>
       {results.length > 0 && (
         <div className="mt-3">
@@ -221,10 +216,10 @@ export function Explorer({
         </div>
       )}
       {!query && (
-        <div className="flex text-text-darker mt-3">
+        <Text className="">
           Search for a document above to modify its boost or hide it from
           searches.
-        </div>
+        </Text>
       )}
     </div>
   );

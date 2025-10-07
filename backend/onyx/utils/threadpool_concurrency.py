@@ -1,8 +1,11 @@
+import asyncio
 import collections.abc
+import concurrent
 import contextvars
 import copy
 import threading
 import uuid
+from collections.abc import Awaitable
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import MutableMapping
@@ -20,6 +23,7 @@ from typing import Protocol
 from typing import TypeVar
 
 from pydantic import GetCoreSchemaHandler
+from pydantic.types import T
 from pydantic_core import core_schema
 
 from onyx.utils.logger import setup_logger
@@ -277,6 +281,19 @@ def run_functions_in_parallel(
                     raise
 
     return results
+
+
+def run_async_sync(coro: Awaitable[T]) -> T:
+    """
+    async-to-sync converter. Basically just executes asyncio.run in a separate thread.
+    Which is probably somehow inefficient or not ideal but fine for now.
+    """
+    context = contextvars.copy_context()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future: concurrent.futures.Future[T] = executor.submit(
+            context.run, asyncio.run, coro  # type: ignore[arg-type]
+        )
+        return future.result()
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

@@ -9,10 +9,10 @@ import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 
-export const handleCopy = (
-  e: React.ClipboardEvent,
+export function handleCopy(
+  event: React.ClipboardEvent,
   markdownRef: React.RefObject<HTMLDivElement>
-) => {
+) {
   // Check if we have a selection
   const selection = window.getSelection();
   if (!selection?.rangeCount) return;
@@ -24,7 +24,7 @@ export const handleCopy = (
     markdownRef.current &&
     markdownRef.current.contains(range.commonAncestorContainer)
   ) {
-    e.preventDefault();
+    event.preventDefault();
 
     // Clone selection to get the HTML
     const fragment = range.cloneContents();
@@ -32,20 +32,13 @@ export const handleCopy = (
     tempDiv.appendChild(fragment);
 
     // Create clipboard data with both HTML and plain text
-    e.clipboardData.setData("text/html", tempDiv.innerHTML);
-    e.clipboardData.setData("text/plain", selection.toString());
+    event.clipboardData.setData("text/html", tempDiv.innerHTML);
+    event.clipboardData.setData("text/plain", selection.toString());
   }
-};
+}
 
 // For copying the entire content
-export const copyAll = (
-  content: string,
-  markdownRef: React.RefObject<HTMLDivElement>
-) => {
-  if (!markdownRef.current || typeof content !== "string") {
-    return;
-  }
-
+export function copyAll(content: string) {
   // Convert markdown to HTML using unified ecosystem
   unified()
     .use(remarkParse)
@@ -68,4 +61,4 @@ export const copyAll = (
 
       navigator.clipboard.write([clipboardItem]);
     });
-};
+}

@@ -1,12 +1,10 @@
-import {
-  CpuIcon,
-  DatabaseIcon,
-  IconProps,
-  UsersIcon,
-  AppSearchIcon,
-  GlobeIcon,
-  ImageIcon,
-} from "@/components/icons/icons";
+import { SvgProps } from "@/icons";
+import SvgCpu from "@/icons/cpu";
+import SvgGlobe from "@/icons/globe";
+import SvgImage from "@/icons/image";
+import SvgSearch from "@/icons/search";
+import SvgServer from "@/icons/server";
+import SvgUser from "@/icons/user";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
 // Helper functions to identify specific tools
@@ -48,18 +46,11 @@ const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
 
 export function getIconForAction(
   action: ToolSnapshot
-): (iconProps: IconProps) => JSX.Element {
-  if (isSearchTool(action)) {
-    return AppSearchIcon;
-  } else if (isWebSearchTool(action)) {
-    return GlobeIcon;
-  } else if (isImageGenerationTool(action)) {
-    return ImageIcon;
-  } else if (isKnowledgeGraphTool(action)) {
-    return DatabaseIcon;
-  } else if (isOktaProfileTool(action)) {
-    return UsersIcon;
-  } else {
-    return CpuIcon;
-  }
+): (props: SvgProps) => JSX.Element {
+  if (isSearchTool(action)) return SvgSearch;
+  if (isWebSearchTool(action)) return SvgGlobe;
+  if (isImageGenerationTool(action)) return SvgImage;
+  if (isKnowledgeGraphTool(action)) return SvgServer;
+  if (isOktaProfileTool(action)) return SvgUser;
+  return SvgCpu;
 }

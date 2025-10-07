@@ -184,7 +184,7 @@ def seed_initial_documents(
             "base_url": "https://docs.onyx.app/",
             "web_connector_type": "recursive",
         },
-        refresh_freq=None,  # Never refresh by default
+        refresh_freq=3600,  # 1 hour
         prune_freq=None,
         indexing_start=None,
     )

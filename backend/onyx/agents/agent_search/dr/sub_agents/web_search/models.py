@@ -26,6 +26,7 @@ class InternetContent(BaseModel):
     link: str
     full_content: str
     published_date: datetime | None = None
+    scrape_successful: bool = True
 
 
 class InternetSearchProvider(ABC):

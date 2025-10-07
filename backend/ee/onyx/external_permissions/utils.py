@@ -4,7 +4,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFun
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -17,7 +17,7 @@ def generic_doc_sync(
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
     doc_source: DocumentSource,
-    slim_connector: SlimConnector,
+    slim_connector: SlimConnectorWithPermSync,
     label: str,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -40,7 +40,7 @@ def generic_doc_sync(
     newly_fetched_doc_ids: set[str] = set()
 
     logger.info(f"Fetching all slim documents from {doc_source}")
-    for doc_batch in slim_connector.retrieve_all_slim_documents(callback=callback):
+    for doc_batch in slim_connector.retrieve_all_slim_docs_perm_sync(callback=callback):
         logger.info(f"Got {len(doc_batch)} slim documents from {doc_source}")
 
         if callback:

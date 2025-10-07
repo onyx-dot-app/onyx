@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: onyx-nginx-conf
 data:
-  nginx.conf: |
+  upstreams.conf: |
     upstream api_server {
         server {{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
     }
@@ -12,11 +12,12 @@ data:
         server {{ include "onyx.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
     }
 
+  server.conf: |
     server {
         listen 1024;
         server_name $$DOMAIN;
 
-        client_max_body_size 5G;    # Maximum upload size
+        client_max_body_size 5G;
 
         location ~ ^/api(.*)$ {
             rewrite ^/api(/.*)$ $1 break;

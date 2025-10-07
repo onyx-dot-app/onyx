@@ -10,21 +10,27 @@ import {
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { SwitchField } from "@/components/ui/switch";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
-import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
-import { KGConfig, KGConfigRaw, SourceAndEntityTypeView } from "./interfaces";
-import { sanitizeKGConfig } from "./utils";
+import {
+  KGConfig,
+  KGConfigRaw,
+  SourceAndEntityTypeView,
+} from "@/app/admin/kg/interfaces";
+import { sanitizeKGConfig } from "@/app/admin/kg/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
-import { useIsKGExposed } from "./utils";
-import KGEntityTypes from "./KGEntityTypes";
+import { useIsKGExposed } from "@/app/admin/kg/utils";
+import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
+import Text from "@/refresh-components/Text";
+import SvgSettings from "@/icons/settings";
+import { cn } from "@/lib/utils";
 
 function createDomainField(
   name: string,
@@ -178,9 +184,10 @@ function KGConfiguration({
               />
             </div>
             <div
-              className={`flex flex-col gap-y-6 ${
-                props.values.enabled ? "" : "opacity-50"
-              }`}
+              className={cn(
+                "flex flex-col gap-y-6",
+                !props.values.enabled && "opacity-50"
+              )}
             >
               <TextFormField
                 name="vendor"
@@ -200,9 +207,7 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Button variant="submit" type="submit" disabled={!props.dirty}>
-              Submit
-            </Button>
+            <Button disabled={!props.dirty}>Submit</Button>
           </div>
         </Form>
       )}
@@ -244,39 +249,38 @@ function Main() {
   return (
     <div className="flex flex-col py-4 gap-y-8">
       {popup}
-      <CardSection className="max-w-2xl text-text shadow-lg rounded-lg">
-        <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-          Knowledge Graph Configuration (Private Beta)
-        </p>
+      <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-spacing-interline">
+        <Text headingH2>Knowledge Graph Configuration (Private Beta)</Text>
         <div className="flex flex-col gap-y-6">
-          <div className="text-text-600">
-            <p>
+          <div>
+            <Text text03>
               The Knowledge Graph feature lets you explore your data in new
               ways. Instead of searching through unstructured text, your data is
               organized as entities and their relationships, enabling powerful
               queries like:
-            </p>
-            <div className="p-4">
-              <p>- &quot;Summarize my last 3 calls with account XYZ&quot;</p>
-              <p>
+            </Text>
+            <div className="p-spacing-paragraph">
+              <Text text03>
+                - &quot;Summarize my last 3 calls with account XYZ&quot;
+              </Text>
+              <Text text03>
                 - &quot;How many open Jiras are assigned to John Smith, ranked
                 by priority&quot;
-              </p>
+              </Text>
             </div>
-            <p>
+            <Text text03>
               (To use Knowledge Graph queries, you&apos;ll need a dedicated
               Assistant configured in a specific way. Please contact the Onyx
               team for setup instructions.)
-            </p>
+            </Text>
           </div>
-          <p className="text-text-600">
+          <Text text03>
             <Title>Getting Started:</Title>
             Begin by configuring some high-level attributes, and then define the
             entities you want to model afterwards.
-          </p>
+          </Text>
           <Button
-            size="lg"
-            icon={FiSettings}
+            leftIcon={SvgSettings}
             onClick={() => setConfigureModalShown(true)}
           >
             Configure Knowledge Graph
@@ -285,9 +289,7 @@ function Main() {
       </CardSection>
       {kgConfig.enabled && (
         <>
-          <p className="text-2xl font-bold text-text border-b border-b-border">
-            Entity Types
-          </p>
+          <Text headingH2>Entity Types</Text>
           <KGEntityTypes sourceAndEntityTypes={sourceAndEntityTypesData} />
         </>
       )}

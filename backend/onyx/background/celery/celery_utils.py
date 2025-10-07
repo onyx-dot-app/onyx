@@ -19,7 +19,9 @@ from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -30,7 +32,7 @@ PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 
 
 def document_batch_to_ids(
-    doc_batch: Iterator[list[Document]],
+    doc_batch: Iterator[list[Document]] | Iterator[list[SlimDocument]],
 ) -> Generator[set[str], None, None]:
     for doc_list in doc_batch:
         yield {doc.id for doc in doc_list}
@@ -41,20 +43,24 @@ def extract_ids_from_runnable_connector(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> set[str]:
     """
-    If the SlimConnector hasnt been implemented for the given connector, just pull
+    If the given connector is neither a SlimConnector nor a SlimConnectorWithPermSync, just pull
     all docs using the load_from_state and grab out the IDs.
 
     Optionally, a callback can be passed to handle the length of each document batch.
     """
     all_connector_doc_ids: set[str] = set()
 
-    if isinstance(runnable_connector, SlimConnector):
-        for metadata_batch in runnable_connector.retrieve_all_slim_documents():
-            all_connector_doc_ids.update({doc.id for doc in metadata_batch})
-
     doc_batch_id_generator = None
-
-    if isinstance(runnable_connector, LoadConnector):
+    if isinstance(runnable_connector, SlimConnector):
+        doc_batch_id_generator = document_batch_to_ids(
+            runnable_connector.retrieve_all_slim_docs()
+        )
+    elif isinstance(runnable_connector, SlimConnectorWithPermSync):
+        doc_batch_id_generator = document_batch_to_ids(
+            runnable_connector.retrieve_all_slim_docs_perm_sync()
+        )
+    # If the connector isn't slim, fall back to running it normally to get ids
+    elif isinstance(runnable_connector, LoadConnector):
         doc_batch_id_generator = document_batch_to_ids(
             runnable_connector.load_from_state()
         )
@@ -78,13 +84,14 @@ def extract_ids_from_runnable_connector(
         raise RuntimeError("Pruning job could not find a valid runnable_connector.")
 
     # this function is called per batch for rate limiting
-    def doc_batch_processing_func(doc_batch_ids: set[str]) -> set[str]:
-        return doc_batch_ids
-
-    if MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE:
-        doc_batch_processing_func = rate_limit_builder(
+    doc_batch_processing_func = (
+        rate_limit_builder(
             max_calls=MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE, period=60
         )(lambda x: x)
+        if MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
+        else lambda x: x
+    )
+
     for doc_batch_ids in doc_batch_id_generator:
         if callback:
             if callback.should_stop():

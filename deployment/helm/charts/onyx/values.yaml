@@ -9,19 +9,15 @@ global:
   pullPolicy: "IfNotPresent"
 
 postgresql:
-  primary:
-    persistence:
+  enabled: true
+  cluster:
+    instances: 1
+    storage:
       storageClass: ""
       size: 10Gi
-    shmVolume:
-      enabled: true
-      sizeLimit: 2Gi
-  enabled: true
-  auth:
-    existingSecret: onyx-postgresql
-    secretKeys:
-      # overwriting as postgres typically expects 'postgres-password'
-      adminPasswordKey: postgres_password
+    enableSuperuserAccess: true
+    superuserSecret:
+      name: onyx-postgresql  # keep in sync with auth.postgresql
 
 vespa:
   name: da-vespa-0
@@ -157,21 +153,39 @@ serviceAccount:
 
 nginx:
   enabled: true
-  containerPorts:
-    http: 1024
-  extraEnvVars:
-    - name: DOMAIN
-      value: localhost
-  service:
-    type: LoadBalancer
-    ports:
-      http: 80
-      onyx: 3000
-    targetPort:
-      http: http
-      onyx: http
+  controller:
+    containerPort:
+      http: 1024
 
-  existingServerBlockConfigmap: onyx-nginx-conf
+    # Propagate DOMAIN into nginx so server_name continues to use the same env var
+    extraEnvs:
+      - name: DOMAIN
+        value: localhost
+
+    config:
+      # Expose DOMAIN to the nginx config and pull in our custom snippets
+      main-snippet: |
+        env DOMAIN;
+      http-snippet: |
+        include /etc/nginx/custom-snippets/upstreams.conf;
+        include /etc/nginx/custom-snippets/server.conf;
+
+    # Mount the existing nginx ConfigMap that holds the upstream and server snippets
+    extraVolumes:
+      - name: nginx-config
+        configMap:
+          name: onyx-nginx-conf
+    extraVolumeMounts:
+      - name: nginx-config
+        mountPath: /etc/nginx/custom-snippets
+        readOnly: true
+
+    service:
+      type: LoadBalancer
+      ports:
+        http: 80
+      targetPorts:
+        http: http
 
 webserver:
   replicaCount: 1
@@ -707,47 +721,54 @@ celery_worker_docfetching:
 
 redis:
   enabled: true
-  architecture: standalone
-  commonConfiguration: |-
-    # Enable AOF https://redis.io/topics/persistence#append-only-file
-    appendonly no
-    # Disable RDB persistence, AOF persistence already enabled.
-    save ""
-  master:
-    replicaCount: 1
-    image:
-      registry: docker.io
-      repository: bitnami/redis
-      tag: "7.4.0"
-      pullPolicy: IfNotPresent
-    persistence:
-      enabled: false
-  service:
-    type: ClusterIP
-    port: 6379
-  auth:
-    existingSecret: onyx-redis
-    existingSecretPasswordKey: redis_password
+  redisStandalone:
+    image: quay.io/opstree/redis
+    tag: v7.0.15
+    imagePullPolicy: IfNotPresent
+    serviceType: ClusterIP
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Use existing secret for Redis password
+    redisSecret:
+      secretName: onyx-redis
+      secretKey: redis_password
+  # Redis configuration
+  externalConfig:
+    enabled: true
+    data: |
+      appendonly no
+      save ""
+  storageSpec:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
 
 minio:
   enabled: true
-  auth:
-    existingSecret: onyx-objectstorage
-    rootUserSecretKey: s3_aws_access_key_id
-    rootPasswordSecretKey: s3_aws_secret_access_key
-  defaultBuckets: "onyx-file-store-bucket"
+  mode: standalone
+  replicas: 1
+  drivesPerNode: 1
+  existingSecret: onyx-objectstorage
+  buckets:
+    - name: onyx-file-store-bucket
   persistence:
     enabled: true
     size: 30Gi
+    storageClass: ""
   service:
     type: ClusterIP
-    ports:
-      api: 9000
-      console: 9001
+    port: 9000
   consoleService:
     type: ClusterIP
-    ports:
-      http: 9001
+    port: 9001
 
 ingress:
   enabled: false
@@ -772,10 +793,13 @@ auth:
     existingSecret: ""
     # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
-      POSTGRES_PASSWORD: "postgres_password"
+      # CloudNativePG requires `username` and `password` keys for the superuser secret.
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
-      postgres_password: "postgres"
+      username: "postgres"
+      password: "postgres"
   redis:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: true
@@ -804,6 +828,8 @@ auth:
     values:
       s3_aws_access_key_id: "minioadmin"
       s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
   oauth:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false

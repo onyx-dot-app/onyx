@@ -1218,7 +1218,10 @@ def _upsert_mcp_server(
 
         logger.info(f"Created new MCP server '{request.name}' with ID {mcp_server.id}")
 
-    if not changing_connection_config:
+    if (
+        not changing_connection_config
+        or request.auth_type == MCPAuthenticationType.NONE
+    ):
         return mcp_server
 
     # Create connection configs

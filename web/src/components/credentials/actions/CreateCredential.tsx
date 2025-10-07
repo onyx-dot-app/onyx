@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
@@ -9,7 +9,6 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
-import { PlusCircleIcon } from "../../icons/icons";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import { ActionType, dictionaryType } from "../types";
 import { createValidationSchema } from "../lib";
@@ -24,6 +23,7 @@ import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import SvgPlusCircle from "@/icons/plus-circle";
 
 const CreateButton = ({
   onClick,
@@ -36,16 +36,13 @@ const CreateButton = ({
   isAdmin: boolean;
   groups: number[];
 }) => (
-  <div className="flex justify-end w-full">
-    <Button
-      onClick={onClick}
-      type="button"
-      disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    >
-      <PlusCircleIcon className="h-4 w-4" />
-      Create
-    </Button>
-  </div>
+  <Button
+    onClick={onClick}
+    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
+    leftIcon={SvgPlusCircle}
+  >
+    Create
+  </Button>
 );
 
 type formType = IsPublicGroupSelectorFormType & {
@@ -248,39 +245,30 @@ export default function CreateCredential({
                       </div>
                     )}
                   </div>
-                  <div className="w-full sm:w-1/4">
-                    <CreateButton
-                      onClick={() =>
-                        handleSubmit(formikProps.values, formikProps, "create")
-                      }
-                      isSubmitting={formikProps.isSubmitting}
-                      isAdmin={isAdmin}
-                      groups={formikProps.values.groups}
-                    />
-                  </div>
+                  <CreateButton
+                    onClick={() =>
+                      handleSubmit(formikProps.values, formikProps, "create")
+                    }
+                    isSubmitting={formikProps.isSubmitting}
+                    isAdmin={isAdmin}
+                    groups={formikProps.values.groups}
+                  />
                 </div>
               )}
             </CardSection>
             {swapConnector && (
-              <div className="flex gap-x-4 w-full mt-8 justify-end">
-                <Button
-                  className="bg-rose-500 hover:bg-rose-400 border-rose-800"
-                  onClick={() =>
-                    handleSubmit(
-                      formikProps.values,
-                      formikProps,
-                      "createAndSwap"
-                    )
-                  }
-                  type="button"
-                  disabled={formikProps.isSubmitting}
-                >
-                  <div className="flex gap-x-2 items-center w-full border-none">
-                    <FaAccusoft />
-                    <p>Create</p>
-                  </div>
-                </Button>
-              </div>
+              <Button
+                className="bg-rose-500 hover:bg-rose-400"
+                onClick={() =>
+                  handleSubmit(formikProps.values, formikProps, "createAndSwap")
+                }
+                disabled={formikProps.isSubmitting}
+                leftIcon={() => (
+                  <FaAccusoft className="fill-text-inverted-05" />
+                )}
+              >
+                Create
+              </Button>
             )}
           </Form>
         );

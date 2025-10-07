@@ -6,7 +6,6 @@ from typing import Optional
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
-from litellm.exceptions import RateLimitError
 from sentence_transformers import CrossEncoder  # type: ignore
 from sentence_transformers import SentenceTransformer  # type: ignore
 
@@ -207,6 +206,8 @@ async def route_bi_encoder_embed(
 async def process_embed_request(
     embed_request: EmbedRequest, gpu_type: str = "UNKNOWN"
 ) -> EmbedResponse:
+    from litellm.exceptions import RateLimitError
+
     # Only local models should use this endpoint - API providers should make direct API calls
     if embed_request.provider_type is not None:
         raise ValueError(

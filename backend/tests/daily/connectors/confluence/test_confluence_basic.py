@@ -14,13 +14,15 @@ from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
-@pytest.fixture
-def confluence_connector(space: str) -> ConfluenceConnector:
+def _make_connector(
+    space: str, access_token: str, scoped_token: bool = False
+) -> ConfluenceConnector:
     connector = ConfluenceConnector(
         wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
         space=space,
         is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
         page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
+        scoped_token=scoped_token,
     )
 
     credentials_provider = OnyxStaticCredentialsProvider(
@@ -28,11 +30,23 @@ def confluence_connector(space: str) -> ConfluenceConnector:
         DocumentSource.CONFLUENCE,
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
+            "confluence_access_token": access_token,
         },
     )
     connector.set_credentials_provider(credentials_provider)
     return connector
+
+
+@pytest.fixture
+def confluence_connector(space: str) -> ConfluenceConnector:
+    return _make_connector(space, os.environ["CONFLUENCE_ACCESS_TOKEN"].strip())
+
+
+@pytest.fixture
+def confluence_connector_scoped(space: str) -> ConfluenceConnector:
+    return _make_connector(
+        space, os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"].strip(), scoped_token=True
+    )
 
 
 @pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
@@ -42,6 +56,25 @@ def confluence_connector(space: str) -> ConfluenceConnector:
 )
 def test_confluence_connector_basic(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
+) -> None:
+    _test_confluence_connector_basic(confluence_connector)
+
+
+@pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_confluence_connector_basic_scoped(
+    mock_get_api_key: MagicMock, confluence_connector_scoped: ConfluenceConnector
+) -> None:
+    _test_confluence_connector_basic(
+        confluence_connector_scoped, expect_attachments=False
+    )
+
+
+def _test_confluence_connector_basic(
+    confluence_connector: ConfluenceConnector, expect_attachments: bool = True
 ) -> None:
     confluence_connector.set_allow_images(False)
     doc_batch = load_all_docs_from_checkpoint_connector(
@@ -65,6 +98,10 @@ def test_confluence_connector_basic(
     assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
     assert page_within_a_page_doc.primary_owners
     assert page_within_a_page_doc.primary_owners[0].email == "hagen@danswer.ai"
+    assert (
+        page_within_a_page_doc.id
+        == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
+    )
     assert len(page_within_a_page_doc.sections) == 1
 
     page_within_a_page_section = page_within_a_page_doc.sections[0]
@@ -77,10 +114,15 @@ def test_confluence_connector_basic(
 
     assert page_doc is not None
     assert page_doc.semantic_identifier == "DailyConnectorTestSpace Home"
+    assert (
+        page_doc.id == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
+    )
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
     assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
-    assert len(page_doc.sections) == 2  # page text + attachment text
+    assert (
+        len(page_doc.sections) == 2 if expect_attachments else 1
+    )  # page text + attachment text
 
     page_section = page_doc.sections[0]
     assert page_section.text == "test123 " + page_within_a_page_text
@@ -89,10 +131,11 @@ def test_confluence_connector_basic(
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
-    text_attachment_section = page_doc.sections[1]
-    assert text_attachment_section.text == "small"
-    assert text_attachment_section.link
-    assert text_attachment_section.link.endswith("small-file.txt")
+    if expect_attachments:
+        text_attachment_section = page_doc.sections[1]
+        assert text_attachment_section.text == "small"
+        assert text_attachment_section.link
+        assert text_attachment_section.link.endswith("small-file.txt")
 
 
 @pytest.mark.parametrize("space", ["MI"])

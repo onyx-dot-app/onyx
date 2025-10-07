@@ -1,8 +1,5 @@
-from typing import Any
-
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
@@ -13,6 +10,8 @@ from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
+from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
@@ -24,13 +23,22 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 
-def _build_extra_model_kwargs(provider: str) -> dict[str, Any]:
-    """Ollama requires us to specify the max context window.
+def _build_provider_extra_headers(
+    provider: str, custom_config: dict[str, str] | None
+) -> dict[str, str]:
+    if provider != OLLAMA_PROVIDER_NAME or not custom_config:
+        return {}
 
-    For now, just using the GEN_AI_MODEL_FALLBACK_MAX_TOKENS value.
-    TODO: allow model-specific values to be configured via the UI.
-    """
-    return {"num_ctx": GEN_AI_MODEL_FALLBACK_MAX_TOKENS} if provider == "ollama" else {}
+    raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
+
+    api_key = raw_api_key.strip() if raw_api_key else None
+    if not api_key:
+        return {}
+
+    if not api_key.lower().startswith("bearer "):
+        api_key = f"Bearer {api_key}"
+
+    return {"Authorization": api_key}
 
 
 def get_main_llm_from_tuple(
@@ -272,6 +280,16 @@ def get_llm(
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+
+    extra_headers = build_llm_extra_headers(additional_headers)
+
+    # NOTE: this is needed since Ollama API key is optional
+    # User may access Ollama cloud via locally hosted instance (logged in)
+    # or just via the cloud API (not logged in, using API key)
+    provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
+    if provider_extra_headers:
+        extra_headers.update(provider_extra_headers)
+
     return DefaultMultiLLM(
         model_provider=provider,
         model_name=model,
@@ -282,8 +300,8 @@ def get_llm(
         timeout=timeout,
         temperature=temperature,
         custom_config=custom_config,
-        extra_headers=build_llm_extra_headers(additional_headers),
-        model_kwargs=_build_extra_model_kwargs(provider),
+        extra_headers=extra_headers,
+        model_kwargs={},
         long_term_logger=long_term_logger,
         max_input_tokens=max_input_tokens,
     )

@@ -92,31 +92,22 @@ def assert_response_is_equivalent(
                 )
             ],
         ),
-        # Test the case in which the basic model-configuration is passed, but its visibility is not
-        # specified (and thus defaulted to False).
-        # In this case, since the one model-configuration is also the default-model-name, its
-        # visibility should be overriden to True.
-        (
-            "gpt-4",
-            [ModelConfigurationUpsertRequest(name="gpt-4")],
-            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
         # Test the case in which multiple model-configuration are passed.
         (
             "gpt-4",
             [
-                ModelConfigurationUpsertRequest(name="gpt-4"),
-                ModelConfigurationUpsertRequest(name="gpt-4o"),
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
             ],
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o"),
+                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
             ],
         ),
         # Test the case in which duplicate model-configuration are passed.
         (
             "gpt-4",
-            [ModelConfigurationUpsertRequest(name="gpt-4")] * 4,
+            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)] * 4,
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
         # Test the case in which no model-configurations are passed.
@@ -132,10 +123,16 @@ def assert_response_is_equivalent(
         # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
         (
             "gpt-4",
-            [ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096)],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True, max_input_tokens=4096
+                )
+            ],
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096),
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True, max_input_tokens=4096
+                ),
             ],
         ),
     ],
@@ -182,7 +179,11 @@ def test_create_llm_provider(
         (
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4", is_visible=True, max_input_tokens=4096
+                    )
+                ],
             ),
             [
                 ModelConfigurationUpsertRequest(
@@ -191,7 +192,7 @@ def test_create_llm_provider(
             ],
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4")],
+                [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
             ),
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
@@ -201,19 +202,25 @@ def test_create_llm_provider(
             (
                 "gpt-4",
                 [
-                    ModelConfigurationUpsertRequest(name="gpt-4"),
+                    ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o", max_input_tokens=4096
+                        name="gpt-4o", is_visible=True, max_input_tokens=4096
                     ),
                 ],
             ),
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096),
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True, max_input_tokens=4096
+                ),
             ],
             (
                 "gpt-4",
-                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4", is_visible=True, max_input_tokens=4096
+                    )
+                ],
             ),
             [
                 ModelConfigurationUpsertRequest(
@@ -328,8 +335,8 @@ def test_update_model_configurations(
         (
             "gpt-4",
             [
-                ModelConfigurationUpsertRequest(name="gpt-4o"),
-                ModelConfigurationUpsertRequest(name="gpt-4"),
+                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
             ],
         ),
     ],

@@ -1,6 +1,6 @@
 "use client";
 
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
@@ -15,9 +15,12 @@ import {
   togglePersonaVisibility,
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
-import { TrashIcon } from "@/components/icons/icons";
 import { useUser } from "@/components/user/UserProvider";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgTrash from "@/icons/trash";
+import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import SvgAlertCircle from "@/icons/alert-circle";
+import Button from "@/refresh-components/buttons/Button";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -166,38 +169,47 @@ export function PersonasTable({
     <div>
       {popup}
       {deleteModalOpen && personaToDelete && (
-        <ConfirmEntityModal
-          entityType="Assistant"
-          entityName={personaToDelete.name}
+        <ConfirmationModal
+          icon={SvgAlertCircle}
+          title="Delete Assistant"
           onClose={closeDeleteModal}
-          onSubmit={handleDeletePersona}
-        />
+          submit={<Button onClick={handleDeletePersona}>Delete</Button>}
+        >
+          {`Are you sure you want to delete ${personaToDelete.name}?`}
+        </ConfirmationModal>
       )}
+      {defaultModalOpen &&
+        personaToToggleDefault &&
+        (() => {
+          const isDefault = personaToToggleDefault.is_default_persona;
 
-      {defaultModalOpen && personaToToggleDefault && (
-        <ConfirmEntityModal
-          variant="action"
-          entityType="Assistant"
-          entityName={personaToToggleDefault.name}
-          onClose={closeDefaultModal}
-          onSubmit={handleToggleDefault}
-          actionText={
-            personaToToggleDefault.is_default_persona
-              ? "remove the featured status of"
-              : "set as featured"
-          }
-          actionButtonText={
-            personaToToggleDefault.is_default_persona
-              ? "Remove Featured"
-              : "Set as Featured"
-          }
-          additionalDetails={
-            personaToToggleDefault.is_default_persona
-              ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
-              : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`
-          }
-        />
-      )}
+          const title = isDefault
+            ? "Remove Featured Assistant"
+            : "Set Featurd Assistant";
+          const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
+          const text = isDefault
+            ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
+            : `Are you sure you want to set the featured status of ${personaToToggleDefault.name}?`;
+          const additionalText = isDefault
+            ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
+            : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`;
+
+          return (
+            <ConfirmationModal
+              icon={SvgAlertCircle}
+              title={title}
+              onClose={closeDefaultModal}
+              submit={
+                <Button onClick={handleToggleDefault}>{buttonText}</Button>
+              }
+            >
+              <div className="flex flex-col gap-spacing-interline">
+                <Text>{text}</Text>
+                <Text text03>{additionalText}</Text>
+              </div>
+            </ConfirmationModal>
+          );
+        })()}
 
       <DraggableTable
         headers={[
@@ -288,14 +300,13 @@ export function PersonasTable({
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
                   {!persona.builtin_persona && isEditable ? (
-                    <div
-                      className="hover:bg-accent-background-hovered rounded p-1 cursor-pointer"
+                    <IconButton
+                      icon={SvgTrash}
+                      tertiary
                       onClick={() => openDeleteModal(persona)}
-                    >
-                      <TrashIcon />
-                    </div>
+                    />
                   ) : (
-                    "-"
+                    <Text>-</Text>
                   )}
                 </div>
               </div>,
