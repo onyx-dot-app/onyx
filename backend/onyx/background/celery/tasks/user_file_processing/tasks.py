@@ -454,6 +454,13 @@ def _visit_chunks(
 
 
 def update_legacy_plaintext_file_records() -> None:
+    """Migrate legacy plaintext cache objects from int-based keys to UUID-based
+    keys. Copies each S3 object to its expected UUID key and updates DB.
+
+    Examples:
+    - Old key: bucket/schema/plaintext_<int>
+    - New key: bucket/schema/plaintext_<uuid>
+    """
 
     task_logger.info("update_legacy_plaintext_file_records - Starting")
 

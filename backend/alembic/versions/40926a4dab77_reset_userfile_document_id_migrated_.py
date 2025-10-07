@@ -24,8 +24,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Revert all records back to migrated
-    op.execute(
-        "UPDATE user_file SET document_id_migrated = TRUE "
-        "WHERE document_id_migrated IS DISTINCT FROM TRUE;"
-    )
+    # No-op
+    pass
