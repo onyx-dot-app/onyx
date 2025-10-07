@@ -94,11 +94,15 @@ def image_generation(
     # Generate images using the image generation tool
     image_generation_responses: list[ImageGenerationResponse] = []
 
-    tool_kwargs: dict[str, str] = {"prompt": image_prompt}
     if requested_shape is not None:
-        tool_kwargs["shape"] = requested_shape.value
+        tool_iterator = image_tool.run(
+            prompt=image_prompt,
+            shape=requested_shape.value,
+        )
+    else:
+        tool_iterator = image_tool.run(prompt=image_prompt)
 
-    for tool_response in image_tool.run(**tool_kwargs):
+    for tool_response in tool_iterator:
         if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
             # Stream heartbeat to frontend
             write_custom_event(
