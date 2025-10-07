@@ -145,7 +145,7 @@ HTML_EMAIL_TEMPLATE = """\
     <tr>
       <td class="footer">
         © {year} {application_name}. All rights reserved.
-        {slack_fragment}
+        {community_link_fragment}
       </td>
     </tr>
   </table>
@@ -161,9 +161,9 @@ def build_html_email(
     cta_text: str | None = None,
     cta_link: str | None = None,
 ) -> str:
-    slack_fragment = ""
+    community_link_fragment = ""
     if application_name == ONYX_DEFAULT_APPLICATION_NAME:
-        slack_fragment = f'<br>Have questions? Join our Discord community <a href="{ONYX_DISCORD_URL}">here</a>.'
+        community_link_fragment = f'<br>Have questions? Join our Discord community <a href="{ONYX_DISCORD_URL}">here</a>.'
 
     if cta_text and cta_link:
         cta_block = f'<a class="cta-button" href="{cta_link}">{cta_text}</a>'
@@ -175,7 +175,7 @@ def build_html_email(
         heading=heading,
         message=message,
         cta_block=cta_block,
-        slack_fragment=slack_fragment,
+        community_link_fragment=community_link_fragment,
         year=datetime.now().year,
     )
 
