@@ -141,7 +141,7 @@ export function AgentsProvider({
   );
 }
 
-interface AgentsContext {
+interface AgentsContextType {
   // All available agents
   agents: MinimalPersonaSnapshot[];
   refreshAgents: () => Promise<void>;
@@ -164,9 +164,9 @@ interface AgentsContext {
   setForcedToolIds: Dispatch<SetStateAction<number[]>>;
 }
 
-const AgentsContext = createContext<AgentsContext | undefined>(undefined);
+const AgentsContext = createContext<AgentsContextType | undefined>(undefined);
 
-export function useAgentsContext(): AgentsContext {
+export function useAgentsContext(): AgentsContextType {
   const context = useContext(AgentsContext);
   if (!context)
     throw new Error("useAgentsContext must be used within an AgentsProvider");
