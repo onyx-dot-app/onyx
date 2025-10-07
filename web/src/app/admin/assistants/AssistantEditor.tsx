@@ -598,11 +598,9 @@ export function AssistantEditor({
         validateOnBlur={false}
         validationSchema={Yup.object()
           .shape({
-            name: Yup.string().required(
-              "Must provide a name for the Assistant"
-            ),
+            name: Yup.string().required("Must provide a name for the Agent"),
             description: Yup.string().required(
-              "Must provide a description for the Assistant"
+              "Must provide a description for the Agent"
             ),
             system_prompt: Yup.string().max(
               MAX_CHARACTERS_PERSONA_DESCRIPTION,
@@ -743,7 +741,7 @@ export function AssistantEditor({
           let error = null;
 
           if (!personaResponse) {
-            error = "Failed to create Assistant - no response received";
+            error = "Failed to create Agent - no response received";
           } else if (!personaResponse.ok) {
             error = await personaResponse.text();
           }
@@ -751,7 +749,7 @@ export function AssistantEditor({
           if (error || !personaResponse) {
             setPopup({
               type: "error",
-              message: `Failed to create Assistant - ${error}`,
+              message: `Failed to create Agent - ${error}`,
             });
             formikHelpers.setSubmitting(false);
           } else {
@@ -820,7 +818,7 @@ export function AssistantEditor({
               return (
                 <img
                   src={uploadedImagePreview}
-                  alt="Uploaded assistant icon"
+                  alt="Uploaded agent icon"
                   className="w-12 h-12 rounded-full object-cover"
                 />
               );
@@ -830,7 +828,7 @@ export function AssistantEditor({
               return (
                 <img
                   src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                  alt="Uploaded assistant icon"
+                  alt="Uploaded agent icon"
                   className="w-12 h-12 rounded-full object-cover"
                 />
               );
@@ -847,21 +845,19 @@ export function AssistantEditor({
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
                     <>
-                      Edit assistant <b>{existingPersona.name}</b>
+                      Edit Agent <b>{existingPersona.name}</b>
                     </>
                   ) : (
-                    "Create an Assistant"
+                    "Create an Agent"
                   )}
                 </p>
                 <div className="max-w-4xl w-full">
                   <Separator />
                   <div className="flex gap-x-2 items-center">
-                    <div className="block font-medium text-sm">
-                      Assistant Icon
-                    </div>
+                    <div className="block font-medium text-sm">Agent Icon</div>
                   </div>
                   <SubLabel>
-                    The icon that will visually represent your Assistant
+                    The icon that will visually represent your Agent
                   </SubLabel>
                   <div className="flex gap-x-2 items-center">
                     <div
@@ -1223,9 +1219,9 @@ export function AssistantEditor({
                                         ) : (
                                           "Team Document Sets"
                                         )}{" "}
-                                        this Assistant should use to inform its
+                                        this Agent should use to inform its
                                         responses. If none are specified, the
-                                        Assistant will reference all available
+                                        Agent will reference all available
                                         documents.
                                       </>
                                     </SubLabel>
@@ -1297,7 +1293,7 @@ export function AssistantEditor({
                                   disabled={!currentLLMSupportsImageOutput}
                                   disabledTooltip={
                                     !currentLLMSupportsImageOutput
-                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
+                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Agent."
                                       : "Image Generation requires an OpenAI or Azure Dall-E configuration."
                                   }
                                 />
@@ -1437,8 +1433,8 @@ export function AssistantEditor({
                             }
                           }}
                           name="is_default_persona"
-                          label="Featured Assistant"
-                          subtext="If set, this assistant will be pinned for all new users and appear in the Featured list in the assistant explorer. This also makes the assistant public."
+                          label="Featured Agent"
+                          subtext="If set, this agent will be pinned for all new users and appear in the Featured list in the agent explorer. This also makes the agent public."
                         />
                       )}
 
@@ -1448,7 +1444,7 @@ export function AssistantEditor({
                         <div className="block font-medium text-sm">Access</div>
                       </div>
                       <SubLabel>
-                        Control who can access and use this assistant
+                        Control who can access and use this agent
                       </SubLabel>
 
                       <div className="min-h-[100px]">
@@ -1512,13 +1508,13 @@ export function AssistantEditor({
 
                         {values.is_public ? (
                           <p className="text-sm text-text-dark">
-                            This assistant will be available to everyone in your
+                            This agent will be available to everyone in your
                             organization
                           </p>
                         ) : (
                           <>
                             <p className="text-sm text-text-dark mb-2">
-                              This assistant will only be available to specific
+                              This agent will only be available to specific
                               users and groups
                             </p>
                             <div className="mt-2">
@@ -1630,9 +1626,8 @@ export function AssistantEditor({
 
                       <SubLabel>
                         Sample messages that help users understand what this
-                        assistant can do and how to interact with it
-                        effectively. New input fields will appear automatically
-                        as you type.
+                        agent can do and how to interact with it effectively.
+                        New input fields will appear automatically as you type.
                       </SubLabel>
 
                       <div className="w-full">
@@ -1665,7 +1660,7 @@ export function AssistantEditor({
                         className="text-sm text-subtle"
                         style={{ color: "rgb(113, 114, 121)" }}
                       >
-                        Select labels to categorize this assistant
+                        Select labels to categorize this agent
                       </p>
                       <div className="mt-3">
                         <SearchMultiSelectDropdown
@@ -1810,7 +1805,7 @@ export function AssistantEditor({
                       removeIndent
                       name="datetime_aware"
                       label="Date and Time Aware"
-                      subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
+                      subtext='Toggle this option to let the agent know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
                     />
 
                     <Separator />
@@ -1846,7 +1841,7 @@ export function AssistantEditor({
                     <OpenFolderIcon size={32} />
                     <DialogTitle>User Files</DialogTitle>
                     <DialogDescription>
-                      All files selected for this assistant
+                      All files selected for this agent
                     </DialogDescription>
                   </DialogHeader>
                   <FilesList
