@@ -2,7 +2,6 @@ import string
 from collections.abc import Callable
 from uuid import UUID
 
-import nltk  # type:ignore
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
@@ -61,6 +60,8 @@ def _dedupe_chunks(
 
 
 def download_nltk_data() -> None:
+    import nltk  # type: ignore[import-untyped]
+
     resources = {
         "stopwords": "corpora/stopwords",
         # "wordnet": "corpora/wordnet",  # Not in use

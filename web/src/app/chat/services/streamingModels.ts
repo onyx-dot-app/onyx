@@ -72,10 +72,13 @@ export interface SearchToolDelta extends BaseObj {
   documents: OnyxDocument[] | null;
 }
 
+export type ImageShape = "square" | "landscape" | "portrait";
+
 interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;
+  shape?: ImageShape;
 }
 
 export interface ImageGenerationToolStart extends BaseObj {

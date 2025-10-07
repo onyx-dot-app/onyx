@@ -81,7 +81,7 @@ export default async function RootLayout({
       getAuthTypeMetadataSS(),
     ]);
 
-  const { folded } = await fetchAppSidebarMetadata();
+  const { folded } = await fetchAppSidebarMetadata(user);
 
   const productGating =
     combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;

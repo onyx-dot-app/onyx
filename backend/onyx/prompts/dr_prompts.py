@@ -172,6 +172,14 @@ written as a list of one question.
     DRPath.CLOSER.value: f"""if the tool is {CLOSER}, the list of questions should simply be \
 ['Answer the original question with the information you have.'].
 """,
+    DRPath.IMAGE_GENERATION.value: """
+if the tool is Image Generation, respond with a list that contains exactly one JSON object
+string describing the tool call. The JSON must include a "prompt" field with the text to
+render. When the user specifies or implies an orientation, also include a "shape" field whose
+value is one of "square", "landscape", or "portrait" (use "landscape" for wide/horizontal
+requests and "portrait" for tall/vertical ones). Example: {"prompt": "Create a poster of a
+coral reef", "shape": "landscape"}. Do not surround the JSON with backticks or narration.
+""",
 }
 
 

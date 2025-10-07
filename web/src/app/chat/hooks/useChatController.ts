@@ -69,7 +69,7 @@ import {
   MessageStart,
   PacketType,
 } from "../services/streamingModels";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { Klee_One } from "next/font/google";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
@@ -140,7 +140,8 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions, llmProviders } = useChatContext();
-  const { assistantPreferences, forcedToolIds } = useAssistantsContext();
+  const { agentPreferences: assistantPreferences, forcedToolIds } =
+    useAgentsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles } =
     useProjectsContext();
 

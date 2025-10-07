@@ -12,7 +12,7 @@ import React, {
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 
-function setFoldedState(folded: boolean) {
+function setFoldedCookie(folded: boolean) {
   const foldedAsString = folded.toString();
   Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, foldedAsString, { expires: 365 });
   if (typeof window !== "undefined") {
@@ -29,10 +29,15 @@ export function AppSidebarProvider({
   folded: initiallyFolded,
   children,
 }: AppSidebarProviderProps) {
-  const [folded, setFolded] = useState(() => {
-    setFoldedState(initiallyFolded);
-    return initiallyFolded;
-  });
+  const [folded, setFoldedInternal] = useState(initiallyFolded);
+
+  const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
+    setFoldedInternal((prev) => {
+      const newState = typeof value === "function" ? value(prev) : value;
+      setFoldedCookie(newState);
+      return newState;
+    });
+  };
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -41,11 +46,7 @@ export function AppSidebarProvider({
       if (!isModifierPressed || event.key !== "e") return;
 
       event.preventDefault();
-      setFolded((prev) => {
-        const newState = !prev;
-        setFoldedState(newState);
-        return newState;
-      });
+      setFolded((prev) => !prev);
     }
 
     document.addEventListener("keydown", handleKeyDown);
