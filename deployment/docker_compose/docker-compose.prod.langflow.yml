@@ -77,6 +77,7 @@ services:
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -123,6 +124,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - REDIS_HOST=cache
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
