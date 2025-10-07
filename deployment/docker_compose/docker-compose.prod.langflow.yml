@@ -51,6 +51,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -104,6 +106,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       echo \"Starting Telegram Bot\" &&
