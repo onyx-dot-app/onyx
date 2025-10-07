@@ -95,6 +95,11 @@
     margin-top: 0.5em;
     margin-bottom: 0.5em;
   }
+
+  /* Remove top margin from first child to align with icon */
+  .prose > :first-child {
+    margin-top: 0;
+  }
 }
 
 @layer utilities {
