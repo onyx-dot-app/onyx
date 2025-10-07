@@ -69,7 +69,7 @@ def test_confluence_connector_basic_scoped(
     mock_get_api_key: MagicMock, confluence_connector_scoped: ConfluenceConnector
 ) -> None:
     _test_confluence_connector_basic(
-        confluence_connector_scoped, expect_attachments=False
+        confluence_connector_scoped, expect_attachments=True
     )
 
 
