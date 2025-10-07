@@ -60,7 +60,7 @@ def _dedupe_chunks(
 
 
 def download_nltk_data() -> None:
-    import nltk
+    import nltk  # type: ignore[import-untyped]
 
     resources = {
         "stopwords": "corpora/stopwords",
