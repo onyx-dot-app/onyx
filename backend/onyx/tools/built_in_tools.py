@@ -1,6 +1,12 @@
 from typing import Type
 from typing import Union
 
+from onyx.tools.tool_implementations.fetch_single_file.fetch_single_file_tool import (
+    FetchSingleFileTool,
+)
+from onyx.tools.tool_implementations.fetch_single_file.fetch_url_tool import (
+    FetchUrlTool,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -17,7 +23,13 @@ logger = setup_logger()
 
 
 BUILT_IN_TOOL_TYPES = Union[
-    SearchTool, ImageGenerationTool, WebSearchTool, KnowledgeGraphTool
+    SearchTool,
+    ImageGenerationTool,
+    WebSearchTool,
+    KnowledgeGraphTool,
+    OktaProfileTool,
+    FetchUrlTool,
+    FetchSingleFileTool,
 ]
 
 # same as d09fc20a3c66_seed_builtin_tools.py
@@ -26,6 +38,9 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     ImageGenerationTool.__name__: ImageGenerationTool,
     WebSearchTool.__name__: WebSearchTool,
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
+    OktaProfileTool.__name__: OktaProfileTool,
+    FetchUrlTool.__name__: FetchUrlTool,
+    FetchSingleFileTool.__name__: FetchSingleFileTool,
 }
 
 

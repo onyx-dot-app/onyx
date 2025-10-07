@@ -89,5 +89,16 @@ class SearchToolOverrideKwargs(BaseModel):
         arbitrary_types_allowed = True
 
 
+class DocumentResult(BaseModel):
+    """Result from fetching a single document"""
+
+    title: str
+    content: str
+    source: str  # "internal", "external", "federated"
+    url: str | None = None
+    metadata: dict[str, str] = {}
+    confidence: int  # 0-100
+
+
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
 MESSAGE_ID_PLACEHOLDER = "MESSAGE_ID"

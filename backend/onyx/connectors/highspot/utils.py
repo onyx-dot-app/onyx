@@ -34,8 +34,78 @@ def scrape_url_content(
     try:
         validate_url(url)
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
+
+        # Enhanced browser launch with anti-bot measures
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-site-isolation-trials",
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor",
+            ],
+        )
+
+        # Create context with realistic browser properties
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1440, "height": 900},
+            device_scale_factor=2.0,
+            locale="en-US",
+            timezone_id="America/Los_Angeles",
+            has_touch=False,
+            java_script_enabled=True,
+            color_scheme="light",
+            bypass_csp=True,
+            ignore_https_errors=True,
+        )
+
+        # Set additional headers to mimic a real browser
+        context.set_extra_http_headers(
+            {
+                "Accept": (
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                    "image/avif,image/webp,image/apng,*/*;q=0.8,"
+                    "application/signed-exchange;v=b3;q=0.7"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8"',
+                "Sec-CH-UA-Mobile": "?0",
+                "Sec-CH-UA-Platform": '"macOS"',
+                "Cache-Control": "max-age=0",
+                "DNT": "1",
+            }
+        )
+
+        # Add script to modify navigator properties to avoid detection
+        context.add_init_script(
+            """
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
+            });
+            window.chrome = {
+                runtime: {},
+            };
+        """
+        )
+
         page = context.new_page()
 
         logger.info(f"Navigating to URL: {url}")

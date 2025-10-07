@@ -43,6 +43,12 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
+from onyx.tools.tool_implementations.fetch_single_file.fetch_single_file_tool import (
+    FetchSingleFileTool,
+)
+from onyx.tools.tool_implementations.fetch_single_file.fetch_url_tool import (
+    FetchUrlTool,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -291,6 +297,50 @@ def construct_tools(
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
+            # Handle Fetch URL Tool (expand to two runtime tools for the LLM)
+            elif tool_cls.__name__ == FetchUrlTool.__name__:
+                user_id_for_tool = cast(UUID | None, user.id) if user else None
+
+                fetch_url_tool = FetchUrlTool(
+                    tool_id=db_tool_model.id,
+                    db_session=db_session,
+                    user_id=user_id_for_tool,
+                )
+
+                fetch_single_file_tool = FetchSingleFileTool(
+                    tool_id=db_tool_model.id,
+                    db_session=db_session,
+                    user_id=user_id_for_tool,
+                )
+
+                tool_dict[db_tool_model.id] = [fetch_url_tool, fetch_single_file_tool]
+            # Handle Okta Profile Tool
+            elif tool_cls.__name__ == OktaProfileTool.__name__:
+                if not user_oauth_token:
+                    raise ValueError(
+                        "Okta Profile Tool requires user OAuth token but none found"
+                    )
+
+                if not all([OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_CONFIG_URL]):
+                    raise ValueError(
+                        "Okta Profile Tool requires OAuth configuration to be set"
+                    )
+
+                if not OKTA_API_TOKEN:
+                    raise ValueError(
+                        "Okta Profile Tool requires OKTA_API_TOKEN to be set"
+                    )
+
+                tool_dict[db_tool_model.id] = [
+                    OktaProfileTool(
+                        access_token=user_oauth_token,
+                        client_id=OAUTH_CLIENT_ID,
+                        client_secret=OAUTH_CLIENT_SECRET,
+                        openid_config_url=OPENID_CONFIG_URL,
+                        okta_api_token=OKTA_API_TOKEN,
+                        tool_id=db_tool_model.id,
+                    )
+                ]
 
             # Handle KG Tool
             elif tool_cls.__name__ == KnowledgeGraphTool.__name__:

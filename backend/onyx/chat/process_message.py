@@ -739,6 +739,11 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        # Debug: Log what tools were constructed
+        logger.info(
+            f"Constructed tools for persona {persona.name if persona else 'None'}: {[tool.name for tool in tools]}"
+        )
+
         force_use_tool = _get_force_search_settings(
             new_msg_req, tools, search_tool_override_kwargs_for_user_files
         )
@@ -796,6 +801,16 @@ def stream_chat_message_objects(
             prompt_builder.context_llm_docs = project_llm_docs
 
         # LLM prompt building, response capturing, etc.
+        # Check if this is the Document/URL Fetcher persona and disable native tool calling
+        skip_explicit_tool_calling = (
+            persona.name == "Document/URL Fetcher" if persona else False
+        )
+
+        if skip_explicit_tool_calling:
+            logger.info(
+                "Disabling native tool calling for Document/URL Fetcher persona"
+            )
+
         answer = Answer(
             prompt_builder=prompt_builder,
             is_connected=is_connected,
@@ -824,6 +839,7 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
+            skip_explicit_tool_calling=skip_explicit_tool_calling,
         )
         if simple_agent_framework_enabled:
             llm_model, model_settings = get_llm_model_and_settings_for_persona(
