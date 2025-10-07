@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +14,12 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import QueryExpansions
 from shared_configs.model_server_models import Embedding
+
+
+class DocumentRetrievalType(str, Enum):
+    INTERNAL = "internal"
+    EXTERNAL = "external"
+    FEDERATED = "federated"
 
 
 class ToolResponse(BaseModel):
@@ -94,7 +101,7 @@ class DocumentResult(BaseModel):
 
     title: str
     content: str
-    source: str  # "internal", "external", "federated"
+    source: DocumentRetrievalType
     url: str | None = None
     metadata: dict[str, str] = {}
     confidence: int  # 0-100

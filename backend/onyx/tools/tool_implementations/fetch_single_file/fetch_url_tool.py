@@ -30,6 +30,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import DocumentResult
+from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.models import ToolResponse
 from onyx.tools.utils import get_full_document_by_id
 from onyx.tools.utils import process_chunks_to_document_result
@@ -154,7 +155,7 @@ class FetchUrlTool(BaseTool):
         )
 
         # Route to appropriate fetch method based on access method
-        if access_method == "federated":
+        if access_method == "federated" and source_type:
             logger.info(f"Routing to federated source: {url}")
             result = self._fetch_from_federated_source(url, source_type)
         elif access_method == "indexed" and source_type:
@@ -179,7 +180,10 @@ class FetchUrlTool(BaseTool):
                 "source": document_result.source,
                 "url": document_result.url,
                 "confidence": document_result.confidence,
+                "metadata": document_result.metadata,
             }
+
+        return {}
 
     def _get_universal_ignore_params(self) -> set[str]:
         """Universal query parameters that should be ignored for all sources
@@ -545,7 +549,7 @@ class FetchUrlTool(BaseTool):
                             )
                             resp.validate()
 
-                            messages = resp.get("messages", [])
+                            messages: list[dict] = resp.get("messages", [])
                             if messages:
                                 message = messages[0]
                                 text = message.get("text", "")
@@ -566,7 +570,7 @@ class FetchUrlTool(BaseTool):
                                 return DocumentResult(
                                     title=f"Slack message in #{channel_id}",
                                     content=content,
-                                    source="federated",
+                                    source=DocumentRetrievalType.FEDERATED,
                                     url=url,
                                     metadata={
                                         "channel_id": channel_id,
@@ -607,7 +611,7 @@ class FetchUrlTool(BaseTool):
                 return DocumentResult(
                     title="Content from Federated Source",
                     content=content,
-                    source="federated",
+                    source=DocumentRetrievalType.FEDERATED,
                     url=url,
                     metadata={"chunk_count": str(len(chunks))},
                     confidence=95,
@@ -699,7 +703,7 @@ class FetchUrlTool(BaseTool):
                 return DocumentResult(
                     title="Failed to fetch content",
                     content=f"Could not scrape content from {url}. The page might be inaccessible or require authentication.",
-                    source="error",
+                    source=DocumentRetrievalType.INTERNAL,
                     url=url,
                     metadata={"error": "scraping_failed", "source_type": "web"},
                     confidence=0,
@@ -711,7 +715,7 @@ class FetchUrlTool(BaseTool):
             return DocumentResult(
                 title=title,
                 content=content,
-                source="external",
+                source=DocumentRetrievalType.EXTERNAL,
                 url=url,
                 metadata={
                     "fetched_at": "2025-01-01T00:00:00Z",
@@ -726,7 +730,7 @@ class FetchUrlTool(BaseTool):
             return DocumentResult(
                 title="Error fetching content",
                 content=f"Failed to fetch content from {url}: {str(e)}",
-                source="error",
+                source=DocumentRetrievalType.INTERNAL,
                 url=url,
                 metadata={"error": str(e)},
                 confidence=0,

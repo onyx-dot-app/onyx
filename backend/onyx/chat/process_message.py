@@ -739,11 +739,6 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
-        # Debug: Log what tools were constructed
-        logger.info(
-            f"Constructed tools for persona {persona.name if persona else 'None'}: {[tool.name for tool in tools]}"
-        )
-
         force_use_tool = _get_force_search_settings(
             new_msg_req, tools, search_tool_override_kwargs_for_user_files
         )

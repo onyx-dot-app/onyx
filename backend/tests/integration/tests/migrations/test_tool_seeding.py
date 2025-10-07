@@ -44,10 +44,10 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        # Should have all 5 builtin tools
+        # Should have all 6 builtin tools
         assert (
-            len(tools) == 5
-        ), f"Should have created exactly 5 builtin tools, got {len(tools)}"
+            len(tools) == 6
+        ), f"Should have created exactly 6 builtin tools, got {len(tools)}"
 
         # Check SearchTool
         search_tool = next((t for t in tools if t[1] == "SearchTool"), None)
@@ -84,3 +84,23 @@ def test_tool_seeding_migration() -> None:
         assert (
             kg_tool[5] is None
         ), "KnowledgeGraphTool should not have a user_id (builtin)"
+
+        # Check OktaProfileTool
+        okta_tool = next((t for t in tools if t[1] == "OktaProfileTool"), None)
+        assert okta_tool is not None, "OktaProfileTool should exist"
+        assert (
+            okta_tool[2] == "Okta Profile"
+        ), "OktaProfileTool display name should be 'Okta Profile'"
+        assert (
+            okta_tool[5] is None
+        ), "OktaProfileTool should not have a user_id (builtin)"
+
+        # Check FetchUrlTool
+        fetch_url_tool = next((t for t in tools if t[1] == "FetchUrlTool"), None)
+        assert fetch_url_tool is not None, "FetchUrlTool should exist"
+        assert (
+            fetch_url_tool[2] == "Fetch URL"
+        ), "FetchUrlTool display name should be 'Fetch URL'"
+        assert (
+            fetch_url_tool[5] is None
+        ), "FetchUrlTool should not have a user_id (builtin)"

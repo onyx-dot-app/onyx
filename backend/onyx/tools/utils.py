@@ -20,6 +20,7 @@ from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.models import DocumentResult
+from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.tool import Tool
 
 
@@ -94,7 +95,7 @@ def get_full_document_by_id(
             try:
                 access_filters = build_access_filters_for_user(
                     user=user,
-                    db_session=db_session,
+                    session=db_session,
                 )
             except Exception:
                 # Access filter building failed, continue without filters
@@ -112,7 +113,6 @@ def get_full_document_by_id(
             chunk_requests=[chunk_request],
             filters=index_filters,
             batch_retrieval=False,
-            get_large_chunks=False,
         )
 
         # Process chunks into full document
@@ -130,7 +130,7 @@ def get_full_document_by_id(
         return DocumentResult(
             title="Error",
             content=f"Failed to retrieve document content: {str(e)}",
-            source=source_method,
+            source=DocumentRetrievalType.INTERNAL,
             url=url,
             metadata={
                 "error": str(e),
@@ -153,7 +153,7 @@ def process_chunks_to_document_result(
         return DocumentResult(
             title="Unknown",
             content="No content available",
-            source=source_method,
+            source=DocumentRetrievalType.INTERNAL,
             url=url,
             metadata={"access_method": "no_chunks_found"},
             confidence=0,
@@ -172,7 +172,7 @@ def process_chunks_to_document_result(
             return DocumentResult(
                 title=section.center_chunk.semantic_identifier,
                 content=section.combined_content,  # Full document content from existing method
-                source=source_method,
+                source=DocumentRetrievalType.INTERNAL,
                 url=url,
                 metadata={
                     "source_type": section.center_chunk.source_type.value,
@@ -198,19 +198,19 @@ def process_chunks_to_document_result(
     )
 
     return DocumentResult(
-        title=title,
+        title=title or "Unknown",
         content=chunk.content,
-        source=source_method,
+        source=DocumentRetrievalType.INTERNAL,
         url=url,
         metadata={
             "source_type": (
                 chunk_source_type.value
-                if hasattr(chunk_source_type, "value")
-                else str(chunk_source_type)
+                if chunk_source_type and hasattr(chunk_source_type, "value")
+                else str(chunk_source_type) if chunk_source_type else "unknown"
             ),
-            "chunk_id": chunk.chunk_id,
+            "chunk_id": str(chunk.chunk_id) if chunk.chunk_id else "",
             "access_method": f"{source_method}_single_chunk_fallback",
-            "document_id": chunk_doc_id,
+            "document_id": str(chunk_doc_id) if chunk_doc_id else "",
         },
         confidence=90,
     )

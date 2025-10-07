@@ -27,6 +27,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import DocumentResult
+from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.models import ToolResponse
 from onyx.tools.utils import get_full_document_by_id
 from onyx.utils.logger import setup_logger
@@ -179,7 +180,6 @@ class FetchSingleFileTool(BaseTool):
             response for response in args if response.id == DOCUMENT_RESULT_ID
         )
         document_result = document_result_response.response
-
         if isinstance(document_result, DocumentResult):
             return json.dumps(
                 {
@@ -226,7 +226,7 @@ class FetchSingleFileTool(BaseTool):
             result = DocumentResult(
                 title="No documents found",
                 content=f"No documents found matching '{description}'",
-                source="none",
+                source=DocumentRetrievalType.INTERNAL,
                 url=None,
                 metadata={"search_query": description},
                 confidence=0,
@@ -259,7 +259,7 @@ class FetchSingleFileTool(BaseTool):
                     if self.user_id:
                         user = (
                             self.db_session.query(User)
-                            .filter(User.id == self.user_id)
+                            .filter(User.id == self.user_id)  # type: ignore
                             .first()
                         )
 
@@ -292,7 +292,7 @@ class FetchSingleFileTool(BaseTool):
                             **full_doc_result.metadata,
                             "total_matches": str(len(all_results)),
                             "confidence_explanation": f"Best match out of {len(all_results)} results",
-                            "source_url": best_match.url,
+                            "source_url": best_match.url or "No URL available",
                             "instruction": "CRITICAL: Always include the source URL in your response. The URL is: "
                             + (best_match.url or "No URL available"),
                             "full_document_retrieved": "true",
@@ -319,7 +319,7 @@ class FetchSingleFileTool(BaseTool):
                             **best_match.metadata,
                             "total_matches": str(len(all_results)),
                             "confidence_explanation": f"Best match out of {len(all_results)} results",
-                            "source_url": best_match.url,
+                            "source_url": best_match.url or "No URL available",
                             "instruction": "CRITICAL: Always include the source URL in your response. The URL is: "
                             + (best_match.url or "No URL available"),
                             "full_document_retrieved": "false",
@@ -348,6 +348,7 @@ class FetchSingleFileTool(BaseTool):
                 "confidence": document_result.confidence,
                 "metadata": document_result.metadata,
             }
+        return {}
 
     def _extract_ticket_pattern(self, description: str) -> str | None:
         """Extract ticket pattern from description (e.g., 'DAN-1919', 'dan 1919', 'linear ticket 50')"""
@@ -438,7 +439,7 @@ class FetchSingleFileTool(BaseTool):
         self, results: list[DocumentResult]
     ) -> list[DocumentResult]:
         """Deduplicate results by document ID, keeping the highest confidence for each unique document"""
-        document_map = {}
+        document_map: dict[str, DocumentResult] = {}
 
         for result in results:
             doc_id = result.metadata.get("document_id", "unknown")
@@ -477,13 +478,15 @@ class FetchSingleFileTool(BaseTool):
             # Build access filters for the user
             user = User(id=self.user_id) if self.user_id else None
             access_filters = (
-                build_access_filters_for_user(user, self.db_session) if user else None
+                build_access_filters_for_user(user=user, session=self.db_session)
+                if user
+                else None
             )
 
             # Create index filters
             index_filters = IndexFilters(
                 access_control_list=access_filters,
-                source_filters=None,
+                source_type=None,
                 time_cutoff=None,
                 tags=None,
             )
@@ -573,7 +576,7 @@ class FetchSingleFileTool(BaseTool):
                 result = DocumentResult(
                     title=chunk.semantic_identifier,
                     content=content,
-                    source="internal",
+                    source=DocumentRetrievalType.INTERNAL,
                     url=url,
                     metadata={
                         "search_query": description,
@@ -617,21 +620,25 @@ class FetchSingleFileTool(BaseTool):
             for federated_info in federated_functions:
                 try:
                     # Search this federated source
-                    search_query = SearchQuery(query=description)
+                    search_query = SearchQuery(query=description)  # type: ignore
                     chunks = federated_info.retrieval_function(search_query)
 
                     # Convert chunks to DocumentResult
                     for chunk in chunks[:3]:  # Top 3 from each source
+                        # InferenceChunk has document info directly on it, not in a document attribute
+                        url = ""
+                        if chunk.source_links:
+                            url = next(iter(chunk.source_links.values()), "")
                         all_results.append(
                             DocumentResult(
-                                title=chunk.document.semantic_identifier,
+                                title=chunk.semantic_identifier,
                                 content="",  # No content yet
-                                source="federated",
-                                url=chunk.document.link,
+                                source=DocumentRetrievalType.FEDERATED,
+                                url=url,
                                 metadata={
                                     "search_query": description,
                                     "source_type": federated_info.source.value,
-                                    "chunk_id": chunk.chunk_id,
+                                    "chunk_id": str(chunk.chunk_id),
                                 },
                                 confidence=self._calculate_confidence(
                                     chunk, description
@@ -691,7 +698,6 @@ class FetchSingleFileTool(BaseTool):
                 "show",
                 "tell",
                 "me",
-                "about",
             }
             desc_words = (
                 set(re.findall(r"\b\w+\b", normalized_description)) - stop_words
@@ -723,7 +729,7 @@ class FetchSingleFileTool(BaseTool):
                 title_words = set(re.findall(r"\b\w+\b", title_lower))
                 word_overlap = len(desc_words & title_words)
                 if word_overlap > 0:
-                    overlap_score = (word_overlap / len(desc_words)) * 85
+                    overlap_score = int((word_overlap / len(desc_words)) * 85)
                     scores.append(overlap_score)
 
             # 4. Fuzzy matching on title
@@ -736,14 +742,14 @@ class FetchSingleFileTool(BaseTool):
                         fuzz.token_set_ratio(normalized_description, title_lower),
                     ]
                 )
-                scores.append(fuzzy_score * 0.8)  # Weight down fuzzy matches
+                scores.append(int(fuzzy_score * 0.8))  # Weight down fuzzy matches
 
             # 5. Word overlap in content (medium confidence)
             if content_lower and desc_words:
                 content_words = set(re.findall(r"\b\w+\b", content_lower))
                 word_overlap = len(desc_words & content_words)
                 if word_overlap > 0:
-                    overlap_score = (word_overlap / len(desc_words)) * 60
+                    overlap_score = int((word_overlap / len(desc_words)) * 60)
                     scores.append(overlap_score)
 
             # 6. Fuzzy matching on content (lowest confidence)
@@ -755,7 +761,7 @@ class FetchSingleFileTool(BaseTool):
                         fuzz.partial_ratio(normalized_description, content_lower),
                     ]
                 )
-                scores.append(fuzzy_score * 0.5)  # Weight down content matches
+                scores.append(int(fuzzy_score * 0.5))  # Weight down content matches
 
             # Take the highest score
             final_score = max(scores) if scores else 30
@@ -825,7 +831,7 @@ class FetchSingleFileTool(BaseTool):
 
         if best_match.confidence < 1:
             reason = "zero confidence scores"
-        elif second_best and (best_match.confidence - second_best.confidence) <= 10:
+        elif second_best and (best_match.confidence - second_best.confidence) <= 3:
             reason = f"similar confidence scores ({best_match.confidence} vs {second_best.confidence})"
         elif len(results) >= 5:
             reason = f"many results ({len(results)}) with small gaps"
@@ -848,7 +854,7 @@ class FetchSingleFileTool(BaseTool):
         return DocumentResult(
             title=f"Multiple documents found for '{description}'",
             content=content_with_urls,
-            source="multiple",
+            source=DocumentRetrievalType.INTERNAL,
             url=None,
             metadata={
                 "search_query": description,
