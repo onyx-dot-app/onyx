@@ -108,7 +108,6 @@ KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
-KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 KV_KG_CONFIG_KEY = "kg_config"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
