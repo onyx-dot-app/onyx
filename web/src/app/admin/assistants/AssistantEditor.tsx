@@ -71,12 +71,10 @@ import {
 import {
   CameraIcon,
   GroupsIconSkeleton,
-  NewChatIcon,
   SwapIcon,
   TrashIcon,
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
@@ -125,6 +123,7 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePicker from "@/app/chat/components/files/FilePicker";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -170,7 +169,9 @@ export function AssistantEditor({
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
 }) {
-  const { refreshAssistants } = useAssistantsContext();
+  // NOTE: assistants = agents
+  // TODO: rename everything to agents
+  const { refreshAgents } = useAgentsContext();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -527,7 +528,7 @@ export function AssistantEditor({
     if (existingPersona) {
       const response = await deletePersona(existingPersona.id);
       if (response.ok) {
-        await refreshAssistants();
+        await refreshAgents();
         router.push(
           isAdminPage ? `/admin/assistants?u=${Date.now()}` : `/chat`
         );
@@ -777,7 +778,7 @@ export function AssistantEditor({
                   message: `"${assistant.name}" has been added to your list.`,
                   type: "success",
                 });
-                await refreshAssistants();
+                await refreshAgents();
               } else {
                 setPopup({
                   message: `"${assistant.name}" could not be added to your list.`,
@@ -786,7 +787,7 @@ export function AssistantEditor({
               }
             }
 
-            await refreshAssistants();
+            await refreshAgents();
 
             router.push(
               isAdminPage

@@ -26,7 +26,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
@@ -333,11 +333,11 @@ function MCPToolsList({
 }: MCPToolsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const {
-    assistantPreferences,
-    setSpecificAssistantPreferences,
+    agentPreferences: assistantPreferences,
+    setSpecificAgentPreferences: setSpecificAssistantPreferences,
     forcedToolIds,
     setForcedToolIds,
-  } = useAssistantsContext();
+  } = useAgentsContext();
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -512,11 +512,11 @@ export function ActionToggle({
 
   // Get the assistant preference for this assistant
   const {
-    assistantPreferences,
-    setSpecificAssistantPreferences,
+    agentPreferences: assistantPreferences,
+    setSpecificAgentPreferences: setSpecificAssistantPreferences,
     forcedToolIds,
     setForcedToolIds,
-  } = useAssistantsContext();
+  } = useAgentsContext();
 
   const { isAdmin, isCurator } = useUser();
 

@@ -14,7 +14,7 @@ import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
@@ -130,7 +130,7 @@ function ChatInputBarInner({
 }: ChatInputBarProps) {
   const { user } = useUser();
 
-  const { forcedToolIds, setForcedToolIds } = useAssistantsContext();
+  const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles, recentFiles } =
     useProjectsContext();
 

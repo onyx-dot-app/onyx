@@ -34,7 +34,7 @@ import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -139,7 +139,7 @@ export function ChatPage({
 
   const isInitialLoad = useRef(true);
 
-  const { assistants: availableAssistants } = useAssistantsContext();
+  const { agents: availableAssistants } = useAgentsContext();
 
   const [showApiKeyModal, setShowApiKeyModal] = useState(
     !shouldShowWelcomeModal

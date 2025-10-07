@@ -10,7 +10,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { OnyxSparkleIcon } from "@/components/icons/icons";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
@@ -46,7 +46,7 @@ interface AvailableTool {
 function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { refreshAssistants } = useAssistantsContext();
+  const { refreshAgents } = useAgentsContext();
   const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
@@ -104,7 +104,7 @@ function DefaultAssistantConfig() {
       await persistConfiguration({ tool_ids: Array.from(next) });
       await mutate("/api/admin/default-assistant/configuration");
       router.refresh();
-      await refreshAssistants();
+      await refreshAgents();
     } catch (e) {
       const rollback = new Set(enabledTools);
       if (rollback.has(toolId)) {
@@ -137,7 +137,7 @@ function DefaultAssistantConfig() {
       await persistConfiguration({ system_prompt: currentPrompt });
       await mutate("/api/admin/default-assistant/configuration");
       router.refresh();
-      await refreshAssistants();
+      await refreshAgents();
       setOriginalPrompt(currentPrompt);
       setPopup({
         message: "Instructions updated successfully!",
