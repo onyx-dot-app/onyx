@@ -123,7 +123,8 @@ You may have to deactivate and reactivate your virtualenv for `playwright` to ap
 #### Frontend: Node dependencies
 
 Onyx uses Node v22.20.0. We highly recommend you use [Node Version Manager (nvm)](https://github.com/nvm-sh/nvm)
-to manage your Node version. Once installed, you can run 
+to manage your Node installations. Once installed, you can run
+
 ```bash
 nvm install 22 && nvm use 22`
 node -v # verify your active version
