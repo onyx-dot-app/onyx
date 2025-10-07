@@ -23,6 +23,9 @@ from onyx.agents.agent_search.dr.models import DecisionResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestratorTool
+from onyx.agents.agent_search.dr.process_llm_stream import (
+    BasicSearchProcessedStreamResults,
+)
 from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
@@ -668,7 +671,7 @@ def clarifier(
                 user_prompt_to_use = decision_prompt + assistant_task_prompt
 
             @traced(name="clarifier stream and process", type="llm")
-            def stream_and_process():
+            def stream_and_process() -> BasicSearchProcessedStreamResults:
                 stream = graph_config.tooling.primary_llm.stream(
                     prompt=create_question_prompt(
                         cast(str, system_prompt_to_use),
