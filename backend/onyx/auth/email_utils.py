@@ -29,7 +29,7 @@ from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
-from onyx.configs.constants import ONYX_SLACK_URL
+from onyx.configs.constants import ONYX_DISCORD_URL
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
@@ -163,7 +163,7 @@ def build_html_email(
 ) -> str:
     slack_fragment = ""
     if application_name == ONYX_DEFAULT_APPLICATION_NAME:
-        slack_fragment = f'<br>Have questions? Join our Slack community <a href="{ONYX_SLACK_URL}">here</a>.'
+        slack_fragment = f'<br>Have questions? Join our Discord community <a href="{ONYX_DISCORD_URL}">here</a>.'
 
     if cta_text and cta_link:
         cta_block = f'<a class="cta-button" href="{cta_link}">{cta_text}</a>'

@@ -13,8 +13,7 @@ As an open source project in a rapidly changing space, we welcome all contributi
 The [GitHub Issues](https://github.com/onyx-dot-app/onyx/issues) page is a great place to start for contribution ideas.
 
 To ensure that your contribution is aligned with the project's direction, please reach out to any maintainer on the Onyx team
-via [Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA) /
-[Discord](https://discord.gg/TDJ59cGV2X) or [email](mailto:founders@onyx.app).
+via [Discord](https://discord.gg/4NA5SbzrWb) or [email](mailto:hello@onyx.app).
 
 Issues that have been explicitly approved by the maintainers (aligned with the direction of the project)
 will be marked with the `approved by maintainers` label.
@@ -28,8 +27,7 @@ Your input is vital to making sure that Onyx moves in the right direction.
 Before starting on implementation, please raise a GitHub issue.
 
 Also, always feel free to message the founders (Chris Weaver / Yuhong Sun) on
-[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA) /
-[Discord](https://discord.gg/TDJ59cGV2X) directly about anything at all.
+[Discord](https://discord.gg/4NA5SbzrWb) directly about anything at all.
 
 ### Contributing Code
 
@@ -46,9 +44,7 @@ Our goal is to make contributing as easy as possible. If you run into any issues
 That way we can help future contributors and users can avoid the same issue.
 
 We also have support channels and generally interesting discussions on our
-[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA)
-and
-[Discord](https://discord.gg/TDJ59cGV2X).
+[Discord](https://discord.gg/4NA5SbzrWb).
 
 We would love to see you there!
 
