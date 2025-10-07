@@ -56,7 +56,7 @@ def validate_user_token(user_token: str | None) -> None:
     Raises:
         HTTPException: If the token is invalid or missing required fields
     """
-    if user_token is None or not user_token:
+    if not user_token:
         # user_token is optional, so None or empty string is valid
         return
 
