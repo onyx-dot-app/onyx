@@ -667,7 +667,7 @@ def clarifier(
                 system_prompt_to_use = assistant_system_prompt
                 user_prompt_to_use = decision_prompt + assistant_task_prompt
 
-            @traced(name="stream and process", type="llm")
+            @traced(name="clarifier stream and process", type="llm")
             def stream_and_process():
                 stream = graph_config.tooling.primary_llm.stream(
                     prompt=create_question_prompt(
