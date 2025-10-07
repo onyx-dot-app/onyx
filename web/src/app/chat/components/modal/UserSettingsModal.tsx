@@ -30,7 +30,7 @@ import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthM
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources, CCPairBasicInfo } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
-import { ModalIds } from "@/refresh-components/contexts/ModalContext";
+import { ModalIds } from "@/refresh-components/contexts/ChatModalContext";
 import SvgSettings from "@/icons/settings";
 import SvgTrash from "@/icons/trash";
 import SvgExternalLink from "@/icons/external-link";

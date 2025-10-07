@@ -32,7 +32,10 @@ import SvgBubbleText from "@/icons/bubble-text";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import SvgTrash from "@/icons/trash";
@@ -476,7 +479,7 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
 

@@ -14,7 +14,7 @@ interface ModalProviderProps {
   children: ReactNode;
 }
 
-export function ModalProvider({ children }: ModalProviderProps) {
+export function ChatModalProvider({ children }: ModalProviderProps) {
   const [openModal, setOpenModal] = useState<string | undefined>();
   const [modalData, setModalData] = useState<any | undefined>();
 
@@ -63,7 +63,7 @@ interface ModalContextType {
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
-export function useModal() {
+export function useChatModal() {
   const context = useContext(ModalContext);
   if (context === undefined) {
     throw new Error("useModal must be used within a ModalProvider");

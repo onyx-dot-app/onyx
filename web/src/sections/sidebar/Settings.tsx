@@ -22,7 +22,10 @@ import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
 import { useRouter } from "next/navigation";
 import Modal from "@/refresh-components/modals/Modal";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import SvgUser from "@/icons/user";
 import { UserSettings } from "@/app/chat/components/modal/UserSettingsModal";
 import { cn } from "@/lib/utils";
@@ -184,7 +187,7 @@ export default function Settings({
   folded,
   removeAdminPanelLink,
 }: SettingsProps) {
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);

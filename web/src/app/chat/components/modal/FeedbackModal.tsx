@@ -5,7 +5,10 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import Modal from "@/refresh-components/modals/Modal";
 import { FilledLikeIcon } from "@/components/icons/icons";
 import { handleChatFeedback } from "../../services/lib";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import Button from "@/refresh-components/buttons/Button";
@@ -32,7 +35,7 @@ interface FeedbackModalProps {
 }
 
 export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
-  const { isOpen, toggleModal, getModalData } = useModal();
+  const { isOpen, toggleModal, getModalData } = useChatModal();
   const data = getModalData<{
     feedbackType: FeedbackType;
     messageId: number;
