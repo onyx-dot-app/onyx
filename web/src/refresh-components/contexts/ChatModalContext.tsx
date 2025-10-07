@@ -5,7 +5,6 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 export enum ModalIds {
   AgentsModal = "AgentsModal",
-  UserSettingsModal = "UserSettingsModal",
   CreateProjectModal = "CreateProjectModal",
   FeedbackModal = "FeedbackModal",
 }
@@ -49,24 +48,26 @@ export function ChatModalProvider({ children }: ModalProviderProps) {
   });
 
   return (
-    <ModalContext.Provider value={{ isOpen, toggleModal, getModalData }}>
+    <ChatModalContext.Provider value={{ isOpen, toggleModal, getModalData }}>
       {children}
-    </ModalContext.Provider>
+    </ChatModalContext.Provider>
   );
 }
 
-interface ModalContextType {
+interface ChatModalContextType {
   isOpen: (id: ModalIds) => boolean;
   toggleModal: (id: ModalIds, open: boolean, data?: any) => void;
   getModalData: <T = any>() => T | undefined;
 }
 
-const ModalContext = createContext<ModalContextType | undefined>(undefined);
+const ChatModalContext = createContext<ChatModalContextType | undefined>(
+  undefined
+);
 
 export function useChatModal() {
-  const context = useContext(ModalContext);
+  const context = useContext(ChatModalContext);
   if (context === undefined) {
-    throw new Error("useModal must be used within a ModalProvider");
+    throw new Error("useChatModal must be used within a ChatModalProvider");
   }
   return context;
 }

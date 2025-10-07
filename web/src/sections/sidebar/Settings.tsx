@@ -21,17 +21,10 @@ import SvgLogOut from "@/icons/log-out";
 import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
 import { useRouter } from "next/navigation";
-import Modal from "@/refresh-components/modals/Modal";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgUser from "@/icons/user";
 import { UserSettings } from "@/app/chat/components/modal/UserSettingsModal";
 import { cn } from "@/lib/utils";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
+import CoreModal from "@/refresh-components/modals/CoreModal";
 
 function getUsernameFromEmail(email?: string): string {
   if (!email) return ANONYMOUS_USER_NAME;
@@ -80,64 +73,66 @@ function SettingsPopover({
   }
 
   return (
-    <PopoverMenu>
-      {[
-        // TODO (@raunakab):
-        // Not sure what this does; leave it out for now.
-        // ...dropdownItems.map((item, index) => (
-        //   <NavigationTab key={index} href={item.link}>
-        //     {item.title}
-        //   </NavigationTab>
-        // )),
-        showAdminPanel && (
+    <>
+      <PopoverMenu>
+        {[
+          // TODO (@raunakab):
+          // Not sure what this does; leave it out for now.
+          // ...dropdownItems.map((item, index) => (
+          //   <NavigationTab key={index} href={item.link}>
+          //     {item.title}
+          //   </NavigationTab>
+          // )),
+          showAdminPanel && (
+            <NavigationTab
+              key="admin-panel"
+              href="/admin/indexing/status"
+              icon={SvgSettings}
+            >
+              Admin Panel
+            </NavigationTab>
+          ),
+          showCuratorPanel && (
+            <NavigationTab
+              key="curator-panel"
+              href="/admin/indexing/status"
+              icon={SvgSettings}
+            >
+              Curator Panel
+            </NavigationTab>
+          ),
           <NavigationTab
-            key="admin-panel"
-            href="/admin/indexing/status"
-            icon={SvgSettings}
+            key="user-settings"
+            icon={SvgUser}
+            onClick={onUserSettingsClick}
           >
-            Admin Panel
-          </NavigationTab>
-        ),
-        showCuratorPanel && (
+            User Settings
+          </NavigationTab>,
           <NavigationTab
-            key="curator-panel"
-            href="/admin/indexing/status"
-            icon={SvgSettings}
+            key="notifications"
+            icon={SvgBell}
+            onClick={onNotificationsClick}
           >
-            Curator Panel
-          </NavigationTab>
-        ),
-        <NavigationTab
-          key="user-settings"
-          icon={SvgUser}
-          onClick={onUserSettingsClick}
-        >
-          User Settings
-        </NavigationTab>,
-        <NavigationTab
-          key="notifications"
-          icon={SvgBell}
-          onClick={onNotificationsClick}
-        >
-          {`Notifications ${
-            notifications && notifications.length > 0
-              ? `(${notifications.length})`
-              : ""
-          }`}
-        </NavigationTab>,
-        null,
-        showLogout && (
-          <NavigationTab
-            key="log-out"
-            icon={SvgLogOut}
-            danger
-            onClick={handleLogout}
-          >
-            Log out
-          </NavigationTab>
-        ),
-      ]}
-    </PopoverMenu>
+            {`Notifications ${
+              notifications && notifications.length > 0
+                ? `(${notifications.length})`
+                : ""
+            }`}
+          </NavigationTab>,
+          null,
+          showLogout && (
+            <NavigationTab
+              key="log-out"
+              icon={SvgLogOut}
+              danger
+              onClick={handleLogout}
+            >
+              Log out
+            </NavigationTab>
+          ),
+        ]}
+      </PopoverMenu>
+    </>
   );
 }
 
@@ -187,40 +182,32 @@ export default function Settings({
   folded,
   removeAdminPanelLink,
 }: SettingsProps) {
-  const { toggleModal } = useChatModal();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  const { llmProviders, ccPairs } = useChatContext();
-  const {
-    connectors: federatedConnectors,
-    refetch: refetchFederatedConnectors,
-  } = useFederatedOAuthStatus();
-  const { popup, setPopup } = usePopup();
+  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false);
 
   const username = getUsernameFromEmail(user?.email);
 
   return (
     <>
-      {popup}
-      <Modal
-        id={ModalIds.UserSettingsModal}
-        title="User Settings"
-        icon={SvgSettings}
-        className="h-fit"
-        sm
-      >
-        <UserSettings
-          setPopup={setPopup}
-          llmProviders={llmProviders}
-          onClose={() => toggleModal(ModalIds.UserSettingsModal, false)}
-          defaultModel={user?.preferences?.default_model ?? null}
-          ccPairs={ccPairs}
-          federatedConnectors={federatedConnectors}
-          refetchFederatedConnectors={refetchFederatedConnectors}
-        />
-      </Modal>
+      {showUserSettingsModal && (
+        <CoreModal
+          onClickOutside={() => setShowUserSettingsModal(false)}
+          className="h-fit"
+        >
+          <UserSettings
+            setPopup={() => setShowUserSettingsModal(false)}
+            llmProviders={[]}
+            onClose={() => {}}
+            defaultModel={null}
+            ccPairs={[]}
+            federatedConnectors={[]}
+            refetchFederatedConnectors={() => {}}
+          />
+        </CoreModal>
+      )}
 
       <Popover
         open={!!popupState}
@@ -258,7 +245,7 @@ export default function Settings({
               removeAdminPanelLink={removeAdminPanelLink}
               onUserSettingsClick={() => {
                 setPopupState(undefined);
-                toggleModal(ModalIds.UserSettingsModal, true);
+                setShowUserSettingsModal(true);
               }}
               onNotificationsClick={() => setPopupState("Notifications")}
             />
