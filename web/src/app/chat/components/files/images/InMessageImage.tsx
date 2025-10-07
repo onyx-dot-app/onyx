@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { FiDownload } from "react-icons/fi";
+import { ImageShape } from "@/app/chat/services/streamingModels";
 import { FullImageModal } from "./FullImageModal";
 import { buildImgUrl } from "./utils";
-
-type ImageShape = "square" | "landscape" | "portrait";
 
 const DEFAULT_SHAPE: ImageShape = "square";
 
