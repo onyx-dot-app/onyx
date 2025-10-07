@@ -5,6 +5,7 @@ from typing import Literal
 from typing import Type
 from typing import TypeVar
 
+from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
@@ -27,6 +28,7 @@ SchemaType = TypeVar("SchemaType", bound=BaseModel)
 JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
+@traced(name="stream llm", type="llm")
 def stream_llm_answer(
     llm: LLM,
     prompt: LanguageModelInput,
