@@ -314,8 +314,8 @@ def read_pdf_file(
                     image.save(img_byte_arr, format=image.format)
                     img_bytes = img_byte_arr.getvalue()
 
-                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}."
-                    f"{image.format.lower() if image.format else 'png'}"
+                    image_format = image.format.lower() if image.format else "png"
+                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
                     if image_callback is not None:
                         # Stream image out immediately
                         image_callback(img_bytes, image_name)
