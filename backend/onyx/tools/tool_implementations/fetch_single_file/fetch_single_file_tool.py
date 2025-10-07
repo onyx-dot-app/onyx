@@ -488,11 +488,21 @@ class FetchSingleFileTool(BaseTool):
                 tags=None,
             )
 
-            # Extract key terms from description for better search
-            search_terms = self._extract_search_terms(description)
-            logger.info(
-                f"Searching with terms: '{search_terms}' (original: '{description}')"
-            )
+            # Extract ticket pattern first - prioritize it if found
+            ticket_pattern = self._extract_ticket_pattern(description)
+            # If we have a ticket pattern, use it directly for better search
+            if ticket_pattern:
+                search_terms = ticket_pattern
+                logger.info(
+                    f"Using ticket pattern for search: '{search_terms}' (original: '{description}')"
+                )
+            else:
+                # Extract key terms from description for better search
+                search_terms = self._extract_search_terms(description)
+                logger.info(
+                    f"Searching with terms: '{search_terms}' (original: '{description}')"
+                )
+
             logger.info(
                 f"Search query: '{search_terms}' - looking for Jira tickets, documents, etc."
             )
@@ -643,7 +653,10 @@ class FetchSingleFileTool(BaseTool):
             # Get chunk content and document info
             content = getattr(chunk, "content", "")
             doc = getattr(chunk, "document", None)
-            title = getattr(doc, "semantic_identifier", "") if doc else ""
+            # Try to get title from chunk first, then from document
+            title = getattr(chunk, "semantic_identifier", "") or (
+                getattr(doc, "semantic_identifier", "") if doc else ""
+            )
 
             if not content and not title:
                 return 30

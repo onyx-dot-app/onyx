@@ -1,7 +1,7 @@
 """seed FetchUrlTool built-in
 
 Revision ID: 92b047e96c9f
-Revises: b4ef3ae0bf6e
+Revises: 64bd5677aeb6
 Create Date: 2025-09-30 11:08:57.275447
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "92b047e96c9f"
-down_revision = "b4ef3ae0bf6e"
+down_revision = "64bd5677aeb6"
 branch_labels = None
 depends_on = None
 
