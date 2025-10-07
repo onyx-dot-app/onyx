@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { RefreshCcw, Copy, Check } from "lucide-react";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgRefreshCw from "@/icons/refresh-cw";
+import Text from "@/refresh-components/Text";
+import { LoadingAnimation } from "@/components/Loading";
+import SvgCopy from "@/icons/copy";
+import SvgCheck from "@/icons/check";
 
 interface ResetPasswordModalProps {
   user: User;
@@ -75,36 +80,28 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
               <p data-testid="new-password" className="flex-grow">
                 {newPassword}
               </p>
-              <Button
+              <IconButton
+                secondary
+                icon={isCopied ? SvgCheck : SvgCopy}
                 onClick={handleCopyPassword}
-                variant="ghost"
-                size="sm"
-                className="ml-2"
-              >
-                {isCopied ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
+              />
             </div>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
+            <Text text02>
               Please securely communicate this password to the user.
-            </p>
+            </Text>
           </div>
         ) : (
           <Button
             onClick={handleResetPassword}
             disabled={isLoading}
-            className="w-full bg-neutral-700 hover:bg-neutral-600 dark:bg-neutral-200 dark:hover:bg-neutral-300 dark:text-neutral-900"
+            leftIcon={SvgRefreshCw}
           >
             {isLoading ? (
-              "Resetting..."
+              <Text>
+                <LoadingAnimation text="Resetting" />
+              </Text>
             ) : (
-              <>
-                <RefreshCcw className="w-4 h-4 mr-2" />
-                Reset Password
-              </>
+              "Reset Password"
             )}
           </Button>
         )}

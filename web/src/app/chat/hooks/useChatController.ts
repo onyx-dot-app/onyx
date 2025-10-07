@@ -55,7 +55,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatContext } from "@/components/context/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import Prism from "prismjs";
 import {
   useChatSessionStore,
@@ -73,10 +73,29 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { Klee_One } from "next/font/google";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
+import { useAppParams } from "@/hooks/appNavigation";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
 const SYSTEM_MESSAGE_ID = -3;
+
+export interface OnSubmitProps {
+  message: string;
+  //from chat input bar
+  currentMessageFiles: ProjectFile[];
+  // from the chat bar???
+
+  useAgentSearch: boolean;
+
+  // optional params
+  messageIdToResend?: number;
+  queryOverride?: string;
+  forceSearch?: boolean;
+  isSeededChat?: boolean;
+  modelOverride?: LlmDescriptor;
+  regenerationRequest?: RegenerationRequest | null;
+  overrideFileDescriptors?: FileDescriptor[];
+}
 
 interface RegenerationRequest {
   messageId: number;
@@ -119,6 +138,7 @@ export function useChatController({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useAppParams();
   const { refreshChatSessions, llmProviders } = useChatContext();
   const { assistantPreferences, forcedToolIds } = useAssistantsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles } =
@@ -308,28 +328,12 @@ export function useChatController({
       modelOverride,
       regenerationRequest,
       overrideFileDescriptors,
-    }: {
-      message: string;
-      //from chat input bar
-      currentMessageFiles: ProjectFile[];
-      // from the chat bar???
-
-      useAgentSearch: boolean;
-
-      // optional params
-      messageIdToResend?: number;
-      queryOverride?: string;
-      forceSearch?: boolean;
-      isSeededChat?: boolean;
-      modelOverride?: LlmDescriptor;
-      regenerationRequest?: RegenerationRequest | null;
-      overrideFileDescriptors?: FileDescriptor[];
-    }) => {
-      const projectId = searchParams?.get("projectid");
+    }: OnSubmitProps) => {
+      const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
-        if (params.has("projectid")) {
-          params.delete("projectid");
+        if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
+          params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
@@ -489,6 +493,7 @@ export function useChatController({
         updateChatStateAction(frozenSessionId, "input");
         return;
       }
+
       // When editing (messageIdToResend exists but no regenerationRequest), use the new message
       // When regenerating (regenerationRequest exists), use the original message
       let currMessage = regenerationRequest
@@ -948,7 +953,9 @@ export function useChatController({
 
           setPopup({
             type: "warning",
-            message: `Some files were not uploaded. ${detailsParts.join(" | ")}`,
+            message: `Some files were not uploaded. ${detailsParts.join(
+              " | "
+            )}`,
           });
         }
       } catch (error) {

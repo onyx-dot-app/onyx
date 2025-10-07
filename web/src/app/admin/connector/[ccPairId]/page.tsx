@@ -61,7 +61,8 @@ import { FiSettings } from "react-icons/fi";
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
+import SvgSettings from "@/icons/settings";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
@@ -446,12 +447,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  leftIcon={SvgSettings}
                   className="flex items-center gap-x-1"
+                  secondary
                 >
-                  <FiSettings className="h-4 w-4" />
-                  <span className="text-sm ml-1">Manage</span>
+                  Manage
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

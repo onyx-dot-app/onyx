@@ -22,8 +22,8 @@ export function ModelPreview({
 
   return (
     <CardSection
-      className={`shadow-md ${
-        display ? "bg-inverted rounded-lg p-4" : "bg-accent-background p-2"
+      className={`shadow-lg rounded-16 bg-background-tint-00 ${
+        display ? "p-4" : "p-2"
       } w-96 flex flex-col`}
     >
       <div className="font-bold text-lg flex">{model.model_name}</div>
@@ -97,7 +97,7 @@ export function ModelPreview({
                   <span className="font-semibold text-text-700">
                     Query Prefix:
                   </span>
-                  <div className="text-text-600 font-mono text-xs bg-background p-2 rounded">
+                  <div className="text-text-600 font-mono text-xs p-2 rounded">
                     &quot;{model.query_prefix}&quot;
                   </div>
                 </div>
@@ -108,7 +108,7 @@ export function ModelPreview({
                   <span className="font-semibold text-text-700">
                     Passage Prefix:
                   </span>
-                  <div className="text-text-600 font-mono text-xs bg-background p-2 rounded">
+                  <div className="text-text-600 font-mono text-xs p-2 rounded">
                     &quot;{model.passage_prefix}&quot;
                   </div>
                 </div>

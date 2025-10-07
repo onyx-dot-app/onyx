@@ -27,7 +27,7 @@ import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
-import CreateButton from "@/components/ui/createButton";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -409,10 +409,9 @@ const Main = () => {
       )}
       <div className="mb-2"></div>
 
-      <CreateButton
-        href="/admin/standard-answer/new"
-        text="New Standard Answer"
-      />
+      <CreateButton href="/admin/standard-answer/new">
+        New Standard Answer
+      </CreateButton>
 
       <Separator />
 

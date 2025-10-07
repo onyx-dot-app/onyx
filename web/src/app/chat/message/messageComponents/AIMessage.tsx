@@ -4,58 +4,57 @@ import {
   CitationDelta,
   SearchToolDelta,
   StreamingCitation,
-} from "../../services/streamingModels";
-import { FullChatState } from "./interfaces";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { Logo } from "@/components/logo/Logo";
-import { CopyButton } from "@/components/CopyButton";
-import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
-import { HoverableIcon } from "@/components/Hoverable";
+} from "@/app/chat/services/streamingModels";
+import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { CitedSourcesToggle } from "./CitedSourcesToggle";
-import {
-  CustomTooltip,
-  TooltipGroup,
-} from "@/components/tooltip/CustomTooltip";
+import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
+import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import { useMemo, useRef, useState, useEffect } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
-} from "../../stores/useChatSessionStore";
-import { useCurrentMessageTree } from "../../stores/useChatSessionStore";
-import { FiFileText } from "react-icons/fi";
-import { copyAll, handleCopy } from "../copyingUtils";
-import RegenerateOption from "../../components/RegenerateOption";
-import { MessageSwitcher } from "../MessageSwitcher";
-import { BlinkingDot } from "../BlinkingDot";
+} from "@/app/chat/stores/useChatSessionStore";
+import { copyAll, handleCopy } from "@/app/chat/message/copyingUtils";
+import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
+import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
   getTextContent,
   isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
-} from "../../services/packetUtils";
-import { useMessageSwitching } from "./hooks/useMessageSwitching";
-import MultiToolRenderer from "./MultiToolRenderer";
-import { RendererComponent } from "./renderMessageComponent";
+} from "@/app/chat/services/packetUtils";
+import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
+import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
+import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
+import { AgentIcon } from "@/refresh-components/AgentIcon";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgCopy from "@/icons/copy";
+import SvgThumbsUp from "@/icons/thumbs-up";
+import SvgThumbsDown from "@/icons/thumbs-down";
+import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import LLMPopover from "@/refresh-components/LLMPopover";
+import { parseLlmDescriptor } from "@/lib/llm/utils";
 
-export function AIMessage({
-  rawPackets,
-  chatState,
-  nodeId,
-  otherMessagesCanSwitchTo,
-  onMessageSelection,
-}: {
+export interface AIMessageProps {
   rawPackets: Packet[];
   chatState: FullChatState;
   nodeId: number;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
-}) {
+}
+
+export default function AIMessage({
+  rawPackets,
+  chatState,
+  nodeId,
+  otherMessagesCanSwitchTo,
+  onMessageSelection,
+}: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
-  const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
-    useState(false);
+
+  const { toggleModal } = useModal();
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -239,15 +238,7 @@ export function AIMessage({
       <div className="mx-auto w-[90%] max-w-message-max">
         <div className="lg:mr-12 mobile:ml-0 md:ml-8">
           <div className="flex items-start">
-            {chatState.assistant?.id === 0 ? (
-              <Logo className="mobile:hidden" size="small" />
-            ) : (
-              <AssistantIcon
-                className="mobile:hidden"
-                size={24}
-                assistant={chatState.assistant}
-              />
-            )}
+            <AgentIcon agent={chatState.assistant} />
             <div className="w-full">
               <div className="max-w-message-max break-words">
                 <div className="w-full desktop:ml-4">
@@ -329,136 +320,110 @@ export function AIMessage({
                   </div>
 
                   {/* Feedback buttons - only show when streaming is complete */}
-                  {chatState.handleFeedback &&
-                    stopPacketSeen &&
-                    displayComplete && (
-                      <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
-                        <TooltipGroup>
-                          <div className="flex items-center gap-x-0.5">
-                            {includeMessageSwitcher && (
-                              <div className="-mx-1">
-                                <MessageSwitcher
-                                  currentPage={(currentMessageInd ?? 0) + 1}
-                                  totalPages={
-                                    otherMessagesCanSwitchTo?.length || 0
-                                  }
-                                  handlePrevious={() => {
-                                    const prevMessage = getPreviousMessage();
-                                    if (
-                                      prevMessage !== undefined &&
-                                      onMessageSelection
-                                    ) {
-                                      onMessageSelection(prevMessage);
-                                    }
-                                  }}
-                                  handleNext={() => {
-                                    const nextMessage = getNextMessage();
-                                    if (
-                                      nextMessage !== undefined &&
-                                      onMessageSelection
-                                    ) {
-                                      onMessageSelection(nextMessage);
-                                    }
-                                  }}
-                                />
-                              </div>
-                            )}
-
-                            <CustomTooltip showTick line content="Copy">
-                              <CopyButton
-                                copyAllFn={() =>
-                                  copyAll(
-                                    getTextContent(rawPackets),
-                                    markdownRef
-                                  )
+                  {stopPacketSeen && displayComplete && (
+                    <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
+                      <TooltipGroup>
+                        <div className="flex items-center gap-x-0.5">
+                          {includeMessageSwitcher && (
+                            <div className="-mx-1">
+                              <MessageSwitcher
+                                currentPage={(currentMessageInd ?? 0) + 1}
+                                totalPages={
+                                  otherMessagesCanSwitchTo?.length || 0
                                 }
-                              />
-                            </CustomTooltip>
-
-                            <CustomTooltip
-                              showTick
-                              line
-                              content="Good response"
-                            >
-                              <HoverableIcon
-                                icon={<LikeFeedback size={16} />}
-                                onClick={() => chatState.handleFeedback("like")}
-                              />
-                            </CustomTooltip>
-
-                            <CustomTooltip showTick line content="Bad response">
-                              <HoverableIcon
-                                icon={<DislikeFeedback size={16} />}
-                                onClick={() =>
-                                  chatState.handleFeedback("dislike")
-                                }
-                              />
-                            </CustomTooltip>
-
-                            {chatState.regenerate && (
-                              <CustomTooltip
-                                disabled={isRegenerateDropdownVisible}
-                                showTick
-                                line
-                                content="Regenerate"
-                              >
-                                <RegenerateOption
-                                  onDropdownVisibleChange={
-                                    setIsRegenerateDropdownVisible
+                                handlePrevious={() => {
+                                  const prevMessage = getPreviousMessage();
+                                  if (
+                                    prevMessage !== undefined &&
+                                    onMessageSelection
+                                  ) {
+                                    onMessageSelection(prevMessage);
                                   }
-                                  selectedAssistant={chatState.assistant}
-                                  regenerate={chatState.regenerate}
-                                  overriddenModel={chatState.overriddenModel}
-                                />
-                              </CustomTooltip>
-                            )}
+                                }}
+                                handleNext={() => {
+                                  const nextMessage = getNextMessage();
+                                  if (
+                                    nextMessage !== undefined &&
+                                    onMessageSelection
+                                  ) {
+                                    onMessageSelection(nextMessage);
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
 
-                            {nodeId &&
-                              (citations.length > 0 ||
-                                documentMap.size > 0) && (
-                                <>
-                                  {chatState.regenerate && (
-                                    <div className="h-4 w-px bg-border mx-2" />
-                                  )}
-                                  <CustomTooltip
-                                    showTick
-                                    line
-                                    content={`${uniqueSourceCount} Sources`}
-                                  >
-                                    <CitedSourcesToggle
-                                      citations={citations}
-                                      documentMap={documentMap}
-                                      nodeId={nodeId}
-                                      onToggle={(toggledNodeId) => {
-                                        // Toggle sidebar if clicking on the same message
-                                        if (
-                                          selectedMessageForDocDisplay ===
-                                            toggledNodeId &&
-                                          documentSidebarVisible
-                                        ) {
-                                          updateCurrentDocumentSidebarVisible(
-                                            false
-                                          );
-                                          updateCurrentSelectedNodeForDocDisplay(
-                                            null
-                                          );
-                                        } else {
-                                          updateCurrentSelectedNodeForDocDisplay(
-                                            toggledNodeId
-                                          );
-                                          updateCurrentDocumentSidebarVisible(
-                                            true
-                                          );
-                                        }
-                                      }}
-                                    />
-                                  </CustomTooltip>
-                                </>
-                              )}
-                          </div>
-                        </TooltipGroup>
-                      </div>
-                    )}
+                          <IconButton
+                            icon={SvgCopy}
+                            onClick={() => copyAll(getTextContent(rawPackets))}
+                            tertiary
+                            tooltip="Copy"
+                          />
+                          <IconButton
+                            icon={SvgThumbsUp}
+                            onClick={() =>
+                              toggleModal(ModalIds.FeedbackModal, true, {
+                                feedbackType: "like",
+                                messageId: nodeId,
+                              })
+                            }
+                            tertiary
+                            tooltip="Good Response"
+                          />
+                          <IconButton
+                            icon={SvgThumbsDown}
+                            onClick={() =>
+                              toggleModal(ModalIds.FeedbackModal, true, {
+                                feedbackType: "dislike",
+                                messageId: nodeId,
+                              })
+                            }
+                            tertiary
+                            tooltip="Bad Response"
+                          />
+
+                          {chatState.regenerate && (
+                            <LLMPopover
+                              currentModelName={chatState.overriddenModel}
+                              onSelect={(modelName) => {
+                                const llmDescriptor =
+                                  parseLlmDescriptor(modelName);
+                                chatState.regenerate!(llmDescriptor);
+                              }}
+                              folded
+                            />
+                          )}
+
+                          {nodeId &&
+                            (citations.length > 0 || documentMap.size > 0) && (
+                              <CitedSourcesToggle
+                                citations={citations}
+                                documentMap={documentMap}
+                                nodeId={nodeId}
+                                onToggle={(toggledNodeId) => {
+                                  // Toggle sidebar if clicking on the same message
+                                  if (
+                                    selectedMessageForDocDisplay ===
+                                      toggledNodeId &&
+                                    documentSidebarVisible
+                                  ) {
+                                    updateCurrentDocumentSidebarVisible(false);
+                                    updateCurrentSelectedNodeForDocDisplay(
+                                      null
+                                    );
+                                  } else {
+                                    updateCurrentSelectedNodeForDocDisplay(
+                                      toggledNodeId
+                                    );
+                                    updateCurrentDocumentSidebarVisible(true);
+                                  }
+                                }}
+                              />
+                            )}
+                        </div>
+                      </TooltipGroup>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

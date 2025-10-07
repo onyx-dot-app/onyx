@@ -183,9 +183,9 @@ export async function unlinkFileFromProject(
   fileId: string
 ): Promise<void> {
   const response = await fetch(
-    `/api/user/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(
-      fileId
-    )}`,
+    `/api/user/projects/${encodeURIComponent(
+      projectId
+    )}/files/${encodeURIComponent(fileId)}`,
     { method: "DELETE" }
   );
   if (!response.ok) {
@@ -198,9 +198,9 @@ export async function linkFileToProject(
   fileId: string
 ): Promise<ProjectFile> {
   const response = await fetch(
-    `/api/user/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(
-      fileId
-    )}`,
+    `/api/user/projects/${encodeURIComponent(
+      projectId
+    )}/files/${encodeURIComponent(fileId)}`,
     { method: "POST" }
   );
   if (!response.ok) {
@@ -249,7 +249,9 @@ export async function getSessionProjectTokenCount(
   chatSessionId: string
 ): Promise<number> {
   const response = await fetch(
-    `/api/user/projects/session/${encodeURIComponent(chatSessionId)}/token-count`
+    `/api/user/projects/session/${encodeURIComponent(
+      chatSessionId
+    )}/token-count`
   );
   if (!response.ok) {
     return 0;

@@ -34,8 +34,6 @@ repos:
     hooks:
     - id: prettier
       types_or: [html, css, javascript, ts, tsx]
-      additional_dependencies:
-      - prettier
 
   - repo: local
     hooks:

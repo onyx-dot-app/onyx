@@ -1,12 +1,11 @@
 import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/Text";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import type { FormikProps } from "formik";
-import { FiTrash } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
@@ -26,6 +25,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import SvgTrash from "@/icons/trash";
 
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
@@ -515,7 +515,6 @@ export function LLMProviderUpdateForm({
             {dynamicConfig && (
               <div className="flex flex-col gap-2">
                 <Button
-                  type="button"
                   onClick={() =>
                     fetchModels(
                       llmProviderDescriptor,
@@ -534,10 +533,9 @@ export function LLMProviderUpdateForm({
                   className="w-fit"
                 >
                   {isFetchingModels ? (
-                    <>
-                      <LoadingAnimation size="text-sm" />
-                      <span className="ml-2">Fetching models...</span>
-                    </>
+                    <Text>
+                      <LoadingAnimation text="Fetching models" />
+                    </Text>
                   ) : (
                     "Fetch Available Models"
                   )}
@@ -666,10 +664,12 @@ export function LLMProviderUpdateForm({
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4">
-              <Button type="submit" variant="submit">
+            <div className="flex w-full mt-4 gap-spacing-interline">
+              <Button disabled={isTesting}>
                 {isTesting ? (
-                  <LoadingAnimation text="Testing" />
+                  <Text inverted>
+                    <LoadingAnimation text="Testing" />
+                  </Text>
                 ) : existingLlmProvider ? (
                   "Update"
                 ) : (
@@ -678,10 +678,8 @@ export function LLMProviderUpdateForm({
               </Button>
               {existingLlmProvider && (
                 <Button
-                  type="button"
-                  variant="destructive"
-                  className="ml-3"
-                  icon={FiTrash}
+                  danger
+                  leftIcon={SvgTrash}
                   onClick={async () => {
                     const response = await fetch(
                       `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
@@ -689,6 +687,7 @@ export function LLMProviderUpdateForm({
                         method: "DELETE",
                       }
                     );
+
                     if (!response.ok) {
                       const errorMsg = (await response.json()).detail;
                       alert(`Failed to delete provider: ${errorMsg}`);

@@ -6,7 +6,7 @@ import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   createCustomTool,
   updateCustomTool,
@@ -236,11 +236,8 @@ function ActionForm({
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                         <Button
-                          type="button"
                           onClick={() => arrayHelpers.remove(index)}
-                          variant="destructive"
-                          size="sm"
-                          className="transition-colors duration-200 hover:bg-red-600"
+                          danger
                         >
                           Remove
                         </Button>
@@ -250,11 +247,8 @@ function ActionForm({
                 </div>
 
                 <Button
-                  type="button"
                   onClick={() => arrayHelpers.push({ key: "", value: "" })}
-                  variant="secondary"
-                  size="sm"
-                  className="transition-colors duration-200"
+                  secondary
                 >
                   Add New Header
                 </Button>
@@ -338,9 +332,6 @@ function ActionForm({
       <div className="flex">
         <Button
           className="mx-auto"
-          variant="submit"
-          size="sm"
-          type="submit"
           disabled={isSubmitting || !!definitionError}
         >
           {existingTool ? "Update Action" : "Create Action"}

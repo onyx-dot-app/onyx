@@ -1,20 +1,15 @@
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+// import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Logo } from "@/components/logo/Logo";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { getRandomGreeting } from "@/lib/chat/greetingMessages";
-import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { AgentIcon } from "@/refresh-components/AgentIcon";
+import Text from "@/refresh-components/Text";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 
-interface WelcomeMessageProps {
-  assistant: MinimalPersonaSnapshot;
-}
+export default function WelcomeMessage() {
+  const { currentAgent } = useAgentsContext();
 
-export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
-  // Memoize the greeting so it doesn't change on re-renders (only for unified assistant)
-  const greeting = useMemo(() => getRandomGreeting(), []);
-
-  // For the unified assistant (ID 0), show greeting message
-  const isUnifiedAssistant = assistant.id === 0;
+  // If no agent is active OR the current agent is the default one, we show the Onyx logo.
+  const isDefaultAgent = !currentAgent || currentAgent.id === 0;
 
   return (
     <div
@@ -25,40 +20,20 @@ export function WelcomeMessage({ assistant }: WelcomeMessageProps) {
         "flex",
         "flex-col",
         "items-center",
-        "text-text-800",
         "justify-center",
-        "mb-6",
-        "transition-opacity",
-        "duration-300"
+        "mb-6"
       )}
     >
       <div className="flex items-center">
-        {isUnifiedAssistant ? (
-          <>
-            <div data-testid="onyx-logo">
-              <Logo size="large" />
-            </div>
-            <div
-              data-testid="greeting-message"
-              className="ml-6 text-text-600 dark:text-neutral-100 text-3xl font-bold max-w-md"
-            >
-              {greeting}
-            </div>
-          </>
+        {isDefaultAgent ? (
+          <div data-testid="onyx-logo">
+            <Logo size="large" />
+          </div>
         ) : (
-          <>
-            <AssistantIcon
-              colorOverride="text-text-800"
-              assistant={assistant}
-              size="large"
-            />
-            <div
-              data-testid="assistant-name-display"
-              className="ml-4 flex justify-center items-center text-center text-3xl font-bold"
-            >
-              {assistant.name}
-            </div>
-          </>
+          <div className="flex flex-row items-center justify-center gap-padding-button">
+            <AgentIcon agent={currentAgent} />
+            <Text headingH2>{currentAgent.name}</Text>
+          </div>
         )}
       </div>
     </div>

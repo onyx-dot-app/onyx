@@ -69,7 +69,7 @@ export function Label({
   return (
     <label
       {...(htmlFor ? { htmlFor } : {})}
-      className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
+      className={`block font-medium ${className} ${
         small ? "text-sm" : "text-base"
       }`}
     >
@@ -111,7 +111,9 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
 
   return (
     <span
-      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
+      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${
+        hasNewlines ? "whitespace-pre-wrap" : ""
+      }`}
     >
       {children}
     </span>
@@ -330,13 +332,9 @@ export function TextFormField({
             w-full
             rounded-md
             border
-            border-neutral-200
-            bg-white
             px-3
             py-2
             mt-1
-            text-base
-
             file:border-0
             file:bg-transparent
             file:text-sm
@@ -353,17 +351,18 @@ export function TextFormField({
             disabled:cursor-not-allowed
             disabled:opacity-50
             md:text-sm
-            dark:border-neutral-700
-            dark:bg-transparent
-            dark:ring-offset-neutral-950
-            dark:file:text-neutral-50
-            dark:placeholder:text-neutral-400
+            border-neutral-700
+            ring-offset-neutral-950
+            file:text-neutral-50
+            text-text-04
+            placeholder:text-text-02
 
             ${heightString}
             ${sizeClass.input}
             ${disabled ? "bg-neutral-100 dark:bg-neutral-800" : ""}
             ${isCode ? "font-mono" : ""}
             ${className}
+            bg-background-neutral-00
           `}
           disabled={disabled}
           placeholder={placeholder}

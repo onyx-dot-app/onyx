@@ -80,7 +80,6 @@ const Page = async (props: {
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}
           nextUrl={nextUrl!}
-          searchParams={searchParams}
           hidePageRedirect={true}
         />
       </AuthFlowContainer>

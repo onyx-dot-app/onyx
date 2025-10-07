@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { FiX } from "react-icons/fi";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 interface SearchAndFilterControlsProps {
   searchQuery: string;
@@ -50,35 +51,17 @@ export function SearchAndFilterControls({
     setLocalSearchValue(searchQuery);
   }, [searchQuery]);
 
-  const handleClearSearch = () => {
-    setLocalSearchValue("");
-  };
-
   return (
-    <div className="flex items-center gap-x-2 -mb-4">
-      <div className="relative w-96 flex-none">
-        <input
-          type="text"
-          placeholder="Search connectors..."
-          value={localSearchValue}
-          onChange={(e) => setLocalSearchValue(e.target.value)}
-          className="w-full h-9 border border-border rounded-md bg-background-50 px-3 py-1 pr-9 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-        {localSearchValue && (
-          <button
-            onClick={handleClearSearch}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-            aria-label="Clear search"
-          >
-            <FiX className="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
-          </button>
-        )}
-      </div>
+    <div className="flex items-center gap-x-2">
+      <InputTypeIn
+        placeholder="Search Connectors"
+        type="text"
+        value={localSearchValue}
+        onChange={(event) => setLocalSearchValue(event.target.value)}
+        className="w-96"
+      />
 
-      <Button
-        className="h-9"
-        onClick={hasExpandedSources ? onCollapseAll : onExpandAll}
-      >
+      <Button onClick={hasExpandedSources ? onCollapseAll : onExpandAll}>
         {hasExpandedSources ? "Collapse All" : "Expand All"}
       </Button>
 

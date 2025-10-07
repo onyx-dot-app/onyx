@@ -31,7 +31,10 @@ test.describe("Default Assistant Admin Page", () => {
           body = await resp.text();
         } catch {}
         console.log(
-          `[api:response] ${method} ${url} => ${status} body=${body?.slice(0, 300)}`
+          `[api:response] ${method} ${url} => ${status} body=${body?.slice(
+            0,
+            300
+          )}`
         );
       }
     });
@@ -45,10 +48,14 @@ test.describe("Default Assistant Admin Page", () => {
         "http://localhost:3000/api/admin/default-assistant/configuration"
       );
       console.log(
-        `[/available-tools] status=${toolsResp.status()} body=${(await toolsResp.text()).slice(0, 400)}`
+        `[/available-tools] status=${toolsResp.status()} body=${(
+          await toolsResp.text()
+        ).slice(0, 400)}`
       );
       console.log(
-        `[/configuration] status=${cfgResp.status()} body=${(await cfgResp.text()).slice(0, 400)}`
+        `[/configuration] status=${cfgResp.status()} body=${(
+          await cfgResp.text()
+        ).slice(0, 400)}`
       );
     } catch (e) {
       console.log(`[setup] Failed to fetch initial admin config: ${String(e)}`);
@@ -99,7 +106,9 @@ test.describe("Default Assistant Admin Page", () => {
     ]);
     if (patchResp) {
       console.log(
-        `[toggle] Internal Search PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+        `[toggle] Internal Search PATCH status=${patchResp.status()} body=${(
+          await patchResp.text()
+        ).slice(0, 300)}`
       );
     } else {
       console.log(`[toggle] Internal Search did not observe PATCH response`);
@@ -159,7 +168,9 @@ test.describe("Default Assistant Admin Page", () => {
     ]);
     if (patchResp) {
       console.log(
-        `[toggle] Web Search PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+        `[toggle] Web Search PATCH status=${patchResp.status()} body=${(
+          await patchResp.text()
+        ).slice(0, 300)}`
       );
     } else {
       console.log(`[toggle] Web Search did not observe PATCH response`);
@@ -219,7 +230,9 @@ test.describe("Default Assistant Admin Page", () => {
     ]);
     if (patchResp) {
       console.log(
-        `[toggle] Image Generation PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+        `[toggle] Image Generation PATCH status=${patchResp.status()} body=${(
+          await patchResp.text()
+        ).slice(0, 300)}`
       );
     } else {
       console.log(`[toggle] Image Generation did not observe PATCH response`);
@@ -280,7 +293,9 @@ test.describe("Default Assistant Admin Page", () => {
     ]);
     if (patchResp) {
       console.log(
-        `[prompt] Save PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+        `[prompt] Save PATCH status=${patchResp.status()} body=${(
+          await patchResp.text()
+        ).slice(0, 300)}`
       );
     } else {
       console.log(`[prompt] Did not observe PATCH response on save`);
@@ -332,7 +347,9 @@ test.describe("Default Assistant Admin Page", () => {
           r.request().method() === "PATCH"
       );
       console.log(
-        `[prompt-empty] Temp save PATCH status=${patchResp1.status()} body=${(await patchResp1.text()).slice(0, 300)}`
+        `[prompt-empty] Temp save PATCH status=${patchResp1.status()} body=${(
+          await patchResp1.text()
+        ).slice(0, 300)}`
       );
       await expect(
         page.locator("text=Instructions updated successfully!")
@@ -352,7 +369,9 @@ test.describe("Default Assistant Admin Page", () => {
         r.request().method() === "PATCH"
     );
     console.log(
-      `[prompt-empty] Save empty PATCH status=${patchResp2.status()} body=${(await patchResp2.text()).slice(0, 300)}`
+      `[prompt-empty] Save empty PATCH status=${patchResp2.status()} body=${(
+        await patchResp2.text()
+      ).slice(0, 300)}`
     );
 
     // Wait for success message
@@ -381,7 +400,9 @@ test.describe("Default Assistant Admin Page", () => {
           r.request().method() === "PATCH"
       );
       console.log(
-        `[prompt-empty] Restore PATCH status=${patchResp3.status()} body=${(await patchResp3.text()).slice(0, 300)}`
+        `[prompt-empty] Restore PATCH status=${patchResp3.status()} body=${(
+          await patchResp3.text()
+        ).slice(0, 300)}`
       );
       await expect(
         page.locator("text=Instructions updated successfully!")
@@ -420,7 +441,9 @@ test.describe("Default Assistant Admin Page", () => {
         r.request().method() === "PATCH"
     );
     console.log(
-      `[prompt-long] Save PATCH status=${patchResp.status()} body=${(await patchResp.text()).slice(0, 300)}`
+      `[prompt-long] Save PATCH status=${patchResp.status()} body=${(
+        await patchResp.text()
+      ).slice(0, 300)}`
     );
 
     // Wait for success message
@@ -443,7 +466,9 @@ test.describe("Default Assistant Admin Page", () => {
           r.request().method() === "PATCH"
       );
       console.log(
-        `[prompt-long] Restore PATCH status=${patchRespRestore.status()} body=${(await patchRespRestore.text()).slice(0, 300)}`
+        `[prompt-long] Restore PATCH status=${patchRespRestore.status()} body=${(
+          await patchRespRestore.text()
+        ).slice(0, 300)}`
       );
       await expect(
         page.locator("text=Instructions updated successfully!")
@@ -496,7 +521,9 @@ test.describe("Default Assistant Admin Page", () => {
         }
       );
       console.log(
-        `[invalid-tools] page.request.patch status=${alt.status()} body=${(await alt.text()).slice(0, 300)}`
+        `[invalid-tools] page.request.patch status=${alt.status()} body=${(
+          await alt.text()
+        ).slice(0, 300)}`
       );
     } catch (e) {
       console.log(`[invalid-tools] page.request.patch error: ${String(e)}`);

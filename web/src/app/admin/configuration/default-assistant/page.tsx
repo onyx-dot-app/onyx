@@ -14,7 +14,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,

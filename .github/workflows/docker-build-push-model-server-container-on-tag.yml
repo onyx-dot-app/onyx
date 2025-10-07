@@ -11,8 +11,8 @@ env:
   BUILDKIT_PROGRESS: plain
   DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
 
-  # don't tag cloud images with "latest"
-  LATEST_TAG: ${{ contains(github.ref_name, 'latest') && !contains(github.ref_name, 'cloud') }}
+  # tag nightly builds with "edge"
+  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
   
 jobs:
 
@@ -145,6 +145,15 @@ jobs:
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Check if stable release version
+        id: check_version
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "${{ github.ref_name }}" != *"cloud"* ]]; then
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -157,8 +166,13 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }} \
             ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64 \
             ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
-          if [[ "${{ env.LATEST_TAG }}" == "true" ]]; then
+          if [[ "${{ steps.check_version.outputs.is_stable }}" == "true" ]]; then
             docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:latest \
+              ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64 \
+              ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
+          fi
+          if [[ "${{ env.EDGE_TAG }}" == "true" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:edge \
               ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64 \
               ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
           fi

@@ -2,13 +2,15 @@ import { SourceIcon } from "@/components/SourceIcon";
 import React, { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
-import { EntityType, SourceAndEntityTypeView } from "./interfaces";
+import { EntityType, SourceAndEntityTypeView } from "@/app/admin/kg/interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
-import { Input } from "@/components/ui/input";
 import { CheckmarkIcon } from "@/components/icons/icons";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/Text";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { cn } from "@/lib/utils";
 
 // Utility: Convert capitalized snake case to human readable case
 function snakeToHumanReadable(str: string): string {
@@ -29,10 +31,16 @@ function snakeToHumanReadable(str: string): string {
 // Custom Header Component
 function TableHeader() {
   return (
-    <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
-      <div className="col-span-1">Entity Name</div>
-      <div className="col-span-10">Description</div>
-      <div className="col-span-1 flex flex-1 justify-center">Active</div>
+    <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b bg-background-tint-00">
+      <div className="col-span-1">
+        <Text>Entity Name</Text>
+      </div>
+      <div className="col-span-10">
+        <Text>Description</Text>
+      </div>
+      <div className="col-span-1 flex flex-1 justify-center">
+        <Text>Active</Text>
+      </div>
     </div>
   );
 }
@@ -105,20 +113,22 @@ function TableRow({ entityType }: { entityType: EntityType }) {
   }, [entityTypeState.description]);
 
   return (
-    <div className="hover:bg-accent-background-hovered transition-colors duration-200 ease-in-out">
+    <div className="bg-background-tint-00">
       <div className="grid grid-cols-12 px-8 py-4">
         <div
-          className={`grid grid-cols-11 col-span-11 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
+          className={cn(
+            "grid grid-cols-11 col-span-11 transition-opacity duration-150 ease-in-out",
+            !entityTypeState.active && "opacity-60"
+          )}
         >
           <div className="col-span-1 flex items-center">
-            <span className="font-medium text-sm">
-              {snakeToHumanReadable(entityType.name)}
-            </span>
+            <Text>{snakeToHumanReadable(entityType.name)}</Text>
           </div>
           <div className="col-span-10 relative">
-            <Input
+            <InputTypeIn
+              placeholder="Value"
               disabled={!entityTypeState.active}
-              className="w-full px-3 py-2 border focus:ring-2 transition-shadow"
+              className="w-full px-3 py-2 border"
               defaultValue={entityType.description}
               onChange={(e) =>
                 setEntityTypeState({
@@ -146,22 +156,24 @@ function TableRow({ entityType }: { entityType: EntityType }) {
               style={{ pointerEvents: "none" }}
             >
               <span
-                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out",
                   descriptionSavingState === "saving" && hasMounted
                     ? "opacity-100"
                     : "opacity-0"
-                }`}
+                )}
                 style={{ zIndex: 1 }}
               >
-                <span className="inline-block w-4 h-4 align-middle border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="inline-block w-4 h-4 align-middle border-2 border-theme-primary-04 border-t-transparent rounded-full animate-spin" />
               </span>
               <span
-                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out",
                   checkmarkVisible ? "opacity-100" : "opacity-0"
-                }`}
+                )}
                 style={{ zIndex: 2 }}
               >
-                <CheckmarkIcon size={16} className="text-green-400" />
+                <CheckmarkIcon size={16} className="text-status-success-05" />
               </span>
             </span>
           </div>
@@ -220,16 +232,13 @@ export default function KGEntityTypes({
   return (
     <div className="flex flex-col gap-y-4 w-full">
       <div className="flex flex-row items-center gap-x-1.5 mb-2">
-        <input
-          type="text"
-          className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        <InputTypeIn
           placeholder="Search source type..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
         />
         <Button
           className="h-9"
-          variant="default"
           onClick={allClosed ? handleExpandAll : handleCollapseAll}
         >
           {allClosed ? "Expand All" : "Collapse All"}
@@ -238,13 +247,16 @@ export default function KGEntityTypes({
       <div className="flex flex-col gap-y-4 w-full">
         {Object.entries(sourceAndEntityTypes.entity_types).length === 0 ? (
           <div className="flex flex-col gap-y-4">
-            <p>No results available.</p>
-            <p>
+            <Text text02>No results available.</Text>
+            <Text text02>
               To configure Knowledge Graph, first connect some{" "}
-              <Link href="/admin/add-connector" className="underline">
+              <Link
+                href="/admin/add-connector"
+                className="underline text-action-link-01"
+              >
                 Connectors.
               </Link>
-            </p>
+            </Text>
           </div>
         ) : (
           Object.entries(sourceAndEntityTypes.entity_types)
@@ -263,6 +275,7 @@ export default function KGEntityTypes({
               return (
                 <div key={key}>
                   <CollapsibleCard
+                    className="focus:outline-none focus-visible:outline-none outline-none"
                     header={
                       <span className="font-semibold text-lg flex flex-row gap-x-4 items-center">
                         {Object.values(ValidSources).includes(
@@ -277,23 +290,21 @@ export default function KGEntityTypes({
                         )}
                         {snakeToHumanReadable(key)}
                         <span className="ml-auto flex flex-row gap-x-16 items-center pr-16">
-                          <span className="flex flex-col items-end">
-                            <span className="text-sm text-neutral-400 mb-0.5">
+                          <span className="flex flex-col items-start">
+                            <Text secondaryBody text02>
                               Entities Count
-                            </span>
-                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
-                              {stats.entities_count}
-                            </span>
+                            </Text>
+                            <Text>{stats.entities_count}</Text>
                           </span>
-                          <span className="flex flex-col items-end">
-                            <span className="text-sm text-neutral-400 mb-0.5">
+                          <span className="flex flex-col items-start">
+                            <Text secondaryBody text02>
                               Last Updated
-                            </span>
-                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
+                            </Text>
+                            <Text>
                               {stats.last_updated
                                 ? new Date(stats.last_updated).toLocaleString()
                                 : "N/A"}
-                            </span>
+                            </Text>
                           </span>
                         </span>
                       </span>

@@ -8,7 +8,7 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
-import { SignInButton } from "../login/SignInButton";
+import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
@@ -91,9 +91,9 @@ const Page = async (props: {
           {cloud && authUrl && (
             <div className="w-full justify-center">
               <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-background-300"></div>
+                <div className="flex-grow border-t border-background-300" />
                 <span className="px-4 text-text-500">or</span>
-                <div className="flex-grow border-t border-background-300"></div>
+                <div className="flex-grow border-t border-background-300" />
               </div>
               <SignInButton authorizeUrl={authUrl} authType="cloud" />
             </div>

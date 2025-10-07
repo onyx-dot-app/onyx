@@ -64,7 +64,7 @@ export function ActionsTable({
                       );
                     }}
                   />
-                  <p className="text font-medium whitespace-normal break-none">
+                  <p className="text-text-04 font-medium whitespace-normal break-none">
                     {server.name}
                   </p>
                 </div>
@@ -82,7 +82,7 @@ export function ActionsTable({
                 <div className="flex">
                   <div className="my-auto">
                     <div
-                      className="hover:bg-accent-background-hovered rounded p-1 cursor-pointer"
+                      className="hover:bg-background-neutral-02 rounded p-1 cursor-pointer"
                       onClick={async () => {
                         const confirmDelete = window.confirm(
                           "Delete this MCP server and all its tools and configs? This cannot be undone."
@@ -122,7 +122,7 @@ export function ActionsTable({
                       }}
                     />
                   )}
-                  <p className="text font-medium whitespace-normal break-none">
+                  <p className="text-text-04 font-medium whitespace-normal break-none">
                     {tool.name}
                   </p>
                 </div>
@@ -148,7 +148,7 @@ export function ActionsTable({
                   {tool.in_code_tool_id === null ? (
                     <div className="my-auto">
                       <div
-                        className="hover:bg-accent-background-hovered rounded p-1 cursor-pointer"
+                        className="hover:bg-background-neutral-02 rounded p-1 cursor-pointer"
                         onClick={async () => {
                           const response = await deleteCustomTool(tool.id);
                           if (response.data) {

@@ -11,7 +11,7 @@ import {
   UserRole,
 } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   ArrayHelpers,
   FieldArray,
@@ -123,6 +123,8 @@ import { FormErrorFocus } from "@/components/FormErrorHelpers";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePicker from "@/app/chat/components/files/FilePicker";
+import SvgTrash from "@/icons/trash";
+import SvgEditBig from "@/icons/edit-big";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -875,10 +877,7 @@ export function AssistantEditor({
 
                     <div className="flex flex-col gap-2">
                       <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-xs flex justify-start gap-x-2"
+                        secondary
                         onClick={() => {
                           const fileInput = document.createElement("input");
                           fileInput.type = "file";
@@ -894,28 +893,26 @@ export function AssistantEditor({
                           };
                           fileInput.click();
                         }}
+                        leftIcon={() => <CameraIcon size={14} />}
                       >
-                        <CameraIcon size={14} />
-                        Upload {values.uploaded_image && "New "}Image
+                        {`Upload ${values.uploaded_image ? "New " : ""}Image`}
                       </Button>
 
                       {values.uploaded_image && (
                         <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="flex justify-start gap-x-2 text-xs"
+                          secondary
                           onClick={() => {
                             setUploadedImagePreview(null);
                             setFieldValue("uploaded_image", null);
                             setRemovePersonaImage(false);
                           }}
+                          leftIcon={SvgTrash}
                         >
-                          <TrashIcon className="h-3 w-3" />
-                          {removePersonaImage
-                            ? "Revert to Previous "
-                            : "Remove "}
-                          Image
+                          {`${
+                            removePersonaImage
+                              ? "Revert to Previous "
+                              : "Remove "
+                          } Image`}
                         </Button>
                       )}
 
@@ -923,10 +920,7 @@ export function AssistantEditor({
                         (!existingPersona?.uploaded_image_id ||
                           removePersonaImage) && (
                           <Button
-                            type="button"
-                            className="text-xs"
-                            variant="outline"
-                            size="sm"
+                            secondary
                             onClick={(e) => {
                               e.stopPropagation();
                               const newShape = generateRandomIconShape();
@@ -939,8 +933,8 @@ export function AssistantEditor({
                               setFieldValue("icon_shape", newShape.encodedGrid);
                               setFieldValue("icon_color", randomColor);
                             }}
+                            leftIcon={SvgEditBig}
                           >
-                            <NewChatIcon size={14} />
                             Generate Icon
                           </Button>
                         )}
@@ -949,18 +943,15 @@ export function AssistantEditor({
                         removePersonaImage &&
                         !values.uploaded_image && (
                           <Button
-                            type="button"
-                            variant="outline"
-                            className="text-xs"
-                            size="sm"
+                            secondary
                             onClick={(e) => {
                               e.stopPropagation();
                               setRemovePersonaImage(false);
                               setUploadedImagePreview(null);
                               setFieldValue("uploaded_image", null);
                             }}
+                            leftIcon={() => <SwapIcon className="h-3 w-3" />}
                           >
-                            <SwapIcon className="h-3 w-3" />
                             Revert to Previous Image
                           </Button>
                         )}
@@ -969,16 +960,13 @@ export function AssistantEditor({
                         !removePersonaImage &&
                         !values.uploaded_image && (
                           <Button
-                            type="button"
-                            variant="outline"
-                            className="text-xs"
-                            size="sm"
+                            secondary
                             onClick={(e) => {
                               e.stopPropagation();
                               setRemovePersonaImage(true);
                             }}
+                            leftIcon={SvgTrash}
                           >
-                            <TrashIcon className="h-3 w-3" />
                             Remove Image
                           </Button>
                         )}
@@ -1834,27 +1822,16 @@ export function AssistantEditor({
                 <div className="mt-12 w-full flex justify-between items-center">
                   <div>
                     {existingPersona && (
-                      <Button
-                        variant="destructive"
-                        onClick={openDeleteModal}
-                        type="button"
-                      >
+                      <Button danger onClick={openDeleteModal}>
                         Delete
                       </Button>
                     )}
                   </div>
-                  <div className="flex gap-x-4 items-center">
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting || isRequestSuccessful}
-                    >
+                  <div className="flex gap-x-2 items-center">
+                    <Button disabled={isSubmitting || isRequestSuccessful}>
                       {isUpdate ? "Update" : "Create"}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => router.back()}
-                    >
+                    <Button secondary onClick={() => router.back()}>
                       Cancel
                     </Button>
                   </div>

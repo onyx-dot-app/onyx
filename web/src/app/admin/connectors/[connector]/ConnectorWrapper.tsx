@@ -3,7 +3,7 @@
 import { ConfigurableSources } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
-import Sidebar from "./Sidebar";
+import Sidebar from "../../../../sections/sidebar/CreateConnectorSidebar";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@/components/ui/button";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";

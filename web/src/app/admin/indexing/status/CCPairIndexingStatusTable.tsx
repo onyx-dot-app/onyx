@@ -38,6 +38,9 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+import Text from "@/refresh-components/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgSettings from "@/icons/settings";
 
 function isFederatedConnectorStatus(
   status: ConnectorIndexingStatusLite | FederatedConnectorStatus
@@ -198,13 +201,12 @@ function ConnectorRow({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <FiSettings
-                  className="cursor-pointer"
-                  onClick={handleManageClick}
-                />
+                <div>
+                  <IconButton icon={SvgSettings} tertiary />
+                </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Manage Connector</p>
+                <Text inverted>Manage Connector</Text>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

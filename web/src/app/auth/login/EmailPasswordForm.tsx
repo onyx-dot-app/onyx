@@ -3,7 +3,7 @@
 import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
@@ -11,7 +11,15 @@ import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
-import { useRouter } from "next/navigation";
+
+interface EmailPasswordFormProps {
+  isSignup?: boolean;
+  shouldVerify?: boolean;
+  referralSource?: string;
+  nextUrl?: string | null;
+  defaultEmail?: string | null;
+  isJoin?: boolean;
+}
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -20,18 +28,10 @@ export function EmailPasswordForm({
   nextUrl,
   defaultEmail,
   isJoin = false,
-}: {
-  isSignup?: boolean;
-  shouldVerify?: boolean;
-  referralSource?: string;
-  nextUrl?: string | null;
-  defaultEmail?: string | null;
-  isJoin?: boolean;
-}) {
+}: EmailPasswordFormProps) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
-  const router = useRouter();
-  const [isWorking, setIsWorking] = useState(false);
+  const [isWorking, setIsWorking] = useState<boolean>(false);
   return (
     <>
       {isWorking && <Spinner />}
@@ -48,9 +48,9 @@ export function EmailPasswordForm({
             .transform((value) => value.toLowerCase()),
           password: Yup.string().required(),
         })}
-        onSubmit={async (values) => {
+        onSubmit={async (values: { email: string; password: string }) => {
           // Ensure email is lowercase
-          const email = values.email.toLowerCase();
+          const email: string = values.email.toLowerCase();
 
           if (isSignup) {
             // login is fast, no need to show a spinner
@@ -64,8 +64,8 @@ export function EmailPasswordForm({
             if (!response.ok) {
               setIsWorking(false);
 
-              const errorDetail = (await response.json()).detail;
-              let errorMsg = "Unknown error";
+              const errorDetail: any = (await response.json()).detail;
+              let errorMsg: string = "Unknown error";
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
@@ -108,8 +108,8 @@ export function EmailPasswordForm({
             }
           } else {
             setIsWorking(false);
-            const errorDetail = (await loginResponse.json()).detail;
-            let errorMsg = "Unknown error";
+            const errorDetail: any = (await loginResponse.json()).detail;
+            let errorMsg: string = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
               errorMsg = "Invalid email or password";
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
@@ -143,20 +143,15 @@ export function EmailPasswordForm({
               placeholder="**************"
             />
 
-            <Button
-              variant="agent"
-              type="submit"
-              disabled={isSubmitting}
-              className="mx-auto  !py-4 w-full"
-            >
+            <Button className="w-full" disabled={isSubmitting}>
               {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link
                 href="/chat"
-                className="text-xs text-blue-500  cursor-pointer text-center w-full text-link font-medium mx-auto"
+                className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
               >
-                <span className="hover:border-b hover:border-dotted hover:border-blue-500">
+                <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
                   or continue as guest
                 </span>
               </Link>

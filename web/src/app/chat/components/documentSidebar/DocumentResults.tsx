@@ -9,12 +9,14 @@ import {
   useMemo,
   memo,
 } from "react";
-import { XIcon } from "@/components/icons/icons";
 import { getCitations } from "../../services/packetUtils";
 import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
+import Text from "@/refresh-components/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -162,19 +164,13 @@ const DocumentResultsComponent = (
                   {/* Cited Documents Section */}
                   {hasCited && (
                     <div className="mt-4">
-                      <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
-                        <h3 className="text-base font-semibold text-text-700">
-                          Cited Sources
-                        </h3>
-
-                        <button
-                          aria-label="Close sidebar"
-                          title="Close"
-                          className="my-auto p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                      <div className="px-4 pb-3 pt-2 flex items-center justify-between border-b border-border">
+                        <Text headingH3>Cited Sources</Text>
+                        <IconButton
+                          icon={SvgX}
+                          tertiary
                           onClick={closeSidebar}
-                        >
-                          <XIcon size={16} />
-                        </button>
+                        />
                       </div>
                       {citedDocuments.map((document, ind) => (
                         <div
@@ -207,15 +203,11 @@ const DocumentResultsComponent = (
                   {/* Other Documents Section */}
                   {hasOther && (
                     <div className="mt-4">
-                      <>
-                        <div className="px-4 pb-3 pt-2 border-b border-border">
-                          <h3 className="text-base font-semibold text-text-700">
-                            {citedDocuments.length > 0
-                              ? "More"
-                              : "Found Sources"}
-                          </h3>
-                        </div>
-                      </>
+                      <div className="px-4 pb-3 pt-2 border-b border-border">
+                        <Text headingH3>
+                          {citedDocuments.length > 0 ? "More" : "Found Sources"}
+                        </Text>
+                      </div>
 
                       {otherDocuments.map((document, ind) => (
                         <div
@@ -250,21 +242,13 @@ const DocumentResultsComponent = (
               {/* Human Files Section */}
               {humanFileDescriptors && humanFileDescriptors.length > 0 && (
                 <div className="mt-4">
-                  <div className="px-4 pb-3 pt-2 flex justify-between border-b border-border">
-                    <h3 className="text-base font-semibold text-text-700">
-                      User Files
-                    </h3>
+                  <div className="px-4 pb-3 pt-2 flex items-center justify-between border-b border-border">
+                    <Text headingH3>User Files</Text>
                     {showCloseInUserFiles && (
-                      <button
-                        aria-label="Close sidebar"
-                        title="Close"
-                        className="my-auto p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                        onClick={closeSidebar}
-                      >
-                        <XIcon size={16} />
-                      </button>
+                      <IconButton icon={SvgX} tertiary onClick={closeSidebar} />
                     )}
                   </div>
+
                   {humanFileDescriptors.map((f) => (
                     <div key={f.id} className={`desktop:px-2 w-full mb-2`}>
                       <ChatDocumentDisplay

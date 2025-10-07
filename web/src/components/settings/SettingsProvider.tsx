@@ -1,9 +1,7 @@
 "use client";
 
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { createContext, useEffect, useState } from "react";
-
-export const SettingsContext = createContext<CombinedSettings | null>(null);
+import { createContext, useContext, useEffect, useState } from "react";
 
 export function SettingsProvider({
   children,
@@ -29,4 +27,16 @@ export function SettingsProvider({
       {children}
     </SettingsContext.Provider>
   );
+}
+
+export const SettingsContext = createContext<CombinedSettings | null>(null);
+
+export function useSettingsContext() {
+  const context = useContext(SettingsContext);
+  if (context === null) {
+    throw new Error(
+      "useSettingsContext must be used within a SettingsProvider"
+    );
+  }
+  return context;
 }
