@@ -39,6 +39,10 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
             "onyx/llm/litellm_singleton.py",
         }
     ),
+    "nltk": LazyImportSettings(),
+    "trafilatura": LazyImportSettings(),
+    "pypdf": LazyImportSettings(),
+    "unstructured_client": LazyImportSettings(),
 }
 
 

@@ -26,6 +26,9 @@ import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
 import SvgUser from "@/icons/user";
 import { UserSettings } from "@/app/chat/components/modal/UserSettingsModal";
 import { cn } from "@/lib/utils";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 
 function getUsernameFromEmail(email?: string): string {
   if (!email) return ANONYMOUS_USER_NAME;
@@ -186,11 +189,18 @@ export default function Settings({
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
+  const { llmProviders, ccPairs } = useChatContext();
+  const {
+    connectors: federatedConnectors,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+  const { popup, setPopup } = usePopup();
 
   const username = getUsernameFromEmail(user?.email);
 
   return (
     <>
+      {popup}
       <Modal
         id={ModalIds.UserSettingsModal}
         title="User Settings"
@@ -199,13 +209,13 @@ export default function Settings({
         sm
       >
         <UserSettings
-          setPopup={() => toggleModal(ModalIds.UserSettingsModal, false)}
-          llmProviders={[]}
-          onClose={() => {}}
-          defaultModel={null}
-          ccPairs={[]}
-          federatedConnectors={[]}
-          refetchFederatedConnectors={() => {}}
+          setPopup={setPopup}
+          llmProviders={llmProviders}
+          onClose={() => toggleModal(ModalIds.UserSettingsModal, false)}
+          defaultModel={user?.preferences?.default_model ?? null}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
         />
       </Modal>
 

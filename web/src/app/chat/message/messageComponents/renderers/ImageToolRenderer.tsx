@@ -96,7 +96,12 @@ export const ImageToolRenderer: MessageRenderer<
                     key={image.file_id || index}
                     className="transition-all group"
                   >
-                    {image.file_id && <InMessageImage fileId={image.file_id} />}
+                    {image.file_id && (
+                      <InMessageImage
+                        fileId={image.file_id}
+                        shape={image.shape}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

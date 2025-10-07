@@ -13,6 +13,7 @@ import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
 import SvgFilter from "@/icons/filter";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import Button from "@/refresh-components/buttons/Button";
+import Link from "next/link";
 
 interface AgentsSectionProps {
   title: string;
@@ -149,15 +150,9 @@ export default function AgentsModal() {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
-          <Button
-            onClick={() => {
-              toggleModal(ModalIds.AgentsModal, false);
-              router.push("/assistants/new");
-            }}
-            className="h-full"
-          >
-            Create
-          </Button>
+          <Link href="/assistants/new">
+            <Button className="h-full">Create</Button>
+          </Link>
         </div>
 
         <div className="py-padding-content flex items-center gap-spacing-interline flex-wrap">

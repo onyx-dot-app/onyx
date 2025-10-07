@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   parseLlmDescriptor,
@@ -30,28 +30,75 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   onSelect,
   requiresImageGeneration,
 }) => {
-  const seenModelNames = new Set();
+  const currentDescriptor = useMemo(
+    () => (currentLlm ? parseLlmDescriptor(currentLlm) : null),
+    [currentLlm]
+  );
 
-  const llmOptions = llmProviders.flatMap((provider) => {
-    return provider.model_configurations
-      .filter((modelConfiguration) => {
+  const llmOptions = useMemo(() => {
+    const seenDisplayNames = new Set<string>();
+    const options: {
+      name: string;
+      value: string;
+      icon: ReturnType<typeof getProviderIcon>;
+      modelName: string;
+      providerName: string;
+      supportsImageInput: boolean;
+    }[] = [];
+
+    llmProviders.forEach((provider) => {
+      provider.model_configurations.forEach((modelConfiguration) => {
         const displayName = getDisplayNameForModel(modelConfiguration.name);
-        if (seenModelNames.has(displayName)) {
-          return false;
+
+        const matchesCurrentSelection =
+          currentDescriptor?.modelName === modelConfiguration.name &&
+          (currentDescriptor?.provider === provider.provider ||
+            currentDescriptor?.name === provider.name);
+
+        if (!modelConfiguration.is_visible && !matchesCurrentSelection) {
+          return;
         }
-        seenModelNames.add(displayName);
-        return true;
-      })
-      .map((modelConfiguration) => ({
-        name: getDisplayNameForModel(modelConfiguration.name),
-        value: structureValue(
-          provider.name,
-          provider.provider,
-          modelConfiguration.name
-        ),
-        icon: getProviderIcon(provider.provider, modelConfiguration.name),
-      }));
-  });
+
+        if (seenDisplayNames.has(displayName)) {
+          return;
+        }
+
+        const supportsImageInput = modelSupportsImageInput(
+          llmProviders,
+          modelConfiguration.name,
+          provider.name
+        );
+
+        const option = {
+          name: displayName,
+          value: structureValue(
+            provider.name,
+            provider.provider,
+            modelConfiguration.name
+          ),
+          icon: getProviderIcon(provider.provider, modelConfiguration.name),
+          modelName: modelConfiguration.name,
+          providerName: provider.name,
+          supportsImageInput,
+        };
+
+        if (requiresImageGeneration && !supportsImageInput) {
+          return;
+        }
+
+        seenDisplayNames.add(displayName);
+        options.push(option);
+      });
+    });
+
+    return options;
+  }, [
+    llmProviders,
+    currentDescriptor?.modelName,
+    currentDescriptor?.provider,
+    currentDescriptor?.name,
+    requiresImageGeneration,
+  ]);
 
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
@@ -62,11 +109,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
     ? getDisplayNameForModel(defaultModelName)
     : null;
 
-  const destructuredCurrentValue = currentLlm
-    ? parseLlmDescriptor(currentLlm)
-    : null;
-
-  const currentLlmName = destructuredCurrentValue?.modelName;
+  const currentLlmName = currentDescriptor?.modelName;
 
   return (
     <Select
@@ -91,21 +134,14 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
             </span>
           )}
         </SelectItem>
-        {llmOptions.map((option) => {
-          if (
-            !requiresImageGeneration ||
-            modelSupportsImageInput(llmProviders, option.name)
-          ) {
-            return (
-              <SelectItem key={option.value} value={option.value}>
-                <div className="my-1 flex items-center">
-                  {option.icon && option.icon({ size: 16 })}
-                  <span className="ml-2">{option.name}</span>
-                </div>
-              </SelectItem>
-            );
-          }
-        })}
+        {llmOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <div className="my-1 flex items-center">
+              {option.icon && option.icon({ size: 16 })}
+              <span className="ml-2">{option.name}</span>
+            </div>
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );

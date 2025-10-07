@@ -430,7 +430,7 @@ function AgentsButtonInner({ visibleAgent }: AgentsButtonProps) {
                     togglePinnedAgent(visibleAgent, !pinned)
                   )}
                 >
-                  {pinned ? "Unpin chat" : "Pin chat"}
+                  {pinned ? "Unpin Agent" : "Pin Agent"}
                 </NavigationTab>,
               ]}
             </PopoverMenu>

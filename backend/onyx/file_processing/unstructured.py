@@ -1,15 +1,15 @@
 from typing import Any
 from typing import cast
 from typing import IO
-
-from unstructured_client import UnstructuredClient  # type: ignore
-from unstructured_client.models import operations  # type: ignore
-from unstructured_client.models import shared
+from typing import TYPE_CHECKING
 
 from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from unstructured_client.models import operations  # type: ignore
 
 
 logger = setup_logger()
@@ -35,7 +35,10 @@ def delete_unstructured_api_key() -> None:
 
 def _sdk_partition_request(
     file: IO[Any], file_name: str, **kwargs: Any
-) -> operations.PartitionRequest:
+) -> "operations.PartitionRequest":
+    from unstructured_client.models import operations  # type: ignore
+    from unstructured_client.models import shared
+
     file.seek(0, 0)
     try:
         request = operations.PartitionRequest(
@@ -52,6 +55,7 @@ def _sdk_partition_request(
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
     from unstructured.staging.base import dict_to_elements
+    from unstructured_client import UnstructuredClient  # type: ignore
 
     logger.debug(f"Starting to read file: {file_name}")
     req = _sdk_partition_request(file, file_name, strategy="fast")

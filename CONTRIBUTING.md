@@ -122,8 +122,15 @@ You may have to deactivate and reactivate your virtualenv for `playwright` to ap
 
 #### Frontend: Node dependencies
 
-Install [Node.js and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) for the frontend.
-Once the above is done, navigate to `onyx/web` run:
+Onyx uses Node v22.20.0. We highly recommend you use [Node Version Manager (nvm)](https://github.com/nvm-sh/nvm)
+to manage your Node installations. Once installed, you can run
+
+```bash
+nvm install 22 && nvm use 22`
+node -v # verify your active version
+``` 
+
+Navigate to `onyx/web` and run:
 
 ```bash
 npm i
@@ -134,8 +141,6 @@ npm i
 ### Backend
 
 For the backend, you'll need to setup pre-commit hooks (black / reorder-python-imports).
-First, install pre-commit (if you don't have it already) following the instructions
-[here](https://pre-commit.com/#installation).
 
 With the virtual environment active, install the pre-commit library with:
 
@@ -155,15 +160,17 @@ To run the mypy checks manually, run `python -m mypy .` from the `onyx/backend` 
 
 ### Web
 
-We use `prettier` for formatting. The desired version (2.8.8) will be installed via a `npm i` from the `onyx/web` directory.
+We use `prettier` for formatting. The desired version will be installed via a `npm i` from the `onyx/web` directory.
 To run the formatter, use `npx prettier --write .` from the `onyx/web` directory.
-Please double check that prettier passes before creating a pull request.
+
+Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail.
+Re-stage your changes and commit again.
 
 # Running the application for development
 
 ## Developing using VSCode Debugger (recommended)
 
-We highly recommend using VSCode debugger for development.
+**We highly recommend using VSCode debugger for development.**
 See [CONTRIBUTING_VSCODE.md](./CONTRIBUTING_VSCODE.md) for more details.
 
 Otherwise, you can follow the instructions below to run the application for development.

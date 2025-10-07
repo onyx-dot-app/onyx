@@ -143,7 +143,7 @@ export function EmailPasswordForm({
               placeholder="**************"
             />
 
-            <Button className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
