@@ -63,6 +63,38 @@
     display: inline;
     /* Make paragraphs inline to reduce vertical space */
   }
+
+  /* Reduce spacing for markdown elements in chat */
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6 {
+    margin-top: 0.75em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose ul,
+  .prose ol {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose li {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
+
+  .prose hr {
+    margin-top: 1.25em;
+    margin-bottom: 1em;
+  }
+
+  .prose p {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
 }
 
 @layer utilities {
