@@ -509,6 +509,10 @@ SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+GOOGLE_CLOUD_STORAGE_SIZE_THRESHOLD = int(
+    os.environ.get("GOOGLE_CLOUD_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
