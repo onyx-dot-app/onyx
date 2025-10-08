@@ -36,6 +36,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
+from onyx.db.models import Validator
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -255,6 +256,7 @@ def create_update_persona(
             user_folder_ids=create_persona_request.user_folder_ids,
             pipeline_id=create_persona_request.pipeline_id,
             template_file=create_persona_request.template_file,
+            validator_ids=create_persona_request.validator_ids,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -451,6 +453,7 @@ def upsert_persona(
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
     pipeline_id: str | None = None,
     template_file: bytes | None = None,
+    validator_ids: list[int] | None = None,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -513,6 +516,17 @@ def upsert_persona(
         if not user_folders and user_folder_ids:
             raise ValueError("user_folders not found")
 
+    # Запрос и выдача объектов Validator по переданным id
+    validators = None
+    if validator_ids is not None:
+        validators = (
+            db_session.query(Validator)
+            .filter(Validator.id.in_(validator_ids))
+            .all()  # загружаем объекты Validator по переданным validator_ids
+        )
+        if not validators and validator_ids:  # проверка, что все запрошенные валидаторы существуют
+            raise ValueError("validators not found")
+
     # Fetch and attach prompts by IDs
     prompts = None
     if prompt_ids is not None:
@@ -534,6 +548,7 @@ def upsert_persona(
     if tools:
         validate_persona_tools(tools)
 
+    # если Persona (ассистент) существует, то есть = редактирование ассистента
     if existing_persona:
         # Built-in personas can only be updated through YAML configuration.
         # This ensures that core system personas are not modified unintentionally.
@@ -590,6 +605,13 @@ def upsert_persona(
             existing_persona.user_folders.clear()
             existing_persona.user_folders = user_folders or []
 
+        # Если передали validator_ids:
+        # - удаляем старые связи ассистента с валидаторами, то есть отвязываем их;
+        # - далее устанавливаем новые связи.
+        if validator_ids is not None:
+            existing_persona.validators.clear()
+            existing_persona.validators = validators or []
+
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -602,6 +624,7 @@ def upsert_persona(
 
         persona = existing_persona
 
+    # если Persona (ассистент) не существует, то есть = создание нового ассистента
     else:
         if not prompts:
             raise ValueError(
@@ -642,6 +665,7 @@ def upsert_persona(
             labels=labels or [],
             pipeline_id=pipeline_id,
             template_file=template_file,
+            validators=validators or [],
         )
         db_session.add(new_persona)
         persona = new_persona
