@@ -10,6 +10,7 @@ from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
+from onyx.server.features.guardrails.core.schemas_validator import ValidatorResponse
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
@@ -89,6 +90,7 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
+    validator_ids: list[int] | None = None
 
 
 class PersonaSnapshot(BaseModel):
@@ -117,6 +119,7 @@ class PersonaSnapshot(BaseModel):
     num_chunks: float | None = None
     pipeline_id: str | None = None
     template_file: bytes | None = None
+    validators: list[ValidatorResponse] = Field(default_factory=list)
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -150,6 +153,10 @@ class PersonaSnapshot(BaseModel):
             document_sets=[
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
+            ],
+            validators=[
+                ValidatorResponse.from_model(validator)
+                for validator in persona.validators
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
@@ -203,6 +210,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
             document_sets=[
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
+            ],
+            validators=[
+                ValidatorResponse.from_model(validator)
+                for validator in persona.validators
             ],
             search_start_date=persona.search_start_date,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
