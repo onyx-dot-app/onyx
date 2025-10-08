@@ -355,7 +355,6 @@ export function TextFormField({
             ring-offset-background-neutral-00
             file:text-text-inverted-05
             text-text-04
-            placeholder:text-text-02
 
             ${heightString}
             ${sizeClass.input}
@@ -499,7 +498,7 @@ export function TypedFileUploadFormField({
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
       {description && (
-        <div className="text-sm text-text-02 mb-2">{description}</div>
+        <div className="text-sm text-text-03 mb-2">{description}</div>
       )}
       <FileUpload
         selectedFiles={field.value ? [field.value.file] : []}
@@ -623,7 +622,7 @@ export const MarkdownFormField = ({
       <div className="border border-border-02 rounded-md">
         <div className="flex items-center justify-between px-4 py-2 bg-background-neutral-02 rounded-t-md">
           <div className="flex items-center space-x-2">
-            <FaMarkdown className="text-text-02" />
+            <FaMarkdown className="text-text-03" />
             <span className="text-sm font-semibold text-text-04">Markdown</span>
           </div>
           <button
