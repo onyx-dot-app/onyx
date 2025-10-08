@@ -1,12 +1,8 @@
-import { FiFileText } from "react-icons/fi";
-import { useState, useRef, useEffect } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ExpandTwoIcon } from "@/components/icons/icons";
+import Truncated from "@/refresh-components/Truncated";
+import Text from "@/refresh-components/Text";
+import SvgFileText from "@/icons/file-text";
 
 export function DocumentPreview({
   fileName,
@@ -20,145 +16,52 @@ export function DocumentPreview({
   alignBubble?: boolean;
 }) {
   const fileNameRef = useRef<HTMLDivElement>(null);
-
-  return (
-    <div
-      className={`
-        ${alignBubble && "min-w-52 max-w-48"}
-        flex
-        items-center
-        bg-accent-background/50
-        border
-        border-border
-        rounded-lg
-        box-border
-        py-4
-        h-12
-        hover:shadow-sm
-        transition-all
-        px-2
-      `}
-    >
-      <div className="flex-shrink-0">
-        <div
-          className="
-            w-8
-            h-8
-            bg-document
-            flex
-            items-center
-            justify-center
-            rounded-lg
-            transition-all
-            duration-200
-            hover:bg-document-dark
-          "
-        >
-          <FiFileText className="w-5 h-5 text-white" />
-        </div>
-      </div>
-      <div className="ml-2 h-8 flex flex-col flex-grow">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                ref={fileNameRef}
-                className={`font-medium text-sm line-clamp-1 break-all ellipsis ${
-                  maxWidth ? maxWidth : "max-w-48"
-                }`}
-              >
-                {fileName}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" align="start">
-              {fileName}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <div className="text-subtle text-xs">Document</div>
-      </div>
-      {open && (
-        <button
-          onClick={() => open()}
-          className="ml-2 p-2 rounded-full hover:bg-background-200 transition-colors duration-200"
-          aria-label="Expand document"
-        >
-          <ExpandTwoIcon className="w-5 h-5 text-text-600" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-export function InputDocumentPreview({
-  fileName,
-  maxWidth,
-  alignBubble,
-}: {
-  fileName: string;
-  maxWidth?: string;
-  alignBubble?: boolean;
-}) {
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const fileNameRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (fileNameRef.current) {
-      setIsOverflowing(
-        fileNameRef.current.scrollWidth > fileNameRef.current.clientWidth
-      );
+  const typeLabel = useMemo(() => {
+    const name = String(fileName || "");
+    const lastDotIndex = name.lastIndexOf(".");
+    if (lastDotIndex <= 0 || lastDotIndex === name.length - 1) {
+      return "";
     }
+    return name.slice(lastDotIndex + 1).toUpperCase();
   }, [fileName]);
 
   return (
     <div
-      className={`
-        ${alignBubble && "w-64"}
-        flex
-        items-center
-        p-2
-        bg-accent-background-hovered
-        border
-        border-border
-        rounded-md
-        box-border
-        h-10
-      `}
+      className={`relative group flex items-center gap-3 border border-border-01 rounded-12 bg-background-tint-00 p-spacing-inline h-14${
+        open ? "cursor-pointer hover:bg-accent-background" : ""
+      }`}
+      onClick={() => {
+        if (open) {
+          open();
+        }
+      }}
     >
-      <div className="flex-shrink-0">
-        <div
-          className="
-            w-6
-            h-6
-            bg-document
-            flex
-            items-center
-            justify-center
-            rounded-md
-          "
+      <div className="flex h-9 w-9 items-center justify-center rounded-08 bg-background-tint-01">
+        <SvgFileText className="h-5 w-5 stroke-text-02" />
+      </div>
+      <div className="flex flex-col overflow-hidden w-40">
+        <Truncated
+          className="font-secondary-action text-text-04"
+          title={fileName}
         >
-          <FiFileText className="w-4 h-4 text-white" />
-        </div>
+          {fileName}
+        </Truncated>
+        <Text text03 secondaryBody>
+          {typeLabel || "Document"}
+        </Text>
       </div>
-      <div className="ml-2 relative">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                ref={fileNameRef}
-                className={`font-medium text-sm line-clamp-1 break-all ellipses ${
-                  maxWidth ? maxWidth : "max-w-48"
-                }`}
-              >
-                {fileName}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" align="start">
-              {fileName}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      {open && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            open();
+          }}
+          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+          aria-label="Expand document"
+        >
+          <ExpandTwoIcon className="h-4 w-4 dark:text-dark-tremor-background-muted" />
+        </button>
+      )}
     </div>
   );
 }
