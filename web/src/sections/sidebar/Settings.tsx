@@ -22,9 +22,8 @@ import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
 import { useRouter } from "next/navigation";
 import SvgUser from "@/icons/user";
-import { UserSettings } from "@/app/chat/components/modal/UserSettingsModal";
 import { cn } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import { useModalContext } from "@/components/context/ModalContext";
 
 function getUsernameFromEmail(email?: string): string {
   if (!email) return ANONYMOUS_USER_NAME;
@@ -186,29 +185,12 @@ export default function Settings({
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false);
+  const { setShowUserSettingsModal } = useModalContext();
 
   const username = getUsernameFromEmail(user?.email);
 
   return (
     <>
-      {showUserSettingsModal && (
-        <CoreModal
-          onClickOutside={() => setShowUserSettingsModal(false)}
-          className="h-fit"
-        >
-          <UserSettings
-            setPopup={() => setShowUserSettingsModal(false)}
-            llmProviders={[]}
-            onClose={() => {}}
-            defaultModel={null}
-            ccPairs={[]}
-            federatedConnectors={[]}
-            refetchFederatedConnectors={() => {}}
-          />
-        </CoreModal>
-      )}
-
       <Popover
         open={!!popupState}
         onOpenChange={(state) =>

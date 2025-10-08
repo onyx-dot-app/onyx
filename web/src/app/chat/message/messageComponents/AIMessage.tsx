@@ -39,11 +39,13 @@ import {
 } from "@/refresh-components/contexts/ChatModalContext";
 import LLMPopover from "@/refresh-components/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
+import { LlmManager } from "@/lib/hooks";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
   chatState: FullChatState;
   nodeId: number;
+  llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
 }
@@ -52,6 +54,7 @@ export default function AIMessage({
   rawPackets,
   chatState,
   nodeId,
+  llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: AIMessageProps) {
@@ -385,8 +388,9 @@ export default function AIMessage({
                             tooltip="Bad Response"
                           />
 
-                          {chatState.regenerate && (
+                          {chatState.regenerate && llmManager && (
                             <LLMPopover
+                              llmManager={llmManager}
                               currentModelName={chatState.overriddenModel}
                               onSelect={(modelName) => {
                                 const llmDescriptor =

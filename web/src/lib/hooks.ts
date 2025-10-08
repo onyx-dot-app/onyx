@@ -703,11 +703,16 @@ export function useLlmManager(
     } else {
       setTemperature(0.5);
     }
-  }, [liveAssistant, currentChatSession, llmProviders]);
+  }, [
+    liveAssistant,
+    currentChatSession,
+    llmProviders,
+    user?.preferences?.default_model,
+  ]);
 
   const updateTemperature = (temperature: number) => {
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      setTemperature((prevTemp) => Math.min(temperature, 1.0));
+      setTemperature(Math.min(temperature, 1.0));
     } else {
       setTemperature(temperature);
     }

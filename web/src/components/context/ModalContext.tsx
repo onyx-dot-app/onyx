@@ -5,6 +5,8 @@ import { NewTeamModal } from "../modals/NewTeamModal";
 import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { UserSettings } from "@/app/chat/components/modal/UserSettingsModal";
+import CoreModal from "@/refresh-components/modals/CoreModal";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
@@ -13,6 +15,7 @@ type ModalContextType = {
   setNewTenantInfo: (info: NewTenantInfo | null) => void;
   invitationInfo: NewTenantInfo | null;
   setInvitationInfo: (info: NewTenantInfo | null) => void;
+  setShowUserSettingsModal: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -36,6 +39,8 @@ export const ModalProvider: React.FC<{
   const [invitationInfo, setInvitationInfo] = useState<NewTenantInfo | null>(
     user?.tenant_info?.invitation || null
   );
+  // TODO: refactor this to only show one modal at a time
+  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false);
 
   // Initialize modal states based on user info
   React.useEffect(() => {
@@ -49,12 +54,27 @@ export const ModalProvider: React.FC<{
 
   // Render all application-wide modals
   const renderModals = () => {
-    if (!user || !NEXT_PUBLIC_CLOUD_ENABLED) return null;
+    if (!user || !NEXT_PUBLIC_CLOUD_ENABLED)
+      return (
+        <>
+          {showUserSettingsModal && (
+            <CoreModal onClickOutside={() => setShowUserSettingsModal(false)}>
+              <UserSettings onClose={() => setShowUserSettingsModal(false)} />
+            </CoreModal>
+          )}
+        </>
+      );
 
     return (
       <>
         {/* Modal for users to request to join an existing team */}
         <NewTeamModal />
+
+        {showUserSettingsModal && (
+          <CoreModal onClickOutside={() => setShowUserSettingsModal(false)}>
+            <UserSettings onClose={() => setShowUserSettingsModal(false)} />
+          </CoreModal>
+        )}
 
         {/* Modal for users who've been accepted to a new team */}
         {newTenantInfo && (
@@ -87,6 +107,7 @@ export const ModalProvider: React.FC<{
         setNewTenantInfo,
         invitationInfo,
         setInvitationInfo,
+        setShowUserSettingsModal,
       }}
     >
       {children}
