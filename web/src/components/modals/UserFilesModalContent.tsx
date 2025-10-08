@@ -1,0 +1,316 @@
+"use client";
+
+import React, { useMemo, useRef, useState, useEffect } from "react";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
+import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import SvgPlusCircle from "@/icons/plus-circle";
+import Text from "@/refresh-components/Text";
+import SvgX from "@/icons/x";
+import { SvgProps } from "@/icons";
+import SvgSearch from "@/icons/search";
+import SvgExternalLink from "@/icons/external-link";
+import SvgFileText from "@/icons/file-text";
+import SvgImage from "@/icons/image";
+import SvgTrash from "@/icons/trash";
+import Truncated from "@/refresh-components/Truncated";
+import { isImageExtension } from "@/app/chat/components/files/files_utils";
+
+interface UserFilesModalProps {
+  title: string;
+  description: string;
+  icon: React.FunctionComponent<SvgProps>;
+  recentFiles: ProjectFile[];
+  onPickRecent?: (file: ProjectFile) => void;
+  handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  showRemove?: boolean;
+  onRemove?: (file: ProjectFile) => void;
+  onFileClick?: (file: ProjectFile) => void;
+  onClose?: () => void;
+}
+
+const getFileExtension = (fileName: string): string => {
+  const idx = fileName.lastIndexOf(".");
+  if (idx === -1) return "";
+  const ext = fileName.slice(idx + 1).toLowerCase();
+  if (ext === "txt") return "PLAINTEXT";
+  return ext.toUpperCase();
+};
+
+export default function UserFilesModalContent({
+  title,
+  description,
+  icon: Icon,
+  recentFiles,
+  onPickRecent,
+  handleUploadChange,
+  showRemove,
+  onRemove,
+  onFileClick,
+  onClose,
+}: UserFilesModalProps) {
+  const [search, setSearch] = useState("");
+  const [containerHeight, setContainerHeight] = useState<number>(320);
+  const [isScrollable, setIsScrollable] = useState(false);
+  const [isInitialMount, setIsInitialMount] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const maxHeight = 588;
+  const minHeight = 320;
+  const triggerUploadPicker = () => fileInputRef.current?.click();
+
+  const filtered = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return recentFiles;
+    return recentFiles.filter((f) => f.name.toLowerCase().includes(s));
+  }, [recentFiles, search]);
+
+  // Track container height - only grow, never shrink
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      requestAnimationFrame(() => {
+        if (scrollAreaRef.current) {
+          const viewport = scrollAreaRef.current.querySelector(
+            "[data-radix-scroll-area-viewport]"
+          );
+          if (viewport) {
+            const contentHeight = viewport.scrollHeight;
+            // Only update if content needs more space and we haven't hit max
+            const newHeight = Math.min(
+              Math.max(contentHeight, minHeight, containerHeight),
+              maxHeight
+            );
+            if (newHeight > containerHeight) {
+              setContainerHeight(newHeight);
+            }
+            // After initial mount, enable transitions
+            if (isInitialMount) {
+              setTimeout(() => setIsInitialMount(false), 50);
+            }
+          }
+        }
+      });
+    }
+  }, [recentFiles.length, containerHeight, isInitialMount]);
+
+  // Check if content is scrollable
+  useEffect(() => {
+    const checkScrollable = () => {
+      if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector(
+          "[data-radix-scroll-area-viewport]"
+        );
+        if (viewport) {
+          const isContentScrollable =
+            viewport.scrollHeight > viewport.clientHeight;
+          setIsScrollable(isContentScrollable);
+        }
+      }
+    };
+
+    // Check initially and after content changes
+    requestAnimationFrame(checkScrollable);
+
+    // Also check on resize
+    window.addEventListener("resize", checkScrollable);
+    return () => window.removeEventListener("resize", checkScrollable);
+  }, [filtered.length, containerHeight]);
+
+  return (
+    <>
+      <div className="shadow-01 rounded-t-12 relative z-20">
+        <div className="flex flex-col gap-spacing-inline px-spacing-paragraph pt-spacing-paragraph">
+          <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
+            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+            {onClose && <IconButton icon={SvgX} internal onClick={onClose} />}
+          </div>
+          <Text headingH3 text04 className="w-full text-left">
+            {title}
+          </Text>
+          <Text text03>{description}</Text>
+        </div>
+        <div
+          tabIndex={-1}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-center gap-2 p-spacing-interline">
+            <div className="relative flex-1">
+              <SvgSearch className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 stroke-text-02 pointer-events-none" />
+              <Input
+                placeholder="Search files..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-8 bg-transparent border-0 shadow-none focus:bg-transparent focus:ring-0 focus-visible:ring-0 focus:border focus:border-border-dark"
+                removeFocusRing
+                autoComplete="off"
+                tabIndex={0}
+                onFocus={(e) => {
+                  e.target.select();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.focus();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+              />
+            </div>
+            {handleUploadChange && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={handleUploadChange}
+                  accept={"*/*"}
+                />
+
+                <button onClick={triggerUploadPicker}>
+                  <LineItem icon={SvgPlusCircle}>
+                    <p className="text-text-03 font-main-action">Add Files</p>
+                  </LineItem>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "relative rounded-b-12",
+          !isInitialMount && "transition-all duration-200"
+        )}
+        style={{
+          height: `${containerHeight}px`,
+          maxHeight: `${maxHeight}px`,
+        }}
+      >
+        <ScrollArea
+          ref={scrollAreaRef}
+          className="flex flex-col h-full bg-background-tint-01 px-spacing-paragraph rounded-b-12"
+        >
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              className={cn(
+                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group"
+              )}
+              onClick={() => {
+                if (onPickRecent) {
+                  onPickRecent(f);
+                }
+              }}
+            >
+              <div className="flex items-center p-spacing-inline flex-1 min-w-0">
+                <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
+                  {String((f as ProjectFile).status).toLowerCase() ===
+                    "processing" ||
+                  String((f as ProjectFile).status).toLowerCase() ===
+                    "uploading" ? (
+                    <Loader2 className="h-5 w-5 text-text-02 animate-spin" />
+                  ) : (
+                    <>
+                      {(() => {
+                        const ext = getFileExtension(f.name).toLowerCase();
+                        const isImage = isImageExtension(ext);
+                        return isImage ? (
+                          <SvgImage className="h-5 w-5 stroke-text-02" />
+                        ) : (
+                          <SvgFileText className="h-5 w-5 stroke-text-02" />
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+                <div className="p-spacing-inline-mini flex-1 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="max-w-[250px] min-w-0 flex-none">
+                      <Truncated
+                        text04
+                        secondaryAction
+                        nowrap
+                        className="truncate w-full"
+                      >
+                        {f.name}
+                      </Truncated>
+                    </div>
+                    {onFileClick &&
+                      String(f.status).toLowerCase() !== "processing" &&
+                      String(f.status).toLowerCase() !== "uploading" && (
+                        <IconButton
+                          internal
+                          icon={SvgExternalLink}
+                          tooltip="View file"
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0  shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onFileClick(f);
+                          }}
+                        />
+                      )}
+                  </div>
+
+                  <Text text03 secondaryBody>
+                    {(() => {
+                      const s = String(f.status || "").toLowerCase();
+                      const typeLabel = getFileExtension(f.name);
+                      if (s === "processing") return "Processing...";
+                      if (s === "uploading") return "Uploading...";
+                      if (s === "completed") return typeLabel;
+                      return f.status ? f.status : typeLabel;
+                    })()}
+                  </Text>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {f.last_accessed_at && (
+                  <Text text03 secondaryBody nowrap>
+                    {formatRelativeTime(f.last_accessed_at)}
+                  </Text>
+                )}
+                {!showRemove && <div className="p-spacing-inline"></div>}
+                {showRemove &&
+                  String(f.status).toLowerCase() !== "processing" && (
+                    <IconButton
+                      internal
+                      icon={SvgTrash}
+                      tooltip="Remove from project"
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove && onRemove(f);
+                      }}
+                    />
+                  )}
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <Text text03 secondaryBody className="px-2 py-4">
+              No files found.
+            </Text>
+          )}
+        </ScrollArea>
+        {/* Fade effect at bottom when scrollable */}
+        {isScrollable && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background via-background/90 to-transparent pointer-events-none z-10 rounded-b-12" />
+        )}
+      </div>
+    </>
+  );
+}
