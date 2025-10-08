@@ -964,9 +964,6 @@ export function ActionToggle({
                       />
                     </div>
                     {(() => {
-                      const allSourceIds = getConfiguredSources(
-                        availableSources
-                      ).map((source) => source.uniqueKey);
                       const anyEnabled = selectedSources.length > 0;
                       if (anyEnabled) {
                         return (
