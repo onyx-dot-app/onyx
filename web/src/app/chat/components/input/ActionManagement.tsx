@@ -626,9 +626,26 @@ export function ActionToggle({
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
-  const displayTools = selectedAssistant.tools.filter(
-    (tool) => !tool.mcp_server_id && availableToolIds.includes(tool.id)
-  );
+  // Also filter out internal search tool for basic users when there are no connectors
+  const displayTools = selectedAssistant.tools.filter((tool) => {
+    // Filter out MCP tools
+    if (tool.mcp_server_id) return false;
+
+    // Filter out tools that are not available
+    if (!availableToolIds.includes(tool.id)) return false;
+
+    // Filter out internal search tool for non-admin/curator users when there are no connectors
+    if (
+      tool.in_code_tool_id === SEARCH_TOOL_ID &&
+      hasNoConnectors &&
+      !isAdmin &&
+      !isCurator
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
