@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import Modal from "@/refresh-components/modals/Modal";
 import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useEscape, useKeyPress } from "@/hooks/useKeyPress";
-import Text from "@/refresh-components/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
+import { useKeyPress } from "@/hooks/useKeyPress";
 import SvgAddLines from "@/icons/add-lines";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -41,28 +38,15 @@ export default function AddInstructionModal() {
   }
 
   useKeyPress(handleSubmit, "Enter", open);
-  useEscape(onClose, open);
-
-  if (!open) return null;
 
   return (
-    <CoreModal
-      className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
-      onClickOutside={() => onClose()}
+    <Modal
+      id={ModalIds.AddInstructionModal}
+      icon={SvgAddLines}
+      title="Set Project Instructions"
+      description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
+      xs
     >
-      <div className="flex flex-col items-center justify-center gap-spacing-inline p-spacing-paragraph">
-        <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
-          <SvgAddLines className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          <IconButton icon={SvgX} internal onClick={onClose} />
-        </div>
-        <Text headingH3 text04 className="w-full text-left">
-          Set Project Instructions
-        </Text>
-        <Text text03>
-          Instruct specific behaviors, focus, tones, or formats for the response
-          in this project.
-        </Text>
-      </div>
       <div className="bg-background-tint-01 p-spacing-paragraph">
         <Textarea
           value={instructionText}
@@ -77,6 +61,6 @@ export default function AddInstructionModal() {
         </Button>
         <Button onClick={handleSubmit}>Save Instructions</Button>
       </div>
-    </CoreModal>
+    </Modal>
   );
 }
