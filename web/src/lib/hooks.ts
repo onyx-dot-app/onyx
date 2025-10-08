@@ -1076,8 +1076,10 @@ export function useSourcePreferences({
   useEffect(() => {
     if (!sourcesInitialized && availableSources.length > 0) {
       const savedSources = loadSavedSourcePreferences();
+      const availableSourceMetadata = getConfiguredSources(availableSources);
+
       if (savedSources !== null) {
-        const availableSourceMetadata = getConfiguredSources(availableSources);
+        // Filter out saved sources that no longer exist
         const validSavedSources = savedSources.filter(
           (savedSource: SourceMetadata) =>
             availableSourceMetadata.some(
@@ -1085,11 +1087,26 @@ export function useSourcePreferences({
                 availableSource.uniqueKey === savedSource.uniqueKey
             )
         );
-        setSelectedSources(validSavedSources);
+
+        // Find new sources that weren't in the saved preferences
+        const savedSourceKeys = new Set(
+          validSavedSources.map((s: SourceMetadata) => s.uniqueKey)
+        );
+        const newSources = availableSourceMetadata.filter(
+          (availableSource) => !savedSourceKeys.has(availableSource.uniqueKey)
+        );
+
+        // Merge valid saved sources with new sources (enable new sources by default)
+        const mergedSources = [...validSavedSources, ...newSources];
+        setSelectedSources(mergedSources);
+
+        // Persist the merged state if there were any new sources
+        if (newSources.length > 0) {
+          persistSourcePreferencesState(mergedSources);
+        }
       } else {
         // First time user - enable all sources by default
-        const allSourceMetadata = getConfiguredSources(availableSources);
-        setSelectedSources(allSourceMetadata);
+        setSelectedSources(availableSourceMetadata);
       }
       setSourcesInitialized(true);
     }
