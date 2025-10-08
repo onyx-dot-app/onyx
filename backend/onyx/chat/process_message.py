@@ -105,6 +105,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.features.guardrails.services.validator_service import validate_message_with_persona_validators
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -444,7 +445,6 @@ def stream_chat_message_objects(
             db_session=db_session,
         )
 
-        message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
         parent_id = new_msg_req.parent_message_id
         reference_doc_ids = new_msg_req.search_doc_ids
@@ -478,6 +478,16 @@ def stream_chat_message_objects(
 
         if not persona:
             raise RuntimeError("No persona specified or found for chat session")
+
+        # Валидация сообщения пользователя
+        validated_message = validate_message_with_persona_validators(
+            persona=persona, message=new_msg_req.message,
+        )
+
+        if validated_message:
+            new_msg_req.message = validated_message
+
+        message_text = new_msg_req.message
 
         multi_assistant_milestone, _is_new = create_milestone_if_not_exists(
             user=user,
