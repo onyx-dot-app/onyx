@@ -337,6 +337,18 @@ export function ClientLayout({
 
                           link: t(k.ADMIN_CONFIGURATION_DOCUMENT),
                         },
+                        {
+                          name: (
+                            <div className="flex">
+                              <ShieldIconSkeleton className="text-text-700" />
+                              <div className="ml-1">
+                                Валидаторы
+                              </div>
+                            </div>
+                          ),
+
+                          link: "/admin/guardrails",
+                        },
                       ],
                     },
                     {

@@ -32,7 +32,7 @@ export const OnyxApiKeyForm = ({
     <Modal onOutsideClick={onClose} width="w-2/6">
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate ? "Обновить валидатор": "Создать новый валидатор"}
+          {isUpdate ? t(k.UPDATE_VALIDATOR) : t(k.CREATE_NEW_VALIDATOR)}
         </h2>
 
         <Separator />
@@ -61,8 +61,8 @@ export const OnyxApiKeyForm = ({
             if (response.ok) {
               setPopup({
                 message: isUpdate
-                  ? "Валидатор успешно обновлён!"
-                  : "Валидатор успешно создан!",
+                  ? t(k.VALIDATOR_UPDATED_SUCCESS)
+                  : t(k.VALIDATOR_CREATED_SUCCESS),
 
                 type: "success",
               });
@@ -71,9 +71,7 @@ export const OnyxApiKeyForm = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: isUpdate
-                  ? `Ошибка обновления валидатора: ${errorMsg}`
-                  : `Ошибка создания валидатора: ${errorMsg}`,
+                message: `${isUpdate ? t(k.VALIDATOR_UPDATE_ERROR) : t(k.VALIDATOR_CREATE_ERROR)}: ${errorMsg}`,
                 type: "error",
               });
             }
@@ -84,31 +82,23 @@ export const OnyxApiKeyForm = ({
 
               <TextFormField
                 name="name"
-                label="Название валидатора"
+                label={t(k.VALIDATOR_NAME_LABEL)}
                 autoCompleteDisabled={true}
               />
 
               <TextFormField
                 maxWidth="max-w-lg"
                 name="description"
-                label="Описание валидатора"
-                placeholder="Введите описание валидатора, например его функционал"
+                label={t(k.VALIDATOR_DESCRIPTION_LABEL)}
+                placeholder={t(k.VALIDATOR_DESCRIPTION_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
               <TextFormField
                 maxWidth="max-w-lg"
                 name="config"
-                label="Заданные настройки"
-                placeholder={`Например:
-                    {
-                    "pii_entities": [
-                      "EMAIL_ADDRESS",
-                      "PHONE_NUMBER",
-                      "CREDIT_CARD"
-                    ]
-                  }"
-                `}
+                label={t(k.VALIDATOR_SETTINGS_LABEL)}
+                placeholder={t(k.VALIDATOR_SETTINGS_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
@@ -118,7 +108,7 @@ export const OnyxApiKeyForm = ({
                 variant="submit"
                 disabled={isSubmitting}
               >
-                {isUpdate ? t(k.UPDATE1) : t(k.CREATE)}
+                {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
               </Button>
             </Form>
           )}

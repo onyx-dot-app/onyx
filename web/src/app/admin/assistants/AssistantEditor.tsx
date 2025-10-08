@@ -396,7 +396,7 @@ export function AssistantEditor({
   );
   
   const { data: validators } = useSWR<APIKey[]>(
-    "/api/validator",
+    "/api/validators",
     errorHandlingFetcher
   );
 

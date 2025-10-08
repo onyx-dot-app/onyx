@@ -63,7 +63,7 @@ function Main() {
   const newApiKeyButton = (
     <CreateButton
       onClick={() => setShowCreateUpdateForm(true)}
-      text={t(k.CREATE_API_KEY)}
+      text={t(k.CREATE_VALIDATOR)}
     />
   );
 
@@ -71,7 +71,7 @@ function Main() {
     return (
       <div>
         {popup}
-        <Text>{t(k.API_KEY_TEXT)}</Text>
+        <Text>{t(k.VALIDATORS_TEXT)}</Text>
         {newApiKeyButton}
 
         {showCreateUpdateForm && (
