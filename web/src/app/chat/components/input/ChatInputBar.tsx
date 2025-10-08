@@ -508,6 +508,13 @@ function ChatInputBarInner({
                   setCurrentMessageFiles((prev) => [...prev, file]);
                 }
               }}
+              onUnpickRecent={(file: ProjectFile) => {
+                setCurrentMessageFiles((prev) =>
+                  prev.filter(
+                    (existingFile) => existingFile.file_id !== file.file_id
+                  )
+                );
+              }}
               recentFiles={recentFiles}
               handleUploadChange={handleUploadChange}
               trigger={
@@ -517,6 +524,7 @@ function ChatInputBarInner({
                   tertiary
                 />
               }
+              selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle

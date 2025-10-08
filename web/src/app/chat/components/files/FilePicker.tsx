@@ -151,23 +151,31 @@ export function FilePickerContents({
 interface FilePickerProps {
   className?: string;
   onPickRecent?: (file: ProjectFile) => void;
+  onUnpickRecent?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
   recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   trigger?: React.ReactNode;
+  selectedFileIds?: string[];
 }
 
 export default function FilePicker({
   className,
   onPickRecent,
+  onUnpickRecent,
   onFileClick,
   recentFiles,
   handleUploadChange,
   trigger,
+  selectedFileIds,
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [open, setOpen] = useState(false);
+  // Snapshot of recent files to avoid re-arranging when the modal is open
+  const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<
+    ProjectFile[] | null
+  >(null);
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
@@ -209,6 +217,11 @@ export default function FilePicker({
             }}
             setShowRecentFiles={(show) => {
               setShowRecentFiles(show);
+              if (show) {
+                setRecentFilesSnapshot(recentFiles.slice());
+              } else {
+                setRecentFilesSnapshot(null);
+              }
               // Close the small popover when opening the dialog
               if (show) setOpen(false);
             }}
@@ -225,14 +238,17 @@ export default function FilePicker({
             title="Recent Files"
             description="Upload files or pick from your recent files."
             icon={SvgFiles}
-            recentFiles={recentFiles}
+            recentFiles={recentFilesSnapshot ?? recentFiles}
             onPickRecent={(file) => {
               onPickRecent && onPickRecent(file);
-              setShowRecentFiles(false);
+            }}
+            onUnpickRecent={(file) => {
+              onUnpickRecent && onUnpickRecent(file);
             }}
             handleUploadChange={handleUploadChange}
             onFileClick={onFileClick}
             onClose={() => setShowRecentFiles(false)}
+            selectedFileIds={selectedFileIds}
           />
         </CoreModal>
       )}

@@ -53,15 +53,14 @@ export function FileCard({
   }, [file.name]);
 
   const isActuallyProcessing =
-    String(file.status).toLowerCase() === "uploading";
+    String(file.status) === UserFileStatus.UPLOADING ||
+    String(file.status) === UserFileStatus.PROCESSING;
 
   // When hideProcessingState is true, we treat processing files as completed for display purposes
   const isProcessing = hideProcessingState ? false : isActuallyProcessing;
 
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Allow removal if hideProcessingState is true (within context limits) or if not actually processing
-    if (isActuallyProcessing && !hideProcessingState) return;
     removeFile(file.id);
   };
 
@@ -80,7 +79,7 @@ export function FileCard({
         }
       }}
     >
-      {!isProcessing && (
+      {String(file.status) !== UserFileStatus.UPLOADING && (
         <button
           onClick={handleRemoveFile}
           title="Delete file"
@@ -310,8 +309,15 @@ export default function ProjectContextPanel({
               if (!linkFileToProject) return;
               await linkFileToProject(currentProjectId, file.id);
             }}
+            onUnpickRecent={async (file) => {
+              if (!currentProjectId) return;
+              await unlinkFileFromProject(currentProjectId, file.id);
+            }}
             handleUploadChange={handleUploadChange}
             className="mr-1.5"
+            selectedFileIds={(currentProjectDetails?.files || []).map(
+              (f) => f.id
+            )}
           />
         </div>
         {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}

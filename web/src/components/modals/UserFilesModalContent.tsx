@@ -18,6 +18,7 @@ import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgTrash from "@/icons/trash";
+import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
 
@@ -27,11 +28,13 @@ interface UserFilesModalProps {
   icon: React.FunctionComponent<SvgProps>;
   recentFiles: ProjectFile[];
   onPickRecent?: (file: ProjectFile) => void;
+  onUnpickRecent?: (file: ProjectFile) => void;
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   showRemove?: boolean;
   onRemove?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
   onClose?: () => void;
+  selectedFileIds?: string[];
 }
 
 const getFileExtension = (fileName: string): string => {
@@ -48,22 +51,35 @@ export default function UserFilesModalContent({
   icon: Icon,
   recentFiles,
   onPickRecent,
+  onUnpickRecent,
   handleUploadChange,
   showRemove,
   onRemove,
   onFileClick,
   onClose,
+  selectedFileIds,
 }: UserFilesModalProps) {
   const [search, setSearch] = useState("");
   const [containerHeight, setContainerHeight] = useState<number>(320);
   const [isScrollable, setIsScrollable] = useState(false);
   const [isInitialMount, setIsInitialMount] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(selectedFileIds || [])
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const maxHeight = 588;
   const minHeight = 320;
   const triggerUploadPicker = () => fileInputRef.current?.click();
+
+  useEffect(() => {
+    if (selectedFileIds) {
+      setSelectedIds(new Set(selectedFileIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [selectedFileIds]);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -207,11 +223,26 @@ export default function UserFilesModalContent({
             <button
               key={f.id}
               className={cn(
-                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group"
+                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group",
+                onPickRecent && "hover:bg-background-tint-02"
               )}
               onClick={() => {
-                if (onPickRecent) {
+                if (!onPickRecent) return;
+                const isSelected = selectedIds.has(f.id);
+                if (isSelected) {
+                  onUnpickRecent?.(f);
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(f.id);
+                    return next;
+                  });
+                } else {
                   onPickRecent(f);
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(f.id);
+                    return next;
+                  });
                 }
               }}
             >
@@ -224,15 +255,21 @@ export default function UserFilesModalContent({
                     <Loader2 className="h-5 w-5 text-text-02 animate-spin" />
                   ) : (
                     <>
-                      {(() => {
-                        const ext = getFileExtension(f.name).toLowerCase();
-                        const isImage = isImageExtension(ext);
-                        return isImage ? (
-                          <SvgImage className="h-5 w-5 stroke-text-02" />
-                        ) : (
-                          <SvgFileText className="h-5 w-5 stroke-text-02" />
-                        );
-                      })()}
+                      {onPickRecent && selectedIds.has(f.id) ? (
+                        <div className="w-4 h-4 flex items-center justify-center rounded-04 border border-border-01 bg-background-neutral-00 p-spacing-inline-mini">
+                          <SvgCheck className="stroke-text-02" />
+                        </div>
+                      ) : (
+                        (() => {
+                          const ext = getFileExtension(f.name).toLowerCase();
+                          const isImage = isImageExtension(ext);
+                          return isImage ? (
+                            <SvgImage className="h-5 w-5 stroke-text-02" />
+                          ) : (
+                            <SvgFileText className="h-5 w-5 stroke-text-02" />
+                          );
+                        })()
+                      )}
                     </>
                   )}
                 </div>

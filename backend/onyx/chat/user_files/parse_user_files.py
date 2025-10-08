@@ -100,12 +100,14 @@ def parse_user_files(
         persona=persona,
         actual_user_input=actual_user_input,
     )
+    uploaded_context_cap = int(available_tokens * 0.5)
 
     logger.debug(
-        f"Total file tokens: {total_tokens}, Available tokens: {available_tokens}"
+        f"Total file tokens: {total_tokens}, Available tokens: {available_tokens},"
+        f"Allowed uploaded context tokens: {uploaded_context_cap}"
     )
 
-    have_enough_tokens = total_tokens <= available_tokens
+    have_enough_tokens = total_tokens <= uploaded_context_cap
 
     # If we have enough tokens, we don't need search
     # we can just pass them into the prompt directly
