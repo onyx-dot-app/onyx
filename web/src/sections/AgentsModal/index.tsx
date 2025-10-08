@@ -9,10 +9,14 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/Text";
 import Modal from "@/refresh-components/modals/Modal";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import SvgFilter from "@/icons/filter";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import Button from "@/refresh-components/buttons/Button";
+import Link from "next/link";
 
 interface AgentsSectionProps {
   title: string;
@@ -21,7 +25,7 @@ interface AgentsSectionProps {
 }
 
 function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
 
   if (agents.length === 0) {
     return null;
@@ -97,7 +101,7 @@ export default function AgentsModal() {
   const router = useRouter();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agents.filter((agent) => {
@@ -149,15 +153,9 @@ export default function AgentsModal() {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
-          <Button
-            onClick={() => {
-              toggleModal(ModalIds.AgentsModal, false);
-              router.push("/assistants/new");
-            }}
-            className="h-full"
-          >
-            Create
-          </Button>
+          <Link href="/assistants/new">
+            <Button className="h-full">Create</Button>
+          </Link>
         </div>
 
         <div className="py-padding-content flex items-center gap-spacing-interline flex-wrap">

@@ -9,7 +9,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -111,6 +110,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+class ToolCallException(Exception):
+    """Exception raised for errors during tool calls."""
 
 
 class PartialResponse(Protocol):

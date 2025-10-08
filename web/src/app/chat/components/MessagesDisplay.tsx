@@ -5,7 +5,7 @@ import { MemoizedHumanMessage } from "../message/MemoizedHumanMessage";
 import { ErrorBanner } from "../message/Resubmit";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { LlmDescriptor } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
@@ -15,7 +15,7 @@ interface MessagesDisplayProps {
   messageHistory: Message[];
   completeMessageTree: Map<number, Message> | null | undefined;
   liveAssistant: MinimalPersonaSnapshot;
-  llmManager: { currentLlm: LlmDescriptor | null };
+  llmManager: LlmManager;
   deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
@@ -199,6 +199,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 messageId={message.messageId}
                 overriddenModel={llmManager.currentLlm?.modelName}
                 nodeId={message.nodeId}
+                llmManager={llmManager}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }

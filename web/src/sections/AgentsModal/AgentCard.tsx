@@ -185,7 +185,7 @@ export default function AgentCard({
                 onClick={() => togglePinnedAgent(agent, !pinned)}
                 secondary
               >
-                {pinned ? "Unpin Chat" : "Pin Chat"}
+                {pinned ? "Unpin Agent" : "Pin Agent"}
               </Button>
             </div>
           </div>

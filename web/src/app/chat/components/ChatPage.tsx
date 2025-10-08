@@ -34,13 +34,12 @@ import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
-import AssistantModal from "@/app/assistants/mine/AssistantModal";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
@@ -140,7 +139,7 @@ export function ChatPage({
 
   const isInitialLoad = useRef(true);
 
-  const { assistants: availableAssistants } = useAssistantsContext();
+  const { agents: availableAssistants } = useAgentsContext();
 
   const [showApiKeyModal, setShowApiKeyModal] = useState(
     !shouldShowWelcomeModal
@@ -592,8 +591,6 @@ export function ChatPage({
     });
   }
 
-  const [showAssistantsModal, setShowAssistantsModal] = useState(false);
-
   const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
       updateCurrentDocumentSidebarVisible(true);
@@ -798,10 +795,6 @@ export function ChatPage({
           onOutsideClick={() => setStackTraceModalContent(null)}
           exceptionTrace={stackTraceModalContent}
         />
-      )}
-
-      {showAssistantsModal && (
-        <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
       )}
 
       <FederatedOAuthModal />

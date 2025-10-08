@@ -1,7 +1,10 @@
 import React, { useRef } from "react";
 import Text from "@/refresh-components/Text";
 import SvgX from "@/icons/x";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
@@ -37,7 +40,7 @@ export default function Modal({
   children,
   className,
 }: ModalProps) {
-  const { isOpen, toggleModal } = useModal();
+  const { isOpen, toggleModal } = useChatModal();
   const insideModal = useRef(false);
 
   if (!isOpen(id)) return null;

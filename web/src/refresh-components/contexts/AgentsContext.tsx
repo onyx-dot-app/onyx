@@ -13,6 +13,11 @@ import React, {
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import {
+  UserSpecificAssistantPreference,
+  UserSpecificAssistantPreferences,
+} from "@/lib/types";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 
 async function fetchAllAgents(): Promise<MinimalPersonaSnapshot[]> {
   try {
@@ -75,6 +80,11 @@ export function AgentsProvider({
   const [pinnedAgents, setPinnedAgents] = useState<MinimalPersonaSnapshot[]>(
     () => getPinnedAgents(agents, initialPinnedAgentIds)
   );
+
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
+  const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
+
   const isInitialMount = useRef(true);
   const searchParams = useSearchParams();
   const currentAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -120,6 +130,10 @@ export function AgentsProvider({
         setPinnedAgents,
         togglePinnedAgent,
         currentAgent,
+        agentPreferences: assistantPreferences,
+        setSpecificAgentPreferences: setSpecificAssistantPreferences,
+        forcedToolIds,
+        setForcedToolIds,
       }}
     >
       {children}
@@ -127,7 +141,7 @@ export function AgentsProvider({
   );
 }
 
-interface AgentsContextProps {
+interface AgentsContextType {
   // All available agents
   agents: MinimalPersonaSnapshot[];
   refreshAgents: () => Promise<void>;
@@ -139,11 +153,20 @@ interface AgentsContextProps {
 
   // Currently live/active agent (from searchParams)
   currentAgent: MinimalPersonaSnapshot | null;
+
+  agentPreferences: UserSpecificAssistantPreferences | null;
+  setSpecificAgentPreferences: (
+    assistantId: number,
+    assistantPreferences: UserSpecificAssistantPreference
+  ) => void;
+
+  forcedToolIds: number[];
+  setForcedToolIds: Dispatch<SetStateAction<number[]>>;
 }
 
-const AgentsContext = createContext<AgentsContextProps | undefined>(undefined);
+const AgentsContext = createContext<AgentsContextType | undefined>(undefined);
 
-export function useAgentsContext(): AgentsContextProps {
+export function useAgentsContext(): AgentsContextType {
   const context = useContext(AgentsContext);
   if (!context)
     throw new Error("useAgentsContext must be used within an AgentsProvider");

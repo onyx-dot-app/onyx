@@ -15,7 +15,10 @@ import Button from "@/refresh-components/buttons/Button";
 import { ChatButton } from "@/sections/sidebar/AppSidebar";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import SvgFolderPlus from "@/icons/folder-plus";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
 
@@ -119,7 +122,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
 
 export default function Projects() {
   const { projects } = useProjectsContext();
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
   return (
     <>
       {projects.map((project) => (

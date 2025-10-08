@@ -22,8 +22,6 @@ from zipfile import BadZipFile
 import chardet
 import openpyxl
 from PIL import Image
-from pypdf import PdfReader
-from pypdf.errors import PdfStreamError
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -272,6 +270,9 @@ def read_pdf_file(
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
     """
+    from pypdf import PdfReader
+    from pypdf.errors import PdfStreamError
+
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
@@ -313,10 +314,8 @@ def read_pdf_file(
                     image.save(img_byte_arr, format=image.format)
                     img_bytes = img_byte_arr.getvalue()
 
-                    image_name = (
-                        f"page_{page_num + 1}_image_{image_file_object.name}."
-                        f"{image.format.lower() if image.format else 'png'}"
-                    )
+                    image_format = image.format.lower() if image.format else "png"
+                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
                     if image_callback is not None:
                         # Stream image out immediately
                         image_callback(img_bytes, image_name)
@@ -483,8 +482,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             if num_empty_consecutive_rows > 100:
                 # handle massive excel sheets with mostly empty cells
                 logger.warning(
-                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
-                    " skipping rest of file"
+                    f"Found {num_empty_consecutive_rows} empty rows in {file_name}, skipping rest of file"
                 )
                 break
         sheet_str = "\n".join(rows)
@@ -556,8 +554,7 @@ def extract_file_text(
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. "
-                    "Falling back to normal processing."
+                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
                 )
         if extension is None:
             extension = get_file_ext(file_name)
@@ -643,8 +640,7 @@ def _extract_text_and_images(
             )
         except Exception as e:
             logger.error(
-                f"Failed to process with Unstructured: {str(e)}. "
-                "Falling back to normal processing."
+                f"Failed to process with Unstructured: {str(e)}. Falling back to normal processing."
             )
             file.seek(0)  # Reset file pointer just in case
 
