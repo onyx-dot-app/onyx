@@ -145,10 +145,13 @@ jobs:
             salesforce:
               - 'backend/onyx/connectors/salesforce/**'
               - 'backend/tests/daily/connectors/salesforce/**'
+            google_drive:
+              - 'backend/onyx/connectors/google_drive/**'
+              - 'backend/tests/daily/connectors/google_drive/**'
             file_processing:
               - 'backend/onyx/file_processing/**'
 
-      - name: Run Tests (excluding HubSpot and Salesforce)
+      - name: Run Tests (excluding HubSpot, Salesforce, and Google Drive)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -160,7 +163,8 @@ jobs:
             --ff \
             backend/tests/daily/connectors \
             --ignore backend/tests/daily/connectors/hubspot \
-            --ignore backend/tests/daily/connectors/salesforce
+            --ignore backend/tests/daily/connectors/salesforce \
+            --ignore backend/tests/daily/connectors/google_drive
 
       - name: Run HubSpot Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.hubspot == 'true' || steps.changes.outputs.file_processing == 'true' }}
@@ -187,6 +191,19 @@ jobs:
             -xv \
             --ff \
             backend/tests/daily/connectors/salesforce
+
+      - name: Run Google Drive Connector Tests
+        if: ${{ github.event_name == 'schedule' || steps.changes.outputs.google_drive == 'true' || steps.changes.outputs.file_processing == 'true' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/connectors/google_drive
 
       - name: Alert on Failure
         if: failure() && github.event_name == 'schedule'
