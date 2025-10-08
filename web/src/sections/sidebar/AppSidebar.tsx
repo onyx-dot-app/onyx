@@ -303,6 +303,10 @@ function ChatButtonInner({
 
   const { popup, setPopup } = usePopup();
 
+  // Gate dnd-kit attributes/listeners to client-only to avoid SSR hydration mismatches
+  const [isHydrated, setIsHydrated] = useState(false);
+  useEffect(() => setIsHydrated(true), []);
+
   async function handleChatDelete() {
     try {
       await deleteChatSession(chatSession.id);
@@ -451,8 +455,8 @@ function ChatButtonInner({
               : undefined,
             opacity: isDragging ? 0.5 : 1,
           }}
-          {...attributes}
-          {...listeners}
+          {...(isHydrated ? attributes : {})}
+          {...(isHydrated ? listeners : {})}
         >
           {navTab}
         </div>
@@ -562,6 +566,10 @@ function SortableItem({ id, children }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
 
+  // Gate dnd-kit attributes/listeners to client-only to avoid SSR hydration mismatches
+  const [isHydrated, setIsHydrated] = useState(false);
+  useEffect(() => setIsHydrated(true), []);
+
   return (
     <div
       ref={setNodeRef}
@@ -569,8 +577,8 @@ function SortableItem({ id, children }: SortableItemProps) {
         transform: CSS.Transform.toString(transform),
         ...(isDragging && { zIndex: 1000, position: "relative" as const }),
       }}
-      {...attributes}
-      {...listeners}
+      {...(isHydrated ? attributes : {})}
+      {...(isHydrated ? listeners : {})}
       className="flex items-center group"
     >
       {children}

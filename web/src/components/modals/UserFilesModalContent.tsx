@@ -194,11 +194,13 @@ export default function UserFilesModalContent({
                   accept={"*/*"}
                 />
 
-                <button onClick={triggerUploadPicker}>
-                  <LineItem icon={SvgPlusCircle}>
-                    <p className="text-text-03 font-main-action">Add Files</p>
+                <div>
+                  <LineItem icon={SvgPlusCircle} onClick={triggerUploadPicker}>
+                    <Text text03 mainUiAction>
+                      Add Files
+                    </Text>
                   </LineItem>
-                </button>
+                </div>
               </>
             )}
           </div>
@@ -220,7 +222,9 @@ export default function UserFilesModalContent({
           className="flex flex-col h-full bg-background-tint-01 px-spacing-paragraph rounded-b-12"
         >
           {filtered.map((f) => (
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               key={f.id}
               className={cn(
                 "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group",
@@ -243,6 +247,12 @@ export default function UserFilesModalContent({
                     next.add(f.id);
                     return next;
                   });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.currentTarget.click();
                 }
               }}
             >
@@ -335,7 +345,7 @@ export default function UserFilesModalContent({
                     />
                   )}
               </div>
-            </button>
+            </div>
           ))}
           {filtered.length === 0 && (
             <Text text03 secondaryBody className="px-2 py-4">

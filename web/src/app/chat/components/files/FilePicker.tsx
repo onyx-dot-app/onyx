@@ -57,17 +57,18 @@ export function FilePickerContents({
           </Text>
 
           {recentFiles.slice(0, 3).map((f) => (
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               key={f.id}
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 onPickRecent && onPickRecent(f);
               }}
-              className="w-full rounded-lg hover:bg-background-neutral-02 group"
+              className="w-full rounded-lg hover:bg-background-neutral-02 group p-0.5"
             >
-              <div className="flex items-center w-full m-1 mt-2 p-0.5 group">
+              <div className="flex items-center w-full m-1 mt-1 p-0.5 group">
                 <Row>
                   <div className="p-0.5">
                     {String(f.status).toLowerCase() === "processing" ? (
@@ -111,7 +112,7 @@ export function FilePickerContents({
                   </div>
                 </Row>
               </div>
-            </button>
+            </div>
           ))}
 
           {recentFiles.length > 3 && (
