@@ -1,5 +1,5 @@
 import copy
-import time
+import mimetypes
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -11,6 +11,7 @@ import requests
 from typing_extensions import override
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
+from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
@@ -36,17 +37,31 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
+    rl_requests,
+)
+from onyx.file_processing.extract_file_text import (
+    ALL_ACCEPTED_FILE_EXTENSIONS,
+    extract_text_and_images,
+)
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-RATE_LIMIT_DELAY = 0.1  # seconds
 MAX_API_PAGE_SIZE = 2000  # max allowed by API
-MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_TEXT_LENGTH = 600000  # characters
+
+SUPPORTED_ATTACHMENT_EXTENSIONS = set(ALL_ACCEPTED_FILE_EXTENSIONS)
+
+
+rate_limited_get = retry_builder()(
+    rate_limit_builder(max_calls=10, period=1)(rl_requests.get)
+)
 
 
 class DrupalWikiConnector(
@@ -132,13 +147,6 @@ class DrupalWikiConnector(
         logger.info(f"Setting include_attachments to {value}.")
         self.include_attachments = value
 
-    def _rate_limited_get(self, *args: Any, **kwargs: Any) -> requests.Response:
-        """
-        Wrapper for requests.get with rate limiting.
-        """
-        time.sleep(RATE_LIMIT_DELAY)
-        return requests.get(*args, **kwargs)
-
     def _get_page_attachments(self, page_id: int) -> List[Dict[str, Any]]:
         """
         Get all attachments for a specific page.
@@ -149,15 +157,12 @@ class DrupalWikiConnector(
         Returns:
             List of attachment dictionaries.
         """
-        if not self.headers:
-            raise ConnectorMissingCredentialError("Drupal Wiki")
-
         url = f"{self.base_url}/api/rest/scope/api/attachment"
         params = {"pageId": str(page_id)}
         logger.info(f"Fetching attachments for page {page_id} from {url}")
 
         try:
-            response = self._rate_limited_get(url, headers=self.headers, params=params)
+            response = rate_limited_get(url, headers=self.headers, params=params)
             response.raise_for_status()
             attachments = response.json()
             logger.info(f"Found {len(attachments)} attachments for page {page_id}")
@@ -185,7 +190,7 @@ class DrupalWikiConnector(
         # Use headers without Accept for binary downloads
         download_headers = {"Authorization": self.headers["Authorization"]}
 
-        response = self._rate_limited_get(url, headers=download_headers)
+        response = rate_limited_get(url, headers=download_headers)
         response.raise_for_status()
 
         return response.content
@@ -207,41 +212,14 @@ class DrupalWikiConnector(
         # Get file extension
         file_extension = Path(file_name).suffix.lower()
 
-        # Supported text file extensions
-        text_extensions = {
-            ".txt",
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".xls",
-            ".xlsx",
-            ".ppt",
-            ".pptx",
-            ".rtf",
-            ".odt",
-            ".ods",
-            ".odp",
-            ".csv",
-            ".md",
-            ".html",
-            ".htm",
-        }
-
-        # Supported image extensions
-        image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp"}
-
-        # Check if it's a supported type
-        if file_extension in text_extensions:
+        if file_extension in SUPPORTED_ATTACHMENT_EXTENSIONS:
             return True
-        elif file_extension in image_extensions:
-            return True
-        else:
-            logger.info(f"Unsupported file type: {file_extension} for {file_name}")
-            return False
+        logger.info(f"Unsupported file type: {file_extension} for {file_name}")
+        return False
 
     def _get_media_type_from_filename(self, filename: str) -> str:
         """
-        Get media type from filename extension.
+        Get media type from filename using the standard mimetypes library.
 
         Args:
             filename: The filename.
@@ -249,184 +227,149 @@ class DrupalWikiConnector(
         Returns:
             Media type string.
         """
-        extension = Path(filename).suffix.lower()
-
-        # Common media type mappings
-        media_types = {
-            ".txt": "text/plain",
-            ".pdf": "application/pdf",
-            ".doc": "application/msword",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".xls": "application/vnd.ms-excel",
-            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            ".ppt": "application/vnd.ms-powerpoint",
-            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".gif": "image/gif",
-            ".bmp": "image/bmp",
-            ".svg": "image/svg+xml",
-            ".webp": "image/webp",
-            ".html": "text/html",
-            ".htm": "text/html",
-            ".md": "text/markdown",
-            ".csv": "text/csv",
-        }
-
-        return media_types.get(extension, "application/octet-stream")
+        mime_type, _encoding = mimetypes.guess_type(filename)
+        return mime_type or "application/octet-stream"
 
     def _process_attachment(
-        self, attachment: Dict[str, Any], page_id: int
-    ) -> Dict[str, Any]:
+        self,
+        attachment: Dict[str, Any],
+        page_id: int,
+        download_url: str,
+    ) -> tuple[List[TextSection | ImageSection], Optional[str]]:
         """
-        Process a single attachment.
+        Process a single attachment and return generated sections.
 
         Args:
             attachment: Attachment dictionary from Drupal Wiki API.
             page_id: ID of the parent page.
+            download_url: Direct download URL for the attachment.
 
         Returns:
-            Dictionary with processing results: {'text': str, 'file_name': str, 'error': str}
+            Tuple of (sections, error_message). If error_message is not None, the
+            sections list should be treated as invalid.
         """
-        result: Dict[str, Optional[str]] = {
-            "text": None,
-            "file_name": None,
-            "error": None,
-        }
+        sections: List[TextSection | ImageSection] = []
 
         try:
-            # Validate file type
             if not self._validate_attachment_filetype(attachment):
-                result["error"] = (
-                    f"Unsupported file type: {attachment.get('fileName', 'unknown')}"
+                return (
+                    [],
+                    f"Unsupported file type: {attachment.get('fileName', 'unknown')}",
                 )
-                return result
 
-            # Get attachment info
             attachment_id = attachment["id"]
             file_name = attachment.get("fileName", f"attachment_{attachment_id}")
             file_size = attachment.get("fileSize", 0)
             media_type = self._get_media_type_from_filename(file_name)
 
-            # Check size limits
-            if file_size > MAX_ATTACHMENT_SIZE:
-                result["error"] = f"Attachment too large: {file_size} bytes"
-                return result
+            if file_size > DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD:
+                return [], f"Attachment too large: {file_size} bytes"
 
-            # Download attachment
             try:
                 raw_bytes = self._download_attachment(attachment_id)
             except Exception as e:
-                result["error"] = f"Failed to download attachment: {e}"
-                return result
+                return [], f"Failed to download attachment: {e}"
 
-            # Process based on media type
             if media_type.startswith("image/"):
-                return self._process_image_attachment(attachment, raw_bytes, media_type)
-            else:
-                return self._process_text_attachment(attachment, raw_bytes, media_type)
+                if not self.allow_images:
+                    logger.info(
+                        "Skipping image attachment %s because allow_images is False",
+                        file_name,
+                    )
+                    return [], None
 
-        except Exception as e:
-            result["error"] = f"Failed to process attachment: {e}"
-            return result
+                try:
+                    image_section, _ = store_image_and_create_section(
+                        image_data=raw_bytes,
+                        file_id=str(attachment_id),
+                        display_name=attachment.get(
+                            "name", attachment.get("fileName", "Unknown")
+                        ),
+                        link=download_url,
+                        media_type=media_type,
+                        file_origin=FileOrigin.CONNECTOR,
+                    )
+                    sections.append(image_section)
+                    logger.info(
+                        "Stored image attachment with file name: %s", file_name
+                    )
+                except Exception as e:
+                    return [], f"Image storage failed: {e}"
 
-    def _process_image_attachment(
-        self, attachment: Dict[str, Any], raw_bytes: bytes, media_type: str
-    ) -> Dict[str, Any]:
-        """
-        Process an image attachment.
+                return sections, None
 
-        Args:
-            attachment: Attachment dictionary.
-            raw_bytes: Raw attachment bytes.
-            media_type: Media type of the attachment.
+            image_counter = 0
 
-        Returns:
-            Processing result dictionary.
-        """
-        result: Dict[str, Optional[str]] = {
-            "text": None,
-            "file_name": None,
-            "error": None,
-        }
+            def _store_embedded_image(image_data: bytes, image_name: str) -> None:
+                nonlocal image_counter
 
-        try:
-            # Store image using the standardized function
-            section, file_name = store_image_and_create_section(
-                image_data=raw_bytes,
-                file_id=str(attachment["id"]),  # correct param to identify image
-                display_name=attachment.get(
-                    "name", attachment.get("fileName", "Unknown")
-                ),
-                link=None,  # no direct link for stored images
-                media_type=media_type,
-                file_origin=FileOrigin.CONNECTOR,
-            )
-            result["text"] = ""  # Empty text for images
-            result["file_name"] = file_name
-            logger.info(f"Stored image attachment with file name: {file_name}")
-        except Exception as e:
-            result["error"] = f"Image storage failed: {e}"
-            logger.error(
-                f"Image storage failed for {attachment.get('name', 'unknown')}: {e}"
-            )
+                if not self.allow_images:
+                    return
 
-        return result
+                media_for_image = self._get_media_type_from_filename(image_name)
+                if media_for_image == "application/octet-stream":
+                    try:
+                        media_for_image = get_image_type_from_bytes(image_data)
+                    except ValueError:
+                        logger.debug(
+                            "Unable to determine media type for embedded image %s on attachment %s",
+                            image_name,
+                            file_name,
+                        )
 
-    def _process_text_attachment(
-        self, attachment: Dict[str, Any], raw_bytes: bytes, media_type: str
-    ) -> Dict[str, Any]:
-        """
-        Process a text-based attachment.
-
-        Args:
-            attachment: Attachment dictionary.
-            raw_bytes: Raw attachment bytes.
-            media_type: Media type of the attachment.
-
-        Returns:
-            Processing result dictionary.
-        """
-        result: Dict[str, Optional[str]] = {
-            "text": None,
-            "file_name": None,
-            "error": None,
-        }
-
-        try:
-            # Extract text from the attachment
-            extracted_text = extract_file_text(
-                BytesIO(raw_bytes),
-                file_name=attachment.get("fileName", "unknown"),
-                break_on_unprocessable=False,
-            )
-
-            if not extracted_text:
-                result["error"] = (
-                    f"No text extracted for {attachment.get('fileName', 'unknown')}"
+                image_counter += 1
+                display_name = (
+                    image_name
+                    or f"{attachment.get('name', file_name)} - embedded image {image_counter}"
                 )
-                return result
 
-            # Check character count limit
-            if len(extracted_text) > MAX_TEXT_LENGTH:
-                result["error"] = (
-                    f"Attachment text too long: {len(extracted_text)} chars"
-                )
-                return result
+                try:
+                    image_section, _ = store_image_and_create_section(
+                        image_data=image_data,
+                        file_id=f"{attachment_id}_embedded_{image_counter}",
+                        display_name=display_name,
+                        link=download_url,
+                        media_type=media_for_image,
+                        file_origin=FileOrigin.CONNECTOR,
+                    )
+                    sections.append(image_section)
+                except Exception as err:
+                    logger.warning(
+                        "Failed to store embedded image %s for attachment %s: %s",
+                        image_name or image_counter,
+                        file_name,
+                        err,
+                    )
 
-            result["text"] = extracted_text
-            logger.info(
-                f"Extracted {len(extracted_text)} characters from {attachment.get('fileName', 'unknown')}"
+            extraction_result = extract_text_and_images(
+                file=BytesIO(raw_bytes),
+                file_name=file_name,
+                content_type=media_type,
+                image_callback=_store_embedded_image if self.allow_images else None,
             )
+
+            text_content = extraction_result.text_content.strip()
+            if text_content:
+                if len(text_content) > MAX_TEXT_LENGTH:
+                    return [], f"Attachment text too long: {len(text_content)} chars"
+
+                sections.insert(0, TextSection(text=text_content, link=download_url))
+                logger.info(
+                    "Extracted %d characters from %s", len(text_content), file_name
+                )
+            elif not sections:
+                return [], f"No text extracted for {file_name}"
+
+            return sections, None
 
         except Exception as e:
-            result["error"] = f"Failed to extract text: {e}"
             logger.error(
-                f"Failed to extract text for {attachment.get('fileName', 'unknown')}: {e}"
+                "Failed to process attachment %s on page %s: %s",
+                attachment.get("name", "unknown"),
+                page_id,
+                e,
             )
-
-        return result
+            return [], f"Failed to process attachment: {e}"
 
     def load_credentials(self, credentials: Dict[str, Any]) -> Dict[str, Any] | None:
         """
@@ -469,7 +412,7 @@ class DrupalWikiConnector(
         while True:
             params = {"size": size, "page": page}
             logger.info(f"Fetching spaces from {url} (page={page}, size={size})")
-            response = self._rate_limited_get(url, headers=self.headers, params=params)
+            response = rate_limited_get(url, headers=self.headers, params=params)
             response.raise_for_status()
             resp_json = response.json()
             space_response = DrupalWikiSpaceResponse.model_validate(resp_json)
@@ -508,7 +451,7 @@ class DrupalWikiConnector(
             logger.info(
                 f"Fetching pages for space {space_id} from {url} (page={page}, size={size})"
             )
-            response = self._rate_limited_get(url, headers=self.headers, params=params)
+            response = rate_limited_get(url, headers=self.headers, params=params)
             response.raise_for_status()
             resp_json = response.json()
             page_response = DrupalWikiPageResponse.model_validate(resp_json)
@@ -547,7 +490,7 @@ class DrupalWikiConnector(
             raise ConnectorMissingCredentialError("Drupal Wiki")
 
         url = f"{self.base_url}/api/rest/scope/api/page/{page_id}"
-        response = self._rate_limited_get(url, headers=self.headers)
+        response = rate_limited_get(url, headers=self.headers)
         response.raise_for_status()
 
         return DrupalWikiPageContent.model_validate(response.json())
@@ -595,30 +538,23 @@ class DrupalWikiConnector(
                     else:
                         download_url = page_url
                     # Process the attachment
-                    result = self._process_attachment(attachment, page.id)
-                    if result.get("error"):
+                    attachment_sections, error = self._process_attachment(
+                        attachment, page.id, download_url
+                    )
+                    if error:
                         logger.warning(
-                            f"Error processing attachment {attachment.get('name', 'Unknown')}: {result['error']}"
+                            "Error processing attachment %s: %s",
+                            attachment.get("name", "Unknown"),
+                            error,
                         )
                         continue
-                    # Add successful processing results to sections
-                    if result.get("text") is not None and result["text"] != "":
-                        # Text attachment - create TextSection with direct download URL
-                        attachment_section = TextSection(
-                            text=result["text"], link=download_url
-                        )
-                        sections.append(attachment_section)
+
+                    if attachment_sections:
+                        sections.extend(attachment_sections)
                         logger.info(
-                            f"Added text section for attachment {attachment.get('name', 'Unknown')}"
-                        )
-                    elif result.get("file_name") and self.allow_images:
-                        # Image attachment - create ImageSection with direct download URL
-                        image_section = ImageSection(
-                            image_file_id=result["file_name"], link=download_url
-                        )
-                        sections.append(image_section)
-                        logger.info(
-                            f"Added image section for attachment {attachment.get('name', 'Unknown')}"
+                            "Added %d section(s) for attachment %s",
+                            len(attachment_sections),
+                            attachment.get("name", "Unknown"),
                         )
 
             # Create metadata
