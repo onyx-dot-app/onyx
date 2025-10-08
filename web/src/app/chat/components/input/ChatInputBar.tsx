@@ -38,6 +38,7 @@ import {
   getIconForAction,
   hasSearchToolsAvailable,
 } from "../../services/actionUtils";
+import SvgPlusCircle from "@/icons/plus-circle";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -392,7 +393,7 @@ function ChatInputBarInner({
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="px-4 pt-4">
+          <div className="p-spacing-inline bg-background-neutral-01 rounded-t-16">
             <div className="flex flex-wrap gap-2">
               {currentMessageFiles.map((file) => (
                 <FileCard
@@ -509,6 +510,13 @@ function ChatInputBarInner({
               }}
               recentFiles={recentFiles}
               handleUploadChange={handleUploadChange}
+              trigger={
+                <IconButton
+                  icon={SvgPlusCircle}
+                  tooltip="Attach Files"
+                  tertiary
+                />
+              }
             />
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle
