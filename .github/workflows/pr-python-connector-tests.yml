@@ -134,7 +134,7 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Detect HubSpot changes
+      - name: Detect Connector changes
         id: changes
         uses: dorny/paths-filter@v3
         with:
