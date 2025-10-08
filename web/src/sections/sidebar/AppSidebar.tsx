@@ -12,6 +12,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  pointerWithin,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -21,6 +22,12 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  restrictToFirstScrollableAncestor,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import SvgSidebar from "@/icons/sidebar";
 import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings";
@@ -65,10 +72,19 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { UNNAMED_CHAT } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
-
-// Constants
-const DEFAULT_PERSONA_ID = 0;
-const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn } from "@/lib/utils";
+import {
+  DRAG_TYPES,
+  DEFAULT_PERSONA_ID,
+  LOCAL_STORAGE_KEYS,
+} from "./constants";
+import {
+  shouldShowMoveModal,
+  showErrorNotification,
+  handleMoveOperation,
+} from "./sidebarUtils";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -141,9 +157,14 @@ export function PopoverSearchInput({
 interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
+  draggable?: boolean;
 }
 
-function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
+function ChatButtonInner({
+  chatSession,
+  project,
+  draggable = false,
+}: ChatButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
   const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
@@ -169,6 +190,19 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
     useState(false);
   const isChatUsingDefaultAssistant =
     chatSession.persona_id === DEFAULT_PERSONA_ID;
+
+  // Drag and drop setup for chat sessions
+  const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
 
   const filteredProjects = useMemo(() => {
     if (!searchTerm) return projects;
@@ -267,6 +301,8 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
     chatSession.id,
   ]);
 
+  const { popup, setPopup } = usePopup();
+
   async function handleChatDelete() {
     try {
       await deleteChatSession(chatSession.id);
@@ -283,30 +319,37 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
       await refreshChatSessions();
     } catch (error) {
       console.error("Failed to delete chat:", error);
+      showErrorNotification(
+        setPopup,
+        "Failed to delete chat. Please try again."
+      );
     }
   }
 
   async function performMove(targetProjectId: number) {
     try {
       await moveChatSession(targetProjectId, chatSession.id);
-      const projectRefreshPromise = currentProjectId
-        ? refreshCurrentProjectDetails()
-        : fetchProjects();
-      await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+      await handleMoveOperation(
+        {
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        },
+        setPopup
+      );
       setShowMoveOptions(false);
       setSearchTerm("");
     } catch (error) {
+      // handleMoveOperation already handles error notification
       console.error("Failed to move chat:", error);
     }
   }
 
   async function handleChatMove(targetProject: Project) {
-    const hideModal =
-      typeof window !== "undefined" &&
-      window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
-        "true";
-
-    if (!isChatUsingDefaultAssistant && !hideModal) {
+    if (shouldShowMoveModal(chatSession)) {
       setPendingMoveProjectId(targetProject.id);
       setShowMoveCustomAgentModal(true);
       return;
@@ -329,8 +372,24 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
     }
   }
 
+  const navTab = (
+    <NavigationTab
+      icon={project ? () => <></> : SvgBubbleText}
+      onClick={() => route({ chatSessionId: chatSession.id })}
+      active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+      popover={<PopoverMenu>{popoverItems}</PopoverMenu>}
+      onPopoverChange={(open) => !open && setShowMoveOptions(false)}
+      renaming={renaming}
+      setRenaming={setRenaming}
+      submitRename={submitRename}
+    >
+      {name}
+    </NavigationTab>
+  );
+
   return (
     <>
+      {popup}
       {deleteConfirmationModalOpen && (
         <ConfirmationModal
           title="Delete Chat"
@@ -362,7 +421,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
           onConfirm={async (doNotShowAgain: boolean) => {
             if (doNotShowAgain && typeof window !== "undefined") {
               window.localStorage.setItem(
-                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
+                LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
                 "true"
               );
             }
@@ -383,18 +442,23 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         />
       )}
 
-      <NavigationTab
-        icon={project ? () => <></> : SvgBubbleText}
-        onClick={() => route({ chatSessionId: chatSession.id })}
-        active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
-        popover={<PopoverMenu>{popoverItems}</PopoverMenu>}
-        onPopoverChange={(open) => !open && setShowMoveOptions(false)}
-        renaming={renaming}
-        setRenaming={setRenaming}
-        submitRename={submitRename}
-      >
-        {name}
-      </NavigationTab>
+      {draggable ? (
+        <div
+          ref={setNodeRef}
+          style={{
+            transform: transform
+              ? `translate3d(0px, ${transform.y}px, 0)`
+              : undefined,
+            opacity: isDragging ? 0.5 : 1,
+          }}
+          {...attributes}
+          {...listeners}
+        >
+          {navTab}
+        </div>
+      ) : (
+        navTab
+      )}
     </>
   );
 }
@@ -449,6 +513,46 @@ function AgentsButtonInner({ visibleAgent }: AgentsButtonProps) {
 
 const AgentsButton = memo(AgentsButtonInner);
 
+interface RecentsSectionProps {
+  isHistoryEmpty: boolean;
+  chatSessions: ChatSession[];
+}
+
+function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: DRAG_TYPES.RECENTS,
+    data: {
+      type: DRAG_TYPES.RECENTS,
+    },
+  });
+
+  return (
+    <div ref={setNodeRef}>
+      <SidebarSection
+        title="Recents"
+        className={cn(
+          "transition-colors duration-200 rounded-08",
+          isOver && "bg-background-tint-03"
+        )}
+      >
+        {isHistoryEmpty ? (
+          <Text text01 className="px-padding-button">
+            Try sending a message! Your chat history will appear here.
+          </Text>
+        ) : (
+          chatSessions.map((chatSession) => (
+            <ChatButton
+              key={chatSession.id}
+              chatSession={chatSession}
+              draggable
+            />
+          ))
+        )}
+      </SidebarSection>
+    </div>
+  );
+}
+
 interface SortableItemProps {
   id: number;
   children?: React.ReactNode;
@@ -479,9 +583,21 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
+  const { chatSessions, refreshChatSessions } = useChatContext();
   const { toggleModal } = useChatModal();
-  const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
+  const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
+    useProjectsContext();
+  const { popup, setPopup } = usePopup();
+
+  // State for custom agent modal
+  const [pendingMoveChatSession, setPendingMoveChatSession] =
+    useState<ChatSession | null>(null);
+  const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
+    number | null
+  >(null);
+  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
+    useState(false);
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
     () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -503,7 +619,8 @@ function AppSidebarInner() {
     })
   );
 
-  const handleDragEnd = useCallback(
+  // Handle agent drag and drop
+  const handleAgentDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over) return;
@@ -532,6 +649,106 @@ function AppSidebarInner() {
     [visibleAgentIds, setPinnedAgents, currentAgent, currentAgentIsPinned]
   );
 
+  // Perform the actual move
+  async function performChatMove(
+    targetProjectId: number,
+    chatSession: ChatSession
+  ) {
+    try {
+      await moveChatSession(targetProjectId, chatSession.id);
+      const projectRefreshPromise = currentProjectId
+        ? refreshCurrentProjectDetails()
+        : fetchProjects();
+      await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+    } catch (error) {
+      console.error("Failed to move chat:", error);
+      throw error;
+    }
+  }
+
+  // Handle chat to project drag and drop
+  const handleChatProjectDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeData = active.data.current;
+      const overData = over.data.current;
+
+      if (!activeData || !overData) {
+        return;
+      }
+
+      // Check if we're dragging a chat onto a project
+      if (
+        activeData?.type === DRAG_TYPES.CHAT &&
+        overData?.type === DRAG_TYPES.PROJECT
+      ) {
+        const chatSession = activeData.chatSession as ChatSession;
+        const targetProject = overData.project as Project;
+        const sourceProjectId = activeData.projectId;
+
+        // Don't do anything if dropping on the same project
+        if (sourceProjectId === targetProject.id) {
+          return;
+        }
+
+        const hideModal =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem(
+            LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+          ) === "true";
+
+        const isChatUsingDefaultAssistant =
+          chatSession.persona_id === DEFAULT_PERSONA_ID;
+
+        if (!isChatUsingDefaultAssistant && !hideModal) {
+          setPendingMoveChatSession(chatSession);
+          setPendingMoveProjectId(targetProject.id);
+          setShowMoveCustomAgentModal(true);
+          return;
+        }
+
+        try {
+          await performChatMove(targetProject.id, chatSession);
+        } catch (error) {
+          showErrorNotification(
+            setPopup,
+            "Failed to move chat. Please try again."
+          );
+        }
+      }
+
+      // Check if we're dragging a chat from a project to the Recents section
+      if (
+        activeData?.type === DRAG_TYPES.CHAT &&
+        overData?.type === DRAG_TYPES.RECENTS
+      ) {
+        const chatSession = activeData.chatSession as ChatSession;
+        const sourceProjectId = activeData.projectId;
+
+        // Only remove from project if it was in a project
+        if (sourceProjectId) {
+          try {
+            await removeChatSessionFromProject(chatSession.id);
+            const projectRefreshPromise = currentProjectId
+              ? refreshCurrentProjectDetails()
+              : fetchProjects();
+            await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+          } catch (error) {
+            console.error("Failed to remove chat from project:", error);
+          }
+        }
+      }
+    },
+    [
+      currentProjectId,
+      refreshChatSessions,
+      refreshCurrentProjectDetails,
+      fetchProjects,
+    ]
+  );
+
   const isHistoryEmpty = useMemo(
     () => !chatSessions || chatSessions.length === 0,
     [chatSessions]
@@ -543,8 +760,42 @@ function AppSidebarInner() {
 
   return (
     <>
+      {popup}
       <AgentsModal />
       <CreateProjectModal />
+
+      {showMoveCustomAgentModal && (
+        <MoveCustomAgentChatModal
+          onCancel={() => {
+            setShowMoveCustomAgentModal(false);
+            setPendingMoveChatSession(null);
+            setPendingMoveProjectId(null);
+          }}
+          onConfirm={async (doNotShowAgain: boolean) => {
+            if (doNotShowAgain && typeof window !== "undefined") {
+              window.localStorage.setItem(
+                LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
+                "true"
+              );
+            }
+            const chat = pendingMoveChatSession;
+            const target = pendingMoveProjectId;
+            setShowMoveCustomAgentModal(false);
+            setPendingMoveChatSession(null);
+            setPendingMoveProjectId(null);
+            if (chat && target != null) {
+              try {
+                await performChatMove(target, chat);
+              } catch (error) {
+                showErrorNotification(
+                  setPopup,
+                  "Failed to move chat. Please try again."
+                );
+              }
+            }
+          }}
+        />
+      )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
@@ -591,7 +842,7 @@ function AppSidebarInner() {
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
+                  onDragEnd={handleAgentDragEnd}
                 >
                   <SortableContext
                     items={visibleAgentIds}
@@ -616,25 +867,38 @@ function AppSidebarInner() {
                 </div>
               </SidebarSection>
 
-              <SidebarSection title="Projects">
-                <Projects />
-              </SidebarSection>
-
-              {/* Recents */}
-              <SidebarSection title="Recents">
-                {isHistoryEmpty ? (
-                  <Text text01 className="px-padding-button">
-                    Try sending a message! Your chat history will appear here.
-                  </Text>
-                ) : (
-                  chatSessions.map((chatSession) => (
-                    <ChatButton
-                      key={chatSession.id}
-                      chatSession={chatSession}
+              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={pointerWithin}
+                modifiers={[
+                  restrictToFirstScrollableAncestor,
+                  restrictToVerticalAxis,
+                ]}
+                onDragEnd={handleChatProjectDragEnd}
+              >
+                <SidebarSection
+                  title="Projects"
+                  action={
+                    <IconButton
+                      icon={SvgFolderPlus}
+                      internal
+                      tooltip="New Project"
+                      onClick={() =>
+                        toggleModal(ModalIds.CreateProjectModal, true)
+                      }
                     />
-                  ))
-                )}
-              </SidebarSection>
+                  }
+                >
+                  <Projects />
+                </SidebarSection>
+
+                {/* Recents */}
+                <RecentsSection
+                  isHistoryEmpty={isHistoryEmpty}
+                  chatSessions={chatSessions}
+                />
+              </DndContext>
             </>
           )}
         </div>

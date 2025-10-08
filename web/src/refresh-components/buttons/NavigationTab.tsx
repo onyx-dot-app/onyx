@@ -74,6 +74,9 @@ export interface NavigationTabProps {
 
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLDivElement>;
+  onIconClick?: React.MouseEventHandler<HTMLDivElement>;
+  onIconHover?: (isHovering: boolean) => void;
+  onTextClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
   tooltip?: boolean;
   popover?: React.ReactNode;
@@ -96,6 +99,9 @@ export default function NavigationTab({
   lowlight,
 
   onClick,
+  onIconClick,
+  onIconHover,
+  onTextClick,
   href,
   tooltip,
   popover,
@@ -164,12 +170,26 @@ export default function NavigationTab({
           folded ? "justify-center" : "justify-start"
         )}
       >
-        <div className={cn("w-[1rem]", "h-[1rem]", iconClassName)}>
+        <div
+          className={cn("w-[1rem]", "h-[1rem]", iconClassName)}
+          onClick={(e) => {
+            if (onIconClick) {
+              e.stopPropagation();
+              onIconClick(e);
+            }
+          }}
+          onMouseEnter={() => onIconHover?.(true)}
+          onMouseLeave={() => onIconHover?.(false)}
+        >
           <Icon
             className={cn(
+              
               "h-[1rem]",
-              "w-[1rem]",
+              "w-[1rem] transition-all duration-200 ease-in-out",
+             
               iconClasses(active)[variant],
+              onIconClick && "cursor-pointer"
+            ,
               iconClassName
             )}
           />
@@ -186,16 +206,27 @@ export default function NavigationTab({
               />
             </div>
           ) : typeof children === "string" ? (
-            <Truncated
-              side="right"
-              // We offset the "truncation popover" iff the popover "kebab menu" exists.
-              // This is because the popover would hover OVER the kebab menu, creating a weird UI.
-              // However, if no popover is specified, we don't need to offset anything.
-              offset={!!popover ? 40 : 0}
-              className={cn("text-left", textClasses(active)[variant])}
+            <div
+              className="w-full"
+              onClick={(e) => {
+                if (onTextClick) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onTextClick(e);
+                }
+              }}
             >
-              {children}
-            </Truncated>
+              <Truncated
+                side="right"
+                // We offset the "truncation popover" iff the popover "kebab menu" exists.
+                // This is because the popover would hover OVER the kebab menu, creating a weird UI.
+                // However, if no popover is specified, we don't need to offset anything.
+                offset={!!popover ? 40 : 0}
+                className={cn("text-left", textClasses(active)[variant])}
+              >
+                {children}
+              </Truncated>
+            </div>
           ) : (
             children
           ))}
