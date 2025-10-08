@@ -104,6 +104,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
+import { APIKey } from "../guardrails/types";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -331,6 +332,7 @@ export function AssistantEditor({
     pipeline_id: existingPersona?.pipeline_id,
     use_default: existingPersona?.use_default,
     template_file: null,
+    selectedValidators: existingPersona?.selectedValidators,
   };
 
   interface AssistantPrompt {
@@ -390,6 +392,11 @@ export function AssistantEditor({
 
   const { data: users } = useSWR<MinimalUserSnapshot[]>(
     "/api/users",
+    errorHandlingFetcher
+  );
+  
+  const { data: validators } = useSWR<APIKey[]>(
+    "/api/validator",
     errorHandlingFetcher
   );
 
@@ -1839,6 +1846,62 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
+                  
+                  <div className="mt-2">
+                            <Label className="mb-2" small>
+                              Выберите валидаторы
+                            </Label>
+
+                  <SearchMultiSelectDropdown
+                    options={[
+                      ...(Array.isArray(validators) ? validators : [])
+                        .filter(
+                          (u: APIKey) =>
+                            !values.selectedValidators.some(
+                              (su: APIKey) =>
+                                su.id === u.id
+                            )
+                        )
+                        .map((u: APIKey) => ({
+                          name: u.name,
+                          value: u.id,
+                        })),
+                    ]}
+                    onSelect={(
+                      selected: DropdownOption<string | number>
+                    ) => {
+                      const option = selected as {
+                        name: string;
+                        value: string | number;
+                        type: "user" | "group";
+                      };
+                      setFieldValue("selectedValidators", [
+                        ...values.selectedValidators,
+                        { id: option.value, email: option.name },
+                      ]);
+                    }}
+                  />
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {values.selectedValidators.map(
+                              (user: APIKey) => (
+                                <SourceChip
+                                  key={user.id}
+                                  onRemove={() => {
+                                    setFieldValue(
+                                      "selectedValidators",
+                                      values.selectedValidators.filter(
+                                        (u: APIKey) =>
+                                          u.id !== user.id
+                                      )
+                                    );
+                                  }}
+                                  title={user.name}
+                                  icon={<UserIcon size={12} />}
+                                />
+                              )
+                            )}
+                          </div>
                 </>
               )}
 
