@@ -6,6 +6,7 @@ import {
   useProjectsContext,
 } from "@/app/chat/projects/ProjectsContext";
 import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Text from "@/refresh-components/Text";
 import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import { PopoverMenu } from "@/components/ui/popover";
@@ -20,7 +21,11 @@ import {
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { noProp } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
+import { OpenFolderIcon } from "@/components/icons/CustomIcons";
+
+import { SvgProps } from "@/icons";
+import { useDroppable } from "@dnd-kit/core";
 
 interface ProjectFolderProps {
   project: Project;
@@ -30,11 +35,22 @@ function ProjectFolder({ project }: ProjectFolderProps) {
   const route = useAppRouter();
   const params = useAppParams();
   const [open, setOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
+
+  // Make project droppable
+  const dropId = `project-${project.id}`;
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId,
+    data: {
+      type: "project",
+      project,
+    },
+  });
 
   async function submitRename(renamedValue: string) {
     const newName = renamedValue.trim();
@@ -44,6 +60,29 @@ function ProjectFolder({ project }: ProjectFolderProps) {
     setIsEditing(false);
     await renameProject(project.id, newName);
   }
+
+  // Determine which icon to show based on open/closed state and hover
+  const getFolderIcon = (): React.FunctionComponent<SvgProps> => {
+    if (open) {
+      return isHovering
+        ? SvgFolder
+        : (OpenFolderIcon as React.FunctionComponent<SvgProps>);
+    } else {
+      return isHovering
+        ? (OpenFolderIcon as React.FunctionComponent<SvgProps>)
+        : SvgFolder;
+    }
+  };
+
+  const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setOpen((prev) => !prev);
+  };
+
+  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    route({ projectId: project.id });
+  };
 
   return (
     <>
@@ -71,41 +110,48 @@ function ProjectFolder({ project }: ProjectFolderProps) {
       )}
 
       {/* Project Folder */}
-      <NavigationTab
-        icon={SvgFolder}
-        active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
-        onClick={() => {
-          setOpen((prev) => !prev);
-          route({ projectId: project.id });
-        }}
-        popover={
-          <PopoverMenu>
-            {[
-              <NavigationTab
-                key="rename-project"
-                icon={SvgEdit}
-                onClick={noProp(() => setIsEditing(true))}
-              >
-                Rename Project
-              </NavigationTab>,
-              null,
-              <NavigationTab
-                key="delete-project"
-                icon={SvgTrash}
-                onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-                danger
-              >
-                Delete Project
-              </NavigationTab>,
-            ]}
-          </PopoverMenu>
-        }
-        renaming={isEditing}
-        setRenaming={setIsEditing}
-        submitRename={submitRename}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "transition-colors duration-200",
+          isOver && "bg-background-tint-03 rounded-08"
+        )}
       >
-        {name}
-      </NavigationTab>
+        <NavigationTab
+          icon={getFolderIcon()}
+          active={params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)}
+          onIconClick={handleIconClick}
+          onIconHover={setIsHovering}
+          onTextClick={handleTextClick}
+          popover={
+            <PopoverMenu>
+              {[
+                <NavigationTab
+                  key="rename-project"
+                  icon={SvgEdit}
+                  onClick={noProp(() => setIsEditing(true))}
+                >
+                  Rename Project
+                </NavigationTab>,
+                null,
+                <NavigationTab
+                  key="delete-project"
+                  icon={SvgTrash}
+                  onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+                  danger
+                >
+                  Delete Project
+                </NavigationTab>,
+              ]}
+            </PopoverMenu>
+          }
+          renaming={isEditing}
+          setRenaming={setIsEditing}
+          submitRename={submitRename}
+        >
+          {name}
+        </NavigationTab>
+      </div>
 
       {/* Project Chat-Sessions */}
       {open &&
@@ -114,8 +160,16 @@ function ProjectFolder({ project }: ProjectFolderProps) {
             key={chatSession.id}
             chatSession={chatSession}
             project={project}
+            draggable
           />
         ))}
+      {open && project.chat_sessions.length === 0 && (
+        <div className="flex justify-center items-center">
+          <Text mainUiMuted text01>
+            No chat sessions yet.
+          </Text>
+        </div>
+      )}
     </>
   );
 }
@@ -129,13 +183,15 @@ export default function Projects() {
         <ProjectFolder key={project.id} project={project} />
       ))}
 
-      <NavigationTab
-        icon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        lowlight
-      >
-        New Project
-      </NavigationTab>
+      {projects.length === 0 && (
+        <NavigationTab
+          icon={SvgFolderPlus}
+          onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+          lowlight
+        >
+          New Project
+        </NavigationTab>
+      )}
     </>
   );
 }
