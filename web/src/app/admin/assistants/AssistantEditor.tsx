@@ -95,18 +95,8 @@ import {
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import FilesList from "@/app/chat/components/files/FilesList";
-import {
-  MultipleFilesIcon,
-  OpenFolderIcon,
-} from "@/components/icons/CustomIcons";
+import CoreModal from "@/refresh-components/modals/CoreModal";
+import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
@@ -127,6 +117,10 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePicker from "@/app/chat/components/files/FilePicker";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import SvgPlusCircle from "@/icons/plus-circle";
+import Text from "@/refresh-components/Text";
+import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/Text";
 
@@ -1108,9 +1102,9 @@ export function AssistantEditor({
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
-                                <div className="flex gap-3 mb-2">
+                                <div className="flex gap-spacing-inline">
                                   {values.user_file_ids
-                                    .slice(0, 3)
+                                    .slice(0, 4)
                                     .map((userFileId: string) => {
                                       const rf = recentFiles.find(
                                         (f) => f.id === userFileId
@@ -1121,7 +1115,7 @@ export function AssistantEditor({
                                         status: "completed" as const,
                                       };
                                       return (
-                                        <div key={userFileId} className="w-52">
+                                        <div key={userFileId} className="w-40">
                                           <FileCard
                                             file={fileData as ProjectFile}
                                             removeFile={() => {
@@ -1137,30 +1131,33 @@ export function AssistantEditor({
                                         </div>
                                       );
                                     })}
-                                  {values.user_file_ids.length > 3 && (
+                                  {values.user_file_ids.length > 4 && (
                                     <button
                                       type="button"
-                                      className="rounded-xl px-3 py-1 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                                      className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
                                       onClick={() => setShowAllUserFiles(true)}
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
-                                          <span className="text-onyx-medium text-sm truncate flex-1">
+                                          <Text text04 secondaryAction>
                                             View All
-                                          </span>
-                                          <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                                          </Text>
+                                          <SvgFiles className="h-5 w-5 stroke-text-02" />
                                         </div>
-                                        <span className="text-onyx-muted text-sm">
+                                        <Text text03 secondaryBody>
                                           {values.user_file_ids.length} files
-                                        </span>
+                                        </Text>
                                       </div>
                                     </button>
                                   )}
                                 </div>
                               )}
                               <FilePicker
-                                showTriggerLabel
-                                triggerLabel="Add User  Files"
+                                trigger={
+                                  <LineItem icon={SvgPlusCircle}>
+                                    Add User Files
+                                  </LineItem>
+                                }
                                 recentFiles={recentFiles}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
@@ -1841,19 +1838,15 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
-              <Dialog
-                open={showAllUserFiles}
-                onOpenChange={setShowAllUserFiles}
-              >
-                <DialogContent className="w-full max-w-lg">
-                  <DialogHeader>
-                    <OpenFolderIcon size={32} />
-                    <DialogTitle>User Files</DialogTitle>
-                    <DialogDescription>
-                      All files selected for this agent
-                    </DialogDescription>
-                  </DialogHeader>
-                  <FilesList
+              {showAllUserFiles && (
+                <CoreModal
+                  className="w-full max-w-lg"
+                  onClickOutside={() => setShowAllUserFiles(false)}
+                >
+                  <UserFilesModalContent
+                    title="User Files"
+                    description="All files selected for this assistant"
+                    icon={SvgFiles}
                     recentFiles={values.user_file_ids.map(
                       (userFileId: string) => {
                         const rf = recentFiles.find((f) => f.id === userFileId);
@@ -1875,9 +1868,10 @@ export function AssistantEditor({
                         )
                       );
                     }}
+                    onClose={() => setShowAllUserFiles(false)}
                   />
-                </DialogContent>
-              </Dialog>
+                </CoreModal>
+              )}
             </>
           );
         }}
