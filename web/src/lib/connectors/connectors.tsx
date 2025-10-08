@@ -609,7 +609,24 @@ export const connectorConfigs: Record<
         defaultTab: "space",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "number",
+        label: "Attachment Size Threshold (bytes)",
+        name: "attachment_size_threshold_bytes",
+        optional: true,
+        description:
+          "Attachments larger than this will be skipped. Leave blank to use default (10 MB).",
+      },
+      {
+        type: "number",
+        label: "Attachment Text Character Threshold",
+        name: "attachment_char_count_threshold",
+        optional: true,
+        description:
+          "If extracted text exceeds this character limit, the attachment is skipped. Leave blank to use default (200,000).",
+      },
+    ],
   },
   jira: {
     description: "Configure Jira connector",
