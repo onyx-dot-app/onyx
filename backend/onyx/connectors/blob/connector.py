@@ -15,7 +15,7 @@ from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
 from mypy_boto3_s3 import S3Client  # type: ignore
 
-from onyx.configs.app_configs import GOOGLE_CLOUD_STORAGE_SIZE_THRESHOLD
+from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
@@ -63,10 +63,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
-        self.size_threshold: int | None = None
-
-        if self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            self.size_threshold = GOOGLE_CLOUD_STORAGE_SIZE_THRESHOLD
+        self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
@@ -204,11 +201,6 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         return None
 
-    def _should_enforce_size_limit(self) -> bool:
-        return self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE and (
-            self.size_threshold is not None
-        )
-
     def _download_object(self, key: str) -> bytes | None:
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
@@ -216,7 +208,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         body = response["Body"]
 
         try:
-            if not self._should_enforce_size_limit():
+            if self.size_threshold is None:
                 return body.read()
 
             return self._read_stream_with_limit(body, key)
@@ -314,7 +306,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 size_bytes = obj.get("Size")
                 if (
-                    self._should_enforce_size_limit()
+                    self.size_threshold is not None
                     and isinstance(size_bytes, int)
                     and self.size_threshold is not None
                     and size_bytes > self.size_threshold
