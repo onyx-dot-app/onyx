@@ -33,6 +33,7 @@ import {
 } from "./projectsService";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 
 export type { Project, ProjectFile } from "./projectsService";
 
@@ -101,6 +102,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
   );
+  const route = useAppRouter();
 
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     setError(null);
@@ -141,6 +143,8 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       setError(null);
       try {
         const project: Project = await svcCreateProject(name);
+        // Navigate to the newly created project's page
+        route({ projectId: project.id });
         // Refresh list to keep order consistent with backend
         await fetchProjects();
         return project;
@@ -151,7 +155,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
         throw err;
       }
     },
-    [fetchProjects]
+    [fetchProjects, route]
   );
 
   const renameProject = useCallback(
