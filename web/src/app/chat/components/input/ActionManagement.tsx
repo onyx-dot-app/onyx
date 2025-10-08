@@ -902,7 +902,7 @@ export function ActionToggle({
             }
           }}
           className="
-            w-[244px] 
+            w-[15.5rem] 
             max-h-[300px]
             text-neutral-600 dark:text-neutral-400
             text-sm 
@@ -910,7 +910,6 @@ export function ActionToggle({
             overflow-hidden
             flex
             flex-col
-            bg-white dark:bg-neutral-900
             border border-neutral-200 dark:border-transparent
             shadow-lg dark:shadow-xl dark:shadow-[0_0_8px_rgba(255,255,255,0.05)]
           "
