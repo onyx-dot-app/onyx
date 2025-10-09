@@ -1,4 +1,4 @@
-import { WELCOME_MESSAGE } from "@/lib/chat/greetingMessages";
+import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
 import { test, expect } from "@chromatic-com/playwright";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
@@ -31,7 +31,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Look for greeting message - should be one from the predefined list
       const greeting = await waitForUnifiedGreeting(page);
-      expect(greeting.trim()).toStrictEqual(WELCOME_MESSAGE);
+      expect(GREETING_MESSAGES).toContain(greeting.trim());
     });
 
     test("greeting should only appear for default assistant", async ({
