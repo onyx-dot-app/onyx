@@ -8,6 +8,8 @@ from typing import List
 from typing import Optional
 
 import requests
+from typing_extensions import override
+
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -44,7 +46,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-from typing_extensions import override
 
 logger = setup_logger()
 
