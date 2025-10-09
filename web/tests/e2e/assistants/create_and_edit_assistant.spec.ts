@@ -146,7 +146,15 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
     "false"
   );
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(knowledgeCutoffDate);
-  await expect(getNumChunksInput(page)).toHaveValue(numChunks);
+  // This should still be 0.
+  //
+  // Since "seeded docs" are disabled, "search" (the "Knowledge" toggle) will be disabled.
+  // Since "search" is disabled, modifying the "num_chunks" will NOT work (the frontend will override the value sent to the backend to be 0).
+  // ```ts
+  // // (AssistantEditor.tsx):
+  // const numChunks = searchToolEnabled ? values.num_chunks || 25 : 0;
+  // ```
+  await expect(getNumChunksInput(page)).toHaveValue("0");
   await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
     "aria-checked",
     "true"
@@ -210,7 +218,9 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(
     editedKnowledgeCutoffDate
   );
-  await expect(getNumChunksInput(page)).toHaveValue(editedNumChunks);
+
+  // Once again, this will still not work.
+  await expect(getNumChunksInput(page)).toHaveValue("0");
   await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
     "aria-checked",
     "false"
