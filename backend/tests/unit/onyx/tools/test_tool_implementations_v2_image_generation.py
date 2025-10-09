@@ -1,9 +1,11 @@
 from unittest.mock import Mock
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from agents import RunContextWrapper
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
@@ -77,6 +79,9 @@ def create_test_run_context(
         iteration_instructions=[],
         aggregated_context=aggregated_context,
         run_dependencies=run_dependencies,
+        chat_session_id=uuid4(),
+        message_id=1,
+        research_type=ResearchType.THOUGHTFUL,
     )
 
     # Create the run context wrapper
