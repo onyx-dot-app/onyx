@@ -140,36 +140,12 @@ OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 # OpenRouter
 OPENROUTER_PROVIDER_NAME = "openrouter"
 
-
-def get_bedrock_model_names() -> list[str]:
-    import litellm
-
-    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
-    # litellm has split them into two lists :(
-    return [
-        model
-        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
-        if "/" not in model and "embed" not in model
-    ][::-1]
-
-
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
     "claude-instant-1",
     "anthropic/claude-3-5-sonnet-20241022",
 ]
 ANTHROPIC_PROVIDER_NAME = "anthropic"
-
-
-def get_anthropic_model_names() -> list[str]:
-    import litellm
-
-    return [
-        model
-        for model in litellm.anthropic_models
-        if model not in IGNORABLE_ANTHROPIC_MODELS
-    ][::-1]
-
 
 ANTHROPIC_VISIBLE_MODEL_NAMES = [
     "claude-sonnet-4-5-20250929",
@@ -230,40 +206,44 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def get_openrouter_model_names() -> list[str]:
-    """
-    Return OpenRouter chat-capable model names recognized by LiteLLM.
-
-    We derive the list from litellm.model_cost entries prefixed with "openrouter/".
-    We keep the OpenRouter subpath (e.g., "deepseek/deepseek-r1") as the model name,
-    excluding embedding-only models.
-    """
+def get_bedrock_model_names() -> list[str]:
     import litellm
 
-    models: set[str] = set()
-    try:
-        for full_name in getattr(litellm, "model_cost", {}).keys():
-            if not isinstance(full_name, str):
-                continue
-            if not full_name.startswith("openrouter/"):
-                continue
+    litellm._turn_on_debug()
 
-            # Extract the provider/model path after the leading "openrouter/"
-            subpath = full_name[len("openrouter/") :]
+    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
+    # litellm has split them into two lists :(
+    return [
+        model
+        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
+        if "/" not in model and "embed" not in model
+    ][::-1]
 
-            # Filter out embeddings and other non-chat models
-            lowered = subpath.lower()
-            if "embed" in lowered or "embedding" in lowered:
-                continue
 
-            if not subpath or subpath.endswith("/"):
-                continue
+def get_anthropic_model_names() -> list[str]:
+    import litellm
 
-            models.add(subpath)
-    except Exception:
-        return []
+    return [
+        model
+        for model in litellm.anthropic_models
+        if model not in IGNORABLE_ANTHROPIC_MODELS
+    ][::-1]
 
-    return sorted(models)
+
+def get_openrouter_model_names() -> list[str]:
+    """Return OpenRouter models, stripped of the leading 'openrouter/' if present,
+    then sorted by provider, then model (assumes both exist)."""
+    import litellm
+
+    # 1) Strip 'openrouter/' if present and filter out embedding models
+    model_list = [
+        (model.split("/", 1)[1] if model.startswith("openrouter/") else model)
+        for model in litellm.openrouter_models
+        if "embed" not in model.lower()
+    ]
+
+    # 2) Sort by provider then model
+    return sorted(model_list, key=lambda s: s.split("/", 1))
 
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
