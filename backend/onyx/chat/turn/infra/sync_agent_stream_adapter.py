@@ -4,6 +4,7 @@ import threading
 from collections.abc import Iterator
 from typing import Generic
 from typing import Optional
+from typing import Self
 from typing import TypeVar
 
 from agents import Agent
@@ -45,7 +46,7 @@ class SyncAgentStream(Generic[T]):
         context: ChatTurnContext,
         max_turns: int = 100,
         queue_maxsize: int = 0,
-    ) -> None:
+    ) -> Self:
         self._agent = agent
         self._input = input
         self._context = context

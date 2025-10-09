@@ -81,7 +81,7 @@ def _fast_chat_turn_core(
     )
     # By default, the agent can only take 10 turns. For our use case, it should be higher.
     max_turns = 25
-    agent_stream = SyncAgentStream(
+    agent_stream: SyncAgentStream = SyncAgentStream(
         agent=agent,
         input=messages,
         context=ctx,

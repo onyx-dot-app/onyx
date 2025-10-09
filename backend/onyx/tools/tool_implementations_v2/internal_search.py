@@ -148,6 +148,10 @@ def internal_search_tool(
     The queries will be searched over a vector database where a hybrid search will be performed.
     Will return a combination of keyword and semantic search results.
     ---
+    ## Decision boundary
+    - MUST call internal_search_tool if the user's query requires internal information, like
+    if they reference "we" or "us" or "our" or "internal" for example.
+
     ## Usage hints
     - Batch a list of natural-language queries per call.
     - Generally try searching with some semantic queries and some keyword queries
