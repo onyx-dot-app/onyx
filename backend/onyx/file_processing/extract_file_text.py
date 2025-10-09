@@ -500,7 +500,10 @@ def eml_to_text(file: IO[Any]) -> str:
         try:
             # Keep underlying upload handle open for downstream consumers.
             raw_file = text_file.detach()
-        except Exception:
+        except Exception as detach_error:
+            logger.warning(
+                f"Failed to detach TextIOWrapper for EML upload, using original file: {detach_error}"
+            )
             raw_file = file
         try:
             raw_file.seek(0)
