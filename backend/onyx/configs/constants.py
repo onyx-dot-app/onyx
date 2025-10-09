@@ -613,5 +613,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.IMAP: "imap - email data",
-    DocumentSource.NEXTCLOUD: "Nextcloud-Dateien und -Ordner",
+    DocumentSource.NEXTCLOUD: "nextcloud - files",
 }
