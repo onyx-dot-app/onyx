@@ -14,3 +14,4 @@ onyx/connectors/salesforce/data/
 /generated
 backend/scratch/qdrant/accuracy_testing/*.jsonl
 scratch/qdrant/accuracy_testing/*.jsonl
+scratch/qdrant/accuracy_testing/evaluation_results.json
