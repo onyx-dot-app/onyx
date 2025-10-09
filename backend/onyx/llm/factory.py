@@ -26,19 +26,17 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    if provider != OLLAMA_PROVIDER_NAME or not custom_config:
-        return {}
+    # Ollama Cloud: allow passing Bearer token via custom config for cloud instances
+    if provider == OLLAMA_PROVIDER_NAME and custom_config:
+        raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
+        api_key = raw_api_key.strip() if raw_api_key else None
+        if not api_key:
+            return {}
+        if not api_key.lower().startswith("bearer "):
+            api_key = f"Bearer {api_key}"
+        return {"Authorization": api_key}
 
-    raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
-
-    api_key = raw_api_key.strip() if raw_api_key else None
-    if not api_key:
-        return {}
-
-    if not api_key.lower().startswith("bearer "):
-        api_key = f"Bearer {api_key}"
-
-    return {"Authorization": api_key}
+    return {}
 
 
 def get_main_llm_from_tuple(
