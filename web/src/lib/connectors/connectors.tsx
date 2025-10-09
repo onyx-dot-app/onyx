@@ -1536,6 +1536,37 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  nextcloud: {
+    description: "Configure Nextcloud connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter your Nextcloud server URL (e.g., https://cloud.example.com):",
+        label: "Server URL",
+        name: "server_url",
+        optional: false,
+        description: "The base URL of your Nextcloud instance",
+      },
+	],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter path filter (optional):",
+        label: "Path Filter",
+        name: "path_filter",
+        optional: true,
+        description: "Optional path to limit indexing to a specific folder (e.g., /Documents)",
+      },
+      {
+        type: "list",
+        query: "Enter file extensions to include (optional):",
+        label: "File Extensions",
+        name: "file_extensions",
+        optional: true,
+        description: "Optional list of file extensions to include (e.g., .pdf, .docx, .txt)",
+      },
+    ],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1854,4 +1885,12 @@ export interface ImapConfig {
   host: string;
   port?: number;
   mailboxes?: string[];
+}
+
+export interface NextcloudConfig {
+  server_url: string;
+  username: string;
+  password: string;
+  path_filter?: string;
+  file_extensions?: string[];
 }

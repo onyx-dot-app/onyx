@@ -205,4 +205,9 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
     ),
+	# Nextcloud
+    DocumentSource.NEXTCLOUD: ConnectorMapping(
+        module_path="onyx.connectors.nextcloud.connector",
+        class_name="NextcloudConnector",
+    ),
 }

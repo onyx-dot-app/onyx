@@ -52,6 +52,8 @@ import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
+import { NextcloudIcon } from "@/components/icons/NextcloudIcon";
+
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
   displayName: string;
@@ -412,6 +414,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: GlobeIcon,
     displayName: "Mock Connector",
     category: SourceCategory.Other,
+  },
+  
+  // Nextcloud
+  nextcloud: {
+    icon: NextcloudIcon,
+    displayName: "Nextcloud",
+    category: SourceCategory.Storage,
   },
 } as SourceMap;
 

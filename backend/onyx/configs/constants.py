@@ -215,7 +215,8 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
     # Special case for user files
     USER_FILE = "user_file"
-
+	
+    NEXTCLOUD = "nextcloud"
 
 class FederatedConnectorSource(str, Enum):
     FEDERATED_SLACK = "federated_slack"
@@ -612,4 +613,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.IMAP: "imap - email data",
+    DocumentSource.NEXTCLOUD: "Nextcloud-Dateien und -Ordner",
 }
