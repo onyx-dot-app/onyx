@@ -132,6 +132,7 @@ function buildPersonaUpsertRequest(
     pipeline_id,
     use_default,
     template_file,
+    validator_ids
   } = creationRequest;
 
   return {
@@ -169,6 +170,7 @@ function buildPersonaUpsertRequest(
     pipeline_id,
     use_default,
     template_file: template_file_id,
+    validator_ids
   };
 }
 

@@ -530,7 +530,7 @@ export function ClientLayout({
                               <div className="flex">
                                 <ShieldIconSkeleton className="text-text-700" />
                                 <div className="ml-1">
-                                  t(k.VALIDATORS)
+                                  {t(k.VALIDATORS)}
                                 </div>
                               </div>
                             ),
