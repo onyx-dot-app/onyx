@@ -414,9 +414,5 @@ class NextcloudWebDAVClient:
         if not path.startswith("/"):
             path = "/" + path
         
-        # Handle root directory case
-        if path == "/":
-            path = "/"
-        
         logger.debug(f"Final cleaned path: '{path}'")
         return path

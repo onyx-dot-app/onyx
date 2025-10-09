@@ -417,10 +417,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
   
   // Nextcloud
+  // TODO: Write Docu
   nextcloud: {
     icon: NextcloudIcon,
     displayName: "Nextcloud",
     category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/onyx",
   },
 } as SourceMap;
 

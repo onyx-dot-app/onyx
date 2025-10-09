@@ -24,10 +24,7 @@ import logging
 from pathlib import Path
 import sys
 
-# Add the parent directory to the path so we can import the connector
-sys.path.insert(0, str(Path(__file__).parent))
-
-from connector import NextcloudConnector
+from onyx.connectors.nextcloud.connector import NextcloudConnector
 
 # Set up logging
 logging.basicConfig(

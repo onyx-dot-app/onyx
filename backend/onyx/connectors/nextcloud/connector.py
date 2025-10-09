@@ -102,6 +102,7 @@ class NextcloudConnector(LoadConnector, PollConnector, CredentialsConnector):
 
     @property
     def client(self) -> NextcloudWebDAVClient:
+        """Get or create WebDAV client instance."""  
         if self._client is not None:
             return self._client
 
@@ -115,7 +116,7 @@ class NextcloudConnector(LoadConnector, PollConnector, CredentialsConnector):
         if not (username and password):
             raise ConnectorMissingCredentialError("username/password missing")
 
-        """Get or create WebDAV client instance."""         
+               
         self._client = NextcloudWebDAVClient(
             server_url=self.server_url,
             username=username, 
@@ -363,7 +364,7 @@ class NextcloudConnector(LoadConnector, PollConnector, CredentialsConnector):
         creds = self._creds_provider.get_credentials()
         username = creds.get("nc_username")
         password = creds.get("nc_password")
-		
+        
         if not all([self.server_url, username, password]):
             raise ConnectorMissingCredentialError(
                 "Nextcloud connector requires server_url, username, and password"
