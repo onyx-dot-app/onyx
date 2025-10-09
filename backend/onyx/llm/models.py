@@ -82,6 +82,7 @@ class PreviousMessage(BaseModel):
         else:
             return SystemMessage(content=content)
 
+    # TODO: deprecate langchain
     @classmethod
     def from_langchain_msg(
         cls, msg: BaseMessage, token_count: int

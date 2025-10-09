@@ -7,6 +7,7 @@ from typing import Optional
 from typing import TypeVar
 
 from agents import Agent
+from agents import RunResultStreaming
 from agents.run import Runner
 
 from onyx.chat.turn.models import ChatTurnContext
@@ -53,7 +54,7 @@ class SyncAgentStream(Generic[T]):
         self._q: "queue.Queue[object]" = queue.Queue(maxsize=queue_maxsize)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
-        self._streamed = None  # set to the object returned by Runner.run_streamed(...)
+        self._streamed: RunResultStreaming | None = None
         self._exc: Optional[BaseException] = None
         self._cancel_requested = threading.Event()
         self._started = threading.Event()

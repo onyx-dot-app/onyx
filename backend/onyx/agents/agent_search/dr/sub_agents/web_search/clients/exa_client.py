@@ -15,7 +15,6 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.utils.retry_wrapper import retry_builder
 
 
-# TODO Dependency inject for testing
 class ExaClient(WebSearchProvider):
     def __init__(self, api_key: str | None = EXA_API_KEY) -> None:
         self.exa = Exa(api_key=api_key)
@@ -36,7 +35,7 @@ class ExaClient(WebSearchProvider):
             WebSearchResult(
                 title=result.title or "",
                 link=result.url,
-                snippet="",
+                snippet=result.highlights[0] if result.highlights else "",
                 author=result.author,
                 published_date=(
                     time_str_to_utc(result.published_date)

@@ -74,13 +74,13 @@ def _fast_chat_turn_core(
         model=dependencies.llm_model,
         tools=dependencies.tools,
         model_settings=ModelSettings(
-            temperature=0.0,
+            temperature=dependencies.llm.config.temperature,
             include_usage=True,
         ),
         tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation_tool.name]),
     )
     # By default, the agent can only take 10 turns. For our use case, it should be higher.
-    max_turns = 100
+    max_turns = 25
     agent_stream = SyncAgentStream(
         agent=agent,
         input=messages,
@@ -96,7 +96,6 @@ def _fast_chat_turn_core(
             _emit_clean_up_packets(dependencies, ctx)
             agent_stream.cancel()
             break
-        ctx.current_run_step
         obj = _default_packet_translation(ev, ctx)
         if obj:
             dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))

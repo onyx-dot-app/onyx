@@ -3,7 +3,6 @@
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
 import re
-import uuid
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import UUID
@@ -70,11 +69,7 @@ def save_iteration(
     update_db_session_with_messages(
         db_session=db_session,
         chat_message_id=message_id,
-        chat_session_id=(
-            uuid.UUID(str(chat_session_id))
-            if isinstance(chat_session_id, UUID)
-            else chat_session_id
-        ),
+        chat_session_id=chat_session_id,
         is_agentic=research_type == ResearchType.DEEP,
         message=final_answer,
         citations=citation_dict,
