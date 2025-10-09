@@ -67,42 +67,17 @@ function Main() {
     />
   );
 
-  if (validators.length === 0) {
-    return (
-      <div>
-        {popup}
-        <Text>{t(k.VALIDATORS_TEXT)}</Text>
-        {newApiKeyButton}
-
-        {showCreateUpdateForm && (
-          <OnyxApiKeyForm
-            onClose={() => {
-              setShowCreateUpdateForm(false);
-              setSelectedApiKey(undefined);
-              mutate("/api/admin/api-key");
-            }}
-            setPopup={setPopup}
-            apiKey={selectedApiKey}
-          />
-        )}
-      </div>
-    );
-  }
-
   return (
     <div>
     {popup}
-      <Text className="mb-4">{t(k.VALIDATORS)}</Text>
-
-      <Table className="overflow-visible">
+      <div className="mb-4">{newApiKeyButton}</div>
+      {validators.length === 0 ? 
+      <Text className="mb-4">{t(k.NO_DATA_AVAILABLE)}</Text>  : <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
             <TableHead>{t(k.VALIDATOR_NAME_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_DESCRIPTION_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_SETTINGS_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_PERSONAS_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_GROUPS_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_ACTIVE_HEADER)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -112,34 +87,17 @@ function Main() {
               <TableCell className="max-w-96 break-words">
                 {v.description || ""}
               </TableCell>
-              <TableCell className="max-w-96 break-words text-xs">
-                {v.settings ? (
-                  <pre className="whitespace-pre-wrap break-words">
-                    {JSON.stringify(v.settings, null, 2)}
-                  </pre>
-                ) : (
-                  ""
-                )}
-              </TableCell>
-              <TableCell className="max-w-64 break-words">
-                {(v.personas || [])
-                  .map((p) => p.name)
-                  .filter(Boolean)
-                  .join(", ")}
-              </TableCell>
               <TableCell className="max-w-64 break-words">
                 {(v.groups || [])
                   .map((g) => g.name)
                   .filter(Boolean)
                   .join(", ")}
               </TableCell>
-              <TableCell>
-                {v.active ? t(k.ACTIVE) : t(k.INACTIVE)}
-              </TableCell>
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+      </Table>}
+      
 
 {showCreateUpdateForm && (
   <OnyxApiKeyForm
@@ -167,3 +125,18 @@ export default function Page() {
 }
 
 
+
+
+{
+  config: [
+    {
+      type: "select",
+      name: "pii_entities",
+      values: [
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+        "CREDIT_CARD"
+      ]
+    }
+  ]
+}

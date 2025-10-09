@@ -2520,6 +2520,7 @@ module.exports = {
   [k.DOC_FORMATTER_LABEL]: `Doc Formatter`,
   [k.DOC_FORMATTER_SUBTEXT]: `Инструмент резюме`,
   [k.UPLOAD_TEMPLATE_FILE]: `Загрузить файл шаблона`,
+  [k.VALIDATOR_TEMPLATE_LABEL]: `Шаблон`,
   [k.INTERNET_SEARCH_SUBTEXT]: `Получайте доступ к информации в режиме реального времени и ищите в Интернете актуальные результаты`,
   [k.KNOWLEDGE_MAP_TOOL_LABEL]: `KnowledgeMapTool`,
   [k.KNOWLEDGE_MAP_TOOL_SUBTEXT]: `Инструмент для поиска информации в карте знаний по запросу пользователя.`,

@@ -1,17 +1,21 @@
 "use client";
 
+import React from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../i18n/keys";
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   TextFormField,
+  SelectorFormField,
 } from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { APIKey } from "./types";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -25,6 +29,10 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const { t } = useTranslation();
+  const { data: templates } = useSWR<any[]>(
+    "/api/validators/templates",
+    errorHandlingFetcher
+  );
 
   const isUpdate = apiKey !== undefined;
 
@@ -41,14 +49,30 @@ export const OnyxApiKeyForm = ({
           initialValues={{  
             name: apiKey?.name,
             description: apiKey?.description,
-            config: apiKey?.config
+            // Store config in the textarea as a pretty JSON string
+            config: apiKey?.config ? JSON.stringify(apiKey.config, null, 2) : "",
+            template: ""
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
             // Prepare the payload with the UserRole
+            let parsedConfig: any = undefined;
+            try {
+              parsedConfig = values.config ? JSON.parse(values.config as unknown as string) : undefined;
+            } catch (e) {
+              formikHelpers.setSubmitting(false);
+              setPopup({
+                message: "Invalid JSON in config",
+                type: "error",
+              });
+              return;
+            }
+
             const payload = {
-              ...values,
+              name: values.name,
+              description: values.description,
+              config: parsedConfig,
             };
 
             let response;
@@ -80,6 +104,27 @@ export const OnyxApiKeyForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form className="w-full overflow-visible">
 
+              <SelectorFormField
+                name="template"
+                label={t(k.VALIDATOR_TEMPLATE_LABEL)}
+                options={(templates || []).map((tpl, idx) => ({
+                  value: tpl?.id,
+                  name: tpl?.name || tpl?.id || `Шаблон ${idx + 1}`,
+                }))}
+                onSelect={(selected) => {
+                  const selectedId = selected as string;
+                  const tpl = (templates || []).find((t) => String(t?.id) === String(selectedId));
+                  if (tpl && tpl.config !== undefined) {
+                    try {
+                      const pretty = JSON.stringify(tpl.config, null, 2);
+                      setFieldValue("config", pretty);
+                    } catch (_) {
+                      // noop
+                    }
+                  }
+                }}
+              />
+
               <TextFormField
                 name="name"
                 label={t(k.VALIDATOR_NAME_LABEL)}
@@ -100,6 +145,8 @@ export const OnyxApiKeyForm = ({
                 label={t(k.VALIDATOR_SETTINGS_LABEL)}
                 placeholder={t(k.VALIDATOR_SETTINGS_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
+                isTextArea={true}
+                isCode={true}
               />
 
               <Button

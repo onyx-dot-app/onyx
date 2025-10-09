@@ -332,7 +332,7 @@ export function AssistantEditor({
     pipeline_id: existingPersona?.pipeline_id,
     use_default: existingPersona?.use_default,
     template_file: null,
-    selectedValidators: existingPersona?.selectedValidators,
+    selectedValidators: existingPersona?.selectedValidators ?? [],
   };
 
   interface AssistantPrompt {
@@ -1857,12 +1857,11 @@ export function AssistantEditor({
                       ...(Array.isArray(validators) ? validators : [])
                         .filter(
                           (u: APIKey) =>
-                            !values.selectedValidators.some(
+                            !values.selectedValidators?.some(
                               (su: APIKey) =>
                                 su.id === u.id
                             )
-                        )
-                        .map((u: APIKey) => ({
+                        )?.map((u: APIKey) => ({
                           name: u.name,
                           value: u.id,
                         })),
@@ -1883,14 +1882,14 @@ export function AssistantEditor({
                   />
                           </div>
                           <div className="flex flex-wrap gap-2 mt-2">
-                            {values.selectedValidators.map(
+                            {values.selectedValidators?.map(
                               (user: APIKey) => (
                                 <SourceChip
                                   key={user.id}
                                   onRemove={() => {
                                     setFieldValue(
                                       "selectedValidators",
-                                      values.selectedValidators.filter(
+                                      values.selectedValidators?.filter(
                                         (u: APIKey) =>
                                           u.id !== user.id
                                       )

@@ -2845,6 +2845,7 @@ module.exports = {
   [k.DOC_FORMATTER_LABEL]: `Doc Formatter`,
   [k.DOC_FORMATTER_SUBTEXT]: `Resume tool`,
   [k.UPLOAD_TEMPLATE_FILE]: `Upload template file`,
+  [k.VALIDATOR_TEMPLATE_LABEL]: `Template`,
   [k.INTERNET_SEARCH_SUBTEXT]: `Get access to real-time information and search the internet for current results`,
   [k.KNOWLEDGE_MAP_TOOL_LABEL]: `KnowledgeMapTool`,
   [k.KNOWLEDGE_MAP_TOOL_SUBTEXT]: `Tool for searching information in knowledge map by user query.`,

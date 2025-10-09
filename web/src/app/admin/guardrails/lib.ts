@@ -28,3 +28,11 @@ export const deleteApiKey = async (validatorId: number) => {
     method: "DELETE",
   });
 };
+
+export const fetchValidatorTemplates = async () => {
+  const response = await fetch("/api/validators/templates");
+  if (!response.ok) {
+    throw new Error("Failed to fetch validator templates");
+  }
+  return response.json();
+};
