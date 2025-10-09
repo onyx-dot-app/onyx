@@ -134,6 +134,8 @@ def evaluate_search_results(
     """
     Evaluate search results against ground truth with deduplication.
 
+    Matches on either document_id OR filename to handle both hash IDs and filenames.
+
     For multi-document ground truth, deduplicates retrieved docs to get unique
     documents before checking recall.
 
@@ -145,33 +147,65 @@ def evaluate_search_results(
     Returns:
         Dict with recall metrics at different k values
     """
-    retrieved_doc_ids = [
-        point.payload.get("document_id") for point in search_results.points
-    ]
+    # Extract both document_id and filename for matching
+    retrieved_docs = []
+    for point in search_results.points:
+        doc_id = point.payload.get("document_id")
+        filename = point.payload.get("filename")
+        retrieved_docs.append((doc_id, filename))
 
-    # Deduplicate while preserving order
+    # Helper to normalize paths (convert ~ to / for comparison)
+    def normalize_path(path: str) -> str:
+        return path.replace("~", "/")
+
+    # Helper to check if a doc matches ground truth (by document_id OR filename)
+    def matches_ground_truth(doc_id: str, filename: str | None) -> bool:
+        # Check document_id directly
+        if doc_id in ground_truth_doc_ids:
+            return True
+        # Check filename with normalization and suffix matching
+        if filename:
+            normalized_filename = normalize_path(filename)
+            # Check if any ground truth matches or ends with the normalized filename
+            for gt_id in ground_truth_doc_ids:
+                normalized_gt = normalize_path(gt_id)
+                # Exact match
+                if normalized_gt == normalized_filename:
+                    return True
+                # Ground truth ends with filename (handles missing prefixes like "company_wiki/")
+                if normalized_gt.endswith(normalized_filename):
+                    return True
+                # Filename ends with ground truth (opposite case)
+                if normalized_filename.endswith(normalized_gt):
+                    return True
+        return False
+
+    # Deduplicate while preserving order (by document_id)
     seen = set()
     deduplicated_doc_ids = []
-    for doc_id in retrieved_doc_ids:
+    for doc_id, filename in retrieved_docs:
         if doc_id not in seen:
             seen.add(doc_id)
-            deduplicated_doc_ids.append(doc_id)
+            deduplicated_doc_ids.append((doc_id, filename))
 
     # Find rank of first correct document (for MRR)
     first_correct_rank = None
-    for rank, doc_id in enumerate(deduplicated_doc_ids, start=1):
-        if doc_id in ground_truth_doc_ids:
+    for rank, (doc_id, filename) in enumerate(deduplicated_doc_ids, start=1):
+        if matches_ground_truth(doc_id, filename):
             first_correct_rank = rank
             break
 
     # Calculate recall at different k values (using deduplicated results)
     def recall_at_k(k: int) -> float:
         """Calculate recall@k: fraction of ground truth docs found in top k"""
-        top_k_docs = set(deduplicated_doc_ids[:k])
-        found_docs = top_k_docs & ground_truth_doc_ids
-        return (
-            len(found_docs) / len(ground_truth_doc_ids) if ground_truth_doc_ids else 0.0
+        top_k_tuples = deduplicated_doc_ids[:k]
+        # Check each doc against ground truth (match on document_id OR filename)
+        found_count = sum(
+            1
+            for doc_id, filename in top_k_tuples
+            if matches_ground_truth(doc_id, filename)
         )
+        return found_count / len(ground_truth_doc_ids) if ground_truth_doc_ids else 0.0
 
     # Calculate recall at multiple k values
     recall_metrics = {
@@ -184,6 +218,12 @@ def evaluate_search_results(
     }
 
     # Perfect recall (all ground truth docs found) at different k
+    # For display, prefer filename over hash document_id when available
+    deduplicated_display = [
+        filename if filename else doc_id
+        for doc_id, filename in deduplicated_doc_ids[:50]
+    ]
+
     return {
         "top_1_hit": recall_metrics["recall_at_1"] == 1.0,
         "top_3_hit": recall_metrics["recall_at_3"] == 1.0,
@@ -193,8 +233,10 @@ def evaluate_search_results(
         "reciprocal_rank": 1.0 / first_correct_rank if first_correct_rank else 0.0,
         "first_correct_rank": first_correct_rank,
         "num_ground_truth": len(ground_truth_doc_ids),
-        "retrieved_doc_ids": retrieved_doc_ids[:50],  # Keep first 50 (with duplicates)
-        "deduplicated_doc_ids": deduplicated_doc_ids[:50],  # Keep deduplicated top 50
+        "retrieved_doc_ids": [
+            filename if filename else doc_id for doc_id, filename in retrieved_docs[:50]
+        ],
+        "deduplicated_doc_ids": deduplicated_display,  # Keep deduplicated top 50
     }
 
 
@@ -414,6 +456,33 @@ def main():
             print()
     else:
         print("No questions with multiple ground truth documents found.\n")
+
+    # Show failed retrieval examples (no ground truth found in top 10)
+    print("=" * 80)
+    print("FAILED RETRIEVAL SAMPLES (Ground Truth Not Found in Top 10)")
+    print("=" * 80)
+    print()
+
+    failed_results = [r for r in results if not r["top_10_hit"]]
+    if failed_results:
+        print(
+            f"Found {len(failed_results)} questions where ground truth was not in top 10\n"
+        )
+
+        for idx, result in enumerate(failed_results[:2], start=1):
+            print(f"{idx}. Question: {result['question']}")
+            print(f"   Ground truth: {result['ground_truth_doc_ids']}")
+            print(
+                f"   First correct rank: "
+                f"{result['first_correct_rank'] if result['first_correct_rank'] else 'Not found in top 50'}"
+            )
+            print(
+                f"   Recall@10: {result['recall_at_10'] * 100:.0f}% | Recall@50: {result['recall_at_50'] * 100:.0f}%"
+            )
+            print(f"   Retrieved (top 10): {result['deduplicated_doc_ids'][:10]}")
+            print()
+    else:
+        print("All questions found at least one ground truth document in top 10! 🎉\n")
 
     # Save detailed results to file
     output_path = Path(__file__).parent / "evaluation_results.json"

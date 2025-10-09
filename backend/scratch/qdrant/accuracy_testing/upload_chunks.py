@@ -175,6 +175,7 @@ def convert_target_doc_to_chunks(
     - Splits long documents into multiple chunks if needed
     - Each chunk gets a unique UUID
     - All chunks share the same document_id for traceability
+    - Uses filename if available, otherwise falls back to document_id
     - Uses empty ACL (public access)
     - Uses current time for created_at
 
@@ -199,6 +200,7 @@ def convert_target_doc_to_chunks(
             QdrantChunk(
                 id=uuid4(),
                 document_id=target_doc.document_id,
+                filename=target_doc.filename,
                 source_type=None,
                 access_control_list=None,
                 created_at=created_at,
@@ -219,6 +221,7 @@ def convert_target_doc_to_chunks(
             QdrantChunk(
                 id=uuid4(),
                 document_id=target_doc.document_id,
+                filename=target_doc.filename,
                 source_type=None,
                 access_control_list=None,
                 created_at=created_at,

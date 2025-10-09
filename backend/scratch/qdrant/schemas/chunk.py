@@ -10,6 +10,7 @@ class QdrantChunk(BaseModel):
     id: UUID
     created_at: datetime.datetime
     document_id: str
+    filename: str | None = None  # Optional filename for matching
     source_type: SourceType | None
     access_control_list: list[str] | None  # lets just say its a list of user emails
     content: str

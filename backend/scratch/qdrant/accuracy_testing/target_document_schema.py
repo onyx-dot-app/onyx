@@ -4,9 +4,14 @@ from pydantic import BaseModel
 class TargetDocument(BaseModel):
     """Schema for documents in target_docs.jsonl."""
 
-    document_id: str
+    document_id: str  # Hash ID
+    semantic_identifier: str | None = None
     title: str | None
     content: str
+    source_type: str | None = None
+    filename: str | None = None  # Human-readable filename
+    url: str | None = None
+    metadata: dict | None = None
 
 
 class TargetQuestionDocSource(BaseModel):
