@@ -144,7 +144,7 @@ def test_drupal_wiki_connector_basic(
 
         return mock_response
 
-    with patch.object(drupal_wiki_connector, "_rate_limited_get", side_effect=mock_get):
+    with patch("onyx.connectors.drupal_wiki.connector.rate_limited_get", side_effect=mock_get):
         # Collect all documents
         all_docs: list[Document] = []
         target_test_doc_id = "https://help.drupal-wiki.com/node/123"
@@ -250,7 +250,7 @@ def test_drupal_wiki_connector_slim(drupal_wiki_connector: DrupalWikiConnector) 
 
         return mock_response
 
-    with patch.object(drupal_wiki_connector, "_rate_limited_get", side_effect=mock_get):
+    with patch("onyx.connectors.drupal_wiki.connector.rate_limited_get", side_effect=mock_get):
         # Get all doc IDs from the full connector
         all_full_doc_ids = set()
         checkpoint = drupal_wiki_connector.build_dummy_checkpoint()
