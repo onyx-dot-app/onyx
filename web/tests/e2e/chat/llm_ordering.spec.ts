@@ -1,13 +1,16 @@
 import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser } from "../utils/auth";
+import { loginAsRandomUser, loginAs } from "../utils/auth";
 import {
-  navigateToAssistantInHistorySidebar,
   sendMessage,
   verifyCurrentModel,
   switchModel,
   startNewChat,
-  verifyAssistantIsChosen,
 } from "../utils/chatActions";
+import {
+  createLLMProvider,
+  deleteLLMProvider,
+} from "../utils/llmProviderUtils";
+import { ensureImageGenerationEnabled } from "../utils/assistantUtils";
 
 // fails in CI, works locally
 // test won't be relevant soon as we'll have a default assistant
@@ -60,4 +63,74 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   // Switch back to Default Assistant and verify its model
   await startNewChat(page);
   await verifyCurrentModel(page, "GPT 5");
+});
+
+test("Non-image-generation model visibility in chat input bar", async ({
+  page,
+}) => {
+  // Setup: Clear cookies and log in as admin
+  await page.context().clearCookies();
+  await loginAs(page, "admin");
+
+  // Ensure Image Generation is enabled in default assistant
+  await ensureImageGenerationEnabled(page);
+
+  // Navigate to the chat page
+  await page.goto("http://localhost:3000/chat");
+  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
+
+  const testProviderName = `E2E Test Provider ${Date.now()}`;
+  const testModelName = "gpt-4o-mini";
+  const testModelDisplayName = "GPT 4o Mini";
+
+  try {
+    // Create an LLM provider with a non-vision model set to visible
+    await createLLMProvider(page, {
+      name: testProviderName,
+      provider: "openai",
+      apiKey: "test-key-12345",
+      defaultModelName: testModelName,
+      modelConfigurations: [
+        {
+          name: testModelName,
+          isVisible: true,
+        },
+      ],
+    });
+
+    // Reload the page to ensure the new provider is loaded
+    await page.reload();
+    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
+
+    // Open the LLM popover by clicking the model selector button
+    const llmPopoverTrigger = page.locator(
+      '[data-testid="llm-popover-trigger"]'
+    );
+    await llmPopoverTrigger.click();
+
+    // Wait for the popover to open
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+
+    // Verify that the non-vision model appears in the list
+    // The model name is displayed via getDisplayNameForModel, so we search for text containing the model name
+    // Use .first() since there might be multiple providers with the same model
+    const modelButton = page
+      .locator('[role="dialog"]')
+      .locator("button")
+      .filter({ hasText: testModelDisplayName })
+      .first();
+
+    await expect(modelButton).toBeVisible();
+
+    // Optionally, select the model to verify it works
+    await modelButton.click();
+    await verifyCurrentModel(page, testModelDisplayName);
+  } finally {
+    // Cleanup: Delete the test provider
+    try {
+      await deleteLLMProvider(page, testProviderName);
+    } catch (error) {
+      console.error("Failed to cleanup test provider:", error);
+    }
+  }
 });

@@ -44,8 +44,9 @@ export async function sendMessage(page: Page, message: string) {
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {
-  const chatInput = page.locator("#onyx-chat-input");
-  const text = await chatInput.textContent();
+  // Target the LLM popover trigger button specifically to get just the model name
+  const llmPopoverTrigger = page.locator('[data-testid="llm-popover-trigger"]');
+  const text = await llmPopoverTrigger.textContent();
   expect(text).toContain(modelName);
 }
 

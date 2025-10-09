@@ -555,7 +555,10 @@ function ChatInputBarInner({
           </div>
 
           <div className="flex flex-row items-center gap-spacing-inline">
-            <LLMPopover llmManager={llmManager} requiresImageGeneration />
+            <LLMPopover
+              llmManager={llmManager}
+              requiresImageGeneration={false}
+            />
             <IconButton
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
               disabled={chatState === "input" && !message}
