@@ -137,6 +137,9 @@ BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 OLLAMA_PROVIDER_NAME = "ollama"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 
+# OpenRouter
+OPENROUTER_PROVIDER_NAME = "openrouter"
+
 
 def get_bedrock_model_names() -> list[str]:
     import litellm
@@ -223,7 +226,44 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
         OLLAMA_PROVIDER_NAME: [],
+        OPENROUTER_PROVIDER_NAME: get_openrouter_model_names(),
     }
+
+
+def get_openrouter_model_names() -> list[str]:
+    """
+    Return OpenRouter chat-capable model names recognized by LiteLLM.
+
+    We derive the list from litellm.model_cost entries prefixed with "openrouter/".
+    We keep the OpenRouter subpath (e.g., "deepseek/deepseek-r1") as the model name,
+    excluding embedding-only models.
+    """
+    import litellm
+
+    models: set[str] = set()
+    try:
+        for full_name in getattr(litellm, "model_cost", {}).keys():
+            if not isinstance(full_name, str):
+                continue
+            if not full_name.startswith("openrouter/"):
+                continue
+
+            # Extract the provider/model path after the leading "openrouter/"
+            subpath = full_name[len("openrouter/") :]
+
+            # Filter out embeddings and other non-chat models
+            lowered = subpath.lower()
+            if "embed" in lowered or "embedding" in lowered:
+                continue
+
+            if not subpath or subpath.endswith("/"):
+                continue
+
+            models.add(subpath)
+    except Exception:
+        return []
+
+    return sorted(models)
 
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
@@ -232,6 +272,7 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
     OLLAMA_PROVIDER_NAME: [],
+    OPENROUTER_PROVIDER_NAME: [],
 }
 
 
@@ -371,6 +412,20 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
             default_fast_model=VERTEXAI_DEFAULT_MODEL,
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=OPENROUTER_PROVIDER_NAME,
+            display_name="OpenRouter",
+            api_key_required=True,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[],
+            model_configurations=fetch_model_configurations_for_provider(
+                OPENROUTER_PROVIDER_NAME
+            ),
+            default_model=None,
+            default_fast_model=None,
+            default_api_base="https://openrouter.ai/api/v1",
         ),
     ]
 

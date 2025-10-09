@@ -20,6 +20,7 @@ import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
+import { ModelConfigurationField } from "./ModelConfigurationField";
 import { dynamicProviderConfigs, fetchModels } from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
@@ -117,9 +118,37 @@ export function LLMProviderUpdateForm({
 
   // Helper function to get current model configurations
   const getCurrentModelConfigurations = (values: any): ModelConfiguration[] => {
-    return values.fetched_model_configurations?.length > 0
-      ? values.fetched_model_configurations
-      : llmProviderDescriptor.model_configurations;
+    // Base list: fetched (if present) else built-in suggestions
+    const base: ModelConfiguration[] =
+      values.fetched_model_configurations?.length > 0
+        ? values.fetched_model_configurations
+        : llmProviderDescriptor.model_configurations;
+
+    // For OpenRouter, allow admins to append custom models (name + max tokens)
+    if (
+      llmProviderDescriptor.name === "openrouter" &&
+      Array.isArray(values.model_configurations) &&
+      values.model_configurations.length > 0
+    ) {
+      const map = new Map<string, ModelConfiguration>();
+      for (const cfg of base) {
+        map.set(cfg.name, cfg);
+      }
+      for (const cfg of values.model_configurations as ModelConfiguration[]) {
+        if (!cfg || !cfg.name) continue;
+        const existing = map.get(cfg.name);
+        map.set(cfg.name, {
+          name: cfg.name,
+          is_visible: existing?.is_visible ?? true,
+          max_input_tokens:
+            (cfg.max_input_tokens as any) || existing?.max_input_tokens || null,
+          supports_image_input: existing?.supports_image_input ?? null,
+        });
+      }
+      return Array.from(map.values());
+    }
+
+    return base;
   };
 
   // Define the initial values based on the provider's requirements
@@ -654,6 +683,14 @@ export function LLMProviderUpdateForm({
                   />
                   {showAdvancedOptions && (
                     <>
+                      {llmProviderDescriptor.name === "openrouter" && (
+                        <div className="w-full">
+                          <ModelConfigurationField
+                            name="model_configurations"
+                            formikProps={formikProps as any}
+                          />
+                        </div>
+                      )}
                       {currentModelConfigurations.length > 0 && (
                         <div className="w-full">
                           <MultiSelectField
