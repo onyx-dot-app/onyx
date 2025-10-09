@@ -1,20 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
 import ModalContent from "@/refresh-components/modals/ModalContent";
-import { FilledLikeIcon } from "@/components/icons/icons";
 import { handleChatFeedback } from "../../services/lib";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import Button from "@/refresh-components/buttons/Button";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useKeyPress } from "@/hooks/useKeyPress";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
@@ -31,25 +27,21 @@ const predefinedNegativeFeedbackOptions = process.env
     ];
 
 interface FeedbackModalProps {
+  feedbackType: FeedbackType;
+  messageId: number;
   setPopup: (popup: { message: string; type: "success" | "error" }) => void;
 }
 
-export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
-  const { isOpen, toggleModal, getModalData } = useChatModal();
-  const data = getModalData<{
-    feedbackType: FeedbackType;
-    messageId: number;
-  }>();
+export const FeedbackModal = ({
+  feedbackType,
+  messageId,
+  setPopup,
+}: FeedbackModalProps) => {
+  const { toggle } = useModal();
   const [predefinedFeedback, setPredefinedFeedback] = useState<
     string | undefined
   >();
   const fieldInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isOpen(ModalIds.FeedbackModal)) {
-      setPredefinedFeedback(undefined);
-    }
-  }, [isOpen(ModalIds.FeedbackModal)]);
 
   const handleSubmit = async () => {
     if (
@@ -86,7 +78,7 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
       });
     }
 
-    toggleModal(ModalIds.FeedbackModal, false);
+    toggle(false);
   };
 
   useEffect(() => {
@@ -94,9 +86,6 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
   }, [predefinedFeedback]);
 
   useKeyPress(handleSubmit, "Enter");
-
-  if (!data) return null;
-  const { feedbackType, messageId } = data;
 
   const predefinedFeedbackOptions =
     feedbackType === "like"
@@ -106,12 +95,7 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
   const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
 
   return (
-    <ModalContent
-      id={ModalIds.FeedbackModal}
-      title="Provide Additional Feedback"
-      icon={icon}
-      xs
-    >
+    <ModalContent title="Provide Additional Feedback" icon={icon}>
       {predefinedFeedbackOptions.length > 0 && (
         <div className="flex flex-col p-spacing-paragraph gap-spacing-inline">
           {predefinedFeedbackOptions.map((feedback, index) => (
@@ -133,10 +117,7 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
         />
       </div>
       <div className="flex flex-row p-spacing-paragraph items-center justify-end w-full gap-spacing-interline">
-        <Button
-          onClick={() => toggleModal(ModalIds.FeedbackModal, false)}
-          secondary
-        >
+        <Button onClick={() => toggle(false)} secondary>
           Cancel
         </Button>
         <Button onClick={handleSubmit}>Submit</Button>

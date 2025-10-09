@@ -15,23 +15,26 @@ import Button from "@/refresh-components/buttons/Button";
 import { ChatButton } from "@/sections/sidebar/AppSidebar";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import SvgFolderPlus from "@/icons/folder-plus";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
+import {
+  createModalProvider,
+  useModal,
+} from "@/refresh-components/contexts/ModalContext";
 
 interface ProjectFolderProps {
   project: Project;
 }
 
 function ProjectFolder({ project }: ProjectFolderProps) {
+  const {
+    toggle: toggleDeleteConfirmationModal,
+    ModalProvider: DeleteConfirmationModalProvider,
+  } = createModalProvider();
+
   const route = useAppRouter();
   const params = useAppParams();
   const [open, setOpen] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
@@ -47,17 +50,15 @@ function ProjectFolder({ project }: ProjectFolderProps) {
 
   return (
     <>
-      {/* Confirmation Modal (only for deletion) */}
-      {deleteConfirmationModalOpen && (
+      <DeleteConfirmationModalProvider>
         <ConfirmationModalContent
           title="Delete Project"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
             <Button
               danger
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                toggleDeleteConfirmationModal(false);
                 deleteProject(project.id);
               }}
             >
@@ -68,7 +69,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
           Are you sure you want to delete this project? This action cannot be
           undone.
         </ConfirmationModalContent>
-      )}
+      </DeleteConfirmationModalProvider>
 
       {/* Project Folder */}
       <NavigationTab
@@ -92,7 +93,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
               <NavigationTab
                 key="delete-project"
                 icon={SvgTrash}
-                onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+                onClick={noProp(() => toggleDeleteConfirmationModal(true))}
                 danger
               >
                 Delete Project
@@ -122,18 +123,15 @@ function ProjectFolder({ project }: ProjectFolderProps) {
 
 export default function Projects() {
   const { projects } = useProjectsContext();
-  const { toggleModal } = useChatModal();
+  // const { toggle, } = useModal();
+
   return (
     <>
       {projects.map((project) => (
         <ProjectFolder key={project.id} project={project} />
       ))}
 
-      <NavigationTab
-        icon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        lowlight
-      >
+      <NavigationTab icon={SvgFolderPlus} onClick={() => {}} lowlight>
         New Project
       </NavigationTab>
     </>

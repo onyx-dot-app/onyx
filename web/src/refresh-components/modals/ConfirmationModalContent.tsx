@@ -13,6 +13,7 @@ interface ConfirmationModalContentProps {
 
   submit: React.ReactNode;
   hideCancel?: boolean;
+  onCancel?: () => void;
 }
 
 export default function ConfirmationModalContent({
@@ -22,6 +23,7 @@ export default function ConfirmationModalContent({
 
   submit,
   hideCancel,
+  onCancel,
 }: ConfirmationModalContentProps) {
   const { toggle } = useModal();
 
@@ -30,7 +32,14 @@ export default function ConfirmationModalContent({
       <div className="flex flex-col items-center justify-center p-spacing-paragraph gap-spacing-inline">
         <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          <IconButton icon={SvgX} internal onClick={() => toggle(false)} />
+          <IconButton
+            icon={SvgX}
+            internal
+            onClick={() => {
+              onCancel?.();
+              toggle(false);
+            }}
+          />
         </div>
         <Text headingH3 text04 className="w-full text-left">
           {title}
@@ -45,7 +54,13 @@ export default function ConfirmationModalContent({
       </div>
       <div className="flex flex-row w-full items-center justify-end p-spacing-paragraph gap-spacing-interline">
         {!hideCancel && (
-          <Button secondary onClick={() => toggle(false)}>
+          <Button
+            secondary
+            onClick={() => {
+              onCancel?.();
+              toggle(false);
+            }}
+          >
             Cancel
           </Button>
         )}

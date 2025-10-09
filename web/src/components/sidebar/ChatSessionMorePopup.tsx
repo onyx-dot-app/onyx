@@ -27,6 +27,7 @@ import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
+import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -58,8 +59,10 @@ export function ChatSessionMorePopup({
   iconSize = 16,
   isVisible = false,
 }: ChatSessionMorePopupProps) {
+  const { toggle: toggleDeleteModal, ModalProvider: DeleteModalProvider } =
+    createModalProvider();
+
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { refreshChatSessions } = useChatContext();
   const { fetchProjects, projects } = useProjectsContext();
 
@@ -89,11 +92,17 @@ export function ChatSessionMorePopup({
       await deleteChatSession(chatSession.id);
       await refreshChatSessions();
       await fetchProjects();
-      setIsDeleteModalOpen(false);
+      toggleDeleteModal(false);
       setPopoverOpen(false);
       afterDelete?.();
     },
-    [chatSession, refreshChatSessions, fetchProjects, afterDelete]
+    [
+      chatSession,
+      refreshChatSessions,
+      fetchProjects,
+      afterDelete,
+      toggleDeleteModal,
+    ]
   );
 
   const performMove = useCallback(
@@ -175,7 +184,7 @@ export function ChatSessionMorePopup({
         <NavigationTab
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setIsDeleteModalOpen(true))}
+          onClick={noProp(() => toggleDeleteModal(true))}
           danger
         >
           Delete
@@ -217,6 +226,21 @@ export function ChatSessionMorePopup({
 
   return (
     <div>
+      <DeleteModalProvider>
+        <ConfirmationModalContent
+          title="Delete Chat"
+          icon={SvgTrash}
+          submit={
+            <Button danger onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          }
+        >
+          Are you sure you want to delete this chat? This action cannot be
+          undone.
+        </ConfirmationModalContent>
+      </DeleteModalProvider>
+
       <div className="-my-1">
         <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
           <PopoverTrigger
@@ -248,21 +272,6 @@ export function ChatSessionMorePopup({
           </PopoverContent>
         </Popover>
       </div>
-      {isDeleteModalOpen && (
-        <ConfirmationModalContent
-          title="Delete Chat"
-          icon={SvgTrash}
-          onClose={() => setIsDeleteModalOpen(false)}
-          submit={
-            <Button danger onClick={handleConfirmDelete}>
-              Delete
-            </Button>
-          }
-        >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
-        </ConfirmationModalContent>
-      )}
 
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal

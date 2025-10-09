@@ -21,6 +21,7 @@ import SvgTrash from "@/icons/trash";
 import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
+import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -49,6 +50,11 @@ export function PersonasTable({
   personas: Persona[];
   refreshPersonas: () => void;
 }) {
+  const { toggle: toggleDeleteModal, ModalProvider: DeleteModalProvider } =
+    createModalProvider();
+  const { toggle: toggleDefaultModal, ModalProvider: DefaultModalProvider } =
+    createModalProvider();
+
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const { refreshUser, isAdmin } = useUser();
@@ -62,9 +68,7 @@ export function PersonasTable({
   }, [editablePersonas]);
 
   const [finalPersonas, setFinalPersonas] = useState<Persona[]>([]);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [personaToDelete, setPersonaToDelete] = useState<Persona | null>(null);
-  const [defaultModalOpen, setDefaultModalOpen] = useState(false);
   const [personaToToggleDefault, setPersonaToToggleDefault] =
     useState<Persona | null>(null);
 
@@ -114,12 +118,7 @@ export function PersonasTable({
 
   const openDeleteModal = (persona: Persona) => {
     setPersonaToDelete(persona);
-    setDeleteModalOpen(true);
-  };
-
-  const closeDeleteModal = () => {
-    setDeleteModalOpen(false);
-    setPersonaToDelete(null);
+    toggleDeleteModal(true);
   };
 
   const handleDeletePersona = async () => {
@@ -127,7 +126,8 @@ export function PersonasTable({
       const response = await deletePersona(personaToDelete.id);
       if (response.ok) {
         refreshPersonas();
-        closeDeleteModal();
+        toggleDeleteModal(false);
+        setPersonaToDelete(null);
       } else {
         setPopup({
           type: "error",
@@ -139,12 +139,7 @@ export function PersonasTable({
 
   const openDefaultModal = (persona: Persona) => {
     setPersonaToToggleDefault(persona);
-    setDefaultModalOpen(true);
-  };
-
-  const closeDefaultModal = () => {
-    setDefaultModalOpen(false);
-    setPersonaToToggleDefault(null);
+    toggleDefaultModal(true);
   };
 
   const handleToggleDefault = async () => {
@@ -155,7 +150,8 @@ export function PersonasTable({
       );
       if (response.ok) {
         refreshPersonas();
-        closeDefaultModal();
+        toggleDefaultModal(false);
+        setPersonaToToggleDefault(null);
       } else {
         setPopup({
           type: "error",
@@ -168,48 +164,53 @@ export function PersonasTable({
   return (
     <div>
       {popup}
-      {deleteModalOpen && personaToDelete && (
+
+      <DeleteModalProvider>
         <ConfirmationModalContent
           icon={SvgAlertCircle}
           title="Delete Assistant"
-          onClose={closeDeleteModal}
           submit={<Button onClick={handleDeletePersona}>Delete</Button>}
         >
-          {`Are you sure you want to delete ${personaToDelete.name}?`}
+          {personaToDelete
+            ? `Are you sure you want to delete ${personaToDelete.name}?`
+            : "Are you sure you want to delete this assistant?"}
         </ConfirmationModalContent>
-      )}
-      {defaultModalOpen &&
-        personaToToggleDefault &&
-        (() => {
-          const isDefault = personaToToggleDefault.is_default_persona;
+      </DeleteModalProvider>
 
-          const title = isDefault
-            ? "Remove Featured Assistant"
-            : "Set Featurd Assistant";
-          const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
-          const text = isDefault
-            ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
-            : `Are you sure you want to set the featured status of ${personaToToggleDefault.name}?`;
-          const additionalText = isDefault
-            ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
-            : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`;
-
-          return (
-            <ConfirmationModalContent
-              icon={SvgAlertCircle}
-              title={title}
-              onClose={closeDefaultModal}
-              submit={
-                <Button onClick={handleToggleDefault}>{buttonText}</Button>
-              }
-            >
-              <div className="flex flex-col gap-spacing-interline">
-                <Text>{text}</Text>
-                <Text text03>{additionalText}</Text>
-              </div>
-            </ConfirmationModalContent>
-          );
-        })()}
+      <DefaultModalProvider>
+        <ConfirmationModalContent
+          icon={SvgAlertCircle}
+          title={
+            personaToToggleDefault?.is_default_persona
+              ? "Remove Featured Assistant"
+              : "Set Featurd Assistant"
+          }
+          submit={
+            <Button onClick={handleToggleDefault}>
+              {personaToToggleDefault?.is_default_persona
+                ? "Remove Feature"
+                : "Set as Featured"}
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-spacing-interline">
+            <Text>
+              {personaToToggleDefault?.is_default_persona
+                ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
+                : personaToToggleDefault
+                  ? `Are you sure you want to set the featured status of ${personaToToggleDefault.name}?`
+                  : "Are you sure you want to change the featured status?"}
+            </Text>
+            <Text text03>
+              {personaToToggleDefault?.is_default_persona
+                ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
+                : personaToToggleDefault
+                  ? `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`
+                  : ""}
+            </Text>
+          </div>
+        </ConfirmationModalContent>
+      </DefaultModalProvider>
 
       <DraggableTable
         headers={[

@@ -4,18 +4,15 @@ import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import SvgFolderPlus from "@/icons/folder-plus";
 import ModalContent from "@/refresh-components/modals/ModalContent";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function CreateProjectModal() {
   const { createProject } = useProjectsContext();
-  const { toggleModal } = useChatModal();
+  const { toggle } = useModal();
   const fieldInputRef = useRef<HTMLInputElement>(null);
   const route = useAppRouter();
 
@@ -31,18 +28,16 @@ export default function CreateProjectModal() {
       console.error(`Failed to create the project ${name}`);
     }
 
-    toggleModal(ModalIds.CreateProjectModal, false);
+    toggle(false);
   }
 
   useKeyPress(handleSubmit, "Enter");
 
   return (
     <ModalContent
-      id={ModalIds.CreateProjectModal}
       icon={SvgFolderPlus}
       title="Create New Project"
       description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
-      xs
     >
       <div className="flex flex-col p-spacing-paragraph bg-background-tint-01">
         <FieldInput
@@ -52,10 +47,7 @@ export default function CreateProjectModal() {
         />
       </div>
       <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">
-        <Button
-          secondary
-          onClick={() => toggleModal(ModalIds.CreateProjectModal, false)}
-        >
+        <Button secondary onClick={() => toggle(false)}>
           Cancel
         </Button>
         <Button onClick={handleSubmit}>Create Project</Button>
