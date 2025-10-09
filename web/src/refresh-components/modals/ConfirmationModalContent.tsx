@@ -2,47 +2,35 @@ import React from "react";
 import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/Text";
 import SvgX from "@/icons/x";
-import CoreModal from "@/refresh-components/modals/CoreModal";
-import { useEscape } from "@/hooks/useKeyPress";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
-interface ConfirmationModalProps {
-  escapeToClose?: boolean;
-  clickOutsideToClose?: boolean;
-
+interface ConfirmationModalContentProps {
   icon: React.FunctionComponent<SvgProps>;
   title: string;
   children?: React.ReactNode;
 
   submit: React.ReactNode;
   hideCancel?: boolean;
-  onClose: () => void;
 }
 
-export default function ConfirmationModal({
-  escapeToClose = true,
-  clickOutsideToClose = true,
-
+export default function ConfirmationModalContent({
   icon: Icon,
   title,
   children,
 
   submit,
   hideCancel,
-  onClose,
-}: ConfirmationModalProps) {
-  useEscape(onClose, escapeToClose);
+}: ConfirmationModalContentProps) {
+  const { toggle } = useModal();
 
   return (
-    <CoreModal
-      className="z-10 w-[27rem] rounded-16 border flex flex-col bg-background-tint-00"
-      onClickOutside={clickOutsideToClose ? onClose : undefined}
-    >
+    <>
       <div className="flex flex-col items-center justify-center p-spacing-paragraph gap-spacing-inline">
         <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          <IconButton icon={SvgX} internal onClick={onClose} />
+          <IconButton icon={SvgX} internal onClick={() => toggle(false)} />
         </div>
         <Text headingH3 text04 className="w-full text-left">
           {title}
@@ -57,12 +45,12 @@ export default function ConfirmationModal({
       </div>
       <div className="flex flex-row w-full items-center justify-end p-spacing-paragraph gap-spacing-interline">
         {!hideCancel && (
-          <Button secondary onClick={onClose}>
+          <Button secondary onClick={() => toggle(false)}>
             Cancel
           </Button>
         )}
         {submit}
       </div>
-    </CoreModal>
+    </>
   );
 }

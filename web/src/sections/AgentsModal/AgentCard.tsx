@@ -21,9 +21,10 @@ import SvgEditBig from "@/icons/edit-big";
 import SvgTrash from "@/icons/trash";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import SvgBarChart from "@/icons/bar-chart";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
@@ -43,15 +44,14 @@ export default function AgentCard({
   const { popup, setPopup } = usePopup();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const [kebabMenuOpen, setKebabMenuOpen] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+  const { toggle, ModalProvider } = createModalProvider();
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
 
   async function confirmDelete() {
     const response = await deletePersona(agent.id);
     if (response.ok) {
       await refreshAgents();
-      setDeleteConfirmationModalOpen(false);
+      toggle(false);
       setPopup({
         message: `${agent.name} has been successfully deleted.`,
         type: "success",
@@ -66,21 +66,26 @@ export default function AgentCard({
 
   return (
     <>
-      {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+      <ModalProvider>
+        <ConfirmationModalContent
           title="Delete Agent"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
-            <Button danger onClick={confirmDelete}>
+            <Button
+              danger
+              onClick={() => {
+                toggle(false);
+                confirmDelete();
+              }}
+            >
               Delete
             </Button>
           }
         >
           Are you sure you want to delete this agent? This action cannot be
           undone.
-        </ConfirmationModal>
-      )}
+        </ConfirmationModalContent>
+      </ModalProvider>
 
       <div className="w-full h-full p-padding-content bg-background-tint-02 rounded-08">
         {popup}
@@ -130,7 +135,7 @@ export default function AgentCard({
                           icon={SvgTrash}
                           onClick={() => {
                             setKebabMenuOpen(false);
-                            setDeleteConfirmationModalOpen(true);
+                            toggle(true);
                           }}
                           danger
                         >

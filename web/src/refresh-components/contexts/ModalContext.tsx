@@ -1,21 +1,26 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import CoreModal, {
+  CoreModalProps,
+} from "@/refresh-components/modals/CoreModal";
 
-interface ToggleHandler {
+type ModalProps = Omit<CoreModalProps, "onClickOutside">;
+
+interface UseModalProviderReturn {
   isOpen: boolean;
   toggle: (state: boolean) => void;
 }
 
-interface CreateModalProviderReturn<P> extends ToggleHandler {
-  Modal: React.FunctionComponent<P>;
+interface CreateModalProviderReturn {
+  isOpen: boolean;
+  toggle: (state: boolean) => void;
+  ModalProvider: React.FunctionComponent<ModalProps>;
 }
 
-const ModalContext = createContext<ToggleHandler | null>(null);
+const ModalContext = createContext<UseModalProviderReturn | null>(null);
 
-export function createModalProvider<P>(
-  ModalComponent: React.FunctionComponent<P & { onClose: () => void }>
-): CreateModalProviderReturn<P> {
+export function createModalProvider(): CreateModalProviderReturn {
   const [isOpen, setIsOpen] = useState(false);
 
   const toggle = useCallback((state: boolean) => {
@@ -26,23 +31,23 @@ export function createModalProvider<P>(
     setIsOpen(false);
   }, []);
 
-  const Modal: React.FunctionComponent<P> = useCallback(
-    (props: P) => {
+  const ModalProvider: React.FunctionComponent<ModalProps> = useCallback(
+    (props: ModalProps) => {
       if (!isOpen) return null;
 
       return (
         <ModalContext.Provider value={{ isOpen, toggle }}>
-          <ModalComponent {...props} onClose={onClose} />
+          <CoreModal {...props} onClickOutside={onClose} />
         </ModalContext.Provider>
       );
     },
     [isOpen, toggle, onClose]
   );
 
-  return { isOpen, toggle, Modal };
+  return { isOpen, toggle, ModalProvider };
 }
 
-export function useModal(): ToggleHandler {
+export function useModal(): UseModalProviderReturn {
   const context = useContext(ModalContext);
 
   if (!context) {

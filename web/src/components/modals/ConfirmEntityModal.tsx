@@ -1,4 +1,4 @@
-import Modal from "@/refresh-components/modals/ConfirmationModal";
+import Modal from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/Text";

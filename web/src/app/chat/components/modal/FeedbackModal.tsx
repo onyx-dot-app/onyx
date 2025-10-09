@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
-import Modal from "@/refresh-components/modals/Modal";
+import ModalContent from "@/refresh-components/modals/ModalContent";
 import { FilledLikeIcon } from "@/components/icons/icons";
 import { handleChatFeedback } from "../../services/lib";
 import {
@@ -106,7 +106,7 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
   const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
 
   return (
-    <Modal
+    <ModalContent
       id={ModalIds.FeedbackModal}
       title="Provide Additional Feedback"
       icon={icon}
@@ -141,6 +141,6 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
         </Button>
         <Button onClick={handleSubmit}>Submit</Button>
       </div>
-    </Modal>
+    </ModalContent>
   );
 };

@@ -10,7 +10,7 @@ import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import { PopoverMenu } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import { ChatButton } from "@/sections/sidebar/AppSidebar";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
@@ -49,7 +49,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
     <>
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalContent
           title="Delete Project"
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
@@ -67,7 +67,7 @@ function ProjectFolder({ project }: ProjectFolderProps) {
         >
           Are you sure you want to delete this project? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalContent>
       )}
 
       {/* Project Folder */}

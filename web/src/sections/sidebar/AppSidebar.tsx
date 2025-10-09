@@ -32,12 +32,8 @@ import SvgBubbleText from "@/icons/bubble-text";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgTrash from "@/icons/trash";
 import SvgShare from "@/icons/share";
 import SvgEdit from "@/icons/edit";
@@ -65,6 +61,7 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { UNNAMED_CHAT } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 // Constants
 const DEFAULT_PERSONA_ID = 0;
@@ -144,14 +141,24 @@ interface ChatButtonProps {
 }
 
 function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
+  // Modal contexts
+  const {
+    toggle: toggleDeleteConfirmationModal,
+    ModalProvider: DeleteConfirmationModalProvider,
+  } = createModalProvider();
+  const {
+    toggle: toggleMoveCustomAgentModal,
+    ModalProvider: MoveCustomAgentModalProvider,
+  } = createModalProvider();
+  const { toggle: toggleShareModal, ModalProvider: ShareModalProvider } =
+    createModalProvider();
+
   const route = useAppRouter();
   const params = useAppParams();
   const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
   const [renaming, setRenaming] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+
   const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
   const { refreshChatSessions } = useChatContext();
@@ -165,8 +172,6 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
   const isChatUsingDefaultAssistant =
     chatSession.persona_id === DEFAULT_PERSONA_ID;
 
@@ -197,7 +202,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         <NavigationTab
           key="share"
           icon={SvgShare}
-          onClick={noProp(() => setShowShareModal(true))}
+          onClick={noProp(() => toggleShareModal(true))}
         >
           Share
         </NavigationTab>,
@@ -228,7 +233,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         <NavigationTab
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+          onClick={noProp(() => toggleDeleteConfirmationModal(true))}
           danger
         >
           Delete
@@ -308,7 +313,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
 
     if (!isChatUsingDefaultAssistant && !hideModal) {
       setPendingMoveProjectId(targetProject.id);
-      setShowMoveCustomAgentModal(true);
+      toggleMoveCustomAgentModal(true);
       return;
     }
 
@@ -331,16 +336,15 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
 
   return (
     <>
-      {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+      <DeleteConfirmationModalProvider>
+        <ConfirmationModalContent
           title="Delete Chat"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
             <Button
               danger
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                toggleDeleteConfirmationModal(false);
                 handleChatDelete();
               }}
             >
@@ -350,13 +354,13 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
-      )}
+        </ConfirmationModalContent>
+      </DeleteConfirmationModalProvider>
 
-      {showMoveCustomAgentModal && (
+      <MoveCustomAgentModalProvider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            toggleMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -367,21 +371,21 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
               );
             }
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            toggleMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
             if (target != null) {
               await performMove(target);
             }
           }}
         />
-      )}
+      </MoveCustomAgentModalProvider>
 
-      {showShareModal && (
+      <ShareModalProvider>
         <ShareChatSessionModal
           chatSession={chatSession}
-          onClose={() => setShowShareModal(false)}
+          onClose={() => toggleShareModal(false)}
         />
-      )}
+      </ShareModalProvider>
 
       <NavigationTab
         icon={project ? () => <></> : SvgBubbleText}
@@ -479,7 +483,12 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const { toggleModal } = useChatModal();
+  const { toggle: toggleAgentsModal, ModalProvider: AgentsModalProvider } =
+    createModalProvider();
+  const {
+    toggle: toggleCreateProjectModal,
+    ModalProvider: CreateProjectModalProvider,
+  } = createModalProvider();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
 
@@ -543,8 +552,13 @@ function AppSidebarInner() {
 
   return (
     <>
-      <AgentsModal />
-      <CreateProjectModal />
+      <AgentsModalProvider>
+        <AgentsModal />
+      </AgentsModalProvider>
+
+      <CreateProjectModalProvider>
+        <CreateProjectModal />
+      </CreateProjectModalProvider>
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
@@ -565,7 +579,7 @@ function AppSidebarInner() {
                 icon={SvgOnyxOctagon}
                 folded
                 tooltip
-                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                onClick={() => toggleAgentsModal(true)}
               >
                 Agents
               </NavigationTab>
@@ -573,7 +587,7 @@ function AppSidebarInner() {
                 icon={SvgFolderPlus}
                 folded
                 tooltip
-                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+                onClick={() => toggleCreateProjectModal(true)}
               >
                 New Project
               </NavigationTab>
@@ -605,7 +619,7 @@ function AppSidebarInner() {
                 </DndContext>
                 <NavigationTab
                   icon={SvgMoreHorizontal}
-                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                  onClick={() => toggleAgentsModal(true)}
                   lowlight
                 >
                   More Agents

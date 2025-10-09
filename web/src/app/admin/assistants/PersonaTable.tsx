@@ -18,7 +18,7 @@ import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgTrash from "@/icons/trash";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
 
@@ -169,14 +169,14 @@ export function PersonasTable({
     <div>
       {popup}
       {deleteModalOpen && personaToDelete && (
-        <ConfirmationModal
+        <ConfirmationModalContent
           icon={SvgAlertCircle}
           title="Delete Assistant"
           onClose={closeDeleteModal}
           submit={<Button onClick={handleDeletePersona}>Delete</Button>}
         >
           {`Are you sure you want to delete ${personaToDelete.name}?`}
-        </ConfirmationModal>
+        </ConfirmationModalContent>
       )}
       {defaultModalOpen &&
         personaToToggleDefault &&
@@ -195,7 +195,7 @@ export function PersonasTable({
             : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`;
 
           return (
-            <ConfirmationModal
+            <ConfirmationModalContent
               icon={SvgAlertCircle}
               title={title}
               onClose={closeDefaultModal}
@@ -207,7 +207,7 @@ export function PersonasTable({
                 <Text>{text}</Text>
                 <Text text03>{additionalText}</Text>
               </div>
-            </ConfirmationModal>
+            </ConfirmationModalContent>
           );
         })()}
 

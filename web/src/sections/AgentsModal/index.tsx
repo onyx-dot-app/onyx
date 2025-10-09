@@ -8,15 +8,12 @@ import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/c
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/Text";
-import Modal from "@/refresh-components/modals/Modal";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
+import ModalContent from "@/refresh-components/modals/ModalContent";
 import SvgFilter from "@/icons/filter";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import Button from "@/refresh-components/buttons/Button";
 import Link from "next/link";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 interface AgentsSectionProps {
   title: string;
@@ -25,7 +22,7 @@ interface AgentsSectionProps {
 }
 
 function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
-  const { toggleModal } = useChatModal();
+  const { toggle } = useModal();
 
   if (agents.length === 0) {
     return null;
@@ -42,7 +39,7 @@ function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
               key={index}
               pinned={pinnedAgents.map((a) => a.id).includes(agent.id)}
               agent={agent}
-              closeModal={() => toggleModal(ModalIds.AgentsModal, false)}
+              closeModal={() => toggle(false)}
             />
           ))}
       </div>
@@ -98,10 +95,8 @@ function useAgentFilters() {
 export default function AgentsModal() {
   const { agents, pinnedAgents } = useAgentsContext();
   const { agentFilters, toggleAgentFilter } = useAgentFilters();
-  const router = useRouter();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const { toggleModal } = useChatModal();
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agents.filter((agent) => {
@@ -144,7 +139,7 @@ export default function AgentsModal() {
   );
 
   return (
-    <Modal id={ModalIds.AgentsModal} icon={SvgOnyxOctagon} title="Agents" sm>
+    <ModalContent icon={SvgOnyxOctagon} title="Agents">
       <div className="flex flex-col sticky top-[0rem] z-10 bg-background-tint-01 p-spacing-paragraph">
         <div className="flex flex-row items-center gap-spacing-interline">
           <input
@@ -204,6 +199,6 @@ export default function AgentsModal() {
           </>
         )}
       </div>
-    </Modal>
+    </ModalContent>
   );
 }

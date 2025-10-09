@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import SvgFolderPlus from "@/icons/folder-plus";
-import Modal from "@/refresh-components/modals/Modal";
+import ModalContent from "@/refresh-components/modals/ModalContent";
 import {
   ModalIds,
   useChatModal,
@@ -37,7 +37,7 @@ export default function CreateProjectModal() {
   useKeyPress(handleSubmit, "Enter");
 
   return (
-    <Modal
+    <ModalContent
       id={ModalIds.CreateProjectModal}
       icon={SvgFolderPlus}
       title="Create New Project"
@@ -60,6 +60,6 @@ export default function CreateProjectModal() {
         </Button>
         <Button onClick={handleSubmit}>Create Project</Button>
       </div>
-    </Modal>
+    </ModalContent>
   );
 }
