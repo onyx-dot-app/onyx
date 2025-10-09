@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, Validator
+from onyx.db.models import User, Validator, Persona__Validator
 from onyx.server.features.guardrails.core.schemas_validator import (
     ValidatorCreate,
     ValidatorUpdate,
@@ -79,6 +79,10 @@ def delete_validator(
 
     stmt = delete(Validator).where(Validator.id == validator_id)
     db_session.execute(stmt)
+
+    stmt = delete(Persona__Validator).where(Persona__Validator.validator_id == validator_id)
+    db_session.execute(stmt)
+
     db_session.commit()
 
 

@@ -114,7 +114,7 @@ def delete_validator_by_id(
     summary="Получить валидатор по ID",
 )
 def get_validator_by_id(
-    validator_id: Annotated[int, Path(ge=1)],
+    validator_id: int,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ValidatorResponse:
