@@ -134,7 +134,17 @@ export default function NavigationTab({
     // We add a 100ms timeout to ensure that the callback runs only when the fade-out animation has finished.
     setTimeout(() => onPopoverChange(popoverOpen), 100);
   }, [popoverOpen]);
-  useClickOutside(inputRef, () => setRenaming?.(false), renaming);
+  // Save on click outside when renaming
+  useClickOutside(
+    inputRef,
+    () => {
+      if (!renaming) return;
+      const value = (renamingValue || "").trim();
+      setRenaming?.(false);
+      if (value) submitRename?.(value);
+    },
+    renaming
+  );
   useKeyPress(() => setRenaming?.(false), "Escape", renaming);
   useKeyPress(
     () => {

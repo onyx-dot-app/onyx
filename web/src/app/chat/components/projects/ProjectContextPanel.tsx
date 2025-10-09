@@ -99,7 +99,7 @@ export function FileCard({
           <SvgFileText className="h-5 w-5 stroke-text-02" />
         )}
       </div>
-      <div className="flex flex-col overflow-hidden">
+      <div className="flex flex-col overflow-hidden relative">
         <Truncated
           className={`font-secondary-action truncate
           ${isProcessing ? "text-text-03" : "text-text-04"}`}
@@ -107,13 +107,22 @@ export function FileCard({
         >
           {file.name}
         </Truncated>
-        <Text text03 secondaryBody nowrap className="truncate">
-          {isProcessing
-            ? file.status === UserFileStatus.UPLOADING
-              ? "Uploading..."
-              : "Processing..."
-            : typeLabel}
-        </Text>
+        {isProcessing && (
+          <Text text03 secondaryBody nowrap className="truncate">
+            {(file as any).attaching
+              ? "Attaching..."
+              : file.status === UserFileStatus.UPLOADING
+                ? "Uploading..."
+                : "Processing..."}
+          </Text>
+        )}
+        <div
+          className={`absolute right-0 top-0 bottom-0 w-8 pointer-events-none ${
+            isProcessing
+              ? "bg-gradient-to-l from-background-neutral-02 to-transparent"
+              : "bg-gradient-to-l from-background-tint-00 to-transparent"
+          }`}
+        />
       </div>
     </div>
   );
@@ -130,6 +139,13 @@ export default function ProjectContextPanel({
 }) {
   const { popup, setPopup } = usePopup();
   const [tempProjectFiles, setTempProjectFiles] = useState<ProjectFile[]>([]);
+  const [pendingLinkedFiles, setPendingLinkedFiles] = useState<ProjectFile[]>(
+    []
+  );
+  // Optimistic removal buffer for files removed from the project
+  const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<
+    Set<string>
+  >(new Set());
   const { isOpen, toggleModal } = useChatModal();
   const open = isOpen(ModalIds.ProjectFilesModal);
 
@@ -159,6 +175,57 @@ export default function ProjectContextPanel({
     linkFileToProject,
   } = useProjectsContext();
   const [isUploading, setIsUploading] = useState(false);
+
+  const visibleFiles = useMemo(() => {
+    const byId = new Map<string, ProjectFile>();
+    // Insert temp files first so new uploads appear at the front immediately
+    tempProjectFiles.forEach((f) => byId.set(f.id, f));
+    // Then insert pending linked files (show as processing)
+    pendingLinkedFiles.forEach((f) => byId.set(f.id, f));
+    // Then insert backend files to overwrite temp entries while keeping order
+    (currentProjectDetails?.files || []).forEach((f) => {
+      byId.set(f.id, f);
+    });
+    return Array.from(byId.values()).filter(
+      (f) => !optimisticallyRemovedIds.has(f.id)
+    );
+  }, [
+    tempProjectFiles,
+    pendingLinkedFiles,
+    currentProjectDetails?.files,
+    optimisticallyRemovedIds,
+  ]);
+
+  const removeFileOptimistic = useCallback(
+    async (fileId: string) => {
+      if (!currentProjectId) return;
+      setOptimisticallyRemovedIds((prev) => new Set(prev).add(fileId));
+      try {
+        await unlinkFileFromProject(currentProjectId, fileId);
+      } catch (e) {
+        // Revert on failure and notify user
+        setOptimisticallyRemovedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(fileId);
+          return next;
+        });
+        setPopup({
+          type: "error",
+          message: "Failed to remove file from project. Please try again.",
+        });
+      }
+    },
+    [currentProjectId, unlinkFileFromProject, setPopup]
+  );
+
+  // Reconcile pending linked files once backend reflects them
+  React.useEffect(() => {
+    const presentIds = new Set(
+      (currentProjectDetails?.files || []).map((f) => f.id)
+    );
+    if (presentIds.size === 0) return;
+    setPendingLinkedFiles((prev) => prev.filter((f) => !presentIds.has(f.id)));
+  }, [currentProjectDetails?.files]);
 
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
@@ -216,8 +283,7 @@ export default function ProjectContextPanel({
     [currentProjectId, uploadFiles, setPopup]
   );
 
-  const totalFiles =
-    (currentProjectDetails?.files || []).length + tempProjectFiles.length;
+  const totalFiles = visibleFiles.length;
   const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
 
   const handleUploadChange = useCallback(
@@ -305,12 +371,43 @@ export default function ProjectContextPanel({
             recentFiles={recentFiles}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
-              if (!currentProjectId) return;
-              if (!linkFileToProject) return;
-              await linkFileToProject(currentProjectId, file.id);
+              if (!currentProjectId || !linkFileToProject) return;
+              // Add a pending tile immediately with processing state
+              setPendingLinkedFiles((prev) => {
+                const pending: ProjectFile = {
+                  ...file,
+                  status: UserFileStatus.PROCESSING,
+                  // mark as attaching for UI label
+                  // @ts-ignore - extra UI metadata
+                  attaching: true,
+                };
+                const map = new Map(prev.map((f) => [f.id, f]));
+                map.set(file.id, pending);
+                return Array.from(map.values());
+              });
+              try {
+                await linkFileToProject(currentProjectId, file.id);
+                // The refresh inside linkFileToProject will populate real file; clear pending entry
+                setPendingLinkedFiles((prev) =>
+                  prev.filter((f) => f.id !== file.id)
+                );
+              } catch (e) {
+                // Remove pending and notify
+                setPendingLinkedFiles((prev) =>
+                  prev.filter((f) => f.id !== file.id)
+                );
+                setPopup({
+                  type: "error",
+                  message: `Failed to add ${file.name} to project`,
+                });
+              }
             }}
             onUnpickRecent={async (file) => {
               if (!currentProjectId) return;
+              // If user unpicks before closing, ensure pending state is cleared
+              setPendingLinkedFiles((prev) =>
+                prev.filter((f) => f.id !== file.id)
+              );
               await unlinkFileFromProject(currentProjectId, file.id);
             }}
             handleUploadChange={handleUploadChange}
@@ -324,6 +421,7 @@ export default function ProjectContextPanel({
         <input {...getInputProps()} />
 
         {tempProjectFiles.length > 0 ||
+        pendingLinkedFiles.length > 0 ||
         (currentProjectDetails?.files &&
           currentProjectDetails.files.length > 0) ? (
           <>
@@ -349,29 +447,17 @@ export default function ProjectContextPanel({
 
             {/* Desktop / larger screens: show previews with optional View All */}
             <div className="hidden sm:flex gap-spacing-inline relative">
-              {(() => {
-                const byId = new Map<string, ProjectFile>();
-                // Insert temp files first so new uploads appear at the front immediately
-                tempProjectFiles.forEach((f) => byId.set(f.id, f));
-                // Then insert backend files to overwrite temp entries while keeping order
-                (currentProjectDetails?.files || []).forEach((f) => {
-                  byId.set(f.id, f);
-                });
-                return Array.from(byId.values())
-                  .slice(0, 4)
-                  .map((f) => (
-                    <div key={f.id} className="w-40">
-                      <FileCard
-                        file={f}
-                        removeFile={async (fileId: string) => {
-                          if (!currentProjectId) return;
-                          await unlinkFileFromProject(currentProjectId, fileId);
-                        }}
-                        onFileClick={handleFileClick}
-                      />
-                    </div>
-                  ));
-              })()}
+              {visibleFiles.slice(0, 4).map((f) => (
+                <div key={f.id} className="w-40">
+                  <FileCard
+                    file={f}
+                    removeFile={(fileId: string) => {
+                      void removeFileOptimistic(fileId);
+                    }}
+                    onFileClick={handleFileClick}
+                  />
+                </div>
+              ))}
               {totalFiles > 4 && (
                 <button
                   className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
@@ -427,23 +513,20 @@ export default function ProjectContextPanel({
 
       {open && (
         <CoreModal
-          className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
+          className="w-[48rem] min-w-[48rem] max-w-[48rem] overflow-hidden"
           onClickOutside={onClose}
         >
           <UserFilesModalContent
             title="Project files"
             description="Sessions in this project can access the files here."
             icon={SvgFiles}
-            recentFiles={[
-              ...tempProjectFiles,
-              ...(currentProjectDetails?.files || []),
-            ]}
+            recentFiles={visibleFiles}
+            fixedHeight={588}
             onFileClick={handleFileClick}
             handleUploadChange={handleUploadChange}
             showRemove
             onRemove={async (file: ProjectFile) => {
-              if (!currentProjectId) return;
-              await unlinkFileFromProject(currentProjectId, file.id);
+              void removeFileOptimistic(file.id);
             }}
             onClose={onClose}
           />

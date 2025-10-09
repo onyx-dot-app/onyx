@@ -52,7 +52,7 @@ export default function AddInstructionModal() {
           value={instructionText}
           onChange={(e) => setInstructionText(e.target.value)}
           placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
-          className="min-h-[140px] border-border-01 bg-background-neutral-00"
+          className="min-h-[200px] border-border-01 bg-background-neutral-00"
         />
       </div>
       <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">

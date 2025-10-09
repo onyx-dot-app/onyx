@@ -177,8 +177,51 @@ export default function FilePicker({
   const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<
     ProjectFile[] | null
   >(null);
+  // Buffer selection changes made within the modal until close
+  const [modalInitialSelectedIds, setModalInitialSelectedIds] =
+    useState<Set<string> | null>(null);
+  const [modalSelectedIds, setModalSelectedIds] = useState<Set<string> | null>(
+    null
+  );
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
+
+  const getFilesLookup = () => {
+    const source = recentFilesSnapshot ?? recentFiles;
+    const byId = new Map<string, ProjectFile>();
+    source.forEach((f) => byId.set(f.id, f));
+    return byId;
+  };
+
+  const commitModalSelection = () => {
+    const initial = modalInitialSelectedIds ?? new Set(selectedFileIds || []);
+    const current = modalSelectedIds ?? new Set(initial);
+
+    const toAdd: string[] = [];
+    const toRemove: string[] = [];
+
+    current.forEach((id) => {
+      if (!initial.has(id)) toAdd.push(id);
+    });
+    initial.forEach((id) => {
+      if (!current.has(id)) toRemove.push(id);
+    });
+
+    const byId = getFilesLookup();
+    toAdd.forEach((id) => {
+      const f = byId.get(id);
+      if (f && onPickRecent) onPickRecent(f);
+    });
+    toRemove.forEach((id) => {
+      const f = byId.get(id);
+      if (f && onUnpickRecent) onUnpickRecent(f);
+    });
+
+    // Clear modal buffers
+    setModalInitialSelectedIds(null);
+    setModalSelectedIds(null);
+    setRecentFilesSnapshot(null);
+  };
 
   return (
     <div className={cn("relative", className)}>
@@ -220,8 +263,13 @@ export default function FilePicker({
               setShowRecentFiles(show);
               if (show) {
                 setRecentFilesSnapshot(recentFiles.slice());
+                const initial = new Set<string>(selectedFileIds || []);
+                setModalInitialSelectedIds(initial);
+                setModalSelectedIds(new Set(initial));
               } else {
                 setRecentFilesSnapshot(null);
+                setModalInitialSelectedIds(null);
+                setModalSelectedIds(null);
               }
               // Close the small popover when opening the dialog
               if (show) setOpen(false);
@@ -232,24 +280,41 @@ export default function FilePicker({
 
       {showRecentFiles && (
         <CoreModal
-          className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
-          onClickOutside={() => setShowRecentFiles(false)}
+          className="w-[48rem] min-w-[48rem] max-w-[48rem] overflow-hidden"
+          onClickOutside={() => {
+            commitModalSelection();
+            setShowRecentFiles(false);
+          }}
         >
           <UserFilesModalContent
             title="Recent Files"
             description="Upload files or pick from your recent files."
             icon={SvgFiles}
             recentFiles={recentFilesSnapshot ?? recentFiles}
+            fixedHeight={588}
             onPickRecent={(file) => {
-              onPickRecent && onPickRecent(file);
+              setModalSelectedIds((prev) => {
+                const next = new Set(prev ?? modalInitialSelectedIds ?? []);
+                next.add(file.id);
+                return next;
+              });
             }}
             onUnpickRecent={(file) => {
-              onUnpickRecent && onUnpickRecent(file);
+              setModalSelectedIds((prev) => {
+                const next = new Set(prev ?? modalInitialSelectedIds ?? []);
+                next.delete(file.id);
+                return next;
+              });
             }}
             handleUploadChange={handleUploadChange}
             onFileClick={onFileClick}
-            onClose={() => setShowRecentFiles(false)}
-            selectedFileIds={selectedFileIds}
+            onClose={() => {
+              commitModalSelection();
+              setShowRecentFiles(false);
+            }}
+            selectedFileIds={
+              modalSelectedIds ? Array.from(modalSelectedIds) : selectedFileIds
+            }
           />
         </CoreModal>
       )}

@@ -12,6 +12,7 @@ interface TruncatedProps extends TextProps {
   side?: "top" | "right" | "bottom" | "left";
   offset?: number;
   disable?: boolean;
+  fade?: boolean;
 }
 
 /**
@@ -22,9 +23,11 @@ export default function Truncated({
   side = "top",
   offset = 5,
   disable,
+  fade,
 
   className,
   children,
+  style,
   ...rest
 }: TruncatedProps) {
   const [isTruncated, setIsTruncated] = useState(false);
@@ -61,7 +64,7 @@ export default function Truncated({
         <TooltipTrigger asChild>
           <div
             ref={visibleRef}
-            className="flex-grow overflow-hidden text-left w-full"
+            className="relative flex-grow overflow-hidden text-left w-full"
           >
             {isLoading ? (
               <div
@@ -71,12 +74,18 @@ export default function Truncated({
                 )}
               />
             ) : (
-              <Text
-                className={cn("line-clamp-1 break-all text-left", className)}
-                {...rest}
-              >
-                {children}
-              </Text>
+              <>
+                <Text
+                  className={cn("line-clamp-1 break-all text-left", className)}
+                  style={style}
+                  {...rest}
+                >
+                  {children}
+                </Text>
+                {fade && isTruncated && (
+                  <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-r from-transparent to-background-tint-00" />
+                )}
+              </>
             )}
           </div>
         </TooltipTrigger>

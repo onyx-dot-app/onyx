@@ -50,7 +50,7 @@ export default function Modal({
       className={cn(
         "w-[80dvw] h-[80dvh]",
         sm && "max-w-[60rem]",
-        xs && "max-w-[32rem] h-fit",
+        xs && "max-w-[48rem] h-fit",
         className
       )}
       onClickOutside={
@@ -64,7 +64,12 @@ export default function Modal({
     >
       <div className="flex flex-col gap-spacing-interline p-spacing-paragraph">
         <div className="flex flex-row items-center justify-between">
-          <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+          <div className="flex flex-row items-center gap-2 min-w-0">
+            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04 flex-none" />
+            <Text headingH3 className="truncate">
+              {title}
+            </Text>
+          </div>
           <div data-testid="Modal/close-modal">
             <IconButton
               icon={SvgX}
@@ -73,7 +78,6 @@ export default function Modal({
             />
           </div>
         </div>
-        <Text headingH3>{title}</Text>
         {description && (
           <Text secondaryBody text02>
             {description}
