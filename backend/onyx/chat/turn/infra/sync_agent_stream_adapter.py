@@ -80,7 +80,7 @@ class SyncAgentStream(Generic[T]):
             # StopIteration, or external cancel.
             self.close()
 
-    def cancel(self) -> None:
+    def cancel(self) -> bool:
         """
         Cooperatively cancel the underlying streamed run and shut down.
         Safe to call multiple times and from any thread.
@@ -92,11 +92,14 @@ class SyncAgentStream(Generic[T]):
             # schedule the async cancel on the loop thread
             try:
                 fut = asyncio.run_coroutine_threadsafe(streamed.cancel(), loop)
-                # It’s OK not to block here; if you prefer to wait for the cancel to be sent:
+                # It’s OK not to block here. This makes cancellations for tools that don't
+                # have a clean cooperative cancel feel smoother. Overall the loop will be closed
+                # so resources shouldn't leak.
                 _ = fut.result(timeout=2.0)
-            except Exception:
-                # We swallow here; the worker will propagate any real errors via _exc
-                pass
+
+            finally:
+                return True
+        return False
 
     def close(self, *, wait: bool = True) -> None:
         """Idempotent shutdown."""
