@@ -30,7 +30,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useFilters, useSourcePreferences } from "@/lib/hooks";
+import { useFilters, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -131,7 +131,7 @@ export function ActionItem({
             justify-between
             px-2
             cursor-pointer
-            hover:bg-background-100
+            hover:bg-neutral-100
             dark:hover:bg-neutral-800
             dark:text-neutral-300
             rounded-lg
@@ -316,16 +316,16 @@ function MCPServerItem({
       ref={itemRef}
       className={`
         group
-        flex 
-        items-center 
-        justify-between 
-        px-2 
-        cursor-pointer 
-        hover:bg-background-100 
+        flex
+        items-center
+        justify-between
+        px-2
+        cursor-pointer
+        hover:bg-neutral-100
         dark:hover:bg-neutral-800
         dark:text-neutral-300
-        rounded-lg 
-        py-2 
+        rounded-lg
+        py-2
         mx-1
         ${isExpanded ? "bg-accent-100 hover:bg-accent-200" : ""}
       `}
@@ -920,13 +920,15 @@ export function ActionToggle({
         >
           {/* Search Input */}
           {!showSourceManagement && (
-            <InputTypeIn
-              placeholder="Search Menu"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              autoFocus
-              internal
-            />
+            <div className="pt-1 mx-2">
+              <InputTypeIn
+                placeholder="Search Menu"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                autoFocus
+                internal
+              />
+            </div>
           )}
 
           {/* Options */}
@@ -964,9 +966,6 @@ export function ActionToggle({
                       />
                     </div>
                     {(() => {
-                      const allSourceIds = getConfiguredSources(
-                        availableSources
-                      ).map((source) => source.uniqueKey);
                       const anyEnabled = selectedSources.length > 0;
                       if (anyEnabled) {
                         return (
@@ -1240,7 +1239,7 @@ export function ActionToggle({
                 they are the only ones who can manage actions. */}
                 {(isAdmin || isCurator) && (
                   <>
-                    <div className="border-b border-border mx-3.5" />
+                    <div className="border-b border-border mx-3.5 mt-2" />
                     <Link href="/admin/actions">
                       <button
                         className="
@@ -1264,7 +1263,7 @@ export function ActionToggle({
                           text-text-500
                           dark:text-neutral-500
                           dark:hover:bg-neutral-800
-                          hover:bg-background-100
+                          hover:bg-neutral-100
                           hover:text-text-500
                           transition-colors
                           rounded-lg

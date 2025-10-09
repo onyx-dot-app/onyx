@@ -9,17 +9,19 @@ import sqlalchemy as sa
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
+from retry import retry
 from sqlalchemy import select
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
-from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
@@ -36,13 +38,12 @@ from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.httpx.httpx_pool import HttpxPool
@@ -134,7 +135,8 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
 
     redis_client = get_redis_client(tenant_id=tenant_id)
     file_lock: RedisLock = redis_client.lock(
-        _user_file_lock_key(user_file_id), timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+        _user_file_lock_key(user_file_id),
+        timeout=CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,
     )
 
     if not file_lock.acquire(blocking=False):
@@ -306,8 +308,10 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             user_file_ids = (
                 db_session.execute(
                     select(UserFile.id).where(
-                        UserFile.needs_project_sync.is_(True)
-                        and UserFile.status == UserFileStatus.COMPLETED
+                        sa.and_(
+                            UserFile.needs_project_sync.is_(True),
+                            UserFile.status == UserFileStatus.COMPLETED,
+                        )
                     )
                 )
                 .scalars()
@@ -348,7 +352,7 @@ def process_single_user_file_project_sync(
     redis_client = get_redis_client(tenant_id=tenant_id)
     file_lock: RedisLock = redis_client.lock(
         _user_file_project_sync_lock_key(user_file_id),
-        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+        timeout=CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
     )
 
     if not file_lock.acquire(blocking=False):
@@ -359,6 +363,15 @@ def process_single_user_file_project_sync(
 
     try:
         with get_session_with_current_tenant() as db_session:
+
+            # 20 is the documented default for httpx max_keepalive_connections
+            if MANAGED_VESPA:
+                httpx_init_vespa_pool(
+                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                )
+            else:
+                httpx_init_vespa_pool(20)
+
             active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
                 search_settings=active_search_settings.primary,
@@ -416,6 +429,7 @@ def _normalize_legacy_user_file_doc_id(old_id: str) -> str:
     return old_id
 
 
+@retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
 def _visit_chunks(
     *,
     http_client: httpx.Client,
@@ -423,10 +437,13 @@ def _visit_chunks(
     selection: str,
     continuation: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
+    task_logger.info(
+        f"Visiting chunks for index={index_name} with selection={selection}"
+    )
     base_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
     params: dict[str, str] = {
         "selection": selection,
-        "wantedDocumentCount": "1000",
+        "wantedDocumentCount": "100",  # Use smaller batch size to avoid timeouts
     }
     if continuation:
         params["continuation"] = continuation
@@ -436,125 +453,153 @@ def _visit_chunks(
     return payload.get("documents", []), payload.get("continuation")
 
 
-def _update_document_id_in_vespa(
-    *,
-    index_name: str,
-    old_doc_id: str,
-    new_doc_id: str,
-    user_project_ids: list[int] | None = None,
-) -> None:
-    clean_new_doc_id = replace_invalid_doc_id_characters(new_doc_id)
-    normalized_old = _normalize_legacy_user_file_doc_id(old_doc_id)
-    clean_old_doc_id = replace_invalid_doc_id_characters(normalized_old)
+def update_legacy_plaintext_file_records() -> None:
+    """Migrate legacy plaintext cache objects from int-based keys to UUID-based
+    keys. Copies each S3 object to its expected UUID key and updates DB.
 
-    selection = f"{index_name}.document_id=='{clean_old_doc_id}'"
-    task_logger.debug(f"Vespa selection: {selection}")
+    Examples:
+    - Old key: bucket/schema/plaintext_<int>
+    - New key: bucket/schema/plaintext_<uuid>
+    """
 
-    with get_vespa_http_client() as http_client:
-        continuation: str | None = None
-        while True:
-            docs, continuation = _visit_chunks(
-                http_client=http_client,
-                index_name=index_name,
-                selection=selection,
-                continuation=continuation,
+    task_logger.info("update_legacy_plaintext_file_records - Starting")
+
+    with get_session_with_current_tenant() as db_session:
+        store = get_default_file_store()
+
+        if not isinstance(store, S3BackedFileStore):
+            task_logger.info(
+                "update_legacy_plaintext_file_records - Skipping non-S3 store"
             )
-            if not docs:
-                break
-            for doc in docs:
-                vespa_full_id = doc.get("id")
-                if not vespa_full_id:
+            return
+
+        s3_client = store._get_s3_client()
+        bucket_name = store._get_bucket_name()
+
+        # Select PLAINTEXT_CACHE records whose object_key ends with 'plaintext_' + non-hyphen chars
+        # Example: 'some/path/plaintext_abc123' matches; '.../plaintext_foo-bar' does not
+        plaintext_records: Sequence[FileRecord] = (
+            db_session.execute(
+                sa.select(FileRecord).where(
+                    FileRecord.file_origin == FileOrigin.PLAINTEXT_CACHE,
+                    FileRecord.object_key.op("~")(r"plaintext_[^-]+$"),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        task_logger.info(
+            f"update_legacy_plaintext_file_records - Found {len(plaintext_records)} plaintext records to update"
+        )
+
+        normalized = 0
+        for fr in plaintext_records:
+            try:
+                expected_key = store._get_s3_key(fr.file_id)
+                if fr.object_key == expected_key:
                     continue
-                vespa_doc_uuid = vespa_full_id.split("::")[-1]
-                vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_uuid}"
-                update_request: dict[str, Any] = {
-                    "fields": {"document_id": {"assign": clean_new_doc_id}}
-                }
-                if user_project_ids is not None:
-                    update_request["fields"][USER_PROJECT] = {
-                        "assign": user_project_ids
-                    }
-                r = http_client.put(vespa_url, json=update_request)
-                r.raise_for_status()
-            if not continuation:
-                break
+
+                if fr.bucket_name is None:
+                    task_logger.warning(f"id={fr.file_id} - Bucket name is None")
+                    continue
+
+                if fr.object_key is None:
+                    task_logger.warning(f"id={fr.file_id} - Object key is None")
+                    continue
+
+                # Copy old object to new key
+                copy_source = f"{fr.bucket_name}/{fr.object_key}"
+                s3_client.copy_object(
+                    CopySource=copy_source,
+                    Bucket=bucket_name,
+                    Key=expected_key,
+                    MetadataDirective="COPY",
+                )
+
+                # Delete old object (best-effort)
+                try:
+                    s3_client.delete_object(Bucket=fr.bucket_name, Key=fr.object_key)
+                except Exception:
+                    pass
+
+                # Update DB record with new key
+                fr.object_key = expected_key
+                db_session.add(fr)
+                normalized += 1
+            except Exception as e:
+                task_logger.warning(f"id={fr.file_id} - {e.__class__.__name__}")
+
+        if normalized:
+            db_session.commit()
+            task_logger.info(
+                f"user_file_docid_migration_task normalized {normalized} plaintext objects"
+            )
 
 
 @shared_task(
     name=OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
     ignore_result=True,
-    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
-    time_limit=LIGHT_TIME_LIMIT,
     bind=True,
 )
 def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
-    """Per-tenant job to update Vespa and search_doc document_id values for user files.
 
-    - For each user_file with a legacy document_id, set Vespa `document_id` to the UUID `user_file.id`.
-    - Update `search_doc.document_id` to the same UUID string.
-    """
+    task_logger.info(
+        f"user_file_docid_migration_task - Starting for tenant={tenant_id}"
+    )
 
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.USER_FILE_DOCID_MIGRATION_LOCK,
+        timeout=CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT,
+    )
+
+    if not lock.acquire(blocking=False):
+        task_logger.info(
+            f"user_file_docid_migration_task - Lock held, skipping tenant={tenant_id}"
+        )
+        return False
+
+    updated_count = 0
     try:
+        update_legacy_plaintext_file_records()
+        # Track lock renewal
+        last_lock_time = time.monotonic()
         with get_session_with_current_tenant() as db_session:
+
+            # 20 is the documented default for httpx max_keepalive_connections
+            if MANAGED_VESPA:
+                httpx_init_vespa_pool(
+                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                )
+            else:
+                httpx_init_vespa_pool(20)
+
             active_settings = get_active_search_settings(db_session)
             document_index = get_default_document_index(
-                active_settings.primary,
-                active_settings.secondary,
+                search_settings=active_settings.primary,
+                secondary_search_settings=active_settings.secondary,
+                httpx_client=HttpxPool.get("vespa"),
             )
-            if hasattr(document_index, "index_name"):
-                index_name = document_index.index_name
-            else:
-                index_name = "danswer_index"
 
-            # Fetch mappings of legacy -> new ids
-            rows = db_session.execute(
-                sa.select(
-                    UserFile.document_id.label("document_id"),
-                    UserFile.id.label("id"),
-                ).where(
-                    UserFile.document_id.is_not(None),
-                    UserFile.document_id_migrated.is_(False),
-                )
-            ).all()
+            retry_index = RetryDocumentIndex(document_index)
 
-            # dedupe by old document_id
-            seen: set[str] = set()
-            for row in rows:
-                old_doc_id = str(row.document_id)
-                new_uuid = str(row.id)
-                if not old_doc_id or not new_uuid or old_doc_id in seen:
-                    continue
-                seen.add(old_doc_id)
-                # collect user project ids for a combined Vespa update
-                user_project_ids: list[int] | None = None
-                try:
-                    uf = db_session.get(UserFile, UUID(new_uuid))
-                    if uf is not None:
-                        user_project_ids = [project.id for project in uf.projects]
-                except Exception as e:
-                    task_logger.warning(
-                        f"Tenant={tenant_id} failed fetching projects for doc_id={new_uuid} - {e.__class__.__name__}"
-                    )
-                try:
-                    _update_document_id_in_vespa(
-                        index_name=index_name,
-                        old_doc_id=old_doc_id,
-                        new_doc_id=new_uuid,
-                        user_project_ids=user_project_ids,
-                    )
-                except Exception as e:
-                    task_logger.warning(
-                        f"Tenant={tenant_id} failed Vespa update for doc_id={new_uuid} - {e.__class__.__name__}"
-                    )
-            # Update search_doc records to refer to the UUID string
-            # we are not using document_id_migrated = false because if the migration already completed,
-            # it will not run again and we will not update the search_doc records because of the issue currently fixed
+            # Select user files with a legacy doc id that have not been migrated
             user_files = (
                 db_session.execute(
-                    sa.select(UserFile).where(UserFile.document_id.is_not(None))
+                    sa.select(UserFile).where(
+                        sa.and_(
+                            UserFile.document_id.is_not(None),
+                            UserFile.document_id_migrated.is_(False),
+                        )
+                    )
                 )
                 .scalars()
                 .all()
+            )
+
+            task_logger.info(
+                f"user_file_docid_migration_task - Found {len(user_files)} user files to migrate"
             )
 
             # Query all SearchDocs that need updating
@@ -567,9 +612,9 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                 .scalars()
                 .all()
             )
-
-            task_logger.info(f"Found {len(user_files)} user files to update")
-            task_logger.info(f"Found {len(search_docs)} search docs to update")
+            task_logger.info(
+                f"user_file_docid_migration_task - Found {len(search_docs)} search docs to update"
+            )
 
             # Build a map of normalized doc IDs to SearchDocs
             search_doc_map: dict[str, list[SearchDoc]] = {}
@@ -580,120 +625,138 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                 search_doc_map[doc_id].append(sd)
 
             task_logger.debug(
-                f"Built search doc map with {len(search_doc_map)} entries"
+                f"user_file_docid_migration_task - Built search doc map with {len(search_doc_map)} entries"
             )
+
             ids_preview = list(search_doc_map.keys())[:5]
             task_logger.debug(
-                f"First few search_doc_map ids: {ids_preview if ids_preview else 'No ids found'}"
+                f"user_file_docid_migration_task - First few search_doc_map ids: {ids_preview if ids_preview else 'No ids found'}"
             )
             task_logger.debug(
-                f"search_doc_map total items: {sum(len(docs) for docs in search_doc_map.values())}"
+                f"user_file_docid_migration_task - search_doc_map total items: "
+                f"{sum(len(docs) for docs in search_doc_map.values())}"
             )
-            # Process each UserFile and update matching SearchDocs
-            updated_count = 0
-            for uf in user_files:
-                doc_id = uf.document_id
-                if doc_id.startswith("USER_FILE_CONNECTOR__"):
-                    doc_id = "FILE_CONNECTOR__" + doc_id[len("USER_FILE_CONNECTOR__") :]
+            for user_file in user_files:
+                # Periodically renew the Redis lock to prevent expiry mid-run
+                current_time = time.monotonic()
+                if current_time - last_lock_time >= (
+                    CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT / 4
+                ):
+                    renewed = False
+                    try:
+                        # extend lock ttl to full timeout window
+                        lock.extend(CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT)
+                        renewed = True
+                    except Exception:
+                        # if extend fails, best-effort reacquire as a fallback
+                        try:
+                            lock.reacquire()
+                            renewed = True
+                        except Exception:
+                            renewed = False
+                    last_lock_time = current_time
+                    if not renewed or not lock.owned():
+                        task_logger.error(
+                            "user_file_docid_migration_task - Lost lock ownership or failed to renew; aborting for safety"
+                        )
+                        return False
 
-                task_logger.debug(f"Processing user file {uf.id} with doc_id {doc_id}")
-                task_logger.debug(
-                    f"doc_id in search_doc_map: {doc_id in search_doc_map}"
-                )
-
-                if doc_id in search_doc_map:
-                    search_docs = search_doc_map[doc_id]
-                    task_logger.debug(
-                        f"Found {len(search_docs)} search docs to update for user file {uf.id}"
+                try:
+                    clean_old_doc_id = replace_invalid_doc_id_characters(
+                        user_file.document_id
                     )
-                    # Update the SearchDoc to use the UserFile's UUID
-                    for search_doc in search_docs:
-                        search_doc.document_id = str(uf.id)
-                        db_session.add(search_doc)
+                    normalized_doc_id = _normalize_legacy_user_file_doc_id(
+                        clean_old_doc_id
+                    )
+                    user_project_ids = [project.id for project in user_file.projects]
+                    task_logger.info(
+                        f"user_file_docid_migration_task - Migrating user file {user_file.id} with doc_id {normalized_doc_id}"
+                    )
 
-                    # Mark UserFile as migrated
-                    uf.document_id_migrated = True
-                    db_session.add(uf)
+                    index_name = active_settings.primary.index_name
+
+                    # First find the chunks count using direct Vespa query
+                    selection = f"{index_name}.document_id=='{normalized_doc_id}'"
+
+                    # Count all chunks for this document
+                    chunk_count = 0
+                    continuation = None
+                    while True:
+                        docs, continuation = _visit_chunks(
+                            http_client=HttpxPool.get("vespa"),
+                            index_name=index_name,
+                            selection=selection,
+                            continuation=continuation,
+                        )
+                        if not docs:
+                            break
+                        chunk_count += len(docs)
+                        if not continuation:
+                            break
+
+                    task_logger.info(
+                        f"Found {chunk_count} chunks for document {normalized_doc_id}"
+                    )
+
+                    # Now update Vespa chunks with the found chunk count using retry_index
+                    updated_chunks = retry_index.update_single(
+                        doc_id=str(normalized_doc_id),
+                        tenant_id=tenant_id,
+                        chunk_count=chunk_count,
+                        fields=VespaDocumentFields(document_id=str(user_file.id)),
+                        user_fields=VespaDocumentUserFields(
+                            user_projects=user_project_ids
+                        ),
+                    )
+                    user_file.chunk_count = updated_chunks
+
+                    # Update the SearchDocs
+                    actual_doc_id = str(user_file.document_id)
+                    normalized_actual_doc_id = _normalize_legacy_user_file_doc_id(
+                        actual_doc_id
+                    )
+                    if (
+                        normalized_doc_id in search_doc_map
+                        or normalized_actual_doc_id in search_doc_map
+                    ):
+                        to_update = (
+                            search_doc_map[normalized_doc_id]
+                            if normalized_doc_id in search_doc_map
+                            else search_doc_map[normalized_actual_doc_id]
+                        )
+                        task_logger.debug(
+                            f"user_file_docid_migration_task - Updating {len(to_update)} search docs for user file {user_file.id}"
+                        )
+                        for search_doc in to_update:
+                            search_doc.document_id = str(user_file.id)
+                            db_session.add(search_doc)
+
+                    user_file.document_id_migrated = True
+                    db_session.add(user_file)
+                    db_session.commit()
                     updated_count += 1
+                except Exception as per_file_exc:
+                    # Rollback the current transaction and continue with the next file
+                    db_session.rollback()
+                    task_logger.exception(
+                        f"user_file_docid_migration_task - Error migrating user file {user_file.id} - "
+                        f"{per_file_exc.__class__.__name__}"
+                    )
 
             task_logger.info(
-                f"Updated {updated_count} SearchDoc records with new UUIDs"
+                f"user_file_docid_migration_task - Updated {updated_count} user files"
             )
-            db_session.commit()
-
-            # Normalize plaintext FileRecord blobs: ensure S3 object key aligns with current file_id
-            try:
-                store = get_default_file_store()
-                # Only supported for S3-backed stores where we can manipulate object keys
-                if isinstance(store, S3BackedFileStore):
-                    s3_client = store._get_s3_client()
-                    bucket_name = store._get_bucket_name()
-
-                    plaintext_records: Sequence[FileRecord] = (
-                        db_session.execute(
-                            sa.select(FileRecord).where(
-                                FileRecord.file_origin == FileOrigin.PLAINTEXT_CACHE,
-                                FileRecord.file_id.like("plaintext_%"),
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-
-                    normalized = 0
-                    for fr in plaintext_records:
-                        try:
-                            expected_key = store._get_s3_key(fr.file_id)
-                            if fr.object_key == expected_key:
-                                continue
-
-                            # Copy old object to new key
-                            copy_source = f"{fr.bucket_name}/{fr.object_key}"
-                            s3_client.copy_object(
-                                CopySource=copy_source,
-                                Bucket=bucket_name,
-                                Key=expected_key,
-                                MetadataDirective="COPY",
-                            )
-
-                            # Delete old object (best-effort)
-                            try:
-                                s3_client.delete_object(
-                                    Bucket=fr.bucket_name, Key=fr.object_key
-                                )
-                            except Exception:
-                                pass
-
-                            # Update DB record with new key
-                            fr.object_key = expected_key
-                            db_session.add(fr)
-                            normalized += 1
-                        except Exception as e:
-                            task_logger.warning(
-                                f"Tenant={tenant_id} failed plaintext object normalize for "
-                                f"id={fr.file_id} - {e.__class__.__name__}"
-                            )
-
-                    if normalized:
-                        db_session.commit()
-                        task_logger.info(
-                            f"user_file_docid_migration_task normalized {normalized} plaintext objects for tenant={tenant_id}"
-                        )
-                else:
-                    task_logger.info(
-                        "user_file_docid_migration_task skipping plaintext object normalization (non-S3 store)"
-                    )
-            except Exception:
-                task_logger.exception(
-                    f"user_file_docid_migration_task - Error during plaintext normalization for tenant={tenant_id}"
-                )
 
         task_logger.info(
-            f"user_file_docid_migration_task completed for tenant={tenant_id} (rows={len(rows)})"
+            f"user_file_docid_migration_task - Completed for tenant={tenant_id} (updated={updated_count})"
         )
         return True
-    except Exception:
+    except Exception as e:
         task_logger.exception(
-            f"user_file_docid_migration_task - Error during execution for tenant={tenant_id}"
+            f"user_file_docid_migration_task - Error during execution for tenant={tenant_id} "
+            f"(updated={updated_count}) exception={e.__class__.__name__}"
         )
         return False
+    finally:
+        if lock.owned():
+            lock.release()

@@ -100,7 +100,7 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
   // If children is a string, use RichTextSubtext to parse and render links
   if (typeof children === "string") {
     return (
-      <span className="block text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+      <span className="block text-sm text-text-03 mb-2">
         <RichTextSubtext
           text={children}
           className={hasNewlines ? "whitespace-pre-wrap" : ""}
@@ -111,7 +111,7 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
 
   return (
     <span
-      className={`block text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${
+      className={`block text-sm text-text-03 mb-2 ${
         hasNewlines ? "whitespace-pre-wrap" : ""
       }`}
     >
@@ -121,7 +121,7 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
 }
 
 export function ManualErrorMessage({ children }: { children: string }) {
-  return <div className="text-error text-sm">{children}</div>;
+  return <div className="text-action-danger-05 text-sm">{children}</div>;
 }
 
 export function ExplanationText({
@@ -202,7 +202,7 @@ export const FieldLabel = ({
           <ErrorMessage
             name={name}
             component="div"
-            className="text-error my-auto text-sm"
+            className="text-action-danger-05 my-auto text-sm"
           />
         )
       )}
@@ -339,8 +339,8 @@ export function TextFormField({
             file:bg-transparent
             file:text-sm
             file:font-medium
-            file:text-neutral-950
-            placeholder:text-neutral-500
+            file:text-text-05
+            placeholder:text-text-02
             placeholder:font-description
             placeholder:${sizeClass.placeholder}
             caret-accent
@@ -351,15 +351,14 @@ export function TextFormField({
             disabled:cursor-not-allowed
             disabled:opacity-50
             md:text-sm
-            border-neutral-700
-            ring-offset-neutral-950
-            file:text-neutral-50
+            border-border-03
+            ring-offset-background-neutral-00
+            file:text-text-inverted-05
             text-text-04
-            placeholder:text-text-02
 
             ${heightString}
             ${sizeClass.input}
-            ${disabled ? "bg-neutral-100 dark:bg-neutral-800" : ""}
+            ${disabled ? "bg-background-neutral-02" : ""}
             ${isCode ? "font-mono" : ""}
             ${className}
             bg-background-neutral-00
@@ -499,7 +498,7 @@ export function TypedFileUploadFormField({
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
       {description && (
-        <div className="text-sm text-gray-500 mb-2">{description}</div>
+        <div className="text-sm text-text-03 mb-2">{description}</div>
       )}
       <FileUpload
         selectedFiles={field.value ? [field.value.file] : []}
@@ -508,16 +507,18 @@ export function TypedFileUploadFormField({
       />
       {/* Validation feedback */}
       {isValidating && (
-        <div className="text-blue-500 text-sm mt-1">Validating file...</div>
+        <div className="text-status-info-05 text-sm mt-1">
+          Validating file...
+        </div>
       )}
 
       {customError ? (
-        <div className="text-red-500 text-sm mt-1">{customError}</div>
+        <div className="text-action-danger-05 text-sm mt-1">{customError}</div>
       ) : (
         <ErrorMessage
           name={name}
           component="div"
-          className="text-red-500 text-sm mt-1"
+          className="text-action-danger-05 text-sm mt-1"
         />
       )}
     </div>
@@ -570,7 +571,7 @@ export function MultiSelectField({
             <ErrorMessage
               name={name}
               component="div"
-              className="text-error my-auto text-sm"
+              className="text-action-danger-05 my-auto text-sm"
             />
           )
         )}
@@ -618,24 +619,22 @@ export const MarkdownFormField = ({
   return (
     <div className="flex flex-col space-y-4 mb-4">
       <Label>{label}</Label>
-      <div className="border border-background-300 rounded-md">
-        <div className="flex items-center justify-between px-4 py-2 bg-background-100 rounded-t-md">
+      <div className="border border-border-02 rounded-md">
+        <div className="flex items-center justify-between px-4 py-2 bg-background-neutral-02 rounded-t-md">
           <div className="flex items-center space-x-2">
-            <FaMarkdown className="text-text-500" />
-            <span className="text-sm font-semibold text-text-600">
-              Markdown
-            </span>
+            <FaMarkdown className="text-text-03" />
+            <span className="text-sm font-semibold text-text-04">Markdown</span>
           </div>
           <button
             type="button"
             onClick={togglePreview}
-            className="text-sm font-semibold text-text-600 hover:text-text-800 focus:outline-none"
+            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-none"
           >
             {isPreviewOpen ? "Write" : "Preview"}
           </button>
         </div>
         {isPreviewOpen ? (
-          <div className="p-4 border-t border-background-300">
+          <div className="p-4 border-t border-border-02">
             <ReactMarkdown
               className="prose dark:prose-invert"
               remarkPlugins={[remarkGfm]}
@@ -650,7 +649,7 @@ export const MarkdownFormField = ({
               {...field}
               rows={2}
               placeholder={placeholder}
-              className={`w-full p-2 border border-border rounded-md border-background-300`}
+              className={`w-full p-2 border border-border-02 rounded-md`}
             />
           </div>
         )}
@@ -661,7 +660,7 @@ export const MarkdownFormField = ({
         <ErrorMessage
           name={name}
           component="div"
-          className="text-red-500 text-sm mt-1"
+          className="text-action-danger-05 text-sm mt-1"
         />
       )}
     </div>
@@ -723,7 +722,7 @@ export const BooleanFormField = memo(function BooleanFormField({
             </FastField>
             {disabled && disabledTooltip && (
               <TooltipContent side="top" align="center">
-                <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                <p className="bg-background-neutral-inverted-00 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-text-inverted-05">
                   {disabledTooltip}
                 </p>
               </TooltipContent>
@@ -752,7 +751,7 @@ export const BooleanFormField = memo(function BooleanFormField({
       <ErrorMessage
         name={name}
         component="div"
-        className="text-error text-sm mt-1"
+        className="text-action-danger-05 text-sm mt-1"
       />
     </div>
   );
@@ -821,7 +820,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
-                          className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded p-2"
                           onClick={() => {
                             if (!disabled) {
                               arrayHelpers.remove(index);
@@ -836,7 +835,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                   <ErrorMessage
                     name={`${name}.${index}`}
                     component="div"
-                    className="text-error text-sm mt-1"
+                    className="text-action-danger-05 text-sm mt-1"
                   />
                 </div>
               ))}
@@ -1011,7 +1010,7 @@ export function SelectorFormField({
       <ErrorMessage
         name={name}
         component="div"
-        className="text-error text-sm mt-1"
+        className="text-action-danger-05 text-sm mt-1"
       />
     </div>
   );
