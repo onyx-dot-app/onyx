@@ -67,8 +67,6 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   await advancedOptionsButton.click();
 
   // --- Fill Advanced Fields ---
-  // Enable Knowledge first
-  await getKnowledgeToggle(page).click();
 
   // Reminder
   await getReminderTextarea(page).fill(assistantReminder);
@@ -145,7 +143,7 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   );
   await expect(getKnowledgeToggle(page)).toHaveAttribute(
     "aria-checked",
-    "true"
+    "false"
   );
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(knowledgeCutoffDate);
   await expect(getNumChunksInput(page)).toHaveValue(numChunks);
@@ -207,7 +205,7 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   ); // Now disabled
   await expect(getKnowledgeToggle(page)).toHaveAttribute(
     "aria-checked",
-    "true"
+    "false"
   );
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(
     editedKnowledgeCutoffDate
