@@ -12,6 +12,7 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
+from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
@@ -35,6 +36,13 @@ def _build_provider_extra_headers(
         if not api_key.lower().startswith("bearer "):
             api_key = f"Bearer {api_key}"
         return {"Authorization": api_key}
+
+    # Passing these will put Onyx on the OpenRouter leaderboard
+    elif provider == OPENROUTER_PROVIDER_NAME:
+        return {
+            "HTTP-Referer": "https://onyx.app",
+            "X-Title": "Onyx",
+        }
 
     return {}
 

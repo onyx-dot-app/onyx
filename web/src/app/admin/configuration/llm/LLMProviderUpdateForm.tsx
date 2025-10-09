@@ -305,6 +305,28 @@ export function LLMProviderUpdateForm({
           ...rest
         } = values;
 
+        // If adding manual models for OpenRouter, require max_input_tokens
+        if (llmProviderDescriptor.name === "openrouter") {
+          const manualModels = Array.isArray(values.model_configurations)
+            ? values.model_configurations
+            : [];
+          for (const mm of manualModels) {
+            if (!mm || !mm.name) continue; // ignore empty rows
+            const tok = (mm as any).max_input_tokens;
+            if (tok === null || tok === undefined || tok === "") {
+              const msg =
+                "For OpenRouter manual models, 'Max Input Tokens' is required.";
+              if (setPopup) {
+                setPopup({ type: "error", message: msg });
+              } else {
+                alert(msg);
+              }
+              setSubmitting(false);
+              return;
+            }
+          }
+        }
+
         // For Azure OpenAI, parse target_uri to extract api_base and api_version
         let finalApiBase = rest.api_base;
         let finalApiVersion = rest.api_version;
@@ -330,7 +352,11 @@ export function LLMProviderUpdateForm({
             (modelConfiguration): ModelConfiguration => ({
               name: modelConfiguration.name,
               is_visible: visibleModels.includes(modelConfiguration.name),
-              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+              max_input_tokens:
+                (modelConfiguration as any).max_input_tokens === undefined ||
+                (modelConfiguration as any).max_input_tokens === ""
+                  ? null
+                  : Number((modelConfiguration as any).max_input_tokens),
               supports_image_input: modelConfiguration.supports_image_input,
             })
           ),
