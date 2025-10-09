@@ -153,6 +153,11 @@ serviceAccount:
 
 nginx:
   enabled: true
+  # Nginx proxy timeout settings (in seconds)
+  timeouts:
+    connect: 300  # Time to establish connection with upstream server
+    send: 300     # Time to send request to upstream server
+    read: 300     # Time to read response from upstream server
   controller:
     containerPort:
       http: 1024
