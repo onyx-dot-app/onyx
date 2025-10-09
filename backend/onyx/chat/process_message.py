@@ -807,8 +807,8 @@ def stream_chat_message_objects(
             tools,
             db_session,
             get_redis_client(),
-            chat_session_id,
-            reserved_message_id,
+            str(chat_session_id),
+            str(reserved_message_id),
         )
 
     except ValueError as e:

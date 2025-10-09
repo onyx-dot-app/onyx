@@ -1,8 +1,10 @@
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 from agents import RunContextWrapper
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -62,10 +64,13 @@ def create_test_run_context(
 
     # Create the actual context object
     context = ChatTurnContext(
+        chat_session_id=uuid4(),
+        message_id=1,
+        research_type=ResearchType.THOUGHTFUL,
         current_run_step=current_run_step,
         iteration_instructions=[],
-        aggregated_context=aggregated_context,
-        run_dependencies=run_dependencies,
+        aggregated_context=aggregated_context,  # type: ignore[arg-type]
+        run_dependencies=run_dependencies,  # type: ignore[arg-type]
     )
 
     # Create the run context wrapper

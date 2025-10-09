@@ -77,8 +77,8 @@ def create_test_run_context(
     context = ChatTurnContext(
         current_run_step=current_run_step,
         iteration_instructions=[],
-        aggregated_context=aggregated_context,
-        run_dependencies=run_dependencies,
+        aggregated_context=aggregated_context,  # type: ignore[arg-type]
+        run_dependencies=run_dependencies,  # type: ignore[arg-type]
         chat_session_id=uuid4(),
         message_id=1,
         research_type=ResearchType.THOUGHTFUL,

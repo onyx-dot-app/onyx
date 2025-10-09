@@ -90,32 +90,18 @@ def create_fake_message(
 ) -> ResponseOutputMessage:
     """Create a fake response message with optional tool calls."""
     content = [ResponseOutputText(text=text, type="output_text", annotations=[])]
-
-    tool_calls = None
-    if include_tool_calls:
-        tool_calls = [
-            {
-                "id": "fake-tool-call-id",
-                "type": "function",
-                "function": {
-                    "name": "fake_cancellation_tool",
-                    "arguments": '{"query": "test query"}',
-                },
-            }
-        ]
-
-    return ResponseOutputMessage(
+    message = ResponseOutputMessage(
         id="fake-message-id",
         role="assistant",
-        content=content,
+        content=content,  # type: ignore[arg-type]
         status="completed",
         type="message",
-        tool_calls=tool_calls,
     )
+    return message
 
 
 def create_fake_response(
-    response_id: str = "fake-response-id", message: ResponseOutputMessage = None
+    response_id: str = "fake-response-id", message: ResponseOutputMessage | None = None
 ) -> Response:
     """Create a fake response object."""
     if message is None:
@@ -171,7 +157,7 @@ class BaseFakeModel(Model):
 class StreamableFakeModel(BaseFakeModel):
     """Base class for fake models that support streaming."""
 
-    def stream_response(
+    def stream_response(  # type: ignore[override]
         self,
         system_instructions: str | None,
         input: str | list,
@@ -190,7 +176,7 @@ class StreamableFakeModel(BaseFakeModel):
 
     def _create_stream_events(
         self,
-        message: ResponseOutputMessage = None,
+        message: ResponseOutputMessage | None = None,
         response_id: str = "fake-response-id",
     ) -> AsyncIterator[object]:
         """Create standard stream events."""
@@ -383,7 +369,7 @@ class FakeCancellationModel(CancellationMixin, StreamableFakeModel):
 
     def _create_stream_events(
         self,
-        message: ResponseOutputMessage = None,
+        message: ResponseOutputMessage | None = None,
         response_id: str = "fake-response-id",
     ) -> AsyncIterator[object]:
         """Create stream events with cancellation support."""
@@ -451,7 +437,7 @@ class FakeToolCallModel(CancellationMixin, StreamableFakeModel):
 
     def _create_stream_events(
         self,
-        message: ResponseOutputMessage = None,
+        message: ResponseOutputMessage | None = None,
         response_id: str = "fake-response-id",
     ) -> AsyncIterator[object]:
         """Create stream events with tool calls and cancellation support."""
@@ -498,7 +484,7 @@ class FakeToolCallModel(CancellationMixin, StreamableFakeModel):
 class FakeFailingModel(BaseFakeModel):
     """Simple fake Model implementation for testing exceptions."""
 
-    def stream_response(
+    def stream_response(  # type: ignore[override]
         self,
         system_instructions: str | None,
         input: str | list,
@@ -515,8 +501,9 @@ class FakeFailingModel(BaseFakeModel):
         """Stream implementation that raises an exception."""
 
         async def _gen() -> AsyncIterator[object]:
+            fake_response = create_fake_response(response_id="fake-response-id")
             yield ResponseCreatedEvent(
-                response="hi", sequence_number=1, type="response.created"
+                response=fake_response, sequence_number=1, type="response.created"
             )
 
             # Stream some deltas before failing
@@ -685,9 +672,9 @@ def chat_turn_dependencies(
     return ChatTurnDependencies(
         llm_model=fake_model,
         llm=fake_llm,
-        db_session=fake_db_session,
+        db_session=fake_db_session,  # type: ignore[arg-type]
         tools=fake_tools,
-        redis_client=fake_redis_client,
+        redis_client=fake_redis_client,  # type: ignore[arg-type]
         emitter=emitter,
         search_pipeline=Mock(SearchTool),
         image_generation_tool=Mock(ImageGenerationTool),
@@ -832,7 +819,9 @@ def test_fast_chat_turn_tool_call_cancellation(
 class FakeCitationModel(StreamableFakeModel):
     """Fake model that simulates having iteration answers with cited documents."""
 
-    def __init__(self, iteration_answers: list[IterationAnswer] = None, **kwargs):
+    def __init__(
+        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self._iteration_answers = iteration_answers or []
 
@@ -862,7 +851,9 @@ class FakeCitationModel(StreamableFakeModel):
 
 
 class FakeCitationModelWithContext(StreamableFakeModel):
-    def __init__(self, iteration_answers: list[IterationAnswer] = None, **kwargs):
+    def __init__(
+        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self._iteration_answers = iteration_answers or []
 
@@ -892,7 +883,7 @@ class FakeCitationModelWithContext(StreamableFakeModel):
 
     def _create_stream_events(
         self,
-        message: ResponseOutputMessage = None,
+        message: ResponseOutputMessage | None = None,
         response_id: str = "fake-response-id",
     ) -> AsyncIterator[object]:
         """Create stream events with citation text."""
@@ -1118,6 +1109,8 @@ def test_fast_chat_turn_citation_processing(
     assert citation_section_end_found, "Citation section should end with SectionEnd"
 
     # Verify that citation packets are emitted after message packets (higher index)
+    assert message_start_index is not None, "message_start_index should be set"
+    assert citation_start_index is not None, "citation_start_index should be set"
     assert (
         citation_start_index > message_start_index
     ), f"Citation packets (index {citation_start_index}) > message start (index {message_start_index})"

@@ -353,7 +353,7 @@ def run_internal_search_core_with_dependencies(
             run_context.context.run_dependencies.redis_client = redis_client  # type: ignore
 
         # Call the real _internal_search_core function
-        return _internal_search_core(run_context, query, search_pipeline)
+        return _internal_search_core(run_context, [query], search_pipeline)  # type: ignore[arg-type]
 
 
 class FakeSearchToolOverrideKwargs:
@@ -458,7 +458,7 @@ def test_internal_search_core_basic_functionality(
 
     # Act
     result = run_internal_search_core_with_dependencies(
-        fake_run_context, queries, test_pipeline, fake_session_context_manager
+        fake_run_context, query, test_pipeline, fake_session_context_manager
     )
 
     # Assert
@@ -584,7 +584,7 @@ def test_internal_search_core_with_multiple_queries(
 
     # Act
     result = run_internal_search_core_with_dependencies(
-        fake_run_context, queries, test_pipeline, fake_session_context_manager
+        fake_run_context, queries[0], test_pipeline, fake_session_context_manager
     )
 
     # Assert

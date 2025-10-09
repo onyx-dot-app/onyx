@@ -42,8 +42,8 @@ class MockWebSearchProvider(WebSearchProvider):
 
     def __init__(
         self,
-        search_results: List[WebSearchResult] = None,
-        content_results: List[WebContent] = None,
+        search_results: List[WebSearchResult] | None = None,
+        content_results: List[WebContent] | None = None,
         should_raise_exception: bool = False,
     ):
         self.search_results = search_results or []
@@ -93,8 +93,8 @@ class MockRunDependencies:
 
 def create_test_run_context(
     current_run_step: int = 0,
-    iteration_instructions: List[IterationInstructions] = None,
-    global_iteration_responses: List[IterationAnswer] = None,
+    iteration_instructions: List[IterationInstructions] | None = None,
+    global_iteration_responses: List[IterationAnswer] | None = None,
 ) -> RunContextWrapper[ChatTurnContext]:
     """Create a real RunContextWrapper with test dependencies"""
 
@@ -114,8 +114,8 @@ def create_test_run_context(
         research_type=ResearchType.THOUGHTFUL,
         current_run_step=current_run_step,
         iteration_instructions=iteration_instructions or [],
-        aggregated_context=aggregated_context,
-        run_dependencies=run_dependencies,
+        aggregated_context=aggregated_context,  # type: ignore[arg-type]
+        run_dependencies=run_dependencies,  # type: ignore[arg-type]
     )
 
     # Create the run context wrapper

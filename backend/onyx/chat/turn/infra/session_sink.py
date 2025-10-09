@@ -3,9 +3,9 @@
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
 import re
+from uuid import UUID
 
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.sqltypes import UUID
 
 from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType

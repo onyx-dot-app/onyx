@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 from agents import Agent
@@ -72,7 +73,7 @@ def _fast_chat_turn_core(
     agent = Agent(
         name="Assistant",
         model=dependencies.llm_model,
-        tools=dependencies.tools,
+        tools=cast(list, dependencies.tools),  # type: ignore[arg-type]
         model_settings=ModelSettings(
             temperature=dependencies.llm.config.temperature,
             include_usage=True,
@@ -218,7 +219,7 @@ def _process_citations_for_final_answer(
     )
 
     # Process the final answer through citation processor
-    collected_citations = []
+    collected_citations: list = []
     for response_part in citation_processor.process_token(final_answer):
         if hasattr(response_part, "citation_num"):  # It's a CitationInfo
             collected_citations.append(response_part)
@@ -229,7 +230,7 @@ def _process_citations_for_final_answer(
         dependencies.emitter.emit(
             Packet(
                 ind=index,
-                obj=CitationDelta(citations=collected_citations),
+                obj=CitationDelta(citations=collected_citations),  # type: ignore[arg-type]
             )
         )
         dependencies.emitter.emit(Packet(ind=index, obj=SectionEnd(type="section_end")))

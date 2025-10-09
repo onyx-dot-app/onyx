@@ -182,6 +182,7 @@ def internal_search_tool(
     - combined_content: Merged text content from all chunks in the section
     """
     search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
+    assert search_pipeline_instance is not None
 
     # Call the core function
     retrieved_docs = _internal_search_core(

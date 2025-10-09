@@ -53,8 +53,8 @@ def _image_generation_core(
     heartbeat_count = 0
 
     for tool_response in image_generation_tool_instance.run(
-        **tool_args
-    ):  # ignore[arg-type]
+        **tool_args  # type: ignore[arg-type]
+    ):
         # Handle heartbeat responses
         if tool_response.id == "image_generation_heartbeat":
             # Emit heartbeat event for every iteration
@@ -149,9 +149,10 @@ def image_generation_tool(
         prompt: The text description of the image to generate
         shape: The desired image shape - 'square', 'portrait', or 'landscape'
     """
-    image_generation_tool_instance: ImageGenerationTool = (
+    image_generation_tool_instance = (
         run_context.context.run_dependencies.image_generation_tool
     )
+    assert image_generation_tool_instance is not None
 
     generated_images: list[GeneratedImage] = _image_generation_core(
         run_context, prompt, shape, image_generation_tool_instance

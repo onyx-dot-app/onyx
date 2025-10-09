@@ -4,7 +4,6 @@ import threading
 from collections.abc import Iterator
 from typing import Generic
 from typing import Optional
-from typing import Self
 from typing import TypeVar
 
 from agents import Agent
@@ -46,7 +45,7 @@ class SyncAgentStream(Generic[T]):
         context: ChatTurnContext,
         max_turns: int = 100,
         queue_maxsize: int = 0,
-    ) -> Self:
+    ) -> None:
         self._agent = agent
         self._input = input
         self._context = context
@@ -92,14 +91,15 @@ class SyncAgentStream(Generic[T]):
         if loop is not None and streamed is not None and not self._done.is_set():
             # schedule the async cancel on the loop thread
             try:
-                fut = asyncio.run_coroutine_threadsafe(streamed.cancel(), loop)
-                # It’s OK not to block here. This makes cancellations for tools that don't
+                fut = asyncio.run_coroutine_threadsafe(streamed.cancel(), loop)  # type: ignore[func-returns-value]
+                # It's OK not to block here. This makes cancellations for tools that don't
                 # have a clean cooperative cancel feel smoother. Overall the loop will be closed
                 # so resources shouldn't leak.
                 _ = fut.result(timeout=2.0)
 
             finally:
-                return True
+                pass
+            return True
         return False
 
     def close(self, *, wait: bool = True) -> None:
@@ -124,24 +124,24 @@ class SyncAgentStream(Generic[T]):
         # Optionally wait until the loop/worker is started so .cancel() is safe soon after init
         self._started.wait(timeout=1.0)
 
-    def _thread_main(self) -> None:  # type: ignore[no-untyped-def]
+    def _thread_main(self) -> None:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
 
-        async def worker():
+        async def worker() -> None:
             try:
                 # Start the streamed run inside the loop thread
                 self._streamed = Runner.run_streamed(
                     self._agent,
-                    self._input,
+                    self._input,  # type: ignore[arg-type]
                     context=self._context,
                     max_turns=self._max_turns,
                 )
 
                 # If cancel was requested before we created _streamed, honor it now
                 if self._cancel_requested.is_set():
-                    await self._streamed.cancel()
+                    await self._streamed.cancel()  # type: ignore[func-returns-value]
 
                 # Consume async events and forward into the thread-safe queue
                 async for ev in self._streamed.stream_events():
@@ -149,7 +149,7 @@ class SyncAgentStream(Generic[T]):
                     if self._cancel_requested.is_set():
                         # Try to cancel gracefully; don't break until cancel takes effect
                         try:
-                            await self._streamed.cancel()
+                            await self._streamed.cancel()  # type: ignore[func-returns-value]
                         except Exception:
                             pass
                         break
