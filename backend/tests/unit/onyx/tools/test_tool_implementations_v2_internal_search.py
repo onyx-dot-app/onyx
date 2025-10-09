@@ -453,11 +453,12 @@ def test_internal_search_core_basic_functionality(
     """Test basic functionality of _internal_search_core function using dependency injection"""
     # Arrange
     query = "test search query"
+    queries = [query]
     test_pipeline = create_fake_search_pipeline_with_results()
 
     # Act
     result = run_internal_search_core_with_dependencies(
-        fake_run_context, query, test_pipeline, fake_session_context_manager
+        fake_run_context, queries, test_pipeline, fake_session_context_manager
     )
 
     # Assert
@@ -490,8 +491,9 @@ def test_internal_search_core_basic_functionality(
     assert isinstance(instruction, IterationInstructions)
     assert instruction.iteration_nr == 1
     assert instruction.purpose == "Searching internally for information"
+    # Updated to match the list format in reasoning
     assert (
-        f"I am now using Internal Search to gather information on {query}"
+        "I am now using Internal Search to gather information on"
         in instruction.reasoning
     )
 
@@ -519,9 +521,9 @@ def test_internal_search_core_basic_functionality(
     assert isinstance(emitter.packet_history[2].obj, SearchToolDelta)
     assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
-    # Check the first SearchToolDelta (query)
+    # Check the first SearchToolDelta (query) - now expects a list
     first_delta = emitter.packet_history[1].obj
-    assert first_delta.queries == [query]
+    assert first_delta.queries == queries
     assert first_delta.documents is None
 
     # Check the second SearchToolDelta (documents)
@@ -545,3 +547,76 @@ def test_internal_search_core_basic_functionality(
     assert test_pipeline.run_kwargs["override_kwargs"].force_no_rerank is True
     assert test_pipeline.run_kwargs["override_kwargs"].skip_query_analysis is True
     assert test_pipeline.run_kwargs["override_kwargs"].original_query == query
+
+
+def test_internal_search_core_with_multiple_queries(
+    fake_run_context: RunContextWrapper[ChatTurnContext],
+    fake_session_context_manager: FakeSessionContextManager,
+):
+    """Test that _internal_search_core can handle multiple queries and execute them in parallel"""
+    # Arrange
+    queries = ["first query", "second query", "third query"]
+
+    # Create test sections for the search results
+    test_sections = [
+        create_fake_inference_section(
+            document_id=f"doc{i}",
+            semantic_identifier=f"test_doc_{i}",
+            blurb=f"Content for doc {i}",
+        )
+        for i in range(1, 4)
+    ]
+
+    # Use the existing FakeSearchPipeline with results
+    test_pipeline = create_fake_search_pipeline_with_results(sections=test_sections)
+
+    # Track calls to the pipeline
+    original_run = test_pipeline.run
+    call_count = []
+    call_queries = []
+
+    def tracked_run(**kwargs):
+        call_count.append(1)
+        call_queries.append(kwargs.get("query"))
+        return original_run(**kwargs)
+
+    test_pipeline.run = tracked_run
+
+    # Act
+    result = run_internal_search_core_with_dependencies(
+        fake_run_context, queries, test_pipeline, fake_session_context_manager
+    )
+
+    # Assert
+    assert isinstance(result, list)
+    # Should have results from all queries
+    assert len(result) > 0
+
+    # Verify that the search pipeline was called multiple times (once per query)
+    assert len(call_count) == len(
+        queries
+    ), f"Expected {len(queries)} calls to search pipeline, got {len(call_count)}"
+
+    # Verify all queries were executed
+    assert set(call_queries) == set(
+        queries
+    ), f"Expected queries {queries}, got {call_queries}"
+
+    # Verify emitter events were captured with all queries
+    emitter = fake_run_context.context.run_dependencies.emitter
+
+    # Find the SearchToolDelta with queries
+    query_deltas = [
+        packet.obj
+        for packet in emitter.packet_history
+        if isinstance(packet.obj, SearchToolDelta) and packet.obj.queries is not None
+    ]
+    assert (
+        len(query_deltas) > 0
+    ), "Should have at least one SearchToolDelta with queries"
+
+    # Check that all queries were emitted
+    emitted_queries = query_deltas[0].queries
+    assert (
+        emitted_queries == queries
+    ), f"Expected emitted queries {queries}, got {emitted_queries}"
