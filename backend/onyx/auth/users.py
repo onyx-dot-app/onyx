@@ -438,9 +438,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 except exceptions.UserNotExists:
                     password = self.password_helper.generate()
+                    # Truncate password to 72 bytes to avoid bcrypt limitation
+                    # This is safe since the password is randomly generated and
+                    # will never be used by the user (OAuth users don't use passwords)
+                    password_bytes = password.encode("utf-8")[:72]
+                    truncated_password = password_bytes.decode("utf-8", errors="ignore")
                     user_dict = {
                         "email": account_email,
-                        "hashed_password": self.password_helper.hash(password),
+                        "hashed_password": self.password_helper.hash(
+                            truncated_password
+                        ),
                         "is_verified": is_verified_by_default,
                     }
 
