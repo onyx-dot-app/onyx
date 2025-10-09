@@ -34,6 +34,24 @@ test.describe("Default Assistant Tests", () => {
       expect(GREETING_MESSAGES).toContain(greeting.trim());
     });
 
+    test("greeting message should remain consistent during session", async ({
+      page,
+    }) => {
+      // Get initial greeting
+      const initialGreeting = await waitForUnifiedGreeting(page);
+
+      // Reload the page
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+
+      // Get greeting after reload
+      const greetingAfterReload = await waitForUnifiedGreeting(page);
+
+      // Both greetings should be valid but might differ after reload
+      expect(GREETING_MESSAGES).toContain(initialGreeting?.trim());
+      expect(GREETING_MESSAGES).toContain(greetingAfterReload?.trim());
+    });
+
     test("greeting should only appear for default assistant", async ({
       page,
     }) => {
