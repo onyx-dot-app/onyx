@@ -8,13 +8,13 @@ from typing import List
 from typing import Optional
 
 import requests
-from typing_extensions import override
-
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.drupal_wiki.models import DrupalWikiCheckpoint
 from onyx.connectors.drupal_wiki.models import DrupalWikiPage
 from onyx.connectors.drupal_wiki.models import DrupalWikiPageContent
@@ -36,20 +36,15 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-    rl_requests,
-)
-from onyx.file_processing.extract_file_text import (
-    ALL_ACCEPTED_FILE_EXTENSIONS,
-    extract_text_and_images,
-)
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+from typing_extensions import override
 
 logger = setup_logger()
 
@@ -184,6 +179,10 @@ class DrupalWikiConnector(
         logger.info(f"Downloading attachment {attachment_id} from {url}")
 
         # Use headers without Accept for binary downloads
+        if self.headers is None:
+            raise ValueError(
+                "Headers not set in connector instance"
+            )  # because mypy complains
         download_headers = {"Authorization": self.headers["Authorization"]}
 
         response = rate_limited_get(url, headers=download_headers)
@@ -286,9 +285,7 @@ class DrupalWikiConnector(
                         file_origin=FileOrigin.CONNECTOR,
                     )
                     sections.append(image_section)
-                    logger.info(
-                        "Stored image attachment with file name: %s", file_name
-                    )
+                    logger.info("Stored image attachment with file name: %s", file_name)
                 except Exception as e:
                     return [], f"Image storage failed: {e}"
 
@@ -418,15 +415,15 @@ class DrupalWikiConnector(
             page += 1
 
         if page >= max_pages:
-            logger.warning(f"Reached maximum page limit ({max_pages}) while fetching spaces")
+            logger.warning(
+                f"Reached maximum page limit ({max_pages}) while fetching spaces"
+            )
 
         logger.info(f"Total spaces fetched: {len(all_spaces)}")
         return all_spaces
 
     def _get_pages_for_space(
-        self, 
-        space_id: int, 
-        modified_after: Optional[SecondsSinceUnixEpoch] = None
+        self, space_id: int, modified_after: Optional[SecondsSinceUnixEpoch] = None
     ) -> List[DrupalWikiPage]:
         """
         Get all pages for a specific space, optionally filtered by modification time.
@@ -446,19 +443,23 @@ class DrupalWikiConnector(
         max_pages = 100  # Safety limit to prevent infinite loops
 
         while has_more and page < max_pages:
-            params = {"space": str(space_id), "size": size, "page": page}
-            
+            params: dict[str, str | int] = {
+                "space": str(space_id),
+                "size": size,
+                "page": page,
+            }
+
             # Add modifiedAfter parameter if provided
             if modified_after is not None:
                 params["modifiedAfter"] = int(modified_after)
-            
+
             logger.info(
                 f"Fetching pages for space {space_id} from {url} (page={page}, size={size}, modified_after={modified_after})"
             )
             response = rate_limited_get(url, headers=self.headers, params=params)
             response.raise_for_status()
             resp_json = response.json()
-            
+
             try:
                 page_response = DrupalWikiPageResponse.model_validate(resp_json)
             except Exception as e:
@@ -480,7 +481,9 @@ class DrupalWikiConnector(
             page += 1
 
         if page >= max_pages:
-            logger.warning(f"Reached maximum page limit ({max_pages}) while fetching pages for space {space_id}")
+            logger.warning(
+                f"Reached maximum page limit ({max_pages}) while fetching pages for space {space_id}"
+            )
 
         logger.info(f"Total pages fetched for space {space_id}: {len(all_pages)}")
         return all_pages
@@ -642,9 +645,7 @@ class DrupalWikiConnector(
 
                     # Skip pages outside the time range
                     if not self._is_page_in_time_range(page.lastModified, start, end):
-                        logger.info(
-                            f"Skipping page {page_id} - outside time range"
-                        )
+                        logger.info(f"Skipping page {page_id} - outside time range")
                         checkpoint.current_page_id_index += 1
                         continue
 
@@ -785,10 +786,10 @@ class DrupalWikiConnector(
                     page_content = self._get_page_content(int(page_id.strip()))
 
                     # Skip pages outside the time range
-                    if not self._is_page_in_time_range(page_content.lastModified, start, end):
-                        logger.info(
-                            f"Skipping page {page_id} - outside time range"
-                        )
+                    if not self._is_page_in_time_range(
+                        page_content.lastModified, start, end
+                    ):
+                        logger.info(f"Skipping page {page_id} - outside time range")
                         continue
 
                     # Create slim document for the page
@@ -924,10 +925,10 @@ class DrupalWikiConnector(
             raise ConnectorValidationError(f"Failed to connect to Drupal Wiki: {e}")
 
     def _is_page_in_time_range(
-        self, 
-        last_modified: int, 
-        start: Optional[SecondsSinceUnixEpoch], 
-        end: Optional[SecondsSinceUnixEpoch]
+        self,
+        last_modified: int,
+        start: Optional[SecondsSinceUnixEpoch],
+        end: Optional[SecondsSinceUnixEpoch],
     ) -> bool:
         """
         Check if a page's last modified timestamp falls within the specified time range.
