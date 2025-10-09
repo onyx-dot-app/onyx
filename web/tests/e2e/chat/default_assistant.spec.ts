@@ -248,10 +248,13 @@ test.describe("Default Assistant Tests", () => {
       expect(actionToggle).toBeTruthy();
     });
 
-    test("should show just the image generation tool options when clicked", async ({
+    test("should show web-search + image-generation tools options when clicked", async ({
       page,
     }) => {
+      // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
+      // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)
       await openActionManagement(page);
+      expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
       expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
     });
 

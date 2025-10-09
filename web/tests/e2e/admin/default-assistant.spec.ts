@@ -584,6 +584,7 @@ test.describe("Default Assistant Admin Page", () => {
       await openActionManagement(page);
       // If we can open it, check that tools are disabled
       expect(await page.$(TOOL_IDS.searchOption)).toBeFalsy();
+      expect(await page.$(TOOL_IDS.webSearchOption)).toBeFalsy();
       expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeFalsy();
       // Image generation might still show as disabled
     } catch {
@@ -619,6 +620,7 @@ test.describe("Default Assistant Admin Page", () => {
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
     expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
+    expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
 
     await page.goto(
