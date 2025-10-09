@@ -336,7 +336,7 @@ services:
       retries: 3
 
   langflow:
-    image: langflowai/langflow:latest
+    image: langflowai/langflow:1.6.4
     container_name: Langflow
     user: root
     ports:
@@ -356,6 +356,10 @@ services:
       LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-langflow}
       LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD:-langflow}
       LANGFLOW_AUTO_LOGIN: False
+      LANGFLOW_CORS_ORIGINS: "*"
+      LANGFLOW_CORS_ALLOW_CREDENTIALS: true
+      LANGFLOW_CORS_ALLOW_HEADERS: "*"
+      LANGFLOW_CORS_ALLOW_METHODS: "*"
     volumes:
       - langflow:/var/lib/langflow:rw
     logging:
