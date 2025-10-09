@@ -51,7 +51,8 @@ export const OnyxApiKeyForm = ({
             description: apiKey?.description,
             // Store config in the textarea as a pretty JSON string
             config: apiKey?.config ? JSON.stringify(apiKey.config, null, 2) : "",
-            template: ""
+            template: "",
+            validator_type: apiKey?.validator_type,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -73,6 +74,7 @@ export const OnyxApiKeyForm = ({
               name: values.name,
               description: values.description,
               config: parsedConfig,
+              validator_type: values.validator_type
             };
 
             let response;
@@ -107,17 +109,24 @@ export const OnyxApiKeyForm = ({
               <SelectorFormField
                 name="template"
                 label={t(k.VALIDATOR_TEMPLATE_LABEL)}
-                options={(templates || []).map((tpl, idx) => ({
-                  value: tpl?.id,
-                  name: tpl?.name || tpl?.id || `Шаблон ${idx + 1}`,
-                }))}
+                options={Array.isArray(templates)
+                  ? templates.map((tpl, idx) => ({
+                      value: String(tpl?.id),
+                      name: tpl?.name || tpl?.id || `Шаблон ${idx + 1}`,
+                    }))
+                  : []}
+                defaultValue=""
+                disabled={!Array.isArray(templates) || templates.length === 0}
                 onSelect={(selected) => {
                   const selectedId = selected as string;
-                  const tpl = (templates || []).find((t) => String(t?.id) === String(selectedId));
+                  const tpl = Array.isArray(templates)
+                    ? templates.find((t) => String(t?.id) === selectedId)
+                    : undefined;
                   if (tpl && tpl.config !== undefined) {
                     try {
                       const pretty = JSON.stringify(tpl.config, null, 2);
                       setFieldValue("config", pretty);
+                      setFieldValue("validator_type", tpl.validator_type);
                     } catch (_) {
                       // noop
                     }

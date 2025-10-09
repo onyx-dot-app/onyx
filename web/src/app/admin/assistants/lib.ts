@@ -34,6 +34,7 @@ interface PersonaUpsertRequest {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: string | null;
+  validator_ids?: string[]
 }
 
 export interface PersonaUpsertParameters {
@@ -66,6 +67,7 @@ export interface PersonaUpsertParameters {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: File | null;
+  validator_ids?: string[];
 }
 
 export const createPersonaLabel = (name: string) => {

@@ -50,7 +50,7 @@ function StandardDropdownOption<T>({
 }
 
 export function SearchMultiSelectDropdown({
-  options,
+  options = [],
   onSelect,
   itemComponent,
   onCreate,
@@ -59,7 +59,7 @@ export function SearchMultiSelectDropdown({
   initialSearchTerm = "",
   allowCustomValues = false,
 }: {
-  options: StringOrNumberOption[];
+  options?: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: React.ComponentType<{ option: StringOrNumberOption }>;
   onCreate?: (name: string) => void;

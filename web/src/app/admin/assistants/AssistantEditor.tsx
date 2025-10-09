@@ -644,6 +644,7 @@ export function AssistantEditor({
             num_chunks: numChunks,
             user_file_ids: selectedFiles.map((file) => file.id),
             user_folder_ids: selectedFolders.map((folder) => folder.id),
+            validator_ids: values.selectedValidators.map((validator) => validator.id),
           };
 
           let personaResponse;
@@ -1876,7 +1877,7 @@ export function AssistantEditor({
                       };
                       setFieldValue("selectedValidators", [
                         ...values.selectedValidators,
-                        { id: option.value, email: option.name },
+                        { id: option.value, name: option.name },
                       ]);
                     }}
                   />

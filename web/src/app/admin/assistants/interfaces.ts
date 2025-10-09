@@ -56,7 +56,7 @@ export interface FullPersona extends Persona {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: File | null;
-  selectedValidators?: Array<string>
+  selectedValidators?: Array<{id: string, name: string}>
 }
 
 export interface PersonaLabel {
