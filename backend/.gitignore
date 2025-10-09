@@ -12,3 +12,5 @@ celerybeat-schedule*
 onyx/connectors/salesforce/data/
 .test.env
 /generated
+backend/scratch/qdrant/accuracy_testing/*.jsonl
+scratch/qdrant/accuracy_testing/*.jsonl
