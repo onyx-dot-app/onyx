@@ -20,7 +20,12 @@ from pathlib import Path
 
 import cohere
 from dotenv import load_dotenv
+from fastembed import SparseTextEmbedding
 from qdrant_client.models import Filter
+from qdrant_client.models import Fusion
+from qdrant_client.models import FusionQuery
+from qdrant_client.models import Prefetch
+from qdrant_client.models import SparseVector
 
 from scratch.qdrant.accuracy_testing.target_document_schema import TargetQuestion
 from scratch.qdrant.client import QdrantClient
@@ -52,19 +57,50 @@ def embed_query_with_cohere(
     return response.embeddings[0]
 
 
-def search_qdrant(
-    query_vector: list[float],
+def embed_query_with_bm25(
+    query: str,
+    sparse_embedding_model: SparseTextEmbedding,
+) -> SparseVector:
+    """Embed a single query using BM25."""
+    sparse_embedding = next(sparse_embedding_model.query_embed(query))
+    return SparseVector(
+        indices=sparse_embedding.indices.tolist(),
+        values=sparse_embedding.values.tolist(),
+    )
+
+
+def hybrid_search_qdrant(
+    dense_query_vector: list[float],
+    sparse_query_vector: SparseVector,
     qdrant_client: QdrantClient,
     collection_name: CollectionName,
     limit: int = 10,
+    prefetch_limit: int | None = None,
     query_filter: Filter | None = None,
 ):
-    """Search Qdrant collection with a query vector."""
+    """Perform hybrid search using both dense and sparse vectors."""
+    # If prefetch_limit not specified, use limit * 2
+    effective_prefetch_limit = (
+        prefetch_limit if prefetch_limit is not None else limit * 2
+    )
+
     return qdrant_client.query_points(
         collection_name=collection_name,
-        query=query_vector,
-        using="dense",
-        query_filter=query_filter,
+        prefetch=[
+            Prefetch(
+                query=sparse_query_vector,
+                using="sparse",
+                limit=effective_prefetch_limit,
+                filter=query_filter,
+            ),
+            Prefetch(
+                query=dense_query_vector,
+                using="dense",
+                limit=effective_prefetch_limit,
+                filter=query_filter,
+            ),
+        ],
+        fusion_query=FusionQuery(fusion=Fusion.DBSF),
         with_payload=True,
         limit=limit,
     )
@@ -165,19 +201,26 @@ def evaluate_search_results(
 def evaluate_single_question(
     question: TargetQuestion,
     cohere_client: cohere.Client,
+    sparse_embedding_model: SparseTextEmbedding,
     qdrant_client: QdrantClient,
     collection_name: CollectionName,
     cohere_model: str,
 ) -> dict:
-    """Evaluate a single question. This will be run in parallel."""
-    # Embed query
-    query_vector = embed_query_with_cohere(
+    """Evaluate a single question using hybrid search. This will be run in parallel."""
+    # Embed query with Cohere (dense)
+    dense_query_vector = embed_query_with_cohere(
         question.question, cohere_client, cohere_model
     )
 
-    # Search (retrieve 50 to calculate recall@25 and recall@50)
-    search_results = search_qdrant(
-        query_vector,
+    # Embed query with BM25 (sparse)
+    sparse_query_vector = embed_query_with_bm25(
+        question.question, sparse_embedding_model
+    )
+
+    # Hybrid search (retrieve 50 to calculate recall@25 and recall@50)
+    search_results = hybrid_search_qdrant(
+        dense_query_vector,
+        sparse_query_vector,
         qdrant_client,
         collection_name,
         limit=50,
@@ -200,6 +243,7 @@ def evaluate_single_question(
 def main():
     collection_name = CollectionName.ACCURACY_TESTING
     cohere_model = "embed-english-v3.0"
+    sparse_model_name = "Qdrant/bm25"
     max_workers = 10  # Number of parallel workers
 
     # Load environment variables from .env file
@@ -211,14 +255,17 @@ def main():
         print(f"Warning: .env file not found at {env_path}")
 
     # Initialize clients
-    print("Initializing clients...")
+    print("Initializing clients and embedding models...")
     cohere_api_key = os.getenv("COHERE_API_KEY")
     if not cohere_api_key:
         raise ValueError("COHERE_API_KEY environment variable not set")
 
     cohere_client = cohere.Client(cohere_api_key)
     qdrant_client = QdrantClient()
-    print("Clients initialized\n")
+    sparse_embedding_model = SparseTextEmbedding(
+        model_name=sparse_model_name, threads=2
+    )
+    print("Clients and models initialized\n")
 
     # Load questions
     jsonl_path = Path(__file__).parent / "target_questions.jsonl"
@@ -244,6 +291,7 @@ def main():
                 evaluate_single_question,
                 question,
                 cohere_client,
+                sparse_embedding_model,
                 qdrant_client,
                 collection_name,
                 cohere_model,

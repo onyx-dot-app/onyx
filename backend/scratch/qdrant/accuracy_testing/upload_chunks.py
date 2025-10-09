@@ -18,8 +18,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import cohere
+from dotenv import load_dotenv
+from fastembed import SparseTextEmbedding
 from qdrant_client.models import Distance
 from qdrant_client.models import OptimizersConfigDiff
+from qdrant_client.models import SparseVector
+from qdrant_client.models import SparseVectorParams
 from qdrant_client.models import VectorParams
 
 from scratch.qdrant.accuracy_testing.target_document_schema import TargetDocument
@@ -27,6 +31,7 @@ from scratch.qdrant.client import QdrantClient
 from scratch.qdrant.schemas.chunk import QdrantChunk
 from scratch.qdrant.schemas.collection_name import CollectionName
 from scratch.qdrant.schemas.embeddings import ChunkDenseEmbedding
+from scratch.qdrant.schemas.embeddings import ChunkSparseEmbedding
 
 
 def load_target_documents(jsonl_path: Path) -> list[TargetDocument]:
@@ -133,6 +138,34 @@ def chunks_to_cohere_embeddings(
     ]
 
 
+def chunks_to_bm25_embeddings(
+    chunks: list[QdrantChunk],
+    sparse_embedding_model: SparseTextEmbedding,
+) -> list[ChunkSparseEmbedding]:
+    """
+    Convert QdrantChunks to BM25 sparse embeddings.
+
+    Args:
+        chunks: List of chunks to embed
+        sparse_embedding_model: Initialized BM25 model
+
+    Returns:
+        List of ChunkSparseEmbedding objects
+    """
+    sparse_vectors = sparse_embedding_model.passage_embed(
+        [chunk.content for chunk in chunks]
+    )
+    return [
+        ChunkSparseEmbedding(
+            chunk_id=chunk.id,
+            vector=SparseVector(
+                indices=vector.indices.tolist(), values=vector.values.tolist()
+            ),
+        )
+        for chunk, vector in zip(chunks, sparse_vectors)
+    ]
+
+
 def convert_target_doc_to_chunks(
     target_doc: TargetDocument, max_chunk_length: int = 8000
 ) -> list[QdrantChunk]:
@@ -154,6 +187,11 @@ def convert_target_doc_to_chunks(
     """
     created_at = datetime.datetime.now()
     content = target_doc.content
+    title = target_doc.title
+
+    # Prepend title to content if title is not None
+    if title is not None:
+        content = f"{title}\n{content}"
 
     # If content fits in one chunk, return single chunk
     if len(content) <= max_chunk_length:
@@ -196,6 +234,7 @@ def main():
 
     # Embedding model configuration
     cohere_model = "embed-english-v3.0"
+    sparse_model_name = "Qdrant/bm25"
     vector_size = 1024  # embed-english-v3.0 dimension
 
     # Control whether to index while uploading
@@ -205,6 +244,14 @@ def main():
     # Cohere API can handle up to 96 texts per request and processes them in parallel
     batch_size = 96  # Match Cohere's max batch size for optimal performance
 
+    # Load environment variables from .env file
+    env_path = Path(__file__).parent.parent.parent.parent.parent / ".vscode" / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"Loaded environment variables from {env_path}")
+    else:
+        print(f"Warning: .env file not found at {env_path}")
+
     # Initialize Cohere client
     print("Initializing Cohere client...")
     cohere_api_key = os.getenv("COHERE_API_KEY")
@@ -212,7 +259,14 @@ def main():
         raise ValueError("COHERE_API_KEY environment variable not set")
 
     cohere_client = cohere.Client(cohere_api_key)
-    print(f"Cohere client initialized with model: {cohere_model}\n")
+    print(f"Cohere client initialized with model: {cohere_model}")
+
+    # Initialize BM25 sparse embedding model
+    print("Initializing BM25 sparse embedding model...")
+    sparse_embedding_model = SparseTextEmbedding(
+        model_name=sparse_model_name, threads=2
+    )
+    print("BM25 model initialized\n")
 
     # Initialize Qdrant client
     qdrant_client = QdrantClient()
@@ -227,13 +281,15 @@ def main():
         None if index_while_uploading else OptimizersConfigDiff(indexing_threshold=0)
     )
 
-    # Note: Cohere embed-english-v3.0 only produces dense embeddings (no sparse)
+    # Create collection with both dense (Cohere) and sparse (BM25) vectors
     qdrant_client.create_collection(
         collection_name=collection_name,
         dense_vectors_config={
             "dense": VectorParams(size=vector_size, distance=Distance.COSINE),
         },
-        sparse_vectors_config=None,  # Cohere doesn't provide sparse embeddings
+        sparse_vectors_config={
+            "sparse": SparseVectorParams(),
+        },
         optimizers_config=optimizer_config,
         shard_number=4,
     )
@@ -278,29 +334,52 @@ def main():
                 batch_num += 1
                 print(f"=== Batch {batch_num}/{num_batches} ===")
 
-                # Embed with Cohere
+                # Embed with Cohere (dense)
                 embed_start = time.time()
                 dense_embeddings = chunks_to_cohere_embeddings(
                     batch_chunks, cohere_client, cohere_model
                 )
-                embed_time = time.time() - embed_start
+                dense_time = time.time() - embed_start
 
-                # Calculate embedding size
+                # Embed with BM25 (sparse)
+                sparse_start = time.time()
+                sparse_embeddings = chunks_to_bm25_embeddings(
+                    batch_chunks, sparse_embedding_model
+                )
+                sparse_time = time.time() - sparse_start
+
+                # Calculate embedding sizes
                 dense_dim = len(dense_embeddings[0].vector) if dense_embeddings else 0
+                avg_sparse_dims = (
+                    sum(len(e.vector.indices) for e in sparse_embeddings)
+                    / len(sparse_embeddings)
+                    if sparse_embeddings
+                    else 0
+                )
 
-                print(f"1. Cohere embeddings: {embed_time:.2f}s")
-                print(f"   Dense dim: {dense_dim}")
+                embed_time = dense_time + sparse_time
+                print(
+                    f"1. Embeddings: {embed_time:.2f}s (dense: {dense_time:.2f}s, sparse: {sparse_time:.2f}s)"
+                )
+                print(
+                    f"   Dense dim: {dense_dim}, Avg sparse dims: {avg_sparse_dims:.0f}"
+                )
 
-                # Step 2: Build points (without sparse embeddings)
+                # Step 2: Build points with both dense and sparse embeddings
                 build_start = time.time()
                 points = []
-                for chunk, dense_emb in zip(batch_chunks, dense_embeddings):
+                for chunk, dense_emb, sparse_emb in zip(
+                    batch_chunks, dense_embeddings, sparse_embeddings
+                ):
                     from qdrant_client.models import PointStruct
 
                     points.append(
                         PointStruct(
                             id=str(chunk.id),
-                            vector={"dense": dense_emb.vector},
+                            vector={
+                                "dense": dense_emb.vector,
+                                "sparse": sparse_emb.vector,
+                            },
                             payload=chunk.model_dump(exclude={"id"}),
                         )
                     )
@@ -324,7 +403,7 @@ def main():
                 print()
 
                 # Clear batch for next iteration and free memory aggressively
-                del dense_embeddings, points, result
+                del dense_embeddings, sparse_embeddings, points, result
                 batch_chunks = []
                 gc.collect()
 
@@ -336,29 +415,47 @@ def main():
         batch_num += 1
         print(f"=== Batch {batch_num}/{num_batches} (final) ===")
 
-        # Embed with Cohere
+        # Embed with Cohere (dense)
         embed_start = time.time()
         dense_embeddings = chunks_to_cohere_embeddings(
             batch_chunks, cohere_client, cohere_model
         )
-        embed_time = time.time() - embed_start
+        dense_time = time.time() - embed_start
 
-        # Calculate embedding size
+        # Embed with BM25 (sparse)
+        sparse_start = time.time()
+        sparse_embeddings = chunks_to_bm25_embeddings(
+            batch_chunks, sparse_embedding_model
+        )
+        sparse_time = time.time() - sparse_start
+
+        # Calculate embedding sizes
         dense_dim = len(dense_embeddings[0].vector) if dense_embeddings else 0
+        avg_sparse_dims = (
+            sum(len(e.vector.indices) for e in sparse_embeddings)
+            / len(sparse_embeddings)
+            if sparse_embeddings
+            else 0
+        )
 
-        print(f"1. Cohere embeddings: {embed_time:.2f}s")
-        print(f"   Dense dim: {dense_dim}")
+        embed_time = dense_time + sparse_time
+        print(
+            f"1. Embeddings: {embed_time:.2f}s (dense: {dense_time:.2f}s, sparse: {sparse_time:.2f}s)"
+        )
+        print(f"   Dense dim: {dense_dim}, Avg sparse dims: {avg_sparse_dims:.0f}")
 
-        # Build points (without sparse embeddings)
+        # Build points with both dense and sparse embeddings
         build_start = time.time()
         points = []
-        for chunk, dense_emb in zip(batch_chunks, dense_embeddings):
+        for chunk, dense_emb, sparse_emb in zip(
+            batch_chunks, dense_embeddings, sparse_embeddings
+        ):
             from qdrant_client.models import PointStruct
 
             points.append(
                 PointStruct(
                     id=str(chunk.id),
-                    vector={"dense": dense_emb.vector},
+                    vector={"dense": dense_emb.vector, "sparse": sparse_emb.vector},
                     payload=chunk.model_dump(exclude={"id"}),
                 )
             )
