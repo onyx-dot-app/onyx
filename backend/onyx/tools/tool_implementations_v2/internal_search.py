@@ -3,6 +3,7 @@ from typing import cast
 from agents import function_tool
 from agents import RunContextWrapper
 
+from onyx.agents.agent_search.dr.models import InferenceSection
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
@@ -29,7 +30,7 @@ def _internal_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
     search_tool: SearchTool,
-) -> list:
+) -> list[InferenceSection]:
     """Core internal search logic that can be tested with dependency injection"""
     if search_tool is None:
         raise RuntimeError("Search tool not available in context")
@@ -62,7 +63,7 @@ def _internal_search_core(
 
     def execute_single_query(query: str, parallelization_nr: int) -> list:
         """Execute a single query and return the retrieved documents"""
-        retrieved_docs_for_query: list = []
+        retrieved_docs_for_query: list[InferenceSection] = []
 
         with get_session_with_current_tenant() as search_db_session:
             for tool_response in search_tool.run(
@@ -130,7 +131,7 @@ def _internal_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_retrieved_docs: list = []
+    all_retrieved_docs: list[InferenceSection] = []
     for result_id in search_results_dict:
         retrieved_docs = search_results_dict[result_id]
         if retrieved_docs:
@@ -160,25 +161,25 @@ def internal_search_tool(
     ## Args
     - queries (list[str]): The search queries.
 
-    ## Returns (JSON string)
-    [
-        {
-           "center_chunk": {
-            "title": "...",
-                "link": "...",
-                "author": "...",
-                "published_date": "2025-10-01T12:34:56Z"
-            },
-            "chunks": [
-                {
-                    "content": "...",
-                    "link": "...",
-                    "author": "...",
-                    "published_date": "2025-10-01T12:34:56Z"
-                }
-            ]
-        }
-    ]
+    ## Returns (list of InferenceSection objects as string)
+    Each InferenceSection contains:
+    - center_chunk: The main InferenceChunk with fields like:
+        - document_id: Unique document identifier
+        - chunk_id: Chunk index within document
+        - semantic_identifier: Human-readable document name
+        - title: Document title (may be None)
+        - source_links: List of URLs to the source
+        - blurb: Text excerpt from the chunk
+        - content: Full chunk content
+        - source_type: Type of document source (e.g., web, confluence, etc.)
+        - metadata: Additional document metadata
+        - updated_at: When document was last updated
+        - primary_owners: List of primary document owners
+        - secondary_owners: List of secondary document owners
+        - score: Relevance score
+        - match_highlights: Highlighted matching text snippets
+    - chunks: List of InferenceChunk objects (context chunks around center_chunk)
+    - combined_content: Merged text content from all chunks in the section
     """
     search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
 
