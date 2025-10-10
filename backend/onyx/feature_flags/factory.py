@@ -26,4 +26,4 @@ def get_default_feature_flag_provider() -> FeatureFlagProvider:
             fallback=lambda: NoOpFeatureFlagProvider(),
         )
         return provider_class()
-    return
+    return NoOpFeatureFlagProvider()
