@@ -1,24 +1,81 @@
-from collections.abc import Sequence
-from datetime import datetime, timezone
+from fastapi import HTTPException
+from sqlalchemy import select, Select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
-from fastapi import HTTPException, status
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
-
-from onyx.db.models import User, Validator, Persona__Validator
+from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.db.models import (
+    User,
+    Validator,
+)
 from onyx.server.features.guardrails.core.schemas_validator import (
     ValidatorCreate,
     ValidatorUpdate,
 )
 
+def _add_user_filters(
+    stmt: Select,
+    user: User | None,
+) -> Select:
+    """Применяет фильтры к запросу валидаторов (проверка прав доступа)"""
 
-def get_validators_templates(db_session: Session) -> Sequence[Validator]:
-    """Получить список шаблонов валидаторов"""
+    # ADMIN и GLOBAL_CURATOR видят все валидаторы
+    admin_roles = [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
+    if (user is None and DISABLE_AUTH) or (user and user.role in admin_roles):
+        return stmt
 
-    stmt = select(Validator).where(Validator.user_id.is_(None))
-    validators_templates: Sequence[Validator] = db_session.scalars(stmt).all()
+    # убирает дублирующие строки
+    stmt = stmt.distinct()
 
-    return validators_templates
+    # CURATOR видит только свои валидаторы
+    where_clause = Validator.user_id == user.id
+
+    return stmt.where(where_clause)
+
+
+def get_validator_by_id_for_user(
+    db_session: Session,
+    validator_id: int,
+    user: User | None,
+) -> Validator:
+    """Получает пользовательский валидатор по ID
+    с предварительной проверкой прав доступа"""
+
+    stmt = (
+        select(Validator)
+        .where(Validator.id == validator_id)
+        .options(
+            joinedload(Validator.user),
+        )
+    )
+
+    stmt = _add_user_filters(stmt=stmt, user=user)
+    validator = db_session.scalars(stmt).one_or_none()
+
+    if not validator:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Валидатор с ID {validator_id} не найден или у вас нет прав доступа.",
+        )
+
+    return validator
+
+
+def get_validators_for_user(
+    db_session: Session,
+    user: User | None,
+) -> list[Validator]:
+    """Получает список пользовательских валидаторов
+    с предварительной проверкой прав доступа
+    """
+
+    stmt = select(Validator).options(
+        joinedload(Validator.user),
+    ).where(Validator.user_id.is_not(None))
+
+    stmt = _add_user_filters(stmt=stmt, user=user)
+    return list(db_session.scalars(stmt).unique().all())
 
 
 def create_validator(
@@ -26,78 +83,81 @@ def create_validator(
     user: User | None,
     validator_create: ValidatorCreate,
 ) -> Validator:
-    """Создать валидатор"""
+    """Создает новый валидатор"""
 
-    validator = Validator(
-        user_id=user.id,
+    new_validator = Validator(
         name=validator_create.name,
         description=validator_create.description,
         validator_type=validator_create.validator_type,
         config=validator_create.config,
+        user_id=user.id,
     )
 
-    db_session.add(validator)
-    db_session.commit()
+    try:
+        db_session.add(new_validator)
+        db_session.commit()
+    except IntegrityError as e:
+        db_session.rollback()
+        if "uq_validator_name" in str(e):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Валидатор с таким названием уже существует!"
+            )
 
-    return validator
-
-
-def get_validators(db_session: Session) -> Sequence[Validator]:
-    """Получить список пользовательских валидаторов"""
-
-    stmt = select(Validator).where(Validator.user_id.is_not(None))
-    validators_templates: Sequence[Validator] = db_session.scalars(stmt).all()
-
-    return validators_templates
+    return new_validator
 
 
 def update_validator(
     db_session: Session,
+    user: User | None,
     validator_id: int,
     validator_update: ValidatorUpdate,
-) -> Validator | None:
-    """Обновить валидатор"""
+) -> Validator:
+    """Обновляет существующий валидатор
+    с предварительной проверкой прав доступа
+    """
 
-    validator = get_validator_by_id(
-        db_session=db_session, validator_id=validator_id
+    validator = get_validator_by_id_for_user(
+        db_session=db_session, validator_id=validator_id, user=user
     )
 
     validator.name = validator_update.name
     validator.description = validator_update.description
     validator.config = validator_update.config
-    validator.updated_at = datetime.now(timezone.utc)
 
-    db_session.commit()
+    try:
+        db_session.commit()
+        db_session.refresh(validator)
+    except IntegrityError as e:
+        db_session.rollback()
+        if "uq_validator_name" in str(e):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Валидатор с таким названием уже существует!"
+            )
 
     return validator
 
 
 def delete_validator(
-    db_session: Session, validator_id: int
+    db_session: Session,
+    user: User | None,
+    validator_id: int,
 ) -> None:
-    """Удалить валидатор по ID"""
+    """Удаляет валидатор с предварительной проверкой прав доступа"""
 
-    stmt = delete(Validator).where(Validator.id == validator_id)
-    db_session.execute(stmt)
-
-    stmt = delete(Persona__Validator).where(Persona__Validator.validator_id == validator_id)
-    db_session.execute(stmt)
-
+    validator = get_validator_by_id_for_user(
+        db_session=db_session, validator_id=validator_id, user=user
+    )
+    db_session.delete(validator)
     db_session.commit()
 
 
-def get_validator_by_id(
-    db_session: Session, validator_id: int
-) -> Validator | None:
-    """Получить валидатор по ID"""
+def get_validators_templates(db_session: Session) -> list[Validator]:
+    """Получает список системных шаблонов валидаторов"""
 
-    stmt = select(Validator).where(Validator.id == validator_id)
-    validator = db_session.scalars(stmt).one_or_none()
-
-    if validator is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Validator with ID {validator_id} not found",
-        )
-
-    return validator
+    return list(
+        db_session.scalars(
+            select(Validator).where(Validator.user_id.is_(None))
+        ).all()
+    )

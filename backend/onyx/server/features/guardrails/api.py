@@ -37,6 +37,7 @@ def get_validators_templates(
 @router.post(
     "/validators",
     summary="Создать валидатор",
+    response_model=ValidatorResponse,
 )
 def create_validator(
     validator_create: ValidatorCreate,
@@ -66,8 +67,8 @@ def get_validators(
 
     return [
         ValidatorResponse.from_model(validator)
-        for validator in crud_validator.get_validators(
-            db_session=db_session,
+        for validator in crud_validator.get_validators_for_user(
+            db_session=db_session, user=user
         )
     ]
 
@@ -75,6 +76,7 @@ def get_validators(
 @router.put(
     "/validators/{validator_id}",
     summary="Обновить валидатор",
+    response_model=ValidatorResponse,
 )
 def update_validator(
     validator_id: Annotated[int, Path(ge=1)],
@@ -86,6 +88,7 @@ def update_validator(
 
     validator = crud_validator.update_validator(
         db_session=db_session,
+        user=user,
         validator_id=validator_id,
         validator_update=validator_update
     )
@@ -96,6 +99,7 @@ def update_validator(
 @router.delete(
     "/validators/{validator_id}",
     summary="Удалить валидатор по ID",
+    status_code=204,
 )
 def delete_validator_by_id(
     validator_id: Annotated[int, Path(ge=1)],
@@ -105,13 +109,14 @@ def delete_validator_by_id(
     """Удалить валидатор по ID"""
 
     crud_validator.delete_validator(
-        db_session=db_session, validator_id=validator_id
+        db_session=db_session, user=user, validator_id=validator_id
     )
 
 
 @router.get(
     "/validators/{validator_id}",
     summary="Получить валидатор по ID",
+    response_model=ValidatorResponse,
 )
 def get_validator_by_id(
     validator_id: int,
@@ -120,10 +125,11 @@ def get_validator_by_id(
 ) -> ValidatorResponse:
     """Получить валидатор по ID"""
 
-    validator = crud_validator.get_validator_by_id(
-        db_session=db_session, validator_id=validator_id
+    validator = crud_validator.get_validator_by_id_for_user(
+        db_session=db_session,
+        validator_id=validator_id,
+        user=user,
     )
 
     return ValidatorResponse.from_model(validator)
-
 

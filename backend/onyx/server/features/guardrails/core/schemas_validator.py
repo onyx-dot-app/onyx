@@ -79,6 +79,7 @@ class ValidatorResponse(BaseModel):
         description="Настройки валидатора в формате JSON",
         examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
     )
+
     created_at: datetime = Field(
         description="Дата создания валидатора",
         examples=["2025-10-06 15:25:15.695 +0300"]

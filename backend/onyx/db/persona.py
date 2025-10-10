@@ -37,6 +37,7 @@ from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.models import Validator
+from onyx.db import crud_validator
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
