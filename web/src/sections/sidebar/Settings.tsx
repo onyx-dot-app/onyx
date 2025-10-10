@@ -202,8 +202,8 @@ export default function Settings({
             icon={({ className }) => (
               <Avatar
                 className={cn(
-                  className,
-                  "flex items-center justify-center bg-background-neutral-inverted-00"
+                  "flex items-center justify-center bg-background-neutral-inverted-00",
+                  className
                 )}
               >
                 <Text inverted secondaryBody>
