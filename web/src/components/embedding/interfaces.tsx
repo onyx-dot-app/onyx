@@ -280,7 +280,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       {
         provider_type: EmbeddingProvider.GOOGLE,
         model_name: "text-embedding-005",
-        description: "Google's most recent text embedding model.",
+        description: "Smaller, lighter-weight embedding model from Google.",
         pricePerMillion: 0.025,
         model_dim: 768,
         normalize: false,
