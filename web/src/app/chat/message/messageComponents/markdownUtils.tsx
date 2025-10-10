@@ -79,6 +79,15 @@ export const useMarkdownComponents = (
       b: ({ node, className, children }: any) => {
         return <span className={className}>{children}</span>;
       },
+      ul: ({ node, className, children }: any) => {
+        return <ul className={`${className} text-text-05`}>{children}</ul>;
+      },
+      ol: ({ node, className, children }: any) => {
+        return <ol className={`${className} text-text-05`}>{children}</ol>;
+      },
+      li: ({ node, className, children }: any) => {
+        return <li className={className}>{children}</li>;
+      },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(node, processedContent, children);
 
