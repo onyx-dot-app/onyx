@@ -712,9 +712,9 @@ def sample_messages() -> list[dict]:
 def test_fast_chat_turn_basic(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id: Any,
-    message_id: Any,
-    research_type: Any,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> None:
     """Test that makes sure basic end to end functionality of our
     fast agent chat turn works.
@@ -733,9 +733,9 @@ def test_fast_chat_turn_catch_exception(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
     fake_failing_model: Model,
-    chat_session_id: Any,
-    message_id: Any,
-    research_type: Any,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> None:
     """Test that makes sure exceptions in our agent background thread are propagated properly.
     RuntimeWarning: coroutine 'FakeFailingModel.stream_response.<locals>._gen' was never awaited
@@ -759,9 +759,9 @@ def test_fast_chat_turn_catch_exception(
 def test_fast_chat_turn_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id: Any,
-    message_id: Any,
-    research_type: Any,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> None:
     """Test that cancellation via set_fence works correctly.
 
@@ -794,9 +794,9 @@ def test_fast_chat_turn_cancellation(
 def test_fast_chat_turn_tool_call_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id: Any,
-    message_id: Any,
-    research_type: Any,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> None:
     """Test that cancellation via set_fence works correctly during tool calls.
 
@@ -960,9 +960,9 @@ class FakeCitationModelWithContext(StreamableFakeModel):
 def test_fast_chat_turn_citation_processing(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id: Any,
-    message_id: Any,
-    research_type: Any,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> None:
     """Test that citation processing works correctly when iteration answers contain cited documents.
 
