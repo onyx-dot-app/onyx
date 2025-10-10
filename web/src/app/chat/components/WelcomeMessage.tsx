@@ -31,9 +31,9 @@ export default function WelcomeMessage() {
         {isDefaultAgent ? (
           <div
             data-testid="onyx-logo"
-            className="flex flex-col items-center gap-spacing-paragraph"
+            className="flex flex-row items-center gap-spacing-paragraph"
           >
-            <Logo size="large" />
+            <Logo size="default" />
             <Text headingH2>{greeting}</Text>
           </div>
         ) : (
