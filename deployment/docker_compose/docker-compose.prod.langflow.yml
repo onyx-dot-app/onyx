@@ -432,7 +432,7 @@ services:
           memory: '128M'
 
   langflow:
-    image: langflowai/langflow:1.6.4
+    build: .
     container_name: Langflow
     user: root
     ports:
