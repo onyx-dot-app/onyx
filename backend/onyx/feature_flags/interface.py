@@ -61,5 +61,4 @@ class NoOpFeatureFlagProvider(FeatureFlagProvider):
         user_id: UUID,
         user_properties: dict[str, Any] | None = None,
     ) -> bool:
-        """Always returns False."""
         return False

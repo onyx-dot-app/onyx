@@ -4,7 +4,6 @@ from uuid import UUID
 from ee.onyx.utils.posthog_client import posthog
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -34,11 +33,7 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
 
         Returns:
             True if the feature is enabled for the user, False otherwise.
-            Always returns False if not in multi-tenant mode.
         """
-        if not MULTI_TENANT:
-            return False
-
         try:
             posthog.set(
                 distinct_id=user_id,
