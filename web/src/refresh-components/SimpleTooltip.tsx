@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Truncated from "./Truncated";
+import Text from "@/refresh-components/Text";
 
 export interface SimpleTooltipProps {
   tooltip?: string;
@@ -25,17 +25,15 @@ export default function SimpleTooltip({
     tooltip ?? (typeof children === "string" ? children : undefined);
 
   // If no hover content, just render children without tooltip
-  if (!hoverContent) {
-    return <>{children}</>;
-  }
+  if (!hoverContent) return <>{children}</>;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div>{children}</div>
       </TooltipTrigger>
-      <TooltipContent>
-        <Truncated inverted>{hoverContent}</Truncated>
+      <TooltipContent side="right">
+        <Text inverted>{hoverContent}</Text>
       </TooltipContent>
     </Tooltip>
   );

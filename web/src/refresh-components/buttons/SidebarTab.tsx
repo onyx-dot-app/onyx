@@ -3,7 +3,7 @@
 import React from "react";
 import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/Text";
+import Truncated from "@/refresh-components/Truncated";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 const textClasses = (active: boolean | undefined) =>
@@ -47,7 +47,7 @@ export interface SidebarTabProps {
   iconClassName?: string;
   leftIcon?: React.FunctionComponent<SvgProps>;
   rightChildren?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export default function SidebarTab({
@@ -99,9 +99,9 @@ export default function SidebarTab({
           {!folded && (
             <div className={cn("flex-1 text-left")}>
               {typeof children === "string" ? (
-                <Text className={cn(textClasses(active)[variant])}>
+                <Truncated className={cn(textClasses(active)[variant])} disable>
                   {children}
-                </Text>
+                </Truncated>
               ) : (
                 children
               )}
