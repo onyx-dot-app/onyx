@@ -97,7 +97,7 @@ interface ActionItemProps {
   hasNoConnectors?: boolean;
 }
 
-export function ActionItem({
+function ActionItem({
   tool,
   Icon: ProvidedIcon,
   label: providedLabel,

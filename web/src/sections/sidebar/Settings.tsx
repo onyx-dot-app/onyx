@@ -100,13 +100,11 @@ function SettingsPopover({
               Curator Panel
             </NavigationTab>
           ),
-          <NavigationTab
-            key="user-settings"
-            icon={SvgUser}
-            onClick={onUserSettingsClick}
-          >
-            User Settings
-          </NavigationTab>,
+          <div key="user-settings" data-testid="Settings/user-settings">
+            <NavigationTab icon={SvgUser} onClick={onUserSettingsClick}>
+              User Settings
+            </NavigationTab>
+          </div>,
           <NavigationTab
             key="notifications"
             icon={SvgBell}
@@ -190,53 +188,51 @@ export default function Settings({
   const username = getUsernameFromEmail(user?.email);
 
   return (
-    <>
-      <Popover
-        open={!!popupState}
-        onOpenChange={(state) =>
-          state ? setPopupState("Settings") : setPopupState(undefined)
-        }
-      >
-        <PopoverTrigger asChild>
-          <div className="flex flex-col w-full h-full">
-            <NavigationTab
-              className="!w-full"
-              icon={({ className }) => (
-                <Avatar
-                  className={cn(
-                    "flex items-center justify-center bg-background-neutral-inverted-00",
-                    className
-                  )}
-                >
-                  <Text inverted secondaryBody>
-                    {username[0]?.toUpperCase()}
-                  </Text>
-                </Avatar>
-              )}
-              active={!!popupState}
-              folded={folded}
-              highlight
-            >
-              {username}
-            </NavigationTab>
-          </div>
-        </PopoverTrigger>
-        <PopoverContent align="end" side="right">
-          {popupState === "Settings" && (
-            <SettingsPopover
-              removeAdminPanelLink={removeAdminPanelLink}
-              onUserSettingsClick={() => {
-                setPopupState(undefined);
-                setShowUserSettingsModal(true);
-              }}
-              onNotificationsClick={() => setPopupState("Notifications")}
-            />
-          )}
-          {popupState === "Notifications" && (
-            <NotificationsPopover onClose={() => setPopupState("Settings")} />
-          )}
-        </PopoverContent>
-      </Popover>
-    </>
+    <Popover
+      open={!!popupState}
+      onOpenChange={(state) =>
+        state ? setPopupState("Settings") : setPopupState(undefined)
+      }
+    >
+      <PopoverTrigger asChild>
+        <div className="flex flex-col w-full h-full" id="onyx-user-dropdown">
+          <NavigationTab
+            className="!w-full"
+            icon={({ className }) => (
+              <Avatar
+                className={cn(
+                  "flex items-center justify-center bg-background-neutral-inverted-00",
+                  className
+                )}
+              >
+                <Text inverted secondaryBody>
+                  {username[0]?.toUpperCase()}
+                </Text>
+              </Avatar>
+            )}
+            active={!!popupState}
+            folded={folded}
+            highlight
+          >
+            {username}
+          </NavigationTab>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent align="end" side="right">
+        {popupState === "Settings" && (
+          <SettingsPopover
+            removeAdminPanelLink={removeAdminPanelLink}
+            onUserSettingsClick={() => {
+              setPopupState(undefined);
+              setShowUserSettingsModal(true);
+            }}
+            onNotificationsClick={() => setPopupState("Notifications")}
+          />
+        )}
+        {popupState === "Notifications" && (
+          <NotificationsPopover onClose={() => setPopupState("Settings")} />
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

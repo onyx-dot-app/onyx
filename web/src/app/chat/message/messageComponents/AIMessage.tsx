@@ -37,8 +37,9 @@ import LLMPopover from "@/refresh-components/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
 import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
-import { FeedbackModal } from "../../components/modal/FeedbackModal";
+import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { FeedbackType } from "@/app/chat/interfaces";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -58,8 +59,8 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
-  const { toggle, ModalProvider } = createModalProvider();
-  const { popup, setPopup } = usePopup();
+  const feedbackModal = createModalProvider();
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>("like");
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -217,6 +218,7 @@ export default function AIMessage({
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
+  const { popup, setPopup } = usePopup();
 
   const groupedPackets = groupedPacketsRef.current;
 
@@ -225,13 +227,13 @@ export default function AIMessage({
     <>
       {popup}
 
-      <ModalProvider small>
+      <feedbackModal.ModalProvider>
         <FeedbackModal
-          setPopup={setPopup}
-          feedbackType="like"
+          feedbackType={feedbackType}
           messageId={nodeId}
+          setPopup={setPopup}
         />
-      </ModalProvider>
+      </feedbackModal.ModalProvider>
 
       <div
         // for e2e tests
@@ -364,31 +366,42 @@ export default function AIMessage({
                               }
                               tertiary
                               tooltip="Copy"
+                              data-testid="AIMessage/copy-button"
                             />
                             <IconButton
                               icon={SvgThumbsUp}
-                              onClick={() => toggle(true)}
+                              onClick={() => {
+                                setFeedbackType("like");
+                                feedbackModal.toggle(true);
+                              }}
                               tertiary
                               tooltip="Good Response"
+                              data-testid="AIMessage/like-button"
                             />
                             <IconButton
                               icon={SvgThumbsDown}
-                              onClick={() => toggle(true)}
+                              onClick={() => {
+                                setFeedbackType("dislike");
+                                feedbackModal.toggle(true);
+                              }}
                               tertiary
                               tooltip="Bad Response"
+                              data-testid="AIMessage/dislike-button"
                             />
 
                             {chatState.regenerate && llmManager && (
-                              <LLMPopover
-                                llmManager={llmManager}
-                                currentModelName={chatState.overriddenModel}
-                                onSelect={(modelName) => {
-                                  const llmDescriptor =
-                                    parseLlmDescriptor(modelName);
-                                  chatState.regenerate!(llmDescriptor);
-                                }}
-                                folded
-                              />
+                              <div data-testid="AIMessage/regenerate">
+                                <LLMPopover
+                                  llmManager={llmManager}
+                                  currentModelName={chatState.overriddenModel}
+                                  onSelect={(modelName) => {
+                                    const llmDescriptor =
+                                      parseLlmDescriptor(modelName);
+                                    chatState.regenerate!(llmDescriptor);
+                                  }}
+                                  folded
+                                />
+                              </div>
                             )}
 
                             {nodeId &&

@@ -67,8 +67,6 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   await advancedOptionsButton.click();
 
   // --- Fill Advanced Fields ---
-  // Enable Knowledge first
-  await getKnowledgeToggle(page).click();
 
   // Reminder
   await getReminderTextarea(page).fill(assistantReminder);
@@ -101,11 +99,10 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
 
   // --- Navigate to Edit Page and Verify Initial Values ---
   // Navigate through the Assistant Explorer modal
-  await page.locator('button[aria-label="Explore Assistants"]').click();
-  await page.waitForSelector('div[aria-label="Assistant Modal"]'); // Wait for modal to appear
+  await page.getByTestId("AppSidebar/more-agents").click();
 
   // Find the assistant card in the modal and scroll to it
-  const modalContent = page.locator('div[aria-label="Assistant Modal"]');
+  const modalContent = page.getByTestId("AgentsModal/container");
   const modalBox = await modalContent.boundingBox();
   if (modalBox) {
     await page.mouse.move(
@@ -116,34 +113,11 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
     await page.mouse.wheel(0, 1000);
     await page.waitForTimeout(500); // Add a small wait after scroll
   }
-  const assistantCard = page.locator(
-    `//div[@aria-label="Assistant Modal"]//*[contains(text(), "${assistantName}") and 
-not(contains(@class, 'invisible'))]`
-  );
-  // Use waitForSelector for robustness instead of expect().toBeVisible()
-  await page.waitForSelector(
-    `//div[@aria-label="Assistant Modal"]//*[contains(text(), "${assistantName}") and 
-not(contains(@class, 'invisible'))]`,
-    { state: "visible", timeout: 10000 }
-  );
 
-  // Try to get any button with "More Options" aria-label or SVG dots in the card
-  const xpath =
-    `//div[contains(.//text(), "${assistantName}")]` +
-    `//button[contains(@aria-label, "More") or ` +
-    `.//svg[contains(@viewBox, "0 0 24 24")]]`;
-  // Wait for the button to be clickable and then click
-  await page
-    .locator(xpath)
-    .first()
-    .waitFor({ state: "visible", timeout: 5000 });
-  await page.locator(xpath).first().click({ force: true }); // force: true might still be needed if overlays exist
+  await page.getByTestId("AgentCard/more").first().click();
 
   // Wait for the popover to appear and click the "Edit" button
-  await page.waitForSelector('button:has-text("Edit"):visible', {
-    timeout: 5000,
-  });
-  const editButton = page.locator('button:has-text("Edit")').first();
+  const editButton = page.getByTestId("AgentCard/edit").first();
   await editButton.click();
 
   // Verify we are on the edit page
@@ -169,10 +143,18 @@ not(contains(@class, 'invisible'))]`,
   );
   await expect(getKnowledgeToggle(page)).toHaveAttribute(
     "aria-checked",
-    "true"
+    "false"
   );
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(knowledgeCutoffDate);
-  await expect(getNumChunksInput(page)).toHaveValue(numChunks);
+  // This should still be 0.
+  //
+  // Since "seeded docs" are disabled, "search" (the "Knowledge" toggle) will be disabled.
+  // Since "search" is disabled, modifying the "num_chunks" will NOT work (the frontend will override the value sent to the backend to be 0).
+  // ```ts
+  // // (AssistantEditor.tsx):
+  // const numChunks = searchToolEnabled ? values.num_chunks || 25 : 0;
+  // ```
+  await expect(getNumChunksInput(page)).toHaveValue("0");
   await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
     "aria-checked",
     "true"
@@ -231,12 +213,14 @@ not(contains(@class, 'invisible'))]`,
   ); // Now disabled
   await expect(getKnowledgeToggle(page)).toHaveAttribute(
     "aria-checked",
-    "true"
+    "false"
   );
   await expect(getKnowledgeCutoffInput(page)).toHaveValue(
     editedKnowledgeCutoffDate
   );
-  await expect(getNumChunksInput(page)).toHaveValue(editedNumChunks);
+
+  // Once again, this will still not work.
+  await expect(getNumChunksInput(page)).toHaveValue("0");
   await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
     "aria-checked",
     "false"

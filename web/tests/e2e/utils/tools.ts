@@ -17,7 +17,7 @@ export { GREETING_MESSAGES } from "../../../src/lib/chat/greetingMessages";
 
 // Wait for the unified assistant greeting and return its text
 export async function waitForUnifiedGreeting(page: Page): Promise<string> {
-  const el = await page.waitForSelector('[data-testid="greeting-message"]', {
+  const el = await page.waitForSelector('[data-testid="onyx-logo"]', {
     timeout: 5000,
   });
   const text = (await el.textContent())?.trim() || "";

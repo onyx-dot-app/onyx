@@ -10,9 +10,11 @@ import { redirect } from "next/navigation";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
 
-const Page = async (props: {
+export interface PageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-}) => {
+}
+
+export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const nextUrl = Array.isArray(searchParams?.next)
@@ -85,6 +87,4 @@ const Page = async (props: {
       </AuthFlowContainer>
     </div>
   );
-};
-
-export default Page;
+}

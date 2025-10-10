@@ -34,6 +34,7 @@ repos:
     hooks:
     - id: prettier
       types_or: [html, css, javascript, ts, tsx]
+      language_version: system
 
   - repo: local
     hooks:
