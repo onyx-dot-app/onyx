@@ -78,7 +78,7 @@ def _web_search_core(
         Packet(
             ind=index,
             obj=SearchToolDelta(
-                type="internal_search_tool_delta", queries=queries, documents=None
+                type="internal_search_tool_delta", queries=queries, documents=[]
             ),
         )
     )
