@@ -386,7 +386,7 @@ export default function ProjectContextPanel({
   if (!currentProjectId) return null; // no selection yet
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
+    <div className="flex flex-col gap-spacing-paragraph w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
       <div
         className="flex items-center gap-2 text-text-04"
         onMouseEnter={() => {
@@ -562,7 +562,7 @@ export default function ProjectContextPanel({
         {visibleFiles.length > 0 ? (
           <>
             {/* Mobile / small screens: just show a button to view files */}
-            <div className="sm:hidden">
+            <div className="sm:hidden mb-spacing-paragraph">
               <button
                 className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
                 onClick={() => toggleModal(ModalIds.ProjectFilesModal, true)}
@@ -582,7 +582,7 @@ export default function ProjectContextPanel({
             </div>
 
             {/* Desktop / larger screens: show previews with optional View All */}
-            <div className="hidden sm:flex gap-spacing-inline relative">
+            <div className="hidden sm:flex gap-spacing-inline relative mb-spacing-paragraph">
               {visibleFiles.slice(0, 4).map((f) => (
                 <div key={f.id} className="w-40">
                   <FileCard

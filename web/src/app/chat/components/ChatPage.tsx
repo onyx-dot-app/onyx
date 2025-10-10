@@ -917,7 +917,7 @@ export function ChatPage({
                       )}
                       <div
                         className={cn(
-                          "flex flex-col items-center justify-center",
+                          "flex flex-col items-center justify-center gap-spacing-paragraph",
                           showCenteredHero && "row-start-2"
                         )}
                       >
