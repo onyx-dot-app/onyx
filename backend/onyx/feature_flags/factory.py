@@ -20,10 +20,9 @@ def get_default_feature_flag_provider() -> FeatureFlagProvider:
         FeatureFlagProvider: The configured feature flag provider instance
     """
     if MULTI_TENANT:
-        provider_class = fetch_versioned_implementation_with_fallback(
+        return fetch_versioned_implementation_with_fallback(
             module="onyx.feature_flags.factory",
             attribute="get_posthog_feature_flag_provider",
             fallback=lambda: NoOpFeatureFlagProvider(),
-        )
-        return provider_class()
+        )()
     return NoOpFeatureFlagProvider()
