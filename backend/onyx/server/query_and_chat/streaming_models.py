@@ -62,7 +62,7 @@ class SearchToolStart(BaseObj):
 class SearchToolDelta(BaseObj):
     type: Literal["internal_search_tool_delta"] = "internal_search_tool_delta"
 
-    queries: list[str] | None = None
+    queries: list[str]
     documents: list[SavedSearchDoc]
 
 

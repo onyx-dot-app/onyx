@@ -88,7 +88,7 @@ def _internal_search_core(
                             ind=index,
                             obj=SearchToolDelta(
                                 type="internal_search_tool_delta",
-                                queries=None,
+                                queries=[],
                                 documents=convert_inference_sections_to_search_docs(
                                     retrieved_docs, is_internet=False
                                 ),
