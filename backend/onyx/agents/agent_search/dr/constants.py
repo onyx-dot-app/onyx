@@ -25,7 +25,7 @@ AVERAGE_TOOL_COSTS: dict[DRPath, float] = {
 }
 
 DR_TIME_BUDGET_BY_TYPE = {
-    ResearchType.THOUGHTFUL: 3.0,
+    ResearchType.THOUGHTFUL: 300.0,
     ResearchType.DEEP: 12.0,
     ResearchType.FAST: 0.5,
 }
