@@ -17,6 +17,9 @@ branch_labels = None
 depends_on = None
 
 
+DELETE_DISABLED_TOOLS_SQL = "DELETE FROM tool WHERE enabled = false"
+
+
 def upgrade() -> None:
     op.add_column(
         "tool",
@@ -37,9 +40,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    tool_table = sa.table("tool", sa.column("enabled", sa.Boolean()))
-    op.execute(
-        tool_table.delete().where(tool_table.c.enabled.is_(False)),
-    )
+    op.execute(DELETE_DISABLED_TOOLS_SQL)
     op.drop_index("ix_tool_mcp_server_enabled", table_name="tool")
     op.drop_column("tool", "enabled")
