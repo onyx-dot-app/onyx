@@ -80,10 +80,10 @@ export const useMarkdownComponents = (
         return <span className={className}>{children}</span>;
       },
       ul: ({ node, className, children }: any) => {
-        return <ul className={`${className} text-text-05`}>{children}</ul>;
+        return <ul className={`text-text-05 ${className}`}>{children}</ul>;
       },
       ol: ({ node, className, children }: any) => {
-        return <ol className={`${className} text-text-05`}>{children}</ol>;
+        return <ol className={`text-text-05 ${className}`}>{children}</ol>;
       },
       li: ({ node, className, children }: any) => {
         return <li className={className}>{children}</li>;
