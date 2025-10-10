@@ -60,7 +60,7 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { UNNAMED_CHAT } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 import ProjectFolder from "@/components/sidebar/Projects";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -138,9 +138,9 @@ interface ChatButtonProps {
 
 function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
   // Modal contexts
-  const deleteConfirmationModal = createModalProvider();
-  const moveCustomAgentModal = createModalProvider();
-  const shareModal = createModalProvider();
+  const deleteConfirmationModal = useModalProvider();
+  const moveCustomAgentModal = useModalProvider();
+  const shareModal = useModalProvider();
 
   const route = useAppRouter();
   const params = useAppParams();
@@ -474,8 +474,8 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const agentsModal = createModalProvider();
-  const createProjectModal = createModalProvider();
+  const agentsModal = useModalProvider();
+  const createProjectModal = useModalProvider();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
   const { projects } = useProjectsContext();

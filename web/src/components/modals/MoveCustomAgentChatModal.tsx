@@ -6,7 +6,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/refresh-components/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface MoveCustomAgentChatModalProps {
   onCancel: () => void;
@@ -18,7 +18,7 @@ export default function MoveCustomAgentChatModal({
   onConfirm,
 }: MoveCustomAgentChatModalProps) {
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
-  const { ModalProvider } = createModalProvider();
+  const { ModalProvider } = useModalProvider();
 
   return (
     <ModalProvider>

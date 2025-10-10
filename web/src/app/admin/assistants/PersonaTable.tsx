@@ -21,7 +21,7 @@ import SvgTrash from "@/icons/trash";
 import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -51,9 +51,9 @@ export function PersonasTable({
   refreshPersonas: () => void;
 }) {
   const { toggle: toggleDeleteModal, ModalProvider: DeleteModalProvider } =
-    createModalProvider();
+    useModalProvider();
   const { toggle: toggleDefaultModal, ModalProvider: DefaultModalProvider } =
-    createModalProvider();
+    useModalProvider();
 
   const router = useRouter();
   const { popup, setPopup } = usePopup();

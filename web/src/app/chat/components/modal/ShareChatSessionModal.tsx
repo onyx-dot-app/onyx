@@ -19,7 +19,7 @@ import SvgShare from "@/icons/share";
 import SvgCopy from "@/icons/copy";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;

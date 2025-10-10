@@ -16,7 +16,7 @@ import { ChatButton } from "@/sections/sidebar/AppSidebar";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 export interface ProjectFolderProps {
   project: Project;
@@ -26,7 +26,7 @@ export default function ProjectFolder({ project }: ProjectFolderProps) {
   const {
     toggle: toggleDeleteConfirmationModal,
     ModalProvider: DeleteConfirmationModalProvider,
-  } = createModalProvider();
+  } = useModalProvider();
 
   const route = useAppRouter();
   const params = useAppParams();

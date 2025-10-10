@@ -2,7 +2,7 @@ import Modal from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/Text";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;
@@ -44,7 +44,7 @@ export function ConfirmEntityModal({
       : "Confirm";
   const actionText = action ? action : danger ? "delete" : "modify";
 
-  const { toggle, ModalProvider } = createModalProvider();
+  const { toggle, ModalProvider } = useModalProvider();
 
   return (
     <ModalProvider>

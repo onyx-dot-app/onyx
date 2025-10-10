@@ -27,7 +27,7 @@ import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -60,7 +60,7 @@ export function ChatSessionMorePopup({
   isVisible = false,
 }: ChatSessionMorePopupProps) {
   const { toggle: toggleDeleteModal, ModalProvider: DeleteModalProvider } =
-    createModalProvider();
+    useModalProvider();
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const { refreshChatSessions } = useChatContext();

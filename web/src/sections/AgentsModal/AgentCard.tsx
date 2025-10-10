@@ -23,7 +23,7 @@ import SvgBarChart from "@/icons/bar-chart";
 import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import Button from "@/refresh-components/buttons/Button";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
@@ -42,7 +42,7 @@ export default function AgentCard({
   const { popup, setPopup } = usePopup();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const [kebabMenuOpen, setKebabMenuOpen] = useState(false);
-  const { toggle, ModalProvider } = createModalProvider();
+  const { toggle, ModalProvider } = useModalProvider();
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
 
   async function confirmDelete() {

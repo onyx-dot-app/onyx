@@ -36,7 +36,7 @@ import SvgThumbsDown from "@/icons/thumbs-down";
 import LLMPopover from "@/refresh-components/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
-import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { FeedbackType } from "@/app/chat/interfaces";
@@ -59,7 +59,7 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
-  const feedbackModal = createModalProvider();
+  const feedbackModal = useModalProvider();
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("like");
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(

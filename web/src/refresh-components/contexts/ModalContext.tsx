@@ -20,7 +20,7 @@ interface CreateModalProviderReturn {
 
 const ModalContext = createContext<UseModalProviderReturn | null>(null);
 
-export function createModalProvider(): CreateModalProviderReturn {
+export function useModalProvider(): CreateModalProviderReturn {
   const [isOpen, setIsOpen] = useState(false);
 
   const toggle = useCallback((state: boolean) => {
