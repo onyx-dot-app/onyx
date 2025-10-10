@@ -14,19 +14,15 @@ import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationMo
 import Button from "@/refresh-components/buttons/Button";
 import { ChatButton } from "@/sections/sidebar/AppSidebar";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import SvgFolderPlus from "@/icons/folder-plus";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
-import {
-  createModalProvider,
-  useModal,
-} from "@/refresh-components/contexts/ModalContext";
+import { createModalProvider } from "@/refresh-components/contexts/ModalContext";
 
-interface ProjectFolderProps {
+export interface ProjectFolderProps {
   project: Project;
 }
 
-function ProjectFolder({ project }: ProjectFolderProps) {
+export default function ProjectFolder({ project }: ProjectFolderProps) {
   const {
     toggle: toggleDeleteConfirmationModal,
     ModalProvider: DeleteConfirmationModalProvider,
@@ -117,23 +113,6 @@ function ProjectFolder({ project }: ProjectFolderProps) {
             project={project}
           />
         ))}
-    </>
-  );
-}
-
-export default function Projects() {
-  const { projects } = useProjectsContext();
-  // const { toggle, } = useModal();
-
-  return (
-    <>
-      {projects.map((project) => (
-        <ProjectFolder key={project.id} project={project} />
-      ))}
-
-      <NavigationTab icon={SvgFolderPlus} onClick={() => {}} lowlight>
-        New Project
-      </NavigationTab>
     </>
   );
 }

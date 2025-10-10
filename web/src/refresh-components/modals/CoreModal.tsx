@@ -1,15 +1,26 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom";
 import { MODAL_ROOT_ID } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+const sizeClasses = {
+  medium: "w-[64rem] h-[80dvh]",
+  small: "w-[30rem]",
+} as const;
+
 export interface CoreModalProps {
+  medium?: boolean;
+  small?: boolean;
+
   onClickOutside?: () => void;
   className?: string;
   children?: React.ReactNode;
 }
 
 export default function CoreModal({
+  medium,
+  small,
+
   onClickOutside,
   className,
   children,
@@ -17,12 +28,11 @@ export default function CoreModal({
   const insideModal = React.useRef(false);
   const modalRef = React.useRef<HTMLDivElement>(null);
 
-  // Focus this `CoreModal` component when it mounts.
-  // This is important, becaues it causes open popovers or things of the sort to CLOSE automatically (this is desired behaviour).
-  // The current `Popover` will always close when another DOM node is focused on!
-  React.useEffect(() => {
-    if (!modalRef.current) return;
-    modalRef.current.focus();
+  useEffect(() => {
+    // Focus the modal on mount for accessibility
+    if (modalRef.current) {
+      modalRef.current.focus();
+    }
   }, []);
 
   // This must always exist.
@@ -31,6 +41,8 @@ export default function CoreModal({
     throw new Error(
       `A root div wrapping all children with the id ${MODAL_ROOT_ID} must exist, but was not found. This is an error. Go to "web/src/app/layout.tsx" and add a wrapper div with that id around the {children} invocation`
     );
+
+  const size = medium ? "medium" : small ? "small" : "small";
 
   const modalContent = (
     <div
@@ -41,6 +53,7 @@ export default function CoreModal({
         ref={modalRef}
         className={cn(
           "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00",
+          sizeClasses[size],
           className
         )}
         onMouseOver={() => (insideModal.current = true)}

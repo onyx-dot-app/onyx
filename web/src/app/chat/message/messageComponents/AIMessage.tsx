@@ -225,7 +225,7 @@ export default function AIMessage({
     <>
       {popup}
 
-      <ModalProvider>
+      <ModalProvider small>
         <FeedbackModal
           setPopup={setPopup}
           feedbackType="like"
