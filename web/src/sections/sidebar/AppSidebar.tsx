@@ -540,11 +540,11 @@ function AppSidebarInner() {
 
   return (
     <>
-      <agentsModal.ModalProvider>
+      <agentsModal.ModalProvider medium>
         <AgentsModal />
       </agentsModal.ModalProvider>
 
-      <createProjectModal.ModalProvider small>
+      <createProjectModal.ModalProvider>
         <CreateProjectModal />
       </createProjectModal.ModalProvider>
 

@@ -11,7 +11,7 @@ interface ConfirmationModalContentProps {
   title: string;
   children?: React.ReactNode;
 
-  submit: React.ReactNode;
+  submit?: React.ReactNode;
   hideCancel?: boolean;
   onCancel?: () => void;
 }

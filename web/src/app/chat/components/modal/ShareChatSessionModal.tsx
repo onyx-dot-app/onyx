@@ -119,7 +119,8 @@ export default function ShareChatSessionModal({
       <ConfirmationModalContent
         icon={SvgShare}
         title="Share Chat"
-        submit={<Button>Share</Button>}
+        onCancel={onClose}
+        hideCancel
       >
         {shareLink ? (
           <div>
