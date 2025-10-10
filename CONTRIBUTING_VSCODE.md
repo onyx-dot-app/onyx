@@ -21,6 +21,9 @@ Before starting, make sure the Docker Daemon is running.
 5. You can set breakpoints by clicking to the left of line numbers to help debug while the app is running
 6. Use the debug toolbar to step through code, inspect variables, etc.
 
+Note: Clear and Restart External Volumes and Containers will reset your postgres and Vespa (relational-db and index).
+Only run this if you are okay with wiping your data.
+
 ## Features
 
 - Hot reload is enabled for the web server and API servers

@@ -22,7 +22,6 @@ from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import convert_attachment_to_content
 from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -250,9 +249,26 @@ class ConfluenceConnector(
         page_query += " order by lastmodified asc"
         return page_query
 
-    def _construct_attachment_query(self, confluence_page_id: str) -> str:
+    def _construct_attachment_query(
+        self,
+        confluence_page_id: str,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> str:
         attachment_query = f"type=attachment and container='{confluence_page_id}'"
         attachment_query += self.cql_label_filter
+        # Add time filters to avoid reprocessing unchanged attachments during refresh
+        if start:
+            formatted_start_time = datetime.fromtimestamp(
+                start, tz=self.timezone
+            ).strftime("%Y-%m-%d %H:%M")
+            attachment_query += f" and lastmodified >= '{formatted_start_time}'"
+        if end:
+            formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            attachment_query += f" and lastmodified <= '{formatted_end_time}'"
+        attachment_query += " order by lastmodified asc"
         return attachment_query
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
@@ -306,41 +322,8 @@ class ConfluenceConnector(
                 sections.append(
                     TextSection(text=comment_text, link=f"{page_url}#comments")
                 )
-
-            # Process attachments
-            if "children" in page and "attachment" in page["children"]:
-                attachments = self.confluence_client.get_attachments_for_page(
-                    page_id, expand="metadata"
-                )
-
-                for attachment in attachments.get("results", []):
-                    # Process each attachment
-                    result = process_attachment(
-                        self.confluence_client,
-                        attachment,
-                        page_id,
-                        self.allow_images,
-                    )
-
-                    if result and result.text:
-                        # Create a section for the attachment text
-                        attachment_section = TextSection(
-                            text=result.text,
-                            link=f"{page_url}#attachment-{attachment['id']}",
-                        )
-                        sections.append(attachment_section)
-                    elif result and result.file_name:
-                        # Create an ImageSection for image attachments
-                        image_section = ImageSection(
-                            link=f"{page_url}#attachment-{attachment['id']}",
-                            image_file_id=result.file_name,
-                        )
-                        sections.append(image_section)
-                    else:
-                        logger.warning(
-                            f"Error processing attachment '{attachment.get('title')}':",
-                            f"{result.error if result else 'Unknown error'}",
-                        )
+            # Note: attachments are no longer merged into the page document.
+            # They are indexed as separate documents downstream.
 
             # Extract metadata
             metadata = {}
@@ -389,9 +372,20 @@ class ConfluenceConnector(
             )
 
     def _fetch_page_attachments(
-        self, page: dict[str, Any], doc: Document
-    ) -> Document | ConnectorFailure:
-        attachment_query = self._construct_attachment_query(page["id"])
+        self,
+        page: dict[str, Any],
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> tuple[list[Document], list[ConnectorFailure]]:
+        """
+        Inline attachments are added directly to the document as text or image sections by
+        this function. The returned documents/connectorfailures are for non-inline attachments
+        and those at the end of the page.
+        """
+        attachment_query = self._construct_attachment_query(page["id"], start, end)
+        attachment_failures: list[ConnectorFailure] = []
+        attachment_docs: list[Document] = []
+        page_url = ""
 
         for attachment in self.confluence_client.paginated_cql_retrieval(
             cql=attachment_query,
@@ -420,11 +414,17 @@ class ConfluenceConnector(
             logger.info(
                 f"Processing attachment: {attachment['title']} attached to page {page['title']}"
             )
-
-            # Attempt to get textual content or image summarization:
-            object_url = build_confluence_document_id(
-                self.wiki_base, attachment["_links"]["webui"], self.is_cloud
-            )
+            # Attachment document id: use the download URL for stable identity
+            try:
+                object_url = build_confluence_document_id(
+                    self.wiki_base, attachment["_links"]["download"], self.is_cloud
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Invalid attachment url for id {attachment['id']}, skipping"
+                )
+                logger.debug(f"Error building attachment url: {e}")
+                continue
             try:
                 response = convert_attachment_to_content(
                     confluence_client=self.confluence_client,
@@ -437,38 +437,76 @@ class ConfluenceConnector(
 
                 content_text, file_storage_name = response
 
+                sections: list[TextSection | ImageSection] = []
                 if content_text:
-                    doc.sections.append(
-                        TextSection(
-                            text=content_text,
-                            link=object_url,
-                        )
-                    )
+                    sections.append(TextSection(text=content_text, link=object_url))
                 elif file_storage_name:
-                    doc.sections.append(
-                        ImageSection(
-                            link=object_url,
-                            image_file_id=file_storage_name,
-                        )
+                    sections.append(
+                        ImageSection(link=object_url, image_file_id=file_storage_name)
                     )
+
+                # Build attachment-specific metadata
+                attachment_metadata: dict[str, str | list[str]] = {}
+                if "space" in attachment:
+                    attachment_metadata["space"] = attachment["space"].get("name", "")
+                labels: list[str] = []
+                if "metadata" in attachment and "labels" in attachment["metadata"]:
+                    for label in attachment["metadata"]["labels"].get("results", []):
+                        labels.append(label.get("name", ""))
+                if labels:
+                    attachment_metadata["labels"] = labels
+                page_url = page_url or build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                )
+                attachment_metadata["parent_page_id"] = page_url
+                attachment_id = build_confluence_document_id(
+                    self.wiki_base, attachment["_links"]["webui"], self.is_cloud
+                )
+
+                primary_owners: list[BasicExpertInfo] | None = None
+                if "version" in attachment and "by" in attachment["version"]:
+                    author = attachment["version"]["by"]
+                    display_name = author.get("displayName", "Unknown")
+                    email = author.get("email", "unknown@domain.invalid")
+                    primary_owners = [
+                        BasicExpertInfo(display_name=display_name, email=email)
+                    ]
+
+                attachment_doc = Document(
+                    id=attachment_id,
+                    sections=sections,
+                    source=DocumentSource.CONFLUENCE,
+                    semantic_identifier=attachment.get("title", object_url),
+                    metadata=attachment_metadata,
+                    doc_updated_at=(
+                        datetime_from_string(attachment["version"]["when"])
+                        if attachment.get("version")
+                        and attachment["version"].get("when")
+                        else None
+                    ),
+                    primary_owners=primary_owners,
+                )
+                attachment_docs.append(attachment_doc)
             except Exception as e:
                 logger.error(
                     f"Failed to extract/summarize attachment {attachment['title']}",
                     exc_info=e,
                 )
-                if is_atlassian_date_error(
-                    e
-                ):  # propagate error to be caught and retried
+                if is_atlassian_date_error(e):
+                    # propagate error to be caught and retried
                     raise
-                return ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=doc.id,
-                        document_link=object_url,
-                    ),
-                    failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {doc.id}",
-                    exception=e,
+                attachment_failures.append(
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=object_url,
+                            document_link=object_url,
+                        ),
+                        failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {object_url}",
+                        exception=e,
+                    )
                 )
-        return doc
+
+        return attachment_docs, attachment_failures
 
     def _fetch_document_batches(
         self,
@@ -507,11 +545,17 @@ class ConfluenceConnector(
             if isinstance(doc_or_failure, ConnectorFailure):
                 yield doc_or_failure
                 continue
-            # Now get attachments for that page:
-            doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
 
             # yield completed document (or failure)
             yield doc_or_failure
+
+            # Now get attachments for that page:
+            attachment_docs, attachment_failures = self._fetch_page_attachments(
+                page, start, end
+            )
+            # yield attached docs and failures
+            yield from attachment_docs
+            yield from attachment_failures
 
             # Create checkpoint once a full page of results is returned
             if checkpoint.next_page_url and checkpoint.next_page_url != page_query_url:

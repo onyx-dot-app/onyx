@@ -109,6 +109,10 @@ class VespaDocumentFields:
     hidden: bool | None = None
     aggregated_chunk_boost_factor: float | None = None
 
+    # document_id is added for migration purposes, ideally we should not be updating this field
+    # TODO(subash): remove this field in a future migration
+    document_id: str | None = None
+
 
 @dataclass
 class VespaDocumentUserFields:

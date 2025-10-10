@@ -4,6 +4,7 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
+import { ChatModalProvider } from "@/refresh-components/contexts/ChatModalContext";
 
 export default async function Layout({
   children,
@@ -59,12 +60,14 @@ export default async function Layout({
         shouldShowWelcomeModal={shouldShowWelcomeModal}
         defaultAssistantId={defaultAssistantId}
       >
-        <ProjectsProvider initialProjects={projects}>
-          <div className="flex flex-row w-full h-full">
-            <AppSidebar />
-            {children}
-          </div>
-        </ProjectsProvider>
+        <ChatModalProvider>
+          <ProjectsProvider initialProjects={projects}>
+            <div className="flex flex-row w-full h-full">
+              <AppSidebar />
+              {children}
+            </div>
+          </ProjectsProvider>
+        </ChatModalProvider>
       </ChatProvider>
     </>
   );

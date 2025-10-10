@@ -134,7 +134,24 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Run Tests
+      - name: Detect Connector changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            hubspot:
+              - 'backend/onyx/connectors/hubspot/**'
+              - 'backend/tests/daily/connectors/hubspot/**'
+            salesforce:
+              - 'backend/onyx/connectors/salesforce/**'
+              - 'backend/tests/daily/connectors/salesforce/**'
+            github:
+              - 'backend/onyx/connectors/github/**'
+              - 'backend/tests/daily/connectors/github/**'
+            file_processing:
+              - 'backend/onyx/file_processing/**'
+
+      - name: Run Tests (excluding HubSpot, Salesforce, and GitHub)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -144,7 +161,49 @@ jobs:
             -o junit_family=xunit2 \
             -xv \
             --ff \
-            backend/tests/daily/connectors
+            backend/tests/daily/connectors \
+            --ignore backend/tests/daily/connectors/hubspot \
+            --ignore backend/tests/daily/connectors/salesforce \
+            --ignore backend/tests/daily/connectors/github
+
+      - name: Run HubSpot Connector Tests
+        if: ${{ github.event_name == 'schedule' || steps.changes.outputs.hubspot == 'true' || steps.changes.outputs.file_processing == 'true' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/connectors/hubspot
+
+      - name: Run Salesforce Connector Tests
+        if: ${{ github.event_name == 'schedule' || steps.changes.outputs.salesforce == 'true' || steps.changes.outputs.file_processing == 'true' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/connectors/salesforce
+
+      - name: Run GitHub Connector Tests
+        if: ${{ github.event_name == 'schedule' || steps.changes.outputs.github == 'true' || steps.changes.outputs.file_processing == 'true' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/connectors/github
 
       - name: Alert on Failure
         if: failure() && github.event_name == 'schedule'

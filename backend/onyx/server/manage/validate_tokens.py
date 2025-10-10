@@ -56,8 +56,8 @@ def validate_user_token(user_token: str | None) -> None:
     Raises:
         HTTPException: If the token is invalid or missing required fields
     """
-    if user_token is None:
-        # user_token is optional, so None is valid
+    if not user_token:
+        # user_token is optional, so None or empty string is valid
         return
 
     if not user_token.startswith(SLACK_USER_TOKEN_PREFIX):

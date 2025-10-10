@@ -121,7 +121,6 @@ class LLM(abc.ABC):
     ) -> BaseMessage:
         raise NotImplementedError
 
-    @traced(name="stream llm", type="llm")
     def stream(
         self,
         prompt: LanguageModelInput,

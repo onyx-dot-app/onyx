@@ -79,6 +79,7 @@ export interface NavigationTabProps {
   popover?: React.ReactNode;
   onPopoverChange?: (open: boolean) => void;
   className?: string;
+  iconClassName?: string;
   icon: React.FunctionComponent<SvgProps>;
   renaming?: boolean;
   setRenaming?: Dispatch<SetStateAction<boolean>>;
@@ -100,6 +101,7 @@ export default function NavigationTab({
   popover,
   onPopoverChange,
   className,
+  iconClassName,
   icon: Icon,
   renaming,
   setRenaming,
@@ -162,9 +164,14 @@ export default function NavigationTab({
           folded ? "justify-center" : "justify-start"
         )}
       >
-        <div className="w-[1rem] h-[1rem]">
+        <div className={cn("w-[1rem]", "h-[1rem]", iconClassName)}>
           <Icon
-            className={cn("h-[1rem] w-[1rem]", iconClasses(active)[variant])}
+            className={cn(
+              "h-[1rem]",
+              "w-[1rem]",
+              iconClasses(active)[variant],
+              iconClassName
+            )}
           />
         </div>
         {!folded &&

@@ -20,7 +20,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_ONYX_BACKEND_URL || ""}/api/mcp/oauth/callback`,
+      `${
+        process.env.NEXT_PUBLIC_ONYX_BACKEND_URL || ""
+      }/api/mcp/oauth/callback`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

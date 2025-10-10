@@ -1,13 +1,10 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import Modal from "@/refresh-components/modals/Modal";
-import { getDisplayNameForModel, LlmDescriptor } from "@/lib/hooks";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { getDisplayNameForModel } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -19,45 +16,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Loader2, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
-import { FiTrash2, FiExternalLink } from "react-icons/fi";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import { SourceIcon } from "@/components/SourceIcon";
-import { ValidSources, CCPairBasicInfo } from "@/lib/types";
+import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
-import { ModalIds } from "@/refresh-components/contexts/ModalContext";
-import SvgSettings from "@/icons/settings";
 import SvgTrash from "@/icons/trash";
 import SvgExternalLink from "@/icons/external-link";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
 type SettingsSection = "settings" | "password" | "connectors";
 
 interface UserSettingsProps {
-  setPopup: (popupSpec: PopupSpec | null) => void;
-  llmProviders: LLMProviderDescriptor[];
-  updateCurrentLlm?: (newOverride: LlmDescriptor) => void;
   onClose: () => void;
-  defaultModel: string | null;
-  ccPairs: CCPairBasicInfo[];
-  federatedConnectors: FederatedConnectorOAuthStatus[];
-  refetchFederatedConnectors: () => void;
 }
 
-export function UserSettings({
-  setPopup,
-  llmProviders,
-  onClose,
-  updateCurrentLlm,
-  defaultModel,
-  ccPairs,
-  federatedConnectors,
-  refetchFederatedConnectors,
-}: UserSettingsProps) {
+export function UserSettings({ onClose }: UserSettingsProps) {
   const {
     refreshUser,
     user,
@@ -65,7 +44,7 @@ export function UserSettings({
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
   } = useUser();
-  const { refreshChatSessions } = useChatContext();
+  const { llmProviders } = useLLMProviders();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -75,11 +54,38 @@ export function UserSettings({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isModelUpdating, setIsModelUpdating] = useState(false);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("settings");
+  // show updates in the UI instantly without waiting for an API call to finish
+  const [currentDefaultModel, setCurrentDefaultModel] = useState<string | null>(
+    null
+  );
   const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
+
+  const { popup, setPopup } = usePopup();
+
+  // Fetch federated-connector info so the modal can list/refresh them
+  const {
+    connectors: federatedConnectors,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+
+  const { ccPairs } = useCCPairs();
+
+  const defaultModel = user?.preferences?.default_model;
+
+  // Initialize currentDefaultModel from user preferences
+  useEffect(() => {
+    if (currentDefaultModel === null && defaultModel) {
+      setCurrentDefaultModel(defaultModel);
+    }
+  }, [defaultModel, currentDefaultModel]);
+
+  // Use currentDefaultModel for display, falling back to defaultModel
+  const displayModel = currentDefaultModel ?? defaultModel;
 
   const hasConnectors =
     (ccPairs && ccPairs.length > 0) ||
@@ -161,27 +167,36 @@ export function UserSettings({
   });
 
   const handleChangedefaultModel = async (defaultModel: string | null) => {
+    // Update UI instantly
+    setCurrentDefaultModel(defaultModel);
+    setIsModelUpdating(true);
+
     try {
       const response = await setUserDefaultModel(defaultModel);
 
       if (response.ok) {
-        if (defaultModel && updateCurrentLlm) {
-          updateCurrentLlm(parseLlmDescriptor(defaultModel));
-        }
         setPopup({
           message: "Default model updated successfully",
           type: "success",
         });
         refreshUser();
+        // refresh so that the new default model is reflected in the
+        // LLMManager / the UI
         router.refresh();
       } else {
+        // Revert on failure
+        setCurrentDefaultModel(user?.preferences?.default_model ?? null);
         throw new Error("Failed to update default model");
       }
     } catch (error) {
+      // Revert on error
+      setCurrentDefaultModel(user?.preferences?.default_model ?? null);
       setPopup({
         message: "Failed to update default model",
         type: "error",
       });
+    } finally {
+      setIsModelUpdating(false);
     }
   };
 
@@ -276,7 +291,7 @@ export function UserSettings({
           message: "All your chat sessions have been deleted.",
           type: "success",
         });
-        refreshChatSessions();
+        // refreshChatSessions();
         if (pathname.includes("/chat")) {
           router.push("/chat");
         }
@@ -295,60 +310,48 @@ export function UserSettings({
   };
 
   return (
-    <div className="flex flex-col p-padding-content">
-      {/* {(showPasswordSection || hasConnectors) && (
-        <div className="w-1/4 pr-4 flex-shrink-0">
-          <nav>
-            <ul className="space-y-2">
+    <div className="flex flex-col gap-padding-content p-padding-content">
+      {(showPasswordSection || hasConnectors) && (
+        <nav>
+          <ul className="flex space-x-2">
+            <li>
+              <Button
+                tertiary
+                active={activeSection === "settings"}
+                onClick={() => setActiveSection("settings")}
+              >
+                Settings
+              </Button>
+            </li>
+            {showPasswordSection && (
               <li>
-                <button
-                  className={`w-full text-base text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                    activeSection === "settings"
-                      ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
-                      : ""
-                  }`}
-                  onClick={() => setActiveSection("settings")}
+                <Button
+                  tertiary
+                  active={activeSection === "password"}
+                  onClick={() => setActiveSection("password")}
                 >
-                  Settings
-                </button>
+                  Password
+                </Button>
               </li>
-              {showPasswordSection && (
-                <li>
-                  <button
-                    className={`w-full text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                      activeSection === "password"
-                        ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
-                        : ""
-                    }`}
-                    onClick={() => setActiveSection("password")}
-                  >
-                    Password
-                  </button>
-                </li>
-              )}
-              {hasConnectors && (
-                <li>
-                  <button
-                    className={`w-full text-base text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                      activeSection === "connectors"
-                        ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
-                        : ""
-                    }`}
-                    onClick={() => setActiveSection("connectors")}
-                  >
-                    Connectors
-                  </button>
-                </li>
-              )}
-            </ul>
-          </nav>
-        </div>
-      )} */}
-      <div
-        className={`${
-          showPasswordSection || hasConnectors ? "w-3/4" : "w-full"
-        } overflow-y-scroll default-scrollbar !w-full`}
-      >
+            )}
+            {hasConnectors && (
+              <li>
+                <Button
+                  tertiary
+                  active={activeSection === "connectors"}
+                  onClick={() => setActiveSection("connectors")}
+                >
+                  Connectors
+                </Button>
+              </li>
+            )}
+          </ul>
+        </nav>
+      )}
+
+      {popup}
+
+      <div className="w-full overflow-y-scroll">
         {activeSection === "settings" && (
           <div className="space-y-6">
             <div>
@@ -416,16 +419,21 @@ export function UserSettings({
               />
             </div>
             <div>
-              <h3 className="text-lg font-medium">Default Model</h3>
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-lg font-medium">Default Model</h3>
+                {isModelUpdating && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
               <LLMSelector
                 userSettings
                 llmProviders={llmProviders}
                 currentLlm={
-                  defaultModel
+                  displayModel
                     ? structureValue(
-                        parseLlmDescriptor(defaultModel).provider,
-                        parseLlmDescriptor(defaultModel).name,
-                        parseLlmDescriptor(defaultModel).modelName
+                        parseLlmDescriptor(displayModel).provider,
+                        parseLlmDescriptor(displayModel).name,
+                        parseLlmDescriptor(displayModel).modelName
                       )
                     : null
                 }
@@ -715,266 +723,5 @@ export function UserSettings({
         )}
       </div>
     </div>
-  );
-}
-
-export function UserSettingsModal(props: UserSettingsProps) {
-  const {
-    setPopup,
-    llmProviders,
-    onClose,
-    updateCurrentLlm,
-    defaultModel,
-    ccPairs,
-    federatedConnectors,
-    refetchFederatedConnectors,
-  } = props;
-  const {
-    refreshUser,
-    user,
-    updateUserAutoScroll,
-    updateUserShortcuts,
-    updateUserTemperatureOverrideEnabled,
-  } = useUser();
-  const { refreshChatSessions } = useChatContext();
-  const router = useRouter();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const messageRef = useRef<HTMLDivElement>(null);
-  const { theme, setTheme } = useTheme();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeSection, setActiveSection] =
-    useState<SettingsSection>("settings");
-  const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
-
-  const hasConnectors =
-    (ccPairs && ccPairs.length > 0) ||
-    (federatedConnectors && federatedConnectors.length > 0);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const message = messageRef.current;
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-
-    if (container && message) {
-      const checkScrollable = () => {
-        if (container.scrollHeight > container.clientHeight) {
-          message.style.display = "block";
-        } else {
-          message.style.display = "none";
-        }
-      };
-      checkScrollable();
-      window.addEventListener("resize", checkScrollable);
-      return () => {
-        window.removeEventListener("resize", checkScrollable);
-        window.removeEventListener("keydown", handleEscape);
-      };
-    }
-
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
-
-  const defaultModelDestructured = defaultModel
-    ? parseLlmDescriptor(defaultModel)
-    : null;
-  const modelOptionsByProvider = new Map<
-    string,
-    { name: string; value: string }[]
-  >();
-  llmProviders.forEach((llmProvider) => {
-    const providerOptions = llmProvider.model_configurations.map(
-      (model_configuration) => ({
-        name: getDisplayNameForModel(model_configuration.name),
-        value: model_configuration.name,
-      })
-    );
-    modelOptionsByProvider.set(llmProvider.name, providerOptions);
-  });
-
-  const llmOptionsByProvider: {
-    [provider: string]: { name: string; value: string }[];
-  } = {};
-  const uniqueModelNames = new Set<string>();
-
-  llmProviders.forEach((llmProvider) => {
-    if (!llmOptionsByProvider[llmProvider.provider]) {
-      llmOptionsByProvider[llmProvider.provider] = [];
-    }
-
-    llmProvider.model_configurations.forEach((modelConfiguration) => {
-      if (!uniqueModelNames.has(modelConfiguration.name)) {
-        uniqueModelNames.add(modelConfiguration.name);
-        const llmOptions = llmOptionsByProvider[llmProvider.provider];
-        if (llmOptions) {
-          llmOptions.push({
-            name: modelConfiguration.name,
-            value: structureValue(
-              llmProvider.name,
-              llmProvider.provider,
-              modelConfiguration.name
-            ),
-          });
-        }
-      }
-    });
-  });
-
-  const handleChangedefaultModel = async (defaultModel: string | null) => {
-    try {
-      const response = await setUserDefaultModel(defaultModel);
-
-      if (response.ok) {
-        if (defaultModel && updateCurrentLlm) {
-          updateCurrentLlm(parseLlmDescriptor(defaultModel));
-        }
-        setPopup({
-          message: "Default model updated successfully",
-          type: "success",
-        });
-        refreshUser();
-        router.refresh();
-      } else {
-        throw new Error("Failed to update default model");
-      }
-    } catch (error) {
-      setPopup({
-        message: "Failed to update default model",
-        type: "error",
-      });
-    }
-  };
-
-  const handleConnectOAuth = (authorizeUrl: string) => {
-    // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl);
-  };
-
-  const handleDisconnectOAuth = async (connectorId: number) => {
-    setIsDisconnecting(connectorId);
-    try {
-      const response = await fetch(`/api/federated/${connectorId}/oauth`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setPopup({
-          message: "Disconnected successfully",
-          type: "success",
-        });
-        if (refetchFederatedConnectors) {
-          refetchFederatedConnectors();
-        }
-      } else {
-        throw new Error("Failed to disconnect");
-      }
-    } catch (error) {
-      setPopup({
-        message: "Failed to disconnect",
-        type: "error",
-      });
-    } finally {
-      setIsDisconnecting(null);
-    }
-  };
-
-  const settings = useContext(SettingsContext);
-  const autoScroll = settings?.settings?.auto_scroll;
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setPopup({ message: "New passwords do not match", type: "error" });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/password/change-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          old_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
-
-      if (response.ok) {
-        setPopup({ message: "Password changed successfully", type: "success" });
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      } else {
-        const errorData = await response.json();
-        setPopup({
-          message: errorData.detail || "Failed to change password",
-          type: "error",
-        });
-      }
-    } catch (error) {
-      setPopup({
-        message: "An error occurred while changing the password",
-        type: "error",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const pathname = usePathname();
-
-  const showPasswordSection = user?.password_configured;
-
-  const handleDeleteAllChats = async () => {
-    setIsDeleteAllLoading(true);
-    try {
-      const response = await deleteAllChatSessions();
-      if (response.ok) {
-        setPopup({
-          message: "All your chat sessions have been deleted.",
-          type: "success",
-        });
-        refreshChatSessions();
-        if (pathname.includes("/chat")) {
-          router.push("/chat");
-        }
-      } else {
-        throw new Error("Failed to delete all chat sessions");
-      }
-    } catch (error) {
-      setPopup({
-        message: "Failed to delete all chat sessions",
-        type: "error",
-      });
-    } finally {
-      setIsDeleteAllLoading(false);
-      setShowDeleteConfirmation(false);
-    }
-  };
-
-  return (
-    <Modal
-      id={ModalIds.UserSettingsModal}
-      icon={SvgSettings}
-      title="User Settings"
-      clickOutsideToClose
-    >
-      <h2 className="text-xl font-bold mb-4">User Settings</h2>
-      <Separator className="mb-6" />
-      <UserSettings {...props} />
-    </Modal>
   );
 }

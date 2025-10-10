@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import cast
 
@@ -28,6 +29,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.images.image_generation_tool import ImageShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -62,6 +64,29 @@ def image_generation(
     image_tool_info = state.available_tools[state.tools_used[-1]]
     image_tool = cast(ImageGenerationTool, image_tool_info.tool_object)
 
+    image_prompt = branch_query
+    requested_shape: ImageShape | None = None
+
+    try:
+        parsed_query = json.loads(branch_query)
+    except json.JSONDecodeError:
+        parsed_query = None
+
+    if isinstance(parsed_query, dict):
+        prompt_from_llm = parsed_query.get("prompt")
+        if isinstance(prompt_from_llm, str) and prompt_from_llm.strip():
+            image_prompt = prompt_from_llm.strip()
+
+        raw_shape = parsed_query.get("shape")
+        if isinstance(raw_shape, str):
+            try:
+                requested_shape = ImageShape(raw_shape)
+            except ValueError:
+                logger.warning(
+                    "Received unsupported image shape '%s' from LLM. Falling back to square.",
+                    raw_shape,
+                )
+
     logger.debug(
         f"Image generation start for {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
@@ -69,7 +94,15 @@ def image_generation(
     # Generate images using the image generation tool
     image_generation_responses: list[ImageGenerationResponse] = []
 
-    for tool_response in image_tool.run(prompt=branch_query):
+    if requested_shape is not None:
+        tool_iterator = image_tool.run(
+            prompt=image_prompt,
+            shape=requested_shape.value,
+        )
+    else:
+        tool_iterator = image_tool.run(prompt=image_prompt)
+
+    for tool_response in tool_iterator:
         if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
             # Stream heartbeat to frontend
             write_custom_event(
@@ -95,6 +128,7 @@ def image_generation(
             file_id=file_id,
             url=build_frontend_file_url(file_id),
             revised_prompt=img.revised_prompt,
+            shape=(requested_shape or ImageShape.SQUARE).value,
         )
         for file_id, img in zip(file_ids, image_generation_responses)
     ]
@@ -107,15 +141,29 @@ def image_generation(
     if final_generated_images:
         image_descriptions = []
         for i, img in enumerate(final_generated_images, 1):
-            image_descriptions.append(f"Image {i}: {img.revised_prompt}")
+            if img.shape and img.shape != ImageShape.SQUARE.value:
+                image_descriptions.append(
+                    f"Image {i}: {img.revised_prompt} (shape: {img.shape})"
+                )
+            else:
+                image_descriptions.append(f"Image {i}: {img.revised_prompt}")
 
         answer_string = (
-            f"Generated {len(final_generated_images)} image(s) based on the request: {branch_query}\n\n"
+            f"Generated {len(final_generated_images)} image(s) based on the request: {image_prompt}\n\n"
             + "\n".join(image_descriptions)
         )
-        reasoning = f"Used image generation tool to create {len(final_generated_images)} image(s) based on the user's request."
+        if requested_shape:
+            reasoning = (
+                "Used image generation tool to create "
+                f"{len(final_generated_images)} image(s) in {requested_shape.value} orientation."
+            )
+        else:
+            reasoning = (
+                "Used image generation tool to create "
+                f"{len(final_generated_images)} image(s) based on the user's request."
+            )
     else:
-        answer_string = f"Failed to generate images for request: {branch_query}"
+        answer_string = f"Failed to generate images for request: {image_prompt}"
         reasoning = "Image generation tool did not return any results."
 
     return BranchUpdate(

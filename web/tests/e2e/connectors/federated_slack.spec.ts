@@ -77,7 +77,7 @@ async function deleteFederatedSlackConnector(page: Page) {
 
   // Expand the Slack section first (summary row toggles open on click)
   const slackSummaryRow = page.locator("tr").filter({
-    has: page.locator("text=/^\s*Slack\s*$/i"),
+    has: page.locator("text=/^\\s*Slack\\s*$/i"),
   });
   if ((await slackSummaryRow.count()) > 0) {
     await slackSummaryRow.first().click();

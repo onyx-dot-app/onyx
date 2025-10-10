@@ -7,7 +7,7 @@ import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup"
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +22,7 @@ export default function ProjectChatSessionList() {
     currentProjectId,
     refreshCurrentProjectDetails,
   } = useProjectsContext();
-  const { assistants } = useAssistantsContext();
+  const { agents: assistants } = useAgentsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -57,7 +57,11 @@ export default function ProjectChatSessionList() {
               onMouseLeave={() => setHoveredChatId(null)}
             >
               <div
-                className={`w-full rounded-xl bg-background-background px-1 py-2 transition-colors ${hoveredChatId === chat.id ? "bg-accent-background-hovered" : ""}`}
+                className={`w-full rounded-xl bg-background-background px-1 py-2 transition-colors ${
+                  hoveredChatId === chat.id
+                    ? "bg-accent-background-hovered"
+                    : ""
+                }`}
               >
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">

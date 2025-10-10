@@ -107,7 +107,7 @@ export default function SelectButton({
         )}
       </div>
     ),
-    [active, rightChevronIcon]
+    [active, rightChevronIcon, children, variant, state]
   );
   useEffect(() => {
     if (measureRef.current) {

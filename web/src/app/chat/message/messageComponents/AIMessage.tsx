@@ -33,14 +33,19 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgCopy from "@/icons/copy";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import LLMPopover from "@/refresh-components/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
+import { LlmManager } from "@/lib/hooks";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
   chatState: FullChatState;
   nodeId: number;
+  llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
 }
@@ -49,12 +54,13 @@ export default function AIMessage({
   rawPackets,
   chatState,
   nodeId,
+  llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
 
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -361,6 +367,7 @@ export default function AIMessage({
                             onClick={() => copyAll(getTextContent(rawPackets))}
                             tertiary
                             tooltip="Copy"
+                            data-testid="AIMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgThumbsUp}
@@ -372,6 +379,7 @@ export default function AIMessage({
                             }
                             tertiary
                             tooltip="Good Response"
+                            data-testid="AIMessage/like-button"
                           />
                           <IconButton
                             icon={SvgThumbsDown}
@@ -383,18 +391,22 @@ export default function AIMessage({
                             }
                             tertiary
                             tooltip="Bad Response"
+                            data-testid="AIMessage/dislike-button"
                           />
 
-                          {chatState.regenerate && (
-                            <LLMPopover
-                              currentModelName={chatState.overriddenModel}
-                              onSelect={(modelName) => {
-                                const llmDescriptor =
-                                  parseLlmDescriptor(modelName);
-                                chatState.regenerate!(llmDescriptor);
-                              }}
-                              folded
-                            />
+                          {chatState.regenerate && llmManager && (
+                            <div data-testid="AIMessage/regenerate">
+                              <LLMPopover
+                                llmManager={llmManager}
+                                currentModelName={chatState.overriddenModel}
+                                onSelect={(modelName) => {
+                                  const llmDescriptor =
+                                    parseLlmDescriptor(modelName);
+                                  chatState.regenerate!(llmDescriptor);
+                                }}
+                                folded
+                              />
+                            </div>
                           )}
 
                           {nodeId &&
