@@ -283,9 +283,13 @@ def evaluate_single_question(
 
 
 def main():
-    collection_name = CollectionName.ACCURACY_TESTING
     cohere_model = "embed-english-v3.0"
-    sparse_model_name = "Qdrant/bm25"
+
+    # Sparse model options: "Qdrant/bm25" or "prithivida/Splade_PP_en_v1" or "Qdrant/bm42-all-minilm-l6-v2-attentions"
+    sparse_model_name = "prithivida/Splade_PP_en_v1"  # Default to BM25
+
+    # Collection name (should match what was used in upload_chunks.py)
+    collection_name = CollectionName.ACCURACY_TESTING
     max_workers = 10  # Number of parallel workers
 
     # Load environment variables from .env file
@@ -298,6 +302,8 @@ def main():
 
     # Initialize clients
     print("Initializing clients and embedding models...")
+    print(f"Sparse model: {sparse_model_name}")
+
     cohere_api_key = os.getenv("COHERE_API_KEY")
     if not cohere_api_key:
         raise ValueError("COHERE_API_KEY environment variable not set")

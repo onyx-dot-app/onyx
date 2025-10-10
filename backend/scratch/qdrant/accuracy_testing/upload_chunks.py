@@ -233,12 +233,22 @@ def convert_target_doc_to_chunks(
 
 
 def main():
-    collection_name = CollectionName.ACCURACY_TESTING
-
     # Embedding model configuration
     cohere_model = "embed-english-v3.0"
-    sparse_model_name = "Qdrant/bm25"
     vector_size = 1024  # embed-english-v3.0 dimension
+
+    # Sparse model options: "Qdrant/bm25" or "prithivida/Splade_PP_en_v1" "Qdrant/bm42-all-minilm-l6-v2-attentions"
+    sparse_model_name = "prithivida/Splade_PP_en_v1"
+    # Collection name includes sparse model type for easy comparison
+    if "bm25" in sparse_model_name.lower():
+        collection_name = CollectionName.ACCURACY_TESTING
+        collection_suffix = "_bm25"
+    elif "splade" in sparse_model_name.lower():
+        collection_name = CollectionName.ACCURACY_TESTING
+        collection_suffix = "_splade"
+    else:
+        collection_name = CollectionName.ACCURACY_TESTING
+        collection_suffix = "_custom"
 
     # Control whether to index while uploading
     index_while_uploading = False
@@ -264,18 +274,18 @@ def main():
     cohere_client = cohere.Client(cohere_api_key)
     print(f"Cohere client initialized with model: {cohere_model}")
 
-    # Initialize BM25 sparse embedding model
-    print("Initializing BM25 sparse embedding model...")
+    # Initialize sparse embedding model
+    print(f"Initializing sparse embedding model: {sparse_model_name}...")
     sparse_embedding_model = SparseTextEmbedding(
         model_name=sparse_model_name, threads=2
     )
-    print("BM25 model initialized\n")
+    print(f"Sparse model initialized: {sparse_model_name}{collection_suffix}\n")
 
     # Initialize Qdrant client
     qdrant_client = QdrantClient()
 
     # Delete and recreate collection
-    print(f"Setting up collection: {collection_name}")
+    print(f"Setting up collection: {collection_name} (sparse: {sparse_model_name})")
     print(f"Index while uploading: {index_while_uploading}")
     qdrant_client.delete_collection(collection_name=collection_name)
 
