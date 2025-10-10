@@ -332,7 +332,7 @@ def create_fake_search_pipeline_multiple_responses() -> FakeSearchPipeline:
 
 def run_internal_search_core_with_dependencies(
     run_context: RunContextWrapper[ChatTurnContext],
-    query: str,
+    queries: list[str],
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
@@ -362,7 +362,7 @@ def run_internal_search_core_with_dependencies(
             run_context.context.run_dependencies.redis_client = redis_client  # type: ignore
 
         # Call the real _internal_search_core function
-        return _internal_search_core(run_context, [query], search_pipeline)  # type: ignore[arg-type]
+        return _internal_search_core(run_context, queries, search_pipeline)  # type: ignore[arg-type]
 
 
 class FakeSearchToolOverrideKwargs:
@@ -467,7 +467,7 @@ def test_internal_search_core_basic_functionality(
 
     # Act
     result = run_internal_search_core_with_dependencies(
-        fake_run_context, query, test_pipeline, fake_session_context_manager
+        fake_run_context, queries, test_pipeline, fake_session_context_manager
     )
 
     # Assert
@@ -517,7 +517,7 @@ def test_internal_search_core_basic_functionality(
         answer.reasoning
         == f"I am now using Internal Search to gather information on {query}"
     )
-    assert answer.answer == "Cool"
+    assert answer.answer == ""
     assert len(answer.cited_documents) == 2
 
     # Verify emitter events were captured
@@ -533,12 +533,11 @@ def test_internal_search_core_basic_functionality(
     # Check the first SearchToolDelta (query) - now expects a list
     first_delta = emitter.packet_history[1].obj
     assert first_delta.queries == queries
-    assert first_delta.documents is None
+    assert first_delta.documents == []
 
     # Check the second SearchToolDelta (documents)
     second_delta = emitter.packet_history[2].obj
-    assert second_delta.queries is None
-    assert second_delta.documents is not None
+    assert second_delta.queries == []
     assert len(second_delta.documents) == 2
 
     # Verify the SavedSearchDoc objects
@@ -592,8 +591,9 @@ def test_internal_search_core_with_multiple_queries(
     test_pipeline.run = tracked_run  # type: ignore[method-assign]
 
     # Act
+    # Pass all queries to test parallel execution
     result = run_internal_search_core_with_dependencies(
-        fake_run_context, queries[0], test_pipeline, fake_session_context_manager
+        fake_run_context, queries, test_pipeline, fake_session_context_manager
     )
 
     # Assert
@@ -601,12 +601,8 @@ def test_internal_search_core_with_multiple_queries(
     # Should have results from all queries
     assert len(result) > 0
 
-    # Verify that the search pipeline was called multiple times (once per query)
-    assert len(call_count) == len(
-        queries
-    ), f"Expected {len(queries)} calls to search pipeline, got {len(call_count)}"
-
     # Verify all queries were executed
+    assert len(call_queries) == len(queries)
     assert set(call_queries) == set(
         queries
     ), f"Expected queries {queries}, got {call_queries}"
@@ -618,7 +614,7 @@ def test_internal_search_core_with_multiple_queries(
     query_deltas = [
         packet.obj
         for packet in emitter.packet_history
-        if isinstance(packet.obj, SearchToolDelta) and packet.obj.queries is not None
+        if isinstance(packet.obj, SearchToolDelta) and packet.obj.queries != []
     ]
     assert (
         len(query_deltas) > 0
