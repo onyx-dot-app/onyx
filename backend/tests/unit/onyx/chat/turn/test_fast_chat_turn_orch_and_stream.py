@@ -9,8 +9,10 @@ injection with simple fake versions of all dependencies except for the emitter
 """
 
 from collections.abc import AsyncIterator
+from typing import Any
 from typing import List
 from unittest.mock import Mock
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -125,8 +127,8 @@ class BaseFakeModel(Model):
     """Base class for fake models with common functionality."""
 
     def __init__(
-        self, name: str = "fake-model", provider: str = "fake-provider", **kwargs
-    ):
+        self, name: str = "fake-model", provider: str = "fake-provider", **kwargs: Any
+    ) -> None:
         self.name = name
         self.provider = provider
         # Store any additional kwargs for subclasses
@@ -144,7 +146,7 @@ class BaseFakeModel(Model):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> ModelResponse:
         """Default get_response implementation."""
         message = create_fake_message()
@@ -169,7 +171,7 @@ class StreamableFakeModel(BaseFakeModel):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> AsyncIterator[object]:
         """Default streaming implementation."""
         return self._create_stream_events()
@@ -181,7 +183,7 @@ class StreamableFakeModel(BaseFakeModel):
     ) -> AsyncIterator[object]:
         """Create standard stream events."""
 
-        async def _gen() -> AsyncIterator[object]:
+        async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
             # Create message if not provided
             msg = message if message is not None else create_fake_message()
 
@@ -216,9 +218,13 @@ class CancellationMixin:
     """Mixin for models that support cancellation testing."""
 
     def __init__(
-        self, set_fence_func=None, chat_session_id=None, redis_client=None, **kwargs
-    ):
-        super().__init__(**kwargs)
+        self,
+        set_fence_func: Any = None,
+        chat_session_id: Any = None,
+        redis_client: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)  # type: ignore[call-arg]
         self.set_fence_func = set_fence_func
         self.chat_session_id = chat_session_id
         self.redis_client = redis_client
@@ -232,7 +238,7 @@ class CancellationMixin:
             and self.redis_client
         )
 
-    def _trigger_cancellation(self):
+    def _trigger_cancellation(self) -> None:
         """Trigger the cancellation signal."""
         if self.set_fence_func and self.chat_session_id and self.redis_client:
             self.set_fence_func(self.chat_session_id, self.redis_client, True)
@@ -246,9 +252,9 @@ class CancellationMixin:
 def run_fast_chat_turn(
     sample_messages: list[dict],
     chat_turn_dependencies: ChatTurnDependencies,
-    chat_session_id,
-    message_id,
-    research_type,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
 ) -> list[Packet]:
     """Helper function to run fast_chat_turn and collect all packets."""
     from onyx.chat.turn.fast_chat_turn import fast_chat_turn
@@ -302,8 +308,10 @@ def assert_cancellation_packets(
 
 
 def create_cancellation_model(
-    model_class, chat_turn_dependencies: ChatTurnDependencies, chat_session_id
-):
+    model_class: type,
+    chat_turn_dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+) -> Model:
     """Helper to create a cancellation model with proper setup."""
     from onyx.chat.stop_signal_checker import set_fence
 
@@ -317,7 +325,7 @@ def create_cancellation_model(
 class FakeLLM(LLM):
     """Simple fake LLM implementation for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._config = LLMConfig(
             model_provider="fake",
             model_name="fake-model",
@@ -335,13 +343,13 @@ class FakeLLM(LLM):
 
     def _invoke_implementation(
         self,
-        prompt,
-        tools=None,
-        tool_choice=None,
-        structured_response_format=None,
-        timeout_override=None,
-        max_tokens=None,
-    ):
+        prompt: Any,
+        tools: Any = None,
+        tool_choice: Any = None,
+        structured_response_format: Any = None,
+        timeout_override: Any = None,
+        max_tokens: Any = None,
+    ) -> Any:
         """Fake _invoke_implementation method."""
         from langchain_core.messages import AIMessage
 
@@ -349,13 +357,13 @@ class FakeLLM(LLM):
 
     def _stream_implementation(
         self,
-        prompt,
-        tools=None,
-        tool_choice=None,
-        structured_response_format=None,
-        timeout_override=None,
-        max_tokens=None,
-    ):
+        prompt: Any,
+        tools: Any = None,
+        tool_choice: Any = None,
+        structured_response_format: Any = None,
+        timeout_override: Any = None,
+        max_tokens: Any = None,
+    ) -> Any:
         """Fake _stream_implementation method that yields no messages."""
         return iter([])
 
@@ -374,7 +382,7 @@ class FakeCancellationModel(CancellationMixin, StreamableFakeModel):
     ) -> AsyncIterator[object]:
         """Create stream events with cancellation support."""
 
-        async def _gen() -> AsyncIterator[object]:
+        async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
             # Create message if not provided
             msg = message if message is not None else create_fake_message()
 
@@ -424,7 +432,7 @@ class FakeToolCallModel(CancellationMixin, StreamableFakeModel):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> ModelResponse:
         """Override to create a response with tool calls."""
         message = create_fake_message(
@@ -435,14 +443,14 @@ class FakeToolCallModel(CancellationMixin, StreamableFakeModel):
             output=[message], usage=usage, response_id="fake-response-id"
         )
 
-    def _create_stream_events(
+    def _create_stream_events(  # type: ignore[override]
         self,
         message: ResponseOutputMessage | None = None,
         response_id: str = "fake-response-id",
     ) -> AsyncIterator[object]:
         """Create stream events with tool calls and cancellation support."""
 
-        async def _gen() -> AsyncIterator[object]:
+        async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
             # Create message if not provided
             msg = (
                 message
@@ -496,11 +504,11 @@ class FakeFailingModel(BaseFakeModel):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> AsyncIterator[object]:
         """Stream implementation that raises an exception."""
 
-        async def _gen() -> AsyncIterator[object]:
+        async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
             fake_response = create_fake_response(response_id="fake-response-id")
             yield ResponseCreatedEvent(
                 response=fake_response, sequence_number=1, type="response.created"
@@ -525,89 +533,89 @@ class FakeFailingModel(BaseFakeModel):
 class FakeSession:
     """Simple fake SQLAlchemy Session for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.committed = False
         self.rolled_back = False
 
-    def commit(self):
+    def commit(self) -> None:
         self.committed = True
 
-    def rollback(self):
+    def rollback(self) -> None:
         self.rolled_back = True
 
-    def add(self, instance):
+    def add(self, instance: Any) -> None:
         pass
 
-    def flush(self):
+    def flush(self) -> None:
         pass
 
-    def query(self, *args, **kwargs):
+    def query(self, *args: Any, **kwargs: Any) -> "FakeQuery":
         return FakeQuery()
 
-    def execute(self, *args, **kwargs):
+    def execute(self, *args: Any, **kwargs: Any) -> "FakeResult":
         return FakeResult()
 
 
 class FakeQuery:
     """Simple fake SQLAlchemy Query for testing."""
 
-    def filter(self, *args, **kwargs):
+    def filter(self, *args: Any, **kwargs: Any) -> "FakeQuery":
         return self
 
-    def first(self):
+    def first(self) -> Any:
         # Return a fake chat message to avoid the "Chat message with id not found" error
         class FakeChatMessage:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.id = 123
                 self.chat_session_id = "fake-session-id"
                 self.message = "fake message"
                 self.message_type = "user"
                 self.token_count = 0
                 self.rephrased_query = None
-                self.citations = {}
+                self.citations: dict[str, Any] = {}
                 self.error = None
                 self.alternate_assistant_id = None
                 self.overridden_model = None
                 self.research_type = "FAST"
-                self.research_plan = {}
-                self.final_documents = []
+                self.research_plan: dict[str, Any] = {}
+                self.final_documents: list[Any] = []
                 self.research_answer_purpose = "ANSWER"
                 self.parent_message = None
                 self.is_agentic = False
-                self.search_docs = []
+                self.search_docs: list[Any] = []
 
         return FakeChatMessage()
 
-    def all(self):
+    def all(self) -> list:
         return []
 
 
 class FakeResult:
     """Simple fake SQLAlchemy Result for testing."""
 
-    def scalar(self):
+    def scalar(self) -> Any:
         return None
 
-    def fetchall(self):
+    def fetchall(self) -> list:
         return []
 
 
 class FakeRedis:
     """Simple fake Redis client for testing."""
 
-    def __init__(self):
-        self.data = {}
+    def __init__(self) -> None:
+        self.data: dict = {}
 
-    def get(self, key):
+    def get(self, key: str) -> Any:
         return self.data.get(key)
 
-    def set(self, key, value, ex=None):
+    def set(self, key: str, value: Any, ex: Any = None) -> None:
         self.data[key] = value
 
-    def delete(self, key):
+    def delete(self, key: str) -> int:
         return self.data.pop(key, 0)
 
-    def exists(self, key):
+    def exists(self, key: str) -> bool:
         return key in self.data
 
 
@@ -642,19 +650,19 @@ def fake_tools() -> list[FunctionTool]:
 
 
 @pytest.fixture
-def chat_session_id():
+def chat_session_id() -> UUID:
     """Fixture providing chat session ID."""
     return uuid4()
 
 
 @pytest.fixture
-def message_id():
+def message_id() -> int:
     """Fixture providing message ID."""
     return 123
 
 
 @pytest.fixture
-def research_type():
+def research_type() -> ResearchType:
     """Fixture providing research type."""
     return ResearchType.FAST
 
@@ -704,10 +712,10 @@ def sample_messages() -> list[dict]:
 def test_fast_chat_turn_basic(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id,
-    message_id,
-    research_type,
-):
+    chat_session_id: Any,
+    message_id: Any,
+    research_type: Any,
+) -> None:
     """Test that makes sure basic end to end functionality of our
     fast agent chat turn works.
     """
@@ -725,10 +733,10 @@ def test_fast_chat_turn_catch_exception(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
     fake_failing_model: Model,
-    chat_session_id,
-    message_id,
-    research_type,
-):
+    chat_session_id: Any,
+    message_id: Any,
+    research_type: Any,
+) -> None:
     """Test that makes sure exceptions in our agent background thread are propagated properly.
     RuntimeWarning: coroutine 'FakeFailingModel.stream_response.<locals>._gen' was never awaited
     is expected.
@@ -751,10 +759,10 @@ def test_fast_chat_turn_catch_exception(
 def test_fast_chat_turn_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id,
-    message_id,
-    research_type,
-):
+    chat_session_id: Any,
+    message_id: Any,
+    research_type: Any,
+) -> None:
     """Test that cancellation via set_fence works correctly.
 
     When set_fence is called during message streaming, we should see:
@@ -786,10 +794,10 @@ def test_fast_chat_turn_cancellation(
 def test_fast_chat_turn_tool_call_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id,
-    message_id,
-    research_type,
-):
+    chat_session_id: Any,
+    message_id: Any,
+    research_type: Any,
+) -> None:
     """Test that cancellation via set_fence works correctly during tool calls.
 
     When set_fence is called during tool execution, we should see:
@@ -820,8 +828,8 @@ class FakeCitationModel(StreamableFakeModel):
     """Fake model that simulates having iteration answers with cited documents."""
 
     def __init__(
-        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs
-    ):
+        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._iteration_answers = iteration_answers or []
 
@@ -837,7 +845,7 @@ class FakeCitationModel(StreamableFakeModel):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> ModelResponse:
         """Override to create a response that includes citations."""
         # Create a message with citations that reference our test documents
@@ -852,8 +860,8 @@ class FakeCitationModel(StreamableFakeModel):
 
 class FakeCitationModelWithContext(StreamableFakeModel):
     def __init__(
-        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs
-    ):
+        self, iteration_answers: list[IterationAnswer] | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._iteration_answers = iteration_answers or []
 
@@ -869,7 +877,7 @@ class FakeCitationModelWithContext(StreamableFakeModel):
         *,
         previous_response_id: str | None = None,
         conversation_id: str | None = None,
-        prompt=None,
+        prompt: Any = None,
     ) -> ModelResponse:
         """Override to create a response that includes citations."""
         # Create a message with citations that reference our test documents
@@ -894,7 +902,7 @@ class FakeCitationModelWithContext(StreamableFakeModel):
             ResponseContentPartDoneEvent,
         )
 
-        async def _gen() -> AsyncIterator[object]:
+        async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
             # Create message with citation text
             citation_text = "Based on the search results, here's the answer with citations [[1]](https://example.com)."
             msg = create_fake_message(text=citation_text)
@@ -952,10 +960,10 @@ class FakeCitationModelWithContext(StreamableFakeModel):
 def test_fast_chat_turn_citation_processing(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[dict],
-    chat_session_id,
-    message_id,
-    research_type,
-):
+    chat_session_id: Any,
+    message_id: Any,
+    research_type: Any,
+) -> None:
     """Test that citation processing works correctly when iteration answers contain cited documents.
 
     This test verifies that when the agent has access to context documents through
@@ -1020,9 +1028,9 @@ def test_fast_chat_turn_citation_processing(
     def test_fast_chat_turn_core(
         messages: list[dict],
         dependencies: ChatTurnDependencies,
-        session_id,
-        msg_id,
-        res_type,
+        session_id: UUID,
+        msg_id: int,
+        res_type: ResearchType,
     ) -> None:
         # Manually populate cited_documents from the iteration answer for this test
         # In real usage, cited_documents would be populated by the tool implementations

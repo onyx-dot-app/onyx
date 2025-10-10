@@ -45,7 +45,7 @@ def tool_accounting(func: F) -> F:
             # If it's a coroutine, we need to handle it differently
             if inspect.iscoroutine(result):
                 # For async functions, we need to return a coroutine that handles the cleanup
-                async def async_wrapper():
+                async def async_wrapper() -> Any:
                     try:
                         return await result
                     finally:

@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
@@ -24,38 +25,40 @@ from onyx.tools.tool_implementations_v2.image_generation import _image_generatio
 class MockEmitter:
     """Mock emitter for dependency injection"""
 
-    def __init__(self):
-        self.emitted_events = []
+    def __init__(self) -> None:
+        self.packet_history: list[Packet] = []
 
-    def emit(self, packet: Packet):
-        self.emitted_events.append(packet)
+    def emit(self, packet: Packet) -> None:
+        self.packet_history.append(packet)
 
 
 class MockAggregatedContext:
     """Mock aggregated context for dependency injection"""
 
-    def __init__(self):
-        self.global_iteration_responses = []
+    def __init__(self) -> None:
+        self.global_iteration_responses: list[IterationAnswer] = []
 
 
 class MockRunDependencies:
     """Mock run dependencies for dependency injection"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.emitter = MockEmitter()
 
 
 class MockImageGenerationTool:
     """Mock image generation tool for dependency injection"""
 
-    def __init__(self, responses=None, should_raise_exception=False):
+    def __init__(
+        self, responses: list | None = None, should_raise_exception: bool = False
+    ) -> None:
         self.responses = responses or []
         self.should_raise_exception = should_raise_exception
         self.name = "image_generation_tool"
         self.id = 2
         self.run = Mock(side_effect=self._run_side_effect)
 
-    def _run_side_effect(self, **kwargs):
+    def _run_side_effect(self, **kwargs: Any) -> list:
         if self.should_raise_exception:
             raise Exception("Test exception from image generation tool")
         return self.responses
@@ -93,8 +96,8 @@ def create_test_run_context(
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_basic_functionality(
-    mock_build_frontend_file_url, mock_save_files
-):
+    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+) -> None:
     """Test basic functionality of _image_generation_core function"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -131,7 +134,7 @@ def test_image_generation_core_basic_functionality(
     test_tool = MockImageGenerationTool(responses=test_responses)
 
     # Act
-    result = _image_generation_core(test_run_context, prompt, shape, test_tool)
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
     # Assert
     assert isinstance(result, list)
@@ -173,13 +176,13 @@ def test_image_generation_core_basic_functionality(
 
     # Verify emitter events were captured
     emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    assert len(emitter.packet_history) == 4
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, ImageGenerationToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, ImageGenerationToolHeartbeat)
-    assert isinstance(emitter.emitted_events[2].obj, ImageGenerationToolDelta)
-    assert isinstance(emitter.emitted_events[3].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, ImageGenerationToolHeartbeat)
+    assert isinstance(emitter.packet_history[2].obj, ImageGenerationToolDelta)
+    assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
     # Verify save_files was called correctly
     mock_save_files.assert_called_once_with(
@@ -194,8 +197,8 @@ def test_image_generation_core_basic_functionality(
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_with_heartbeat_only(
-    mock_build_frontend_file_url, mock_save_files
-):
+    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+) -> None:
     """Test _image_generation_core with only heartbeat responses"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -218,24 +221,24 @@ def test_image_generation_core_with_heartbeat_only(
 
     # Act & Assert
     with pytest.raises(RuntimeError, match="No images were generated"):
-        _image_generation_core(test_run_context, prompt, shape, test_tool)
+        _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
     emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    assert len(emitter.packet_history) == 4
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, ImageGenerationToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, ImageGenerationToolHeartbeat)
-    assert isinstance(emitter.emitted_events[2].obj, ImageGenerationToolHeartbeat)
-    assert isinstance(emitter.emitted_events[3].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, ImageGenerationToolHeartbeat)
+    assert isinstance(emitter.packet_history[2].obj, ImageGenerationToolHeartbeat)
+    assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert test_run_context.context.current_run_step == 2
 
 
-def test_image_generation_core_exception_handling():
+def test_image_generation_core_exception_handling() -> None:
     """Test that _image_generation_core handles exceptions properly"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -247,16 +250,16 @@ def test_image_generation_core_exception_handling():
 
     # Act & Assert
     with pytest.raises(Exception, match="Test exception from image generation tool"):
-        _image_generation_core(test_run_context, prompt, shape, test_tool)
+        _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
     emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 2
+    assert len(emitter.packet_history) == 2
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, ImageGenerationToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert test_run_context.context.current_run_step == 2
@@ -265,8 +268,8 @@ def test_image_generation_core_exception_handling():
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_different_shapes(
-    mock_build_frontend_file_url, mock_save_files
-):
+    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+) -> None:
     """Test _image_generation_core with different shapes"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -296,7 +299,7 @@ def test_image_generation_core_different_shapes(
         # Create a fresh mock for each test to avoid call history issues
         fresh_test_tool = MockImageGenerationTool(responses=test_responses)
         result = _image_generation_core(
-            test_run_context, prompt, shape, fresh_test_tool
+            test_run_context, prompt, shape, fresh_test_tool  # type: ignore[arg-type]
         )
 
         assert len(result) == 1
@@ -332,8 +335,8 @@ def test_image_generation_core_different_shapes(
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_empty_response(
-    mock_build_frontend_file_url, mock_save_files
-):
+    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+) -> None:
     """Test _image_generation_core with empty tool responses"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -345,13 +348,13 @@ def test_image_generation_core_empty_response(
 
     # Act & Assert
     with pytest.raises(RuntimeError, match="No images were generated"):
-        _image_generation_core(test_run_context, prompt, shape, test_tool)
+        _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
     emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 2
+    assert len(emitter.packet_history) == 2
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, ImageGenerationToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SectionEnd)

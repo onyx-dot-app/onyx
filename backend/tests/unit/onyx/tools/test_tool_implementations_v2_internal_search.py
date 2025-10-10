@@ -1,4 +1,6 @@
 from queue import Queue
+from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -39,7 +41,7 @@ def create_fake_aggregated_context() -> AggregatedDRContext:
     )
 
 
-def create_fake_run_dependencies(redis_client=None) -> ChatTurnDependencies:
+def create_fake_run_dependencies(redis_client: Any = None) -> ChatTurnDependencies:
     """Create fake run dependencies for testing"""
     from unittest.mock import MagicMock
 
@@ -77,13 +79,15 @@ class FakeTool:
 class FakeSearchPipeline:
     """Fake search pipeline for dependency injection"""
 
-    def __init__(self, responses=None, should_raise_exception=False):
+    def __init__(
+        self, responses: list | None = None, should_raise_exception: bool = False
+    ) -> None:
         self.responses = responses or []
         self.should_raise_exception = should_raise_exception
         self.run_called = False
-        self.run_kwargs = None
+        self.run_kwargs: dict[str, Any] = {}
 
-    def run(self, **kwargs):
+    def run(self, **kwargs: Any) -> list:
         self.run_called = True
         self.run_kwargs = kwargs
         if self.should_raise_exception:
@@ -92,7 +96,10 @@ class FakeSearchPipeline:
 
 
 def create_fake_inference_chunk(
-    document_id="doc1", semantic_identifier="test_doc", blurb="Test content", chunk_id=0
+    document_id: str = "doc1",
+    semantic_identifier: str = "test_doc",
+    blurb: str = "Test content",
+    chunk_id: int = 0,
 ) -> InferenceChunk:
     """Create a fake InferenceChunk for testing"""
     return InferenceChunk(
@@ -125,7 +132,9 @@ def create_fake_inference_chunk(
 
 
 def create_fake_inference_section(
-    document_id="doc1", semantic_identifier="test_doc", blurb="Test content"
+    document_id: str = "doc1",
+    semantic_identifier: str = "test_doc",
+    blurb: str = "Test content",
 ) -> InferenceSection:
     """Create a fake InferenceSection for testing"""
     center_chunk = create_fake_inference_chunk(
@@ -143,7 +152,7 @@ def create_fake_inference_section(
 class FakeSearchResponse:
     """Fake search response for testing"""
 
-    def __init__(self, response_id, top_sections=None):
+    def __init__(self, response_id: str, top_sections: list | None = None) -> None:
         self.id = response_id
         self.response = FakeSearchResponseSummary(top_sections or [])
 
@@ -151,11 +160,11 @@ class FakeSearchResponse:
 class FakeSearchResponseSummary:
     """Fake search response summary for testing"""
 
-    def __init__(self, top_sections):
+    def __init__(self, top_sections: list) -> None:
         self.top_sections = top_sections
 
 
-def create_fake_database_session():
+def create_fake_database_session() -> Any:
     """Create a fake SQLAlchemy Session for testing"""
     from unittest.mock import Mock
     from sqlalchemy.orm import Session
@@ -165,10 +174,10 @@ def create_fake_database_session():
     fake_session.committed = False
     fake_session.rolled_back = False
 
-    def mock_commit():
+    def mock_commit() -> None:
         fake_session.committed = True
 
-    def mock_rollback():
+    def mock_rollback() -> None:
         fake_session.rolled_back = True
 
     fake_session.commit = mock_commit
@@ -184,55 +193,55 @@ def create_fake_database_session():
 class FakeQuery:
     """Fake SQLAlchemy Query for testing"""
 
-    def filter(self, *args, **kwargs):
+    def filter(self, *args: Any, **kwargs: Any) -> "FakeQuery":
         return self
 
-    def first(self):
+    def first(self) -> Any:
         return None
 
-    def all(self):
+    def all(self) -> list:
         return []
 
 
 class FakeResult:
     """Fake SQLAlchemy Result for testing"""
 
-    def scalar(self):
+    def scalar(self) -> Any:
         return None
 
-    def fetchall(self):
+    def fetchall(self) -> list:
         return []
 
 
 class FakeSessionContextManager:
     """Fake session context manager for testing"""
 
-    def __init__(self, session=None):
+    def __init__(self, session: Any = None) -> None:
         self.session = session or create_fake_database_session()
 
-    def __enter__(self):
+    def __enter__(self) -> Any:
         return self.session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
 
 class FakeRedis:
     """Fake Redis client for testing"""
 
-    def __init__(self):
-        self.data = {}
+    def __init__(self) -> None:
+        self.data: dict = {}
 
-    def get(self, key):
+    def get(self, key: str) -> Any:
         return self.data.get(key)
 
-    def set(self, key, value, ex=None):
+    def set(self, key: str, value: Any, ex: Any = None) -> None:
         self.data[key] = value
 
-    def delete(self, key):
+    def delete(self, key: str) -> int:
         return self.data.pop(key, 0)
 
-    def exists(self, key):
+    def exists(self, key: str) -> int:
         return 1 if key in self.data else 0
 
 
@@ -243,9 +252,9 @@ class FakeRedis:
 
 def create_fake_run_context(
     current_run_step: int = 0,
-    chat_session_id=None,
+    chat_session_id: Any = None,
     message_id: int | None = None,
-    research_type=None,
+    research_type: Any = None,
     redis_client: FakeRedis | None = None,
 ) -> RunContextWrapper[ChatTurnContext]:
     """Create a real RunContextWrapper with fake dependencies"""
@@ -273,8 +282,8 @@ def create_fake_run_context(
 
 
 def create_fake_search_pipeline_with_results(
-    sections=None, should_raise_exception=False
-):
+    sections: list | None = None, should_raise_exception: bool = False
+) -> FakeSearchPipeline:
     """Create a fake search pipeline with test results"""
     if sections is None:
         sections = [
@@ -302,12 +311,12 @@ def create_fake_search_pipeline_with_results(
     )
 
 
-def create_fake_search_pipeline_empty():
+def create_fake_search_pipeline_empty() -> FakeSearchPipeline:
     """Create a fake search pipeline with no results"""
     return FakeSearchPipeline(responses=[])
 
 
-def create_fake_search_pipeline_multiple_responses():
+def create_fake_search_pipeline_multiple_responses() -> FakeSearchPipeline:
     """Create a fake search pipeline with multiple responses"""
     test_sections = [create_fake_inference_section()]
     responses = [
@@ -327,7 +336,7 @@ def run_internal_search_core_with_dependencies(
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
-) -> list:
+) -> list[InferenceSection]:
     """Helper function to run the real _internal_search_core with injected dependencies"""
     from unittest.mock import patch
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
@@ -361,11 +370,11 @@ class FakeSearchToolOverrideKwargs:
 
     def __init__(
         self,
-        force_no_rerank=True,
-        alternate_db_session=None,
-        skip_query_analysis=True,
-        original_query=None,
-    ):
+        force_no_rerank: bool = True,
+        alternate_db_session: Any = None,
+        skip_query_analysis: bool = True,
+        original_query: str | None = None,
+    ) -> None:
         self.force_no_rerank = force_no_rerank
         self.alternate_db_session = alternate_db_session
         self.skip_query_analysis = skip_query_analysis
@@ -396,28 +405,28 @@ def fake_redis_client() -> FakeRedis:
 
 
 @pytest.fixture
-def fake_chat_session_id():
+def fake_chat_session_id() -> UUID:
     """Fixture providing fake chat session ID."""
     return uuid4()
 
 
 @pytest.fixture
-def fake_message_id():
+def fake_message_id() -> int:
     """Fixture providing fake message ID."""
     return 123
 
 
 @pytest.fixture
-def fake_research_type():
+def fake_research_type() -> None:
     """Fixture providing fake research type."""
     return None  # Not needed for this test
 
 
 @pytest.fixture
 def fake_run_context(
-    fake_chat_session_id,
-    fake_message_id,
-    fake_research_type,
+    fake_chat_session_id: UUID,
+    fake_message_id: int,
+    fake_research_type: None,
     fake_redis_client: FakeRedis,
 ) -> RunContextWrapper[ChatTurnContext]:
     """Fixture providing a complete RunContextWrapper with fake implementations."""
@@ -449,7 +458,7 @@ def fake_session_context_manager() -> FakeSessionContextManager:
 def test_internal_search_core_basic_functionality(
     fake_run_context: RunContextWrapper[ChatTurnContext],
     fake_session_context_manager: FakeSessionContextManager,
-):
+) -> None:
     """Test basic functionality of _internal_search_core function using dependency injection"""
     # Arrange
     query = "test search query"
@@ -552,7 +561,7 @@ def test_internal_search_core_basic_functionality(
 def test_internal_search_core_with_multiple_queries(
     fake_run_context: RunContextWrapper[ChatTurnContext],
     fake_session_context_manager: FakeSessionContextManager,
-):
+) -> None:
     """Test that _internal_search_core can handle multiple queries and execute them in parallel"""
     # Arrange
     queries = ["first query", "second query", "third query"]
@@ -572,15 +581,15 @@ def test_internal_search_core_with_multiple_queries(
 
     # Track calls to the pipeline
     original_run = test_pipeline.run
-    call_count = []
-    call_queries = []
+    call_count: list[int] = []
+    call_queries: list[Any] = []
 
-    def tracked_run(**kwargs):
+    def tracked_run(**kwargs: Any) -> list:
         call_count.append(1)
         call_queries.append(kwargs.get("query"))
         return original_run(**kwargs)
 
-    test_pipeline.run = tracked_run
+    test_pipeline.run = tracked_run  # type: ignore[method-assign]
 
     # Act
     result = run_internal_search_core_with_dependencies(

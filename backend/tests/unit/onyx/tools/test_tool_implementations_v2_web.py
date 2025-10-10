@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import cast
 from typing import List
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -16,6 +17,7 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
 )
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -64,25 +66,25 @@ class MockWebSearchProvider(WebSearchProvider):
 class MockEmitter:
     """Mock emitter for dependency injection"""
 
-    def __init__(self):
-        self.emitted_events = []
+    def __init__(self) -> None:
+        self.packet_history: list[Packet] = []
 
-    def emit(self, packet: Packet):
-        self.emitted_events.append(packet)
+    def emit(self, packet: Packet) -> None:
+        self.packet_history.append(packet)
 
 
 class MockAggregatedContext:
     """Mock aggregated context for dependency injection"""
 
-    def __init__(self):
-        self.global_iteration_responses = []
-        self.cited_documents = []
+    def __init__(self) -> None:
+        self.global_iteration_responses: list[IterationAnswer] = []
+        self.cited_documents: list[InferenceSection] = []
 
 
 class MockRunDependencies:
     """Mock run dependencies for dependency injection"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.emitter = MockEmitter()
         # Set up mock database session
         self.db_session = MagicMock()
@@ -124,7 +126,7 @@ def create_test_run_context(
     return run_context
 
 
-def test_web_search_core_basic_functionality():
+def test_web_search_core_basic_functionality() -> None:
     """Test basic functionality of _web_search_core function with a single query"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -214,16 +216,16 @@ def test_web_search_core_basic_functionality():
     )
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 3
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 3
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, SearchToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SearchToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SearchToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
 
-def test_web_fetch_core_basic_functionality():
+def test_web_fetch_core_basic_functionality() -> None:
     """Test basic functionality of _web_fetch_core function"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -304,22 +306,22 @@ def test_web_fetch_core_basic_functionality():
     assert len(test_run_context.context.aggregated_context.cited_documents) == 0
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 2
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 2
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, FetchToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
 
     # Verify the FetchToolStart event contains the correct SavedSearchDoc objects
-    fetch_start_event = emitter.emitted_events[0].obj
+    fetch_start_event = emitter.packet_history[0].obj
     assert len(fetch_start_event.documents) == 2
     assert fetch_start_event.documents[0].link == "https://example.com/1"
     assert fetch_start_event.documents[1].link == "https://example.com/2"
     assert fetch_start_event.documents[0].source_type == DocumentSource.WEB
 
 
-def test_web_search_core_exception_handling():
+def test_web_search_core_exception_handling() -> None:
     """Test that _web_search_core handles exceptions properly - should still emit section end and update current_run_step"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -334,15 +336,15 @@ def test_web_search_core_exception_handling():
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter
+    emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
     assert (
-        len(emitter.emitted_events) == 3
+        len(emitter.packet_history) == 3
     )  # SearchToolStart, SearchToolDelta, and SectionEnd
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, SearchToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SearchToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SearchToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert (
@@ -350,7 +352,7 @@ def test_web_search_core_exception_handling():
     )  # Should be 2 after proper handling
 
 
-def test_web_search_core_multiple_queries():
+def test_web_search_core_multiple_queries() -> None:
     """Test _web_search_core function with multiple queries searched in parallel"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -448,22 +450,23 @@ def test_web_search_core_multiple_queries():
     )
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 3
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 3
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, SearchToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SearchToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SearchToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
     # Check that SearchToolDelta contains both queries
-    search_delta = emitter.emitted_events[1].obj
+    search_delta = emitter.packet_history[1].obj
+    assert search_delta.queries is not None
     assert len(search_delta.queries) == 2
     assert "first query" in search_delta.queries
     assert "second query" in search_delta.queries
 
 
-def test_web_fetch_core_exception_handling():
+def test_web_fetch_core_exception_handling() -> None:
     """Test that _web_fetch_core handles exceptions properly - should still emit section end and update current_run_step"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -478,12 +481,12 @@ def test_web_fetch_core_exception_handling():
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 2  # FetchToolStart and SectionEnd
+    emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
+    assert len(emitter.packet_history) == 2  # FetchToolStart and SectionEnd
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, FetchToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert (
@@ -491,7 +494,7 @@ def test_web_fetch_core_exception_handling():
     )  # Should be 2 after proper handling
 
 
-def test_saved_search_doc_from_url():
+def test_saved_search_doc_from_url() -> None:
     """Test that SavedSearchDoc.from_url creates a properly formatted document for internet search"""
     # Arrange
     test_url = "https://example.com/test-page"

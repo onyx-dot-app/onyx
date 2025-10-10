@@ -29,10 +29,10 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 class MockEmitter:
     """Mock emitter that tracks packet history for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.packet_history: list = []
 
-    def emit(self, packet):
+    def emit(self, packet: Any) -> None:
         """Emit a packet and add it to history."""
         self.packet_history.append(packet)
 
@@ -219,7 +219,7 @@ def test_custom_tool_invocation(
     # We need to handle the async nature of the FunctionTool
     import asyncio
 
-    async def test_invoke():
+    async def test_invoke() -> Any:
         return await v2_tool.on_invoke_tool(mock_context, test_args)
 
     # Run the async function
@@ -291,7 +291,7 @@ def test_mcp_tool_invocation(mock_call_mcp_tool: MagicMock, mcp_tool: MCPTool) -
     # We need to handle the async nature of the FunctionTool
     import asyncio
 
-    async def test_invoke():
+    async def test_invoke() -> Any:
         return await v2_tool.on_invoke_tool(mock_context, test_args)
 
     # Run the async function
@@ -374,7 +374,7 @@ def test_custom_tool_iteration_instructions_and_answers(
 
     import asyncio
 
-    async def test_invoke():
+    async def test_invoke() -> Any:
         return await v2_tool.on_invoke_tool(mock_context, test_args)
 
     # Run the async function
@@ -480,7 +480,7 @@ def test_custom_tool_csv_response_with_file_ids(
 
         import asyncio
 
-        async def test_invoke():
+        async def test_invoke() -> Any:
             return await v2_tool.on_invoke_tool(mock_context, test_args)
 
         # Run the async function
@@ -558,7 +558,7 @@ def test_mcp_tool_iteration_instructions_and_answers(
 
     import asyncio
 
-    async def test_invoke():
+    async def test_invoke() -> Any:
         return await v2_tool.on_invoke_tool(mock_context, test_args)
 
     # Run the async function

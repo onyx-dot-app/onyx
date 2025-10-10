@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -5,6 +6,7 @@ import pytest
 from agents import RunContextWrapper
 
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -16,35 +18,37 @@ from onyx.tools.tool_implementations_v2.okta_profile import _okta_profile_core
 class MockEmitter:
     """Mock emitter for dependency injection"""
 
-    def __init__(self):
-        self.emitted_events = []
+    def __init__(self) -> None:
+        self.packet_history: list[Packet] = []
 
-    def emit(self, packet: Packet):
-        self.emitted_events.append(packet)
+    def emit(self, packet: Packet) -> None:
+        self.packet_history.append(packet)
 
 
 class MockAggregatedContext:
     """Mock aggregated context for dependency injection"""
 
-    def __init__(self):
-        self.global_iteration_responses = []
+    def __init__(self) -> None:
+        self.global_iteration_responses: list[IterationAnswer] = []
 
 
 class MockRunDependencies:
     """Mock run dependencies for dependency injection"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.emitter = MockEmitter()
 
 
 class MockOktaProfileTool:
     """Mock Okta profile tool for dependency injection"""
 
-    def __init__(self, responses=None, should_raise_exception=False):
+    def __init__(
+        self, responses: list | None = None, should_raise_exception: bool = False
+    ) -> None:
         self.responses = responses or []
         self.should_raise_exception = should_raise_exception
 
-    def run(self):
+    def run(self) -> list:
         if self.should_raise_exception:
             raise Exception("Test exception from Okta profile tool")
         return self.responses
@@ -79,7 +83,7 @@ def create_test_run_context(
     return run_context
 
 
-def test_okta_profile_core_basic_functionality():
+def test_okta_profile_core_basic_functionality() -> None:
     """Test basic functionality of _okta_profile_core function"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -126,36 +130,36 @@ def test_okta_profile_core_basic_functionality():
     assert test_run_context.context.current_run_step == 2
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 4
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, CustomToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, CustomToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, CustomToolDelta)
-    assert isinstance(emitter.emitted_events[3].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, CustomToolStart)
+    assert isinstance(emitter.packet_history[1].obj, CustomToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, CustomToolDelta)
+    assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
     # Check the CustomToolStart event
-    start_event = emitter.emitted_events[0].obj
+    start_event = emitter.packet_history[0].obj
     assert start_event.type == "custom_tool_start"
     assert start_event.tool_name == "Okta Profile"
 
     # Check the first CustomToolDelta event (fetching message)
-    first_delta = emitter.emitted_events[1].obj
+    first_delta = emitter.packet_history[1].obj
     assert first_delta.type == "custom_tool_delta"
     assert first_delta.tool_name == "Okta Profile"
     assert first_delta.response_type == "text"
     assert first_delta.data == "Fetching profile information..."
 
     # Check the second CustomToolDelta event (final result)
-    second_delta = emitter.emitted_events[2].obj
+    second_delta = emitter.packet_history[2].obj
     assert second_delta.type == "custom_tool_delta"
     assert second_delta.tool_name == "Okta Profile"
     assert second_delta.response_type == "json"
     assert second_delta.data == test_profile_data
 
 
-def test_okta_profile_core_minimal_profile():
+def test_okta_profile_core_minimal_profile() -> None:
     """Test _okta_profile_core with minimal profile data"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -188,11 +192,11 @@ def test_okta_profile_core_minimal_profile():
     assert len(result) == 3
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 4
 
 
-def test_okta_profile_core_no_profile_data():
+def test_okta_profile_core_no_profile_data() -> None:
     """Test _okta_profile_core when no profile data is returned"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -213,19 +217,19 @@ def test_okta_profile_core_no_profile_data():
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 3
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 3
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, CustomToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, CustomToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, CustomToolStart)
+    assert isinstance(emitter.packet_history[1].obj, CustomToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert test_run_context.context.current_run_step == 2
 
 
-def test_okta_profile_core_exception_handling():
+def test_okta_profile_core_exception_handling() -> None:
     """Test that _okta_profile_core handles exceptions properly"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -239,19 +243,19 @@ def test_okta_profile_core_exception_handling():
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 3
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 3
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, CustomToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, CustomToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, CustomToolStart)
+    assert isinstance(emitter.packet_history[1].obj, CustomToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert test_run_context.context.current_run_step == 2
 
 
-def test_okta_profile_core_none_tool():
+def test_okta_profile_core_none_tool() -> None:
     """Test that _okta_profile_core handles None tool properly"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -263,15 +267,15 @@ def test_okta_profile_core_none_tool():
         _okta_profile_core(test_run_context, None)
 
     # Verify that even though an exception was raised, we still emitted the SectionEnd packet
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 1
-    assert isinstance(emitter.emitted_events[0].obj, SectionEnd)
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 1
+    assert isinstance(emitter.packet_history[0].obj, SectionEnd)
 
     # Verify that the decorator properly handled the exception and updated current_run_step
     assert test_run_context.context.current_run_step == 2
 
 
-def test_okta_profile_core_empty_responses():
+def test_okta_profile_core_empty_responses() -> None:
     """Test _okta_profile_core with empty tool responses"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -285,16 +289,16 @@ def test_okta_profile_core_empty_responses():
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 3
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 3
 
     # Check the types of emitted events
-    assert isinstance(emitter.emitted_events[0].obj, CustomToolStart)
-    assert isinstance(emitter.emitted_events[1].obj, CustomToolDelta)
-    assert isinstance(emitter.emitted_events[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[0].obj, CustomToolStart)
+    assert isinstance(emitter.packet_history[1].obj, CustomToolDelta)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
 
 
-def test_okta_profile_core_multiple_responses():
+def test_okta_profile_core_multiple_responses() -> None:
     """Test _okta_profile_core with multiple tool responses"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -336,11 +340,11 @@ def test_okta_profile_core_multiple_responses():
     assert result["title"] == "Product Manager"
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 4
 
 
-def test_okta_profile_core_complex_profile_data():
+def test_okta_profile_core_complex_profile_data() -> None:
     """Test _okta_profile_core with complex profile data"""
     # Arrange
     test_run_context = create_test_run_context()
@@ -403,9 +407,10 @@ def test_okta_profile_core_complex_profile_data():
     assert result["certifications"][0]["name"] == "AWS Solutions Architect"
 
     # Verify emitter events were captured
-    emitter = test_run_context.context.run_dependencies.emitter
-    assert len(emitter.emitted_events) == 4
+    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
+    assert len(emitter.packet_history) == 4
 
     # Check the final CustomToolDelta event contains the complex data
-    final_delta = emitter.emitted_events[2].obj
+    final_delta = emitter.packet_history[2].obj
+    assert isinstance(final_delta, CustomToolDelta)
     assert final_delta.data == test_profile_data
