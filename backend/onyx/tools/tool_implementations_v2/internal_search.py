@@ -32,9 +32,6 @@ def _internal_search_core(
     search_tool: SearchTool,
 ) -> list[InferenceSection]:
     """Core internal search logic that can be tested with dependency injection"""
-    if search_tool is None:
-        raise RuntimeError("Search tool not available in context")
-
     index = run_context.context.current_run_step
     run_context.context.run_dependencies.emitter.emit(
         Packet(
@@ -182,7 +179,8 @@ def internal_search_tool(
     - combined_content: Merged text content from all chunks in the section
     """
     search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
-    assert search_pipeline_instance is not None
+    if search_pipeline_instance is None:
+        raise RuntimeError("Search tool not available in context")
 
     # Call the core function
     retrieved_docs = _internal_search_core(
