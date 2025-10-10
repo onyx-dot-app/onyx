@@ -4,7 +4,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchResult,
+    WebSearchResult,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.states import (
     InternetSearchInput,
@@ -23,7 +23,7 @@ def dedup_urls(
     writer: StreamWriter = lambda _: None,
 ) -> InternetSearchInput:
     branch_questions_to_urls: dict[str, list[str]] = defaultdict(list)
-    unique_results_by_link: dict[str, InternetSearchResult] = {}
+    unique_results_by_link: dict[str, WebSearchResult] = {}
     for query, result in state.results_to_open:
         branch_questions_to_urls[query].append(result.link)
         if result.link not in unique_results_by_link:

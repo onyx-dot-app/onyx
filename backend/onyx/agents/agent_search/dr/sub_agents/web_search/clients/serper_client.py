@@ -4,13 +4,13 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetContent,
+    WebContent,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchProvider,
+    WebSearchProvider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchResult,
+    WebSearchResult,
 )
 from onyx.configs.chat_configs import SERPER_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -20,7 +20,7 @@ SERPER_SEARCH_URL = "https://google.serper.dev/search"
 SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
 
-class SerperClient(InternetSearchProvider):
+class SerperClient(WebSearchProvider):
     def __init__(self, api_key: str | None = SERPER_API_KEY) -> None:
         self.headers = {
             "X-API-KEY": api_key,
@@ -28,7 +28,7 @@ class SerperClient(InternetSearchProvider):
         }
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def search(self, query: str) -> list[InternetSearchResult]:
+    def search(self, query: str) -> list[WebSearchResult]:
         payload = {
             "q": query,
         }
@@ -45,7 +45,7 @@ class SerperClient(InternetSearchProvider):
         organic_results = results["organic"]
 
         return [
-            InternetSearchResult(
+            WebSearchResult(
                 title=result["title"],
                 link=result["link"],
                 snippet=result["snippet"],
@@ -55,17 +55,17 @@ class SerperClient(InternetSearchProvider):
             for result in organic_results
         ]
 
-    def contents(self, urls: list[str]) -> list[InternetContent]:
+    def contents(self, urls: list[str]) -> list[WebContent]:
         if not urls:
             return []
 
         # Serper can responds with 500s regularly. We want to retry,
         # but in the event of failure, return an unsuccesful scrape.
-        def safe_get_webpage_content(url: str) -> InternetContent:
+        def safe_get_webpage_content(url: str) -> WebContent:
             try:
                 return self._get_webpage_content(url)
             except Exception:
-                return InternetContent(
+                return WebContent(
                     title="",
                     link=url,
                     full_content="",
@@ -77,7 +77,7 @@ class SerperClient(InternetSearchProvider):
             return list(e.map(safe_get_webpage_content, urls))
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def _get_webpage_content(self, url: str) -> InternetContent:
+    def _get_webpage_content(self, url: str) -> WebContent:
         payload = {
             "url": url,
         }
@@ -90,7 +90,7 @@ class SerperClient(InternetSearchProvider):
 
         # 400 returned when serper cannot scrape
         if response.status_code == 400:
-            return InternetContent(
+            return WebContent(
                 title="",
                 link=url,
                 full_content="",
@@ -122,7 +122,7 @@ class SerperClient(InternetSearchProvider):
             except Exception:
                 published_date = None
 
-        return InternetContent(
+        return WebContent(
             title=title or "",
             link=response_url,
             full_content=text or "",

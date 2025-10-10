@@ -34,7 +34,6 @@ export default function CitedSourcesToggle({
   const createDocumentIcon = (doc: OnyxDocument, documentId: string) => {
     let sourceKey: string;
     let iconElement: React.ReactNode;
-
     if (doc.is_internet || doc.source_type === ValidSources.Web) {
       // For web sources, use the hostname as the unique key
       try {

@@ -1,8 +1,8 @@
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetContent,
+    WebContent,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchResult,
+    WebSearchResult,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
@@ -17,7 +17,7 @@ def truncate_search_result_content(content: str, max_chars: int = 10000) -> str:
 
 
 def dummy_inference_section_from_internet_content(
-    result: InternetContent,
+    result: WebContent,
 ) -> InferenceSection:
     truncated_content = truncate_search_result_content(result.full_content)
     return InferenceSection(
@@ -48,7 +48,7 @@ def dummy_inference_section_from_internet_content(
 
 
 def dummy_inference_section_from_internet_search_result(
-    result: InternetSearchResult,
+    result: WebSearchResult,
 ) -> InferenceSection:
     return InferenceSection(
         center_chunk=InferenceChunk(

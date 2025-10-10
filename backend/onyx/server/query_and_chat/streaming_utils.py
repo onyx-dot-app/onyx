@@ -215,7 +215,7 @@ def create_custom_tool_packets(
 
 def create_search_packets(
     search_queries: list[str],
-    saved_search_docs: list[SavedSearchDoc] | None,
+    saved_search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
     step_nr: int,
 ) -> list[Packet]:

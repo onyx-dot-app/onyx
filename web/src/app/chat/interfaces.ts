@@ -24,6 +24,13 @@ export enum RetrievalType {
   SelectedDocs = "selectedDocs",
 }
 
+export enum ResearchType {
+  LegacyAgentic = "LEGACY_AGENTIC",
+  Thoughtful = "THOUGHTFUL",
+  Deep = "DEEP",
+  Fast = "FAST",
+}
+
 export enum ChatSessionSharedStatus {
   Private = "private",
   Public = "public",
@@ -114,6 +121,7 @@ export interface Message {
   message: string;
   type: "user" | "assistant" | "system" | "error";
   retrievalType?: RetrievalType;
+  researchType?: ResearchType;
   query?: string | null;
   files: FileDescriptor[];
   toolCall: ToolCallMetadata | null;
@@ -154,6 +162,7 @@ export interface BackendChatSession {
 export interface BackendMessage {
   message_id: number;
   message_type: string;
+  research_type: string | null;
   parent_message: number | null;
   latest_child_message: number | null;
   message: string;

@@ -36,6 +36,7 @@ class EvalConfigurationOptions(BaseModel):
     )
     search_permissions_email: str
     dataset_name: str
+    no_send_logs: bool = False
 
     def get_configuration(self, db_session: Session) -> EvalConfiguration:
         persona_override_config = self.persona_override_config or PersonaOverrideConfig(

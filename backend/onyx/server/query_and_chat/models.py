@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import model_validator
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import RetrievalDocs
 from onyx.configs.constants import DocumentSource
@@ -255,6 +256,7 @@ class ChatMessageDetail(BaseModel):
     rephrased_query: str | None = None
     context_docs: RetrievalDocs | None = None
     message_type: MessageType
+    research_type: ResearchType | None = None
     time_sent: datetime
     overridden_model: str | None
     alternate_assistant_id: int | None = None

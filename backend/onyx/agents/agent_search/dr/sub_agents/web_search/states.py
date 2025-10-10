@@ -4,13 +4,13 @@ from typing import Annotated
 from onyx.agents.agent_search.dr.states import LoggerUpdate
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchResult,
+    WebSearchResult,
 )
 from onyx.context.search.models import InferenceSection
 
 
 class InternetSearchInput(SubAgentInput):
-    results_to_open: Annotated[list[tuple[str, InternetSearchResult]], add] = []
+    results_to_open: Annotated[list[tuple[str, WebSearchResult]], add] = []
     parallelization_nr: int = 0
     branch_question: Annotated[str, lambda x, y: y] = ""
     branch_questions_to_urls: Annotated[dict[str, list[str]], lambda x, y: y] = {}
@@ -18,7 +18,7 @@ class InternetSearchInput(SubAgentInput):
 
 
 class InternetSearchUpdate(LoggerUpdate):
-    results_to_open: Annotated[list[tuple[str, InternetSearchResult]], add] = []
+    results_to_open: Annotated[list[tuple[str, WebSearchResult]], add] = []
 
 
 class FetchInput(SubAgentInput):

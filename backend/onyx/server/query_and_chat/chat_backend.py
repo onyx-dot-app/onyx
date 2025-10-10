@@ -15,6 +15,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
@@ -25,6 +26,7 @@ from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
+from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -59,6 +61,7 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
@@ -816,3 +819,17 @@ async def search_chats(
         has_more=has_more,
         next_page=page + 1 if has_more else None,
     )
+
+
+@router.post("/stop-chat-session/{chat_session_id}")
+def stop_chat_session(
+    chat_session_id: UUID,
+    user: User | None = Depends(current_user),
+    redis_client: Redis = Depends(get_redis_client),
+) -> dict[str, str]:
+    """
+    Stop a chat session by setting a stop signal in Redis.
+    This endpoint is called by the frontend when the user clicks the stop button.
+    """
+    set_fence(chat_session_id, redis_client, True)
+    return {"message": "Chat session stopped"}
