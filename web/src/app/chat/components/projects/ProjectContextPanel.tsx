@@ -484,7 +484,7 @@ export default function ProjectContextPanel({
         </Button>
       </div>
       <div
-        className="flex flex-col gap-2 "
+        className="flex flex-col gap-spacing-paragraph"
         {...getRootProps({ onClick: (e) => e.stopPropagation() })}
       >
         <div className="flex flex-row gap-2 justify-between">
@@ -634,7 +634,7 @@ export default function ProjectContextPanel({
             } flex items-center pl-spacing-interline`}
           >
             <p
-              className={`font-secondary-body ${
+              className={`p-spacing-interline font-secondary-body ${
                 isDragActive ? "text-action-link-05" : "text-text-02 "
               }`}
             >
