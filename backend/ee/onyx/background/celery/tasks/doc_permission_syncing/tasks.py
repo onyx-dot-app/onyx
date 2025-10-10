@@ -56,6 +56,18 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
+from onyx.db.permission_sync_attempt import (
+    mark_doc_permission_sync_attempt_completed_with_errors,
+)
+from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
+from onyx.db.permission_sync_attempt import (
+    mark_doc_permission_sync_attempt_in_progress,
+)
+from onyx.db.permission_sync_attempt import (
+    mark_doc_permission_sync_attempt_succeeded,
+)
+from onyx.db.permission_sync_attempt import update_doc_permission_sync_progress
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -379,6 +391,15 @@ def connector_permission_sync_generator_task(
     doc_permission_sync_ctx_dict["request_id"] = self.request.id
     doc_permission_sync_ctx.set(doc_permission_sync_ctx_dict)
 
+    with get_session_with_current_tenant() as db_session:
+        attempt_id = create_doc_permission_sync_attempt(
+            connector_credential_pair_id=cc_pair_id,
+            db_session=db_session,
+        )
+        task_logger.info(
+            f"Created doc permission sync attempt: {attempt_id} for cc_pair={cc_pair_id}"
+        )
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
     r = get_redis_client()
@@ -483,6 +504,8 @@ def connector_permission_sync_generator_task(
 
             logger.info(f"Syncing docs for {source_type} with cc_pair={cc_pair_id}")
 
+            mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
+
             payload = redis_connector.permissions.payload
             if not payload:
                 raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
@@ -533,21 +556,52 @@ def connector_permission_sync_generator_task(
             )
 
             tasks_generated = 0
+            docs_with_errors = 0
             for doc_external_access in document_external_accesses:
-                redis_connector.permissions.update_db(
-                    lock=lock,
-                    new_permissions=[doc_external_access],
-                    source_string=source_type,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    task_logger=task_logger,
-                )
-                tasks_generated += 1
+                try:
+                    redis_connector.permissions.update_db(
+                        lock=lock,
+                        new_permissions=[doc_external_access],
+                        source_string=source_type,
+                        connector_id=cc_pair.connector.id,
+                        credential_id=cc_pair.credential.id,
+                        task_logger=task_logger,
+                    )
+                    tasks_generated += 1
+                except Exception as e:
+                    docs_with_errors += 1
+                    task_logger.exception(
+                        f"Error updating permissions for doc {doc_external_access.doc_id}: {e}"
+                    )
+                    # Continue processing other documents
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks finished. "
-                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
             )
+
+            update_doc_permission_sync_progress(
+                db_session=db_session,
+                attempt_id=attempt_id,
+                total_docs_synced=tasks_generated,
+                docs_with_permission_errors=docs_with_errors,
+            )
+            task_logger.info(
+                f"Updated progress for attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
+            )
+
+            if docs_with_errors > 0:
+                mark_doc_permission_sync_attempt_completed_with_errors(
+                    attempt_id, db_session
+                )
+                task_logger.info(
+                    f"Marked doc permission sync attempt {attempt_id} as completed with errors"
+                )
+            else:
+                mark_doc_permission_sync_attempt_succeeded(attempt_id, db_session)
+                task_logger.info(
+                    f"Marked doc permission sync attempt {attempt_id} as succeeded"
+                )
 
             redis_connector.permissions.generator_complete = tasks_generated
 
@@ -560,6 +614,11 @@ def connector_permission_sync_generator_task(
         task_logger.exception(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id}"
         )
+
+        with get_session_with_current_tenant() as db_session:
+            mark_doc_permission_sync_attempt_failed(
+                attempt_id, db_session, error_message=error_msg
+            )
 
         redis_connector.permissions.generator_clear()
         redis_connector.permissions.taskset_clear()
