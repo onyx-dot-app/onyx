@@ -120,7 +120,9 @@ def _get_available_tools(
     else:
         include_kg = False
 
-    tool_dict: dict[int, Tool] = {tool.id: tool for tool in get_tools(db_session)}
+    tool_dict: dict[int, Tool] = {
+        tool.id: tool for tool in get_tools(db_session, only_enabled=True)
+    }
 
     for tool in graph_config.tooling.tools:
 
