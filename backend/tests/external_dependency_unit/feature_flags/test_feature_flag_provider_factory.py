@@ -5,6 +5,8 @@ These tests verify the feature flag service implementation with real
 PostHog integration when available, and fallback behavior otherwise.
 """
 
+from uuid import UUID
+
 from ee.onyx.feature_flags.posthog_provider import PostHogFeatureFlagProvider
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import FeatureFlagProvider
@@ -19,15 +21,8 @@ class TestNoOpFeatureFlagProvider:
         provider = NoOpFeatureFlagProvider()
 
         assert provider.feature_enabled("test-flag", "user-123") is False
-
-        assert (
-            provider.feature_enabled(
-                "test-flag", "user-123", {"email": "test@example.com"}
-            )
-            is False
-        )
-
-        assert provider.feature_enabled("another-flag", "user-456") is False
+        my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
+        assert provider.feature_enabled("another-flag", my_uuid) is False
 
 
 class TestFeatureFlagFactory:
