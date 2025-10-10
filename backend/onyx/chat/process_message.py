@@ -28,10 +28,8 @@ from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_v2,
-)
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message_v2
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.chat.turn import fast_chat_turn
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -85,7 +83,6 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -741,21 +738,19 @@ def stream_chat_message_objects(
 
         prompt_builder = AnswerPromptBuilder(
             # TODO: for backwards compatibility, we are using the V1
-            # system_message=default_build_system_message(prompt_config, llm.config),
-            # user_message=default_build_user_message(
+            # user_message=default_build_user_message_v2(
             #     user_query=final_msg.message,
             #     prompt_config=prompt_config,
             #     files=latest_query_files,
-            #     single_message_history=single_message_history,
             # ),
-            user_message=default_build_user_message_v2(
+            user_message=default_build_user_message(
                 user_query=final_msg.message,
                 prompt_config=prompt_config,
                 files=latest_query_files,
             ),
             # TODO: for backwards compatibility, we are using the V1
-            # system_message=default_build_system_message(prompt_config, llm.config),
-            system_message=default_build_system_message_v2(prompt_config, llm.config),
+            # system_message=default_build_system_message_v2(prompt_config, llm.config),
+            system_message=default_build_system_message(prompt_config, llm.config),
             message_history=message_history,
             llm_config=llm.config,
             raw_user_query=final_msg.message,
@@ -798,21 +793,20 @@ def stream_chat_message_objects(
             project_instructions=project_instructions,
         )
 
-        # TODO: For backwards compatible PR, switch back to the original call
-        # import litellm
-        # litellm.set_verbose = True
-        # from onyx.chat.packet_proccessing import process_streamed_packets
-        # yield from process_streamed_packets.process_streamed_packets(
-        #     answer_processed_output=answer.processed_streamed_output,
-        # )
-        yield from _fast_message_stream(
-            answer,
-            tools,
-            db_session,
-            get_redis_client(),
-            str(chat_session_id),
-            str(reserved_message_id),
+        from onyx.chat.packet_proccessing import process_streamed_packets
+
+        yield from process_streamed_packets.process_streamed_packets(
+            answer_processed_output=answer.processed_streamed_output,
         )
+        # TODO: For backwards compatible PR, switch back to the original call
+        # yield from _fast_message_stream(
+        #     answer,
+        #     tools,
+        #     db_session,
+        #     get_redis_client(),
+        #     str(chat_session_id),
+        #     str(reserved_message_id),
+        # )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")

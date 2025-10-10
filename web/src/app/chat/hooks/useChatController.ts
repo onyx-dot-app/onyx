@@ -73,7 +73,6 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { Klee_One } from "next/font/google";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
-import { stopChatSession } from "../chat_search/utils";
 import { useAppParams } from "@/hooks/appNavigation";
 
 const TEMP_USER_MESSAGE_ID = -1;
@@ -274,14 +273,48 @@ export function useChatController({
     };
   };
 
-  const stopGenerating = useCallback(async () => {
+  const stopGenerating = useCallback(() => {
     const currentSession = getCurrentSessionId();
-    try {
-      await stopChatSession(currentSession);
-    } catch (error) {
-      console.error("Failed to stop chat session:", error);
-      // Continue with UI cleanup even if backend call fails
+    abortSession(currentSession);
+
+    const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
+    if (
+      lastMessage &&
+      lastMessage.type === "assistant" &&
+      lastMessage.toolCall &&
+      lastMessage.toolCall.tool_result === undefined
+    ) {
+      const newMessageTree = new Map(currentMessageTree);
+      const updatedMessage = { ...lastMessage, toolCall: null };
+      newMessageTree.set(lastMessage.nodeId, updatedMessage);
+      updateSessionMessageTree(currentSession, newMessageTree);
     }
+
+    // Ensure UI reflects a STOP event by appending a STOP packet to the
+    // currently streaming assistant message if one exists and doesn't already
+    // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
+    if (lastMessage && lastMessage.type === "assistant") {
+      const packets = lastMessage.packets || [];
+      const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
+      if (!hasStop) {
+        const maxInd =
+          packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
+        const stopPacket: Packet = {
+          ind: maxInd + 1,
+          obj: { type: PacketType.STOP },
+        } as Packet;
+
+        const newMessageTree = new Map(currentMessageTree);
+        const updatedMessage = {
+          ...lastMessage,
+          packets: [...packets, stopPacket],
+        } as Message;
+        newMessageTree.set(lastMessage.nodeId, updatedMessage);
+        updateSessionMessageTree(currentSession, newMessageTree);
+      }
+    }
+
+    updateChatStateAction(currentSession, "input");
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(

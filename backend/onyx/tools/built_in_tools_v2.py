@@ -20,6 +20,5 @@ BUILT_IN_TOOL_MAP_V2: dict[str, list[FunctionTool]] = {
     SearchTool.__name__: [internal_search_tool],
     ImageGenerationTool.__name__: [image_generation_tool],
     WebSearchTool.__name__: [web_search_tool, web_fetch_tool],
-    # KnowledgeGraphTool.__name__: KnowledgeGraphTool.run,
     OktaProfileTool.__name__: [okta_profile_tool],
 }
