@@ -813,8 +813,8 @@ def stream_chat_message_objects(
                 tools,
                 db_session,
                 get_redis_client(),
-                str(chat_session_id),
-                str(reserved_message_id),
+                chat_session_id,
+                reserved_message_id,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets

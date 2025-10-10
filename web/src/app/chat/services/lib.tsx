@@ -21,6 +21,7 @@ import {
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -527,6 +528,7 @@ export function processRawChatHistory(
       ...(messageInfo.message_type === "assistant"
         ? {
             retrievalType: retrievalType,
+            researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
             documents: messageInfo?.context_docs?.top_documents || [],
             citations: messageInfo?.citations || {},
