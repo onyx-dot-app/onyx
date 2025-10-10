@@ -849,8 +849,8 @@ def _fast_message_stream(
     tools: list[Tool],
     db_session: Session,
     redis_client: Redis,
-    chat_session_id: str,
-    reserved_message_id: str,
+    chat_session_id: UUID,
+    reserved_message_id: int,
 ) -> Generator[Packet, None, None]:
     from onyx.tools.tool_implementations.images.image_generation_tool import (
         ImageGenerationTool,
