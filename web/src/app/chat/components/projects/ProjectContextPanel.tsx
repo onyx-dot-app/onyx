@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -15,6 +15,7 @@ import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgPlusCircle from "@/icons/plus-circle";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -28,6 +29,7 @@ import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/Text";
 import SvgFileText from "@/icons/file-text";
 import SvgFolderOpen from "@/icons/folder-open";
+import SvgEditBig from "@/icons/edit-big";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/Truncated";
@@ -37,11 +39,13 @@ export function FileCard({
   removeFile,
   hideProcessingState = false,
   onFileClick,
+  isAttaching,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
   hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
+  isAttaching?: boolean;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -109,7 +113,7 @@ export function FileCard({
         </Truncated>
         {isProcessing && (
           <Text text03 secondaryBody nowrap className="truncate">
-            {(file as any).attaching
+            {isAttaching
               ? "Attaching..."
               : file.status === UserFileStatus.UPLOADING
                 ? "Uploading..."
@@ -142,6 +146,13 @@ export default function ProjectContextPanel({
   const [pendingLinkedFiles, setPendingLinkedFiles] = useState<ProjectFile[]>(
     []
   );
+  const [renamingTitle, setRenamingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+  const [showEditIcon, setShowEditIcon] = useState(false);
+  const editIconHideRef = React.useRef<number | null>(null);
+  // Track recently added files to pin them on the left
+  const [recentlyAddedIds, setRecentlyAddedIds] = useState<string[]>([]);
   // Optimistic removal buffer for files removed from the project
   const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<
     Set<string>
@@ -169,10 +180,12 @@ export default function ProjectContextPanel({
   const {
     currentProjectDetails,
     currentProjectId,
+    projects,
     uploadFiles,
     recentFiles,
     unlinkFileFromProject,
     linkFileToProject,
+    renameProject,
   } = useProjectsContext();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -186,20 +199,54 @@ export default function ProjectContextPanel({
     (currentProjectDetails?.files || []).forEach((f) => {
       byId.set(f.id, f);
     });
-    return Array.from(byId.values()).filter(
+    const base = Array.from(byId.values()).filter(
       (f) => !optimisticallyRemovedIds.has(f.id)
     );
+    if (recentlyAddedIds.length === 0) return base;
+    const map = new Map(base.map((f) => [f.id, f] as const));
+    const ordered: ProjectFile[] = [];
+    for (const id of recentlyAddedIds) {
+      const item = map.get(id);
+      if (item) {
+        ordered.push(item);
+        map.delete(id);
+      }
+    }
+    for (const f of base) {
+      if (map.has(f.id)) ordered.push(f);
+    }
+    return ordered;
   }, [
     tempProjectFiles,
     pendingLinkedFiles,
     currentProjectDetails?.files,
     optimisticallyRemovedIds,
+    recentlyAddedIds,
   ]);
+
+  const pendingIds = useMemo(
+    () => new Set(pendingLinkedFiles.map((f) => f.id)),
+    [pendingLinkedFiles]
+  );
+
+  const markRecentlyAdded = useCallback((ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    setRecentlyAddedIds((prev) => {
+      const newSet = new Set(ids);
+      const rest = prev.filter((id) => !newSet.has(id));
+      return [...ids, ...rest];
+    });
+  }, []);
+
+  const unmarkRecentlyAdded = useCallback((id: string) => {
+    setRecentlyAddedIds((prev) => prev.filter((x) => x !== id));
+  }, []);
 
   const removeFileOptimistic = useCallback(
     async (fileId: string) => {
       if (!currentProjectId) return;
       setOptimisticallyRemovedIds((prev) => new Set(prev).add(fileId));
+      unmarkRecentlyAdded(fileId);
       try {
         await unlinkFileFromProject(currentProjectId, fileId);
       } catch (e) {
@@ -215,7 +262,7 @@ export default function ProjectContextPanel({
         });
       }
     },
-    [currentProjectId, unlinkFileFromProject, setPopup]
+    [currentProjectId, unlinkFileFromProject, setPopup, unmarkRecentlyAdded]
   );
 
   // Reconcile pending linked files once backend reflects them
@@ -258,6 +305,8 @@ export default function ProjectContextPanel({
           ...result.user_files,
           ...prev.slice(tempFiles.length),
         ]);
+        // Pin the uploaded files to the left in preview/order
+        markRecentlyAdded(result.user_files.map((f) => f.id));
         const unsupported = result?.unsupported_files || [];
         const nonAccepted = result?.non_accepted_files || [];
         if (unsupported.length > 0 || nonAccepted.length > 0) {
@@ -280,8 +329,35 @@ export default function ProjectContextPanel({
         setTempProjectFiles([]);
       }
     },
-    [currentProjectId, uploadFiles, setPopup]
+    [currentProjectId, uploadFiles, setPopup, markRecentlyAdded]
   );
+
+  // Start renaming -> seed draft and focus
+  const startRenamingTitle = useCallback(() => {
+    setTitleDraft(currentProjectDetails?.project?.name || "");
+    setRenamingTitle(true);
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  }, [currentProjectDetails?.project?.name]);
+
+  const commitRenameTitle = useCallback(async () => {
+    if (!renamingTitle) return;
+    const newName = titleDraft.trim();
+    setRenamingTitle(false);
+    if (!currentProjectId) return;
+    const oldName = currentProjectDetails?.project?.name || "";
+    if (!newName || newName === oldName) return;
+    // Optimistic rename handled in context; fire-and-forget with error popup
+    renameProject(currentProjectId, newName).catch(() => {
+      setPopup({ type: "error", message: "Failed to rename project." });
+    });
+  }, [
+    renamingTitle,
+    titleDraft,
+    currentProjectId,
+    currentProjectDetails?.project?.name,
+    renameProject,
+    setPopup,
+  ]);
 
   const totalFiles = visibleFiles.length;
   const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
@@ -311,11 +387,72 @@ export default function ProjectContextPanel({
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
-      <div className="flex flex-col gap-1 text-text-04">
-        <SvgFolderOpen className="h-8 w-8 text-text-04" />
-        <Text headingH2 className="font-heading-h2">
-          {currentProjectDetails?.project?.name || "Loading project..."}
-        </Text>
+      <div
+        className="flex items-center gap-2 text-text-04"
+        onMouseEnter={() => {
+          if (editIconHideRef.current)
+            window.clearTimeout(editIconHideRef.current);
+          setShowEditIcon(true);
+        }}
+        onMouseLeave={() => {
+          if (editIconHideRef.current)
+            window.clearTimeout(editIconHideRef.current);
+          editIconHideRef.current = window.setTimeout(() => {
+            setShowEditIcon(false);
+          }, 250);
+        }}
+      >
+        <SvgFolderOpen className="h-8 w-8 text-text-04 shrink-0" />
+        {!renamingTitle ? (
+          <div className="group flex items-center gap-2 min-w-0">
+            <Text headingH2 className="font-heading-h2 truncate">
+              {currentProjectDetails?.project?.name ??
+                (projects || []).find((p) => p.id === currentProjectId)?.name ??
+                ""}
+            </Text>
+            {!!currentProjectId && (
+              <IconButton
+                internal
+                icon={SvgEditBig}
+                tooltip="Rename project"
+                className={`transition-opacity duration-150 shrink-0 ${
+                  showEditIcon ? "opacity-100" : "opacity-0"
+                }`}
+                iconClassName="h-6 w-6"
+                onFocus={() => {
+                  if (editIconHideRef.current)
+                    window.clearTimeout(editIconHideRef.current);
+                  setShowEditIcon(true);
+                }}
+                onBlur={() => {
+                  if (editIconHideRef.current)
+                    window.clearTimeout(editIconHideRef.current);
+                  editIconHideRef.current = window.setTimeout(() => {
+                    setShowEditIcon(false);
+                  }, 250);
+                }}
+                onClick={startRenamingTitle}
+              />
+            )}
+          </div>
+        ) : (
+          <input
+            ref={titleInputRef}
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commitRenameTitle();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setRenamingTitle(false);
+              }
+            }}
+            onBlur={() => void commitRenameTitle()}
+            className="w-auto flex-1 bg-transparent outline-none border-b border-border-01 focus:border-text-04 font-heading-h2 text-text-04"
+          />
+        )}
       </div>
 
       <Separator className="my-0" />
@@ -377,14 +514,13 @@ export default function ProjectContextPanel({
                 const pending: ProjectFile = {
                   ...file,
                   status: UserFileStatus.PROCESSING,
-                  // mark as attaching for UI label
-                  // @ts-ignore - extra UI metadata
-                  attaching: true,
                 };
                 const map = new Map(prev.map((f) => [f.id, f]));
                 map.set(file.id, pending);
                 return Array.from(map.values());
               });
+              // Ensure it appears on the left immediately
+              markRecentlyAdded([file.id]);
               try {
                 await linkFileToProject(currentProjectId, file.id);
                 // The refresh inside linkFileToProject will populate real file; clear pending entry
@@ -396,6 +532,7 @@ export default function ProjectContextPanel({
                 setPendingLinkedFiles((prev) =>
                   prev.filter((f) => f.id !== file.id)
                 );
+                unmarkRecentlyAdded(file.id);
                 setPopup({
                   type: "error",
                   message: `Failed to add ${file.name} to project`,
@@ -408,7 +545,9 @@ export default function ProjectContextPanel({
               setPendingLinkedFiles((prev) =>
                 prev.filter((f) => f.id !== file.id)
               );
-              await unlinkFileFromProject(currentProjectId, file.id);
+              // Optimistically remove without waiting on backend
+              void removeFileOptimistic(file.id);
+              unmarkRecentlyAdded(file.id);
             }}
             handleUploadChange={handleUploadChange}
             className="mr-1.5"
@@ -420,10 +559,7 @@ export default function ProjectContextPanel({
         {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}
         <input {...getInputProps()} />
 
-        {tempProjectFiles.length > 0 ||
-        pendingLinkedFiles.length > 0 ||
-        (currentProjectDetails?.files &&
-          currentProjectDetails.files.length > 0) ? (
+        {visibleFiles.length > 0 ? (
           <>
             {/* Mobile / small screens: just show a button to view files */}
             <div className="sm:hidden">
@@ -455,6 +591,7 @@ export default function ProjectContextPanel({
                       void removeFileOptimistic(fileId);
                     }}
                     onFileClick={handleFileClick}
+                    isAttaching={pendingIds.has(f.id)}
                   />
                 </div>
               ))}

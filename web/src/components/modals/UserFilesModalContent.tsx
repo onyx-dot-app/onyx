@@ -70,7 +70,6 @@ export default function UserFilesModalContent({
   const [containerHeight, setContainerHeight] = useState<number>(
     typeof fixedHeight === "number" ? fixedHeight : 320
   );
-  const [isScrollable, setIsScrollable] = useState(false);
   const [scrollFadeOpacity, setScrollFadeOpacity] = useState(0);
   const [bottomFadeOpacity, setBottomFadeOpacity] = useState(0);
   const [isInitialMount, setIsInitialMount] = useState(true);
@@ -134,28 +133,7 @@ export default function UserFilesModalContent({
     maxHeight,
   ]);
 
-  // Check if content is scrollable
-  useEffect(() => {
-    const checkScrollable = () => {
-      if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector(
-          "[data-radix-scroll-area-viewport]"
-        );
-        if (viewport) {
-          const isContentScrollable =
-            viewport.scrollHeight > viewport.clientHeight;
-          setIsScrollable(isContentScrollable);
-        }
-      }
-    };
-
-    // Check initially and after content changes
-    requestAnimationFrame(checkScrollable);
-
-    // Also check on resize
-    window.addEventListener("resize", checkScrollable);
-    return () => window.removeEventListener("resize", checkScrollable);
-  }, [filtered.length, containerHeight]);
+  // No need to track scrollability; overlay opacity derives from scrollTop
 
   // Track scroll position for smooth fade opacity
   useEffect(() => {

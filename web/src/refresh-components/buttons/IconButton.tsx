@@ -89,6 +89,8 @@ export interface IconButtonProps
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   icon: React.FunctionComponent<SvgProps>;
   tooltip?: string;
+  // Optional classes to control icon size/appearance
+  iconClassName?: string;
 }
 
 export default function IconButton({
@@ -104,6 +106,7 @@ export default function IconButton({
   icon: Icon,
   className,
   tooltip,
+  iconClassName,
 
   ...props
 }: IconButtonProps) {
@@ -133,7 +136,10 @@ export default function IconButton({
       {...props}
     >
       <Icon
-        className={cn("h-[1rem] w-[1rem]", iconClasses(active)[variant][state])}
+        className={cn(
+          iconClassName ? iconClassName : "h-[1rem] w-[1rem]",
+          iconClasses(active)[variant][state]
+        )}
       />
     </button>
   );

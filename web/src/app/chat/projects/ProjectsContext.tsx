@@ -161,21 +161,71 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const renameProject = useCallback(
     async (projectId: number, name: string): Promise<Project> => {
       setError(null);
+
+      // Snapshot previous state for revert
+      const prevProjects = projects;
+      const prevDetails = currentProjectDetails;
+
+      // Find target project and build optimistic version
+      const target = prevProjects.find((p) => p.id === projectId);
+      const optimistic: Project | null = target ? { ...target, name } : null;
+
+      // Apply optimistic update to projects list
+      if (optimistic) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? optimistic : p))
+        );
+      }
+
+      // Apply optimistic update to current project details if viewing
+      if (currentProjectId === projectId && prevDetails?.project) {
+        setCurrentProjectDetails({
+          ...prevDetails,
+          project: { ...prevDetails.project, name },
+        });
+      }
+
       try {
         const updated = await svcRenameProject(projectId, name);
-        await fetchProjects();
+        // Reconcile: ensure projects and details reflect server response
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId ? { ...p, name: updated.name } : p
+          )
+        );
         if (currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
+          setCurrentProjectDetails((prev) =>
+            prev
+              ? ({
+                  ...prev,
+                  project: { ...prev.project, name: updated.name },
+                } as ProjectDetails)
+              : prev
+          );
+        }
+        // Optionally refresh in background to sync ancillary fields/order
+        void fetchProjects();
+        if (currentProjectId === projectId) {
+          void refreshCurrentProjectDetails();
         }
         return updated;
       } catch (err) {
+        // Revert on failure
+        setProjects(prevProjects);
+        setCurrentProjectDetails(prevDetails);
         const message =
           err instanceof Error ? err.message : "Failed to rename project";
         setError(message);
         throw err;
       }
     },
-    [fetchProjects, currentProjectId, refreshCurrentProjectDetails]
+    [
+      projects,
+      currentProjectDetails,
+      currentProjectId,
+      fetchProjects,
+      refreshCurrentProjectDetails,
+    ]
   );
 
   const deleteProject = useCallback(

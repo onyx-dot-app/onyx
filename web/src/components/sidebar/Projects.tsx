@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Project,
   useProjectsContext,
@@ -41,6 +41,13 @@ function ProjectFolder({ project }: ProjectFolderProps) {
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
+
+  // Keep local name in sync when project name updates elsewhere (e.g., project page rename)
+  useEffect(() => {
+    if (!isEditing) {
+      setName(project.name);
+    }
+  }, [project.name, isEditing]);
 
   // Make project droppable
   const dropId = `project-${project.id}`;

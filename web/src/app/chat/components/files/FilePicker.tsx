@@ -183,6 +183,20 @@ export default function FilePicker({
   const [modalSelectedIds, setModalSelectedIds] = useState<Set<string> | null>(
     null
   );
+  // Track files to hide from the quick popover (recent top 3) once added
+  const [hiddenQuickIds, setHiddenQuickIds] = useState<Set<string>>(
+    new Set(selectedFileIds || [])
+  );
+
+  // Keep quick-popover hidden set in sync with externally selected ids
+  React.useEffect(() => {
+    // Merge externally selected ids into the hidden set (do not clobber optimistic hides)
+    setHiddenQuickIds((prev) => {
+      const next = new Set(prev);
+      (selectedFileIds || []).forEach((id) => next.add(id));
+      return next;
+    });
+  }, [selectedFileIds]);
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
@@ -217,6 +231,16 @@ export default function FilePicker({
       if (f && onUnpickRecent) onUnpickRecent(f);
     });
 
+    // Optimistically sync quick-popover visibility with committed changes
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      setHiddenQuickIds((prev) => {
+        const next = new Set(prev);
+        for (const id of toAdd) next.add(id);
+        for (const id of toRemove) next.delete(id);
+        return next;
+      });
+    }
+
     // Clear modal buffers
     setModalInitialSelectedIds(null);
     setModalSelectedIds(null);
@@ -246,10 +270,16 @@ export default function FilePicker({
           side="top"
         >
           <FilePickerContents
-            recentFiles={recentFiles}
+            key={`quick-${Array.from(hiddenQuickIds).join("-")}`}
+            recentFiles={recentFiles.filter((f) => !hiddenQuickIds.has(f.id))}
             onPickRecent={(file) => {
               onPickRecent && onPickRecent(file);
-              setOpen(false);
+              // Hide immediately from quick popover on next open
+              setHiddenQuickIds((prev) => {
+                const next = new Set(prev);
+                next.add(file.id);
+                return next;
+              });
             }}
             onFileClick={(file) => {
               onFileClick && onFileClick(file);
