@@ -68,9 +68,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_instructions
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.users import get_user_by_email
 from onyx.document_index.factory import get_default_document_index
-from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -357,14 +355,6 @@ def stream_chat_message_objects(
         long_term_logger = LongTermLogger(
             metadata={"user_id": str(user_id), "chat_session_id": str(chat_session_id)}
         )
-        feature_flag_provider = get_default_feature_flag_provider()
-        flag = feature_flag_provider.feature_enabled(
-            "simple-agent-framework",
-            get_user_by_email("richard@onyx.app", db_session).id,
-            {"test": "hi"},
-        )
-        print(f"Simple Agent Framework flag: {flag}")
-
         persona = _get_persona_for_chat_session(
             new_msg_req=new_msg_req,
             user=user,
