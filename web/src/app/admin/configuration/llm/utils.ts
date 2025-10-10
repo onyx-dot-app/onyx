@@ -10,6 +10,7 @@ import {
   DeepseekIcon,
   OpenAISVG,
   QwenIcon,
+  OllamaIcon,
 } from "@/components/icons/icons";
 import {
   WellKnownLLMProviderDescriptor,
@@ -62,6 +63,11 @@ export const getProviderIcon = (
         return icon;
       }
     }
+  }
+
+  // If provider is Ollama and no model-level match, show Ollama logo
+  if (lowerProviderName === "ollama") {
+    return OllamaIcon;
   }
 
   // Fallback to CPU icon if no matches

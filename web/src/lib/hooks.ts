@@ -884,6 +884,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
+  "claude-sonnet-4-5": "Claude 4.5 Sonnet",
+  "claude-opus-4-1": "Claude 4.1 Opus",
+  "qwen3-coder:480b": "Qwen3 Coder 480B",
+  "deepseek-v3.1:671b": "DeepSeek v3.1 671B",
 
   // Google Models
 
@@ -990,6 +994,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // Ollama cloud models
   "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
+  "gpt-oss:120b": "gpt-oss 120B",
   "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
   "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
   "kimi-k2:1t": "Kimi K2 1T Cloud",

@@ -321,7 +321,16 @@ export function CCPairIndexingStatusTable({
       <TableBody>
         {ccPairsIndexingStatuses.map((ccPairStatus) => (
           <React.Fragment key={ccPairStatus.source}>
-            <br className="mt-4 dark:bg-neutral-700" />
+            <TableRow className="border-0">
+              <TableCell
+                colSpan={
+                  isPaidEnterpriseFeaturesEnabled
+                    ? NUMBER_OF_COLUMNS
+                    : NUMBER_OF_COLUMNS - 1
+                }
+                className="p-spacing-paragraph"
+              />
+            </TableRow>
             <SummaryRow
               source={ccPairStatus.source}
               summary={ccPairStatus.summary}

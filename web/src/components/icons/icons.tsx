@@ -89,6 +89,7 @@ import bitbucketIcon from "../../../public/Bitbucket.svg";
 import { FaGithub, FaRobot } from "react-icons/fa";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import ollamaIcon from "../../../public/ollama_circle.png";
 
 export interface IconProps {
   size?: number;
@@ -293,6 +294,13 @@ export const OpenSourceIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return <LogoIcon size={size} className={className} src={openSourceIcon} />;
+};
+
+export const OllamaIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <LogoIcon size={size} className={className} src={ollamaIcon} />;
 };
 
 export const MixedBreadIcon = ({

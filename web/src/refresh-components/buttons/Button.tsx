@@ -282,6 +282,8 @@ export default function Button({
 
   const content = (
     <button
+      // Default to type="button" to avoid accidental form submissions
+      type={(props as any)?.type ?? "button"}
       className={cn(
         "p-spacing-interline h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-spacing-inline",
         variantClasses(active)[variant][subvariant][abled],

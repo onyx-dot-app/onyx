@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Project,
   useProjectsContext,
@@ -80,6 +80,20 @@ function ProjectFolder({ project }: ProjectFolderProps) {
         : SvgFolder;
     }
   };
+
+  // Auto-expand if current chat or project in URL belongs to this project
+  const currentChatId = params(SEARCH_PARAM_NAMES.CHAT_ID);
+  const currentProjectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
+  const containsCurrentChat = useMemo(
+    () => project.chat_sessions.some((cs) => cs.id === currentChatId),
+    [project.chat_sessions, currentChatId]
+  );
+
+  useEffect(() => {
+    if (containsCurrentChat || currentProjectId === String(project.id)) {
+      setOpen(true);
+    }
+  }, [containsCurrentChat, currentProjectId, project.id]);
 
   const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
