@@ -35,10 +35,10 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
             True if the feature is enabled for the user, False otherwise.
         """
         try:
-            posthog.set(
-                distinct_id=user_id,
-                properties=user_properties,
-            )
+            # posthog.set(
+            #     distinct_id=user_id,
+            #     properties=user_properties,
+            # )
             is_enabled = posthog.feature_enabled(
                 flag_key,
                 str(user_id),

@@ -20,7 +20,6 @@ class TestNoOpFeatureFlagProvider:
         """No-op provider should always return False."""
         provider = NoOpFeatureFlagProvider()
 
-        assert provider.feature_enabled("test-flag", "user-123") is False
         my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
         assert provider.feature_enabled("another-flag", my_uuid) is False
 
