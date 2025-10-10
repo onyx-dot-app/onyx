@@ -89,16 +89,7 @@ class SyncAgentStream(Generic[T]):
         loop = self._loop
         streamed = self._streamed
         if loop is not None and streamed is not None and not self._done.is_set():
-            # schedule the async cancel on the loop thread
-            try:
-                fut = asyncio.run_coroutine_threadsafe(streamed.cancel(), loop)  # type: ignore[func-returns-value]
-                # It's OK not to block here. This makes cancellations for tools that don't
-                # have a clean cooperative cancel feel smoother. Overall the loop will be closed
-                # so resources shouldn't leak.
-                _ = fut.result(timeout=2.0)
-
-            finally:
-                pass
+            loop.call_soon_threadsafe(streamed.cancel)
             return True
         return False
 
