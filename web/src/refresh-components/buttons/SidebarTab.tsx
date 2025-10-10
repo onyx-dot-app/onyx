@@ -3,8 +3,7 @@
 import React from "react";
 import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
-import Truncated from "@/refresh-components/Truncated";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Truncated, { TruncatedProvider } from "@/refresh-components/Truncated";
 
 const textClasses = (active: boolean | undefined) =>
   ({
@@ -67,9 +66,7 @@ export default function SidebarTab({
   const variant = danger ? "danger" : lowlight ? "lowlight" : "main";
 
   return (
-    <SimpleTooltip
-      tooltip={typeof children === "string" ? children : undefined}
-    >
+    <TruncatedProvider>
       <div
         className={cn(
           "flex flex-row justify-center items-center p-spacing-interline-mini gap-spacing-inline rounded-08 cursor-pointer hover:bg-background-tint-03 group/SidebarTab w-full select-none",
@@ -99,7 +96,7 @@ export default function SidebarTab({
           {!folded && (
             <div className={cn("flex-1 text-left")}>
               {typeof children === "string" ? (
-                <Truncated className={cn(textClasses(active)[variant])} disable>
+                <Truncated className={cn(textClasses(active)[variant])}>
                   {children}
                 </Truncated>
               ) : (
@@ -110,6 +107,6 @@ export default function SidebarTab({
         </div>
         {!folded && rightChildren}
       </div>
-    </SimpleTooltip>
+    </TruncatedProvider>
   );
 }

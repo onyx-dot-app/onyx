@@ -1,10 +1,11 @@
-import React, { useState, useRef, useLayoutEffect } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import React, {
+  useState,
+  useRef,
+  useLayoutEffect,
+  createContext,
+  useContext,
+} from "react";
+import SimpleTooltip from "./SimpleTooltip";
 import Text, { TextProps } from "./Text";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,28 @@ interface TruncatedProps extends TextProps {
   side?: "top" | "right" | "bottom" | "left";
   offset?: number;
   disable?: boolean;
+}
+
+interface TruncatedContextValue {
+  isTruncated: boolean;
+  setIsTruncated: (value: boolean) => void;
+  isLoading: boolean;
+  setIsLoading: (value: boolean) => void;
+}
+
+const TruncatedContext = createContext<TruncatedContextValue | null>(null);
+
+export function TruncatedProvider({ children }: { children: React.ReactNode }) {
+  const [isTruncated, setIsTruncated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  return (
+    <TruncatedContext.Provider
+      value={{ isTruncated, setIsTruncated, isLoading, setIsLoading }}
+    >
+      {children}
+    </TruncatedContext.Provider>
+  );
 }
 
 /**
@@ -27,8 +50,16 @@ export default function Truncated({
   children,
   ...rest
 }: TruncatedProps) {
-  const [isTruncated, setIsTruncated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const context = useContext(TruncatedContext);
+
+  const [localIsTruncated, setLocalIsTruncated] = useState(false);
+  const [localIsLoading, setLocalIsLoading] = useState(true);
+
+  const isTruncated = context?.isTruncated ?? localIsTruncated;
+  const setIsTruncated = context?.setIsTruncated ?? setLocalIsTruncated;
+  const isLoading = context?.isLoading ?? localIsLoading;
+  const setIsLoading = context?.setIsLoading ?? setLocalIsLoading;
+
   const visibleRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
 
@@ -55,47 +86,50 @@ export default function Truncated({
     };
   }, []);
 
+  const tooltip =
+    !disable && isTruncated && !isLoading
+      ? typeof children === "string"
+        ? children
+        : undefined
+      : undefined;
+
+  const loadingAnimation = (
+    <div
+      className={cn(
+        "h-[1.2rem] w-full bg-background-tint-03 rounded animate-pulse",
+        className
+      )}
+    />
+  );
+
+  const text = (
+    <Text
+      className={cn("line-clamp-1 break-all text-left", className)}
+      {...rest}
+    >
+      {children}
+    </Text>
+  );
+
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            ref={visibleRef}
-            className="flex-grow overflow-hidden text-left w-full"
-          >
-            {isLoading ? (
-              <div
-                className={cn(
-                  "h-[1.2rem] w-full bg-background-tint-03 rounded animate-pulse",
-                  className
-                )}
-              />
-            ) : (
-              <Text
-                className={cn("line-clamp-1 break-all text-left", className)}
-                {...rest}
-              >
-                {children}
-              </Text>
-            )}
-          </div>
-        </TooltipTrigger>
-
-        {/* Hide offscreen to measure full text width */}
+    <>
+      <SimpleTooltip tooltip={tooltip}>
         <div
-          ref={hiddenRef}
-          className="fixed left-[-9999px] top-[0rem] whitespace-nowrap pointer-events-none opacity-0"
-          aria-hidden="true"
+          ref={visibleRef}
+          className="flex-grow overflow-hidden text-left w-full"
         >
-          {children}
+          {isLoading ? loadingAnimation : text}
         </div>
+      </SimpleTooltip>
 
-        {!disable && isTruncated && !isLoading && (
-          <TooltipContent side={side} sideOffset={offset}>
-            <Text inverted>{children}</Text>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+      {/* Hide offscreen to measure full text width */}
+      <div
+        ref={hiddenRef}
+        className="fixed left-[-9999px] top-[0rem] whitespace-nowrap pointer-events-none opacity-0"
+        aria-hidden="true"
+      >
+        {text}
+      </div>
+    </>
   );
 }
