@@ -64,6 +64,7 @@ from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
@@ -763,6 +764,10 @@ class VespaIndex(DocumentIndex):
 
             if fields.hidden is not None:
                 update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
+
+            # document_id update is added only for migration purposes, ideally we should not be updating this field
+            if fields.document_id is not None:
+                update_dict["fields"][DOCUMENT_ID] = {"assign": fields.document_id}
 
         if user_fields is not None:
             if user_fields.user_projects is not None:

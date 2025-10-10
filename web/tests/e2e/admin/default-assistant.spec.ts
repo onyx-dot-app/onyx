@@ -585,6 +585,7 @@ test.describe("Default Assistant Admin Page", () => {
       // If we can open it, check that tools are disabled
       expect(await page.$(TOOL_IDS.searchOption)).toBeFalsy();
       expect(await page.$(TOOL_IDS.webSearchOption)).toBeFalsy();
+      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeFalsy();
       // Image generation might still show as disabled
     } catch {
       // If Action Management can't be opened, that's also acceptable

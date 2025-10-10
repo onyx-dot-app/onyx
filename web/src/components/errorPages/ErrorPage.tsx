@@ -30,11 +30,11 @@ export default function Error() {
           Need help? Join our{" "}
           <a
             className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA"
+            href="https://discord.gg/4NA5SbzrWb"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Slack community
+            Discord community
           </a>{" "}
           for support.
         </p>

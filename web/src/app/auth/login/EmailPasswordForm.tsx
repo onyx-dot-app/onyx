@@ -21,7 +21,7 @@ interface EmailPasswordFormProps {
   isJoin?: boolean;
 }
 
-export function EmailPasswordForm({
+export default function EmailPasswordForm({
   isSignup = false,
   shouldVerify,
   referralSource,
@@ -32,10 +32,12 @@ export function EmailPasswordForm({
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState<boolean>(false);
+
   return (
     <>
       {isWorking && <Spinner />}
       {popup}
+
       <Formik
         initialValues={{
           email: defaultEmail ? defaultEmail.toLowerCase() : "",
@@ -127,13 +129,14 @@ export function EmailPasswordForm({
           }
         }}
       >
-        {({ isSubmitting, values }) => (
+        {({ isSubmitting }) => (
           <Form>
             <TextFormField
               name="email"
               label="Email"
               type="email"
               placeholder="email@yourcompany.com"
+              data-testid="email"
             />
 
             <TextFormField
@@ -141,9 +144,10 @@ export function EmailPasswordForm({
               label="Password"
               type="password"
               placeholder="**************"
+              data-testid="password"
             />
 
-            <Button className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (

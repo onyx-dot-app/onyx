@@ -4,7 +4,7 @@ import { AuthTypeMetadata } from "@/lib/userSS";
 import LoginText from "@/app/auth/login/LoginText";
 import Link from "next/link";
 import SignInButton from "@/app/auth/login/SignInButton";
-import { EmailPasswordForm } from "./EmailPasswordForm";
+import EmailPasswordForm from "./EmailPasswordForm";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
 import Text from "@/refresh-components/Text";

@@ -69,7 +69,7 @@ def test_confluence_connector_basic_scoped(
     mock_get_api_key: MagicMock, confluence_connector_scoped: ConfluenceConnector
 ) -> None:
     _test_confluence_connector_basic(
-        confluence_connector_scoped, expect_attachments=False
+        confluence_connector_scoped, expect_attachments=True
     )
 
 
@@ -81,18 +81,21 @@ def _test_confluence_connector_basic(
         confluence_connector, 0, time.time()
     )
 
-    assert len(doc_batch) == 2
+    assert len(doc_batch) == (3 if expect_attachments else 2)
 
     page_within_a_page_doc: Document | None = None
     page_doc: Document | None = None
+    small_file_doc: Document | None = None
 
     for doc in doc_batch:
         if doc.semantic_identifier == "DailyConnectorTestSpace Home":
             page_doc = doc
         elif doc.semantic_identifier == "Page Within A Page":
             page_within_a_page_doc = doc
+        elif doc.semantic_identifier == "small-file.txt":
+            small_file_doc = doc
         else:
-            pass
+            print(f"Unexpected doc: {doc.semantic_identifier}")
 
     assert page_within_a_page_doc is not None
     assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
@@ -121,21 +124,27 @@ def _test_confluence_connector_basic(
     assert page_doc.primary_owners
     assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
     assert (
-        len(page_doc.sections) == 2 if expect_attachments else 1
-    )  # page text + attachment text
+        len(page_doc.sections) == 1
+    )  # just page text, attachment text is separate doc
 
     page_section = page_doc.sections[0]
-    assert page_section.text == "test123 " + page_within_a_page_text
+    assert (
+        page_section.text
+        == "test123 "
+        + page_within_a_page_text
+        + "\n<attachment>small-file.txt</attachment>\n<attachment>big-file.txt</attachment>"
+    )
     assert (
         page_section.link
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
     if expect_attachments:
-        text_attachment_section = page_doc.sections[1]
+        assert small_file_doc is not None
+        text_attachment_section = small_file_doc.sections[0]
         assert text_attachment_section.text == "small"
         assert text_attachment_section.link
-        assert text_attachment_section.link.endswith("small-file.txt")
+        assert text_attachment_section.link.split("?")[0].endswith("small-file.txt")
 
 
 @pytest.mark.parametrize("space", ["MI"])
@@ -188,5 +197,5 @@ def test_confluence_connector_allow_images(
         confluence_connector, 0, time.time()
     )
 
-    assert len(doc_batch) == 8
+    assert len(doc_batch) == 12
     assert sum(len(doc.sections) for doc in doc_batch) == 12

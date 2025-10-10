@@ -1,8 +1,10 @@
 import os
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from datetime import timezone
 from io import BytesIO
+from numbers import Integral
 from typing import Any
 from typing import Optional
 
@@ -15,6 +17,7 @@ from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
 from mypy_boto3_s3 import S3Client  # type: ignore
 
+from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
@@ -44,6 +47,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+SIZE_THRESHOLD_BUFFER = 64
+
+
 class BlobStorageConnector(LoadConnector, PollConnector):
     def __init__(
         self,
@@ -58,6 +65,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
+        self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
@@ -195,11 +203,43 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         return None
 
-    def _download_object(self, key: str) -> bytes:
+    def _download_object(self, key: str) -> bytes | None:
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
-        object = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
-        return object["Body"].read()
+        response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+        body = response["Body"]
+
+        try:
+            if self.size_threshold is None:
+                return body.read()
+
+            return self._read_stream_with_limit(body, key)
+        finally:
+            body.close()
+
+    def _read_stream_with_limit(self, body: Any, key: str) -> bytes | None:
+        if self.size_threshold is None:
+            return body.read()
+
+        bytes_read = 0
+        chunks: list[bytes] = []
+        chunk_size = min(
+            DOWNLOAD_CHUNK_SIZE, self.size_threshold + SIZE_THRESHOLD_BUFFER
+        )
+
+        for chunk in body.iter_chunks(chunk_size=chunk_size):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            bytes_read += len(chunk)
+
+            if bytes_read > self.size_threshold + SIZE_THRESHOLD_BUFFER:
+                logger.warning(
+                    f"{key} exceeds size threshold of {self.size_threshold}. Skipping."
+                )
+                return None
+
+        return b"".join(chunks)
 
     # NOTE: Left in as may be useful for one-off access to documents and sharing across orgs.
     # def _get_presigned_url(self, key: str) -> str:
@@ -236,6 +276,51 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         else:
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
+    @staticmethod
+    def _extract_size_bytes(obj: Mapping[str, Any]) -> int | None:
+        """Return the first numeric size field found on the object metadata."""
+
+        candidate_keys = (
+            "Size",
+            "size",
+            "ContentLength",
+            "content_length",
+            "Content-Length",
+            "contentLength",
+            "bytes",
+            "Bytes",
+        )
+
+        def _normalize(value: Any) -> int | None:
+            if value is None or isinstance(value, bool):
+                return None
+            if isinstance(value, Integral):
+                return int(value)
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return None
+            if numeric >= 0 and numeric.is_integer():
+                return int(numeric)
+            return None
+
+        for key in candidate_keys:
+            if key in obj:
+                normalized = _normalize(obj.get(key))
+                if normalized is not None:
+                    return normalized
+
+        for key, value in obj.items():
+            if not isinstance(key, str):
+                continue
+            lowered_key = key.lower()
+            if "size" in lowered_key or "length" in lowered_key:
+                normalized = _normalize(value)
+                if normalized is not None:
+                    return normalized
+
+        return None
+
     def _yield_blob_objects(
         self,
         start: datetime,
@@ -266,6 +351,18 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 key = obj["Key"]
                 link = self._get_blob_link(key)
 
+                size_bytes = self._extract_size_bytes(obj)
+                if (
+                    self.size_threshold is not None
+                    and isinstance(size_bytes, int)
+                    and self.size_threshold is not None
+                    and size_bytes > self.size_threshold
+                ):
+                    logger.warning(
+                        f"{file_name} exceeds size threshold of {self.size_threshold}. Skipping."
+                    )
+                    continue
+
                 # Handle image files
                 if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
                     if not self._allow_images:
@@ -277,6 +374,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     # Process the image file
                     try:
                         downloaded_file = self._download_object(key)
+                        if downloaded_file is None:
+                            continue
 
                         # TODO: Refactor to avoid direct DB access in connector
                         # This will require broader refactoring across the codebase
@@ -309,6 +408,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 # Handle text and document files
                 try:
                     downloaded_file = self._download_object(key)
+                    if downloaded_file is None:
+                        continue
                     extraction_result = extract_text_and_images(
                         BytesIO(downloaded_file), file_name=file_name
                     )

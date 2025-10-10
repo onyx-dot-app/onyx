@@ -7,7 +7,7 @@ import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup"
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +22,7 @@ export default function ProjectChatSessionList() {
     currentProjectId,
     refreshCurrentProjectDetails,
   } = useProjectsContext();
-  const { assistants } = useAssistantsContext();
+  const { agents: assistants } = useAgentsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
