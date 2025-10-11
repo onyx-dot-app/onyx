@@ -4,6 +4,7 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -58,7 +59,17 @@ def create_or_add_document_tag(
     if tag not in document.tags:
         document.tags.append(tag)
 
-    db_session.commit()
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        tag = db_session.execute(tag_stmt).scalar_one_or_none()
+        if not tag:
+            raise
+        if tag not in document.tags:
+            document.tags.append(tag)
+        db_session.commit()
+    
     return tag
 
 
@@ -109,7 +120,23 @@ def create_or_add_document_tag_list(
         if tag not in document.tags:
             document.tags.append(tag)
 
-    db_session.commit()
+    try:
+        db_session.commit()
+    except IntegrityError as e:
+        logger.info(
+            f"Tag insertion conflict detected (likely race condition), retrying: {e}"
+        )
+        db_session.rollback()
+        
+        existing_tags = list(db_session.execute(existing_tags_stmt).scalars().all())
+        all_tags = existing_tags
+        
+        for tag in all_tags:
+            if tag not in document.tags:
+                document.tags.append(tag)
+        
+        db_session.commit()
+    
     return all_tags
 
 

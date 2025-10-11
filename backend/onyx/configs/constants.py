@@ -210,6 +210,7 @@ class DocumentSource(str, Enum):
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
+    JOPLIN = "joplin"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -612,4 +613,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.IMAP: "imap - email data",
+    DocumentSource.JOPLIN: "joplin - note-taking application data",
 }
