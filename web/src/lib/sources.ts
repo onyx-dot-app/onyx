@@ -46,6 +46,7 @@ import {
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
+  DrupalWikiIcon,
   EmailIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
@@ -286,6 +287,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: "https://docs.onyx.app/admin/connectors/official/gmail/overview",
+  },
+  drupal_wiki: {
+    icon: DrupalWikiIcon,
+    displayName: "Drupal Wiki",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/drupal_wiki",
   },
   imap: {
     icon: EmailIcon,
