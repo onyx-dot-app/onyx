@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +14,12 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import QueryExpansions
 from shared_configs.model_server_models import Embedding
+
+
+class DocumentRetrievalType(str, Enum):
+    INTERNAL = "internal"
+    EXTERNAL = "external"
+    FEDERATED = "federated"
 
 
 class ToolResponse(BaseModel):
@@ -87,6 +94,17 @@ class SearchToolOverrideKwargs(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class DocumentResult(BaseModel):
+    """Result from fetching a single document"""
+
+    title: str
+    content: str
+    source: DocumentRetrievalType
+    url: str | None = None
+    metadata: dict[str, str] = {}
+    confidence: int  # 0-100
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
