@@ -14,11 +14,12 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgShare from "@/icons/share";
 import SvgCopy from "@/icons/copy";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -115,11 +116,11 @@ export default function ShareChatSessionModal({
     <>
       {popup}
 
-      <ConfirmationModal
+      <ConfirmationModalContent
         icon={SvgShare}
         title="Share Chat"
-        onClose={onClose}
-        submit={<Button>Share</Button>}
+        onCancel={onClose}
+        hideCancel
       >
         {shareLink ? (
           <div>
@@ -251,7 +252,7 @@ export default function ShareChatSessionModal({
             </Button>
           </div>
         )}
-      </ConfirmationModal>
+      </ConfirmationModalContent>
     </>
   );
 }

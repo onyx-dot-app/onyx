@@ -32,12 +32,8 @@ import SvgBubbleText from "@/icons/bubble-text";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalContent from "@/refresh-components/modals/ConfirmationModalContent";
 import SvgTrash from "@/icons/trash";
 import SvgShare from "@/icons/share";
 import SvgEdit from "@/icons/edit";
@@ -47,7 +43,6 @@ import { noProp } from "@/lib/utils";
 import { PopoverMenu } from "@/components/ui/popover";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import Projects from "@/components/sidebar/Projects";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
@@ -65,6 +60,10 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { UNNAMED_CHAT } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
+import ProjectFolder from "@/components/sidebar/Projects";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 // Constants
 const DEFAULT_PERSONA_ID = 0;
@@ -115,25 +114,19 @@ export function PopoverSearchInput({
   };
 
   return (
-    <div className="flex flex-row justify-center items-center p-spacing-inline gap-spacing-inline rounded-08 bg-transparent w-full">
-      <div className="flex-1 h-[1.8rem] flex flex-row items-center gap-spacing-interline">
-        <button
-          className="w-[1.2rem] h-[1.2rem] flex items-center justify-center"
-          onClick={handleClickBackButton}
-        >
-          <SvgChevronLeft className="h-[1.2rem] w-[1.2rem] stroke-text-02 hover:stroke-text-03" />
-        </button>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Search Projects"
-          className="bg-transparent outline-none resize-none overflow-x-hidden overflow-y-hidden whitespace-nowrap no-scrollbar font-main-content-body w-full text-text-03 placeholder-text-02"
-          onClick={noProp()}
-          autoFocus
-        />
-      </div>
+    <div className="flex flex-row justify-center items-center p-spacing-inline gap-spacing-inline rounded-08 bg-transparent">
+      <IconButton
+        icon={SvgChevronLeft}
+        onClick={handleClickBackButton}
+        internal
+      />
+      <InputTypeIn
+        type="text"
+        placeholder="Search Projects"
+        value={searchTerm}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+      />
     </div>
   );
 }
@@ -144,14 +137,17 @@ interface ChatButtonProps {
 }
 
 function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
+  // Modal contexts
+  const deleteConfirmationModal = useModalProvider();
+  const moveCustomAgentModal = useModalProvider();
+  const shareModal = useModalProvider();
+
   const route = useAppRouter();
   const params = useAppParams();
   const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
   const [renaming, setRenaming] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+
   const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
   const { refreshChatSessions } = useChatContext();
@@ -165,8 +161,6 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
   const isChatUsingDefaultAssistant =
     chatSession.persona_id === DEFAULT_PERSONA_ID;
 
@@ -197,7 +191,9 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         <NavigationTab
           key="share"
           icon={SvgShare}
-          onClick={noProp(() => setShowShareModal(true))}
+          onClick={noProp(() => {
+            shareModal.toggle(true);
+          })}
         >
           Share
         </NavigationTab>,
@@ -228,7 +224,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         <NavigationTab
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+          onClick={noProp(() => deleteConfirmationModal.toggle(true))}
           danger
         >
           Delete
@@ -308,7 +304,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
 
     if (!isChatUsingDefaultAssistant && !hideModal) {
       setPendingMoveProjectId(targetProject.id);
-      setShowMoveCustomAgentModal(true);
+      moveCustomAgentModal.toggle(true);
       return;
     }
 
@@ -331,16 +327,15 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
 
   return (
     <>
-      {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+      <deleteConfirmationModal.ModalProvider>
+        <ConfirmationModalContent
           title="Delete Chat"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
             <Button
               danger
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                deleteConfirmationModal.toggle(false);
                 handleChatDelete();
               }}
             >
@@ -350,13 +345,13 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
-      )}
+        </ConfirmationModalContent>
+      </deleteConfirmationModal.ModalProvider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.ModalProvider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -367,21 +362,21 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
               );
             }
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
             if (target != null) {
               await performMove(target);
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.ModalProvider>
 
-      {showShareModal && (
+      <shareModal.ModalProvider>
         <ShareChatSessionModal
           chatSession={chatSession}
-          onClose={() => setShowShareModal(false)}
+          onClose={() => shareModal.toggle(false)}
         />
-      )}
+      </shareModal.ModalProvider>
 
       <NavigationTab
         icon={project ? () => <></> : SvgBubbleText}
@@ -479,9 +474,11 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const { toggleModal } = useChatModal();
+  const agentsModal = useModalProvider();
+  const createProjectModal = useModalProvider();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
+  const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
     () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -543,8 +540,13 @@ function AppSidebarInner() {
 
   return (
     <>
-      <AgentsModal />
-      <CreateProjectModal />
+      <agentsModal.ModalProvider medium>
+        <AgentsModal />
+      </agentsModal.ModalProvider>
+
+      <createProjectModal.ModalProvider>
+        <CreateProjectModal />
+      </createProjectModal.ModalProvider>
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
@@ -567,7 +569,7 @@ function AppSidebarInner() {
                 icon={SvgOnyxOctagon}
                 folded
                 tooltip
-                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                onClick={() => agentsModal.toggle(true)}
               >
                 Agents
               </NavigationTab>
@@ -575,7 +577,7 @@ function AppSidebarInner() {
                 icon={SvgFolderPlus}
                 folded
                 tooltip
-                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+                onClick={() => createProjectModal.toggle(true)}
               >
                 New Project
               </NavigationTab>
@@ -608,7 +610,7 @@ function AppSidebarInner() {
                 <div data-testid="AppSidebar/more-agents">
                   <NavigationTab
                     icon={SvgMoreHorizontal}
-                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                    onClick={() => agentsModal.toggle(true)}
                     lowlight
                   >
                     More Agents
@@ -617,7 +619,16 @@ function AppSidebarInner() {
               </SidebarSection>
 
               <SidebarSection title="Projects">
-                <Projects />
+                {projects.map((project) => (
+                  <ProjectFolder key={project.id} project={project} />
+                ))}
+                <NavigationTab
+                  icon={SvgFolderPlus}
+                  onClick={() => createProjectModal.toggle(true)}
+                  lowlight
+                >
+                  New Project
+                </NavigationTab>
               </SidebarSection>
 
               {/* Recents */}
