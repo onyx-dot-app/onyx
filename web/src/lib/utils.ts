@@ -63,3 +63,30 @@ export function noProp(
     f?.();
   };
 }
+
+/**
+ * Format bytes to human-readable file size (e.g., "1.5 MB", "256 KB")
+ * @param bytes - The number of bytes to format
+ * @param decimals - Number of decimal places (default: 2)
+ * @returns Formatted file size string
+ */
+export function formatBytes(
+  bytes: number | undefined,
+  decimals: number = 2
+): string {
+  if (bytes == null) return "Unknown";
+  if (bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+
+  let unitIndex = Math.floor(Math.log(bytes) / Math.log(k));
+  if (unitIndex < 0) unitIndex = 0;
+  if (unitIndex >= sizes.length) unitIndex = sizes.length - 1;
+  return (
+    parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) +
+    " " +
+    sizes[unitIndex]
+  );
+}
