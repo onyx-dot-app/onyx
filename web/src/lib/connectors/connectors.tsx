@@ -177,6 +177,15 @@ export const connectorConfigs: Record<
         name: "scroll_before_scraping",
         optional: true,
       },
+      {
+        type: "list",
+        query: "Remove by selector:",
+        label: "Remove by selector",
+        description:
+          "List of css selectors used to exclude html elements from scraping",
+        name: "remove_by_selector",
+        optional: true
+      },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
