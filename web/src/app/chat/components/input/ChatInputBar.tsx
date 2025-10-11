@@ -38,6 +38,9 @@ import {
   getIconForAction,
   hasSearchToolsAvailable,
 } from "../../services/actionUtils";
+import { useQdrantSearch } from "../../chat_search/hooks/useQdrantSearch";
+import { InlineSearchResults } from "./InlineSearchResults";
+import { QdrantSearchResult } from "../../chat_search/qdrantInterfaces";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -214,6 +217,38 @@ function ChatInputBarInner({
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
+  // Search-as-you-type for documents
+  const [showDocumentSearch, setShowDocumentSearch] = useState(false);
+  const [searchResultIndex, setSearchResultIndex] = useState(0);
+
+  const { results: documentSearchResults, isLoading: isSearchingDocuments } =
+    useQdrantSearch({
+      searchQuery: message,
+      enabled: message.length > 0 && !showPrompts, // Don't search when showing prompts
+      debounceMs: 300, // Faster for inline search
+      limit: 5, // Fewer results for inline display
+    });
+
+  // Show search results when we have query and results
+  useEffect(() => {
+    const shouldShow =
+      message.length > 0 && !showPrompts && documentSearchResults.length > 0;
+    console.log("[Search Debug]", {
+      message: message.substring(0, 20),
+      messageLength: message.length,
+      showPrompts,
+      resultsLength: documentSearchResults.length,
+      shouldShow,
+    });
+
+    if (shouldShow) {
+      setShowDocumentSearch(true);
+    } else {
+      setShowDocumentSearch(false);
+      setSearchResultIndex(0);
+    }
+  }, [message, showPrompts, documentSearchResults.length]);
+
   // Memoize availableSources to prevent unnecessary re-renders
   const memoizedAvailableSources = useMemo(
     () => [
@@ -230,10 +265,26 @@ function ChatInputBarInner({
     setTabbingIconIndex(0);
   };
 
+  const hideDocumentSearch = useCallback(() => {
+    setShowDocumentSearch(false);
+    setSearchResultIndex(0);
+  }, []);
+
   const updateInputPrompt = (prompt: InputPrompt) => {
     hidePrompts();
     setMessage(`${prompt.content}`);
   };
+
+  const handleSelectDocument = useCallback(
+    (result: QdrantSearchResult) => {
+      // Insert document reference into message
+      const docReference = result.filename || result.document_id;
+      const newMessage = `${message}\n\nRef: ${docReference}`;
+      setMessage(newMessage);
+      hideDocumentSearch();
+    },
+    [message, setMessage, hideDocumentSearch]
+  );
 
   const handlePromptInput = useCallback(
     (text: string) => {
@@ -310,6 +361,33 @@ function ChatInputBarInner({
   }, [selectedAssistant.tools]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle document search navigation
+    if (showDocumentSearch) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSearchResultIndex((prev) =>
+          Math.min(prev + 1, documentSearchResults.length - 1)
+        );
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSearchResultIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      } else if (e.key === "Enter" && documentSearchResults.length > 0) {
+        e.preventDefault();
+        const selected = documentSearchResults[searchResultIndex];
+        if (selected) {
+          handleSelectDocument(selected);
+        }
+        return;
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hideDocumentSearch();
+        return;
+      }
+    }
+
+    // Handle prompt navigation
     if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
       e.preventDefault();
 
@@ -345,7 +423,18 @@ function ChatInputBarInner({
   };
 
   return (
-    <div id="onyx-chat-input" className="max-w-full w-[50rem]">
+    <div id="onyx-chat-input" className="max-w-full w-[50rem] relative">
+      {/* Document search results dropdown */}
+      {showDocumentSearch && !showPrompts && (
+        <InlineSearchResults
+          results={documentSearchResults}
+          searchQuery={message}
+          selectedIndex={searchResultIndex}
+          onSelectResult={handleSelectDocument}
+        />
+      )}
+
+      {/* Prompt suggestions dropdown */}
       {showPrompts && user?.preferences?.shortcut_enabled && (
         <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
           <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
@@ -432,6 +521,7 @@ function ChatInputBarInner({
             if (
               event.key === "Enter" &&
               !showPrompts &&
+              !showDocumentSearch && // Don't submit when search results are showing
               !event.shiftKey &&
               !(event.nativeEvent as any).isComposing
             ) {

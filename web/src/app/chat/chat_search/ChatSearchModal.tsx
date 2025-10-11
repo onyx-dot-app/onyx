@@ -4,10 +4,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatSearchGroup } from "./ChatSearchGroup";
 import { NewChatButton } from "./NewChatButton";
 import { useChatSearch } from "./hooks/useChatSearch";
+import { useQdrantSearch } from "./hooks/useQdrantSearch";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { useRouter } from "next/navigation";
 import { SearchInput } from "./components/SearchInput";
 import { ChatSearchSkeletonList } from "./components/ChatSearchSkeleton";
+import { DocumentSearchResults } from "./components/DocumentSearchResults";
 import { useIntersectionObserver } from "./hooks/useIntersectionObserver";
 
 interface ChatSearchModalProps {
@@ -25,6 +27,15 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
     hasMore,
     fetchMoreChats,
   } = useChatSearch();
+
+  // Qdrant document search
+  const { results: documentResults, isLoading: isLoadingDocuments } =
+    useQdrantSearch({
+      searchQuery,
+      enabled: open && searchQuery.length > 0,
+      debounceMs: 500,
+      limit: 10,
+    });
 
   const onClose = () => {
     setSearchQuery("");
@@ -77,6 +88,15 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
           >
             <div className="px-4 py-2">
               <NewChatButton onClick={handleNewChat} />
+
+              {/* Document Search Results */}
+              {searchQuery && (
+                <DocumentSearchResults
+                  results={documentResults}
+                  isLoading={isLoadingDocuments}
+                  searchQuery={searchQuery}
+                />
+              )}
 
               {isSearching ? (
                 <ChatSearchSkeletonList />

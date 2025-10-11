@@ -238,7 +238,7 @@ def main():
     vector_size = 1024  # embed-english-v3.0 dimension
 
     # Sparse model options: "Qdrant/bm25" or "prithivida/Splade_PP_en_v1" "Qdrant/bm42-all-minilm-l6-v2-attentions"
-    sparse_model_name = "prithivida/Splade_PP_en_v1"
+    sparse_model_name = "Qdrant/bm25"
     # Collection name includes sparse model type for easy comparison
     if "bm25" in sparse_model_name.lower():
         collection_name = CollectionName.ACCURACY_TESTING

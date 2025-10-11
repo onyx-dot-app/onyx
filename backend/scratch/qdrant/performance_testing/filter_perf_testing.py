@@ -10,6 +10,7 @@ from fastembed import TextEmbedding
 from qdrant_client.models import DatetimeRange
 from qdrant_client.models import FieldCondition
 from qdrant_client.models import Filter
+from qdrant_client.models import HasIdCondition
 from qdrant_client.models import MatchValue
 
 from ..client import QdrantClient
@@ -191,6 +192,50 @@ def main():
             collection_name=collection_name,
             limit=test_limit,
             query_filter=composite_filter,
+        )
+
+        latency = time.time() - start
+
+        print(
+            f"{test_limit:<10} {len(search_result.points):<10} {latency * 1000:<15.2f}"
+        )
+
+    print("=" * 60)
+
+    # Test filtering by 200 chunk IDs
+    print("\n" + "=" * 60)
+    print("BENCHMARK: Filter by 200 Chunk IDs")
+    print("=" * 60)
+
+    # First, get 200 chunk IDs from the collection
+    print("Fetching 200 chunk IDs from collection...")
+    sample_search = service.hybrid_search(
+        dense_query_vector=dense_query_vector,
+        sparse_query_vector=sparse_query_vector,
+        collection_name=collection_name,
+        limit=200,
+        query_filter=None,
+    )
+
+    chunk_ids = [point.id for point in sample_search.points]
+    print(f"Retrieved {len(chunk_ids)} chunk IDs")
+
+    # Create filter with all 200 IDs
+    id_filter = Filter(must=[HasIdCondition(has_id=chunk_ids)])
+
+    print(f"Filter: chunk_id IN ({len(chunk_ids)} IDs)")
+    print(f"{'Limit':<10} {'Results':<10} {'Latency (ms)':<15}")
+    print("-" * 60)
+
+    for test_limit in test_limits:
+        start = time.time()
+
+        search_result = service.hybrid_search(
+            dense_query_vector=dense_query_vector,
+            sparse_query_vector=sparse_query_vector,
+            collection_name=collection_name,
+            limit=test_limit,
+            query_filter=id_filter,
         )
 
         latency = time.time() - start
