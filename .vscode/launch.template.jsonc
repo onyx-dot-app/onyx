@@ -23,12 +23,10 @@
         "Slack Bot",
         "Celery primary",
         "Celery light",
-        "Celery heavy",
+        "Celery background",
         "Celery docfetching",
         "Celery docprocessing",
-        "Celery beat",
-        "Celery monitoring",
-        "Celery user file processing"
+        "Celery beat"
       ],
       "presentation": {
         "group": "1"
@@ -42,16 +40,32 @@
       }
     },
     {
-      "name": "Celery (all)",
+      "name": "Celery (lightweight mode)",
+      "configurations": [
+        "Celery primary",
+        "Celery light",
+        "Celery background",
+        "Celery docfetching",
+        "Celery docprocessing",
+        "Celery beat"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
+    },
+    {
+      "name": "Celery (standard mode)",
       "configurations": [
         "Celery primary",
         "Celery light",
         "Celery heavy",
+        "Celery kg_processing",
+        "Celery monitoring",
+        "Celery user_file_processing",
         "Celery docfetching",
         "Celery docprocessing",
-        "Celery beat",
-        "Celery monitoring",
-        "Celery user file processing"
+        "Celery beat"
       ],
       "presentation": {
         "group": "1"
@@ -200,6 +214,35 @@
       "consoleTitle": "Celery light Console"
     },
     {
+      "name": "Celery background",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.background",
+        "worker",
+        "--pool=threads",
+        "--concurrency=6",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=background@%n",
+        "-Q",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery background Console"
+    },
+    {
       "name": "Celery heavy",
       "type": "debugpy",
       "request": "launch",
@@ -221,12 +264,99 @@
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync"
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
       ],
       "presentation": {
         "group": "2"
       },
       "consoleTitle": "Celery heavy Console"
+    },
+    {
+      "name": "Celery kg_processing",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.kg_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=kg_processing@%n",
+        "-Q",
+        "kg_processing"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery kg_processing Console"
+    },
+    {
+      "name": "Celery monitoring",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.monitoring",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=monitoring@%n",
+        "-Q",
+        "monitoring"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery monitoring Console"
+    },
+    {
+      "name": "Celery user_file_processing",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.user_file_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=user_file_processing@%n",
+        "-Q",
+        "user_file_processing,user_file_project_sync"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery user_file_processing Console"
     },
     {
       "name": "Celery docfetching",
@@ -310,58 +440,6 @@
         "group": "2"
       },
       "consoleTitle": "Celery beat Console"
-    },
-    {
-      "name": "Celery monitoring",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "celery",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {},
-      "args": [
-        "-A",
-        "onyx.background.celery.versioned_apps.monitoring",
-        "worker",
-        "--pool=solo",
-        "--concurrency=1",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=monitoring@%n",
-        "-Q",
-        "monitoring"
-      ],
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Celery monitoring Console"
-    },
-    {
-      "name": "Celery user file processing",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "celery",
-      "args": [
-        "-A",
-        "onyx.background.celery.versioned_apps.user_file_processing",
-        "worker",
-        "--loglevel=INFO",
-        "--hostname=user_file_processing@%n",
-        "--pool=threads",
-        "-Q",
-        "user_file_processing,user_file_project_sync"
-      ],
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "LOG_LEVEL": "DEBUG",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
-      },
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Celery user file processing Console"
     },
     {
       "name": "Pytest",
