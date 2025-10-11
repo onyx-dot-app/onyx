@@ -335,6 +335,7 @@ class CCPairManager:
         terminating that indexing."""
         start = time.monotonic()
         while True:
+            elapsed = time.monotonic() - start
             fetched_cc_pairs = CCPairManager.get_indexing_statuses(
                 user_performing_action
             )
@@ -351,10 +352,10 @@ class CCPairManager:
                         f"cc_pair={cc_pair.id} "
                         f"docs_indexed={fetched_cc_pair.docs_indexed} "
                         f"num_docs={num_docs}"
+                        f"time_taken={elapsed:.2f}s"
                     )
                     return
 
-            elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
                     f"Indexing in progress wait timed out: cc_pair={cc_pair.id} timeout={timeout}s"
