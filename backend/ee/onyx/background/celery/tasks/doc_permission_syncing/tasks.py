@@ -617,7 +617,7 @@ def connector_permission_sync_generator_task(
 
         with get_session_with_current_tenant() as db_session:
             mark_doc_permission_sync_attempt_failed(
-                attempt_id, db_session, error_message=error_msg
+                attempt_id, db_session, error_message=str(e)
             )
 
         redis_connector.permissions.generator_clear()
