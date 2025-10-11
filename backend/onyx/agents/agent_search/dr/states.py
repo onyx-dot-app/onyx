@@ -48,6 +48,8 @@ class OrchestrationSetup(OrchestrationUpdate):
     assistant_task_prompt: str | None = None
     uploaded_test_context: str | None = None
     uploaded_image_context: list[dict[str, Any]] | None = None
+    all_entity_types: str | None = None
+    all_relationship_types: str | None = None
 
 
 class AnswerUpdate(LoggerUpdate):
