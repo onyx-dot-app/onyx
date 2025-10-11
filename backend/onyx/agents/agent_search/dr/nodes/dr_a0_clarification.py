@@ -74,6 +74,7 @@ from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
+from onyx.prompts.prompt_utils import handle_company_awareness
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -488,6 +489,7 @@ def clarifier(
             + PROJECT_INSTRUCTIONS_SEPARATOR
             + graph_config.inputs.project_instructions
         )
+    assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
 
     chat_history_string = (
         get_chat_history_string(
