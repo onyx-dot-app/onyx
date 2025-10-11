@@ -55,6 +55,8 @@ def default_build_system_message_v2(
     if not tag_handled_prompt:
         return None
 
+    tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+
     return SystemMessage(content=tag_handled_prompt)
 
 
