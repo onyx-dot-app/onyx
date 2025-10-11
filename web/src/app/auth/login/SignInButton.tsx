@@ -3,6 +3,7 @@ import Text from "@/refresh-components/Text";
 import { AuthType } from "@/lib/constants";
 import Link from "next/link";
 import { FaGoogle } from "react-icons/fa";
+import { SiAuth0 } from "react-icons/si";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -22,6 +23,16 @@ export default function SignInButton({
         <Text inverted>Continue with Google</Text>
       </div>
     );
+  } else if (authType === "auth0") {
+    button = (
+      <div className="mx-auto flex">
+        <div className="my-auto mr-2">
+          <SiAuth0 />
+        </div>
+        <p className="text-sm font-medium select-none">Continue with Auth0</p>
+      </div>
+    );
+
   } else if (authType === "oidc") {
     button = "Continue with OIDC SSO";
   } else if (authType === "saml") {

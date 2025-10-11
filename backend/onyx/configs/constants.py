@@ -251,6 +251,7 @@ class AuthType(str, Enum):
     DISABLED = "disabled"
     BASIC = "basic"
     GOOGLE_OAUTH = "google_oauth"
+    AUTH0 = "auth0"
     OIDC = "oidc"
     SAML = "saml"
 
