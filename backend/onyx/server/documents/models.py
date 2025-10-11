@@ -16,9 +16,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import PermissionSyncStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
@@ -200,6 +202,36 @@ class IndexAttemptSnapshot(BaseModel):
 PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
+class PermissionSyncAttemptSnapshot(BaseModel):
+    id: int
+    status: PermissionSyncStatus
+    error_message: str | None
+    total_docs_synced: int
+    docs_with_permission_errors: int
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_permission_sync_attempt_db_model(
+        cls, attempt: DocPermissionSyncAttempt
+    ) -> "PermissionSyncAttemptSnapshot":
+        return PermissionSyncAttemptSnapshot(
+            id=attempt.id,
+            status=attempt.status,
+            error_message=attempt.error_message,
+            total_docs_synced=attempt.total_docs_synced or 0,
+            docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
+            time_created=attempt.time_created.isoformat(),
+            time_started=(
+                attempt.time_started.isoformat() if attempt.time_started else None
+            ),
+            time_finished=(
+                attempt.time_finished.isoformat() if attempt.time_finished else None
+            ),
+        )
+
+
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     items: list[PaginatedType]
     total_items: int
@@ -230,6 +262,12 @@ class CCPairFullInfo(BaseModel):
     last_full_permission_sync: datetime | None
     overall_indexing_speed: float | None
     latest_checkpoint_description: str | None
+
+    # permission sync attempt status
+    last_permission_sync_attempt_status: PermissionSyncStatus | None
+    permission_syncing: bool
+    last_permission_sync_attempt_finished: datetime | None
+    last_permission_sync_attempt_error_message: str | None
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -279,6 +317,10 @@ class CCPairFullInfo(BaseModel):
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
         indexing: bool,
+        last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
+        permission_syncing: bool = False,
+        last_permission_sync_attempt_finished: datetime | None = None,
+        last_permission_sync_attempt_error_message: str | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -333,6 +375,10 @@ class CCPairFullInfo(BaseModel):
             last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
             overall_indexing_speed=overall_indexing_speed,
             latest_checkpoint_description=None,
+            last_permission_sync_attempt_status=last_permission_sync_attempt_status,
+            permission_syncing=permission_syncing,
+            last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
+            last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
         )
 
 

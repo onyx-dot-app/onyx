@@ -544,9 +544,8 @@ def _perform_external_group_sync(
                     source=cc_pair.connector.source,
                 )
         except Exception as e:
-            error_msg = format_error_for_logging(e)
             mark_external_group_sync_attempt_failed(
-                attempt_id, db_session, error_message=error_msg
+                attempt_id, db_session, error_message=str(e)
             )
 
             # TODO: add some notification to the admins here
