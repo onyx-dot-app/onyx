@@ -103,6 +103,7 @@ from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
+from onyx.server.qdrant_search.api import router as qdrant_search_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.chat_backend_v0 import router as chat_v0_router
 from onyx.server.query_and_chat.query_backend import (
@@ -340,6 +341,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
 
     include_router_with_global_prefix_prepended(application, password_router)
+    include_router_with_global_prefix_prepended(application, qdrant_search_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, chat_v0_router)
     include_router_with_global_prefix_prepended(application, query_router)
