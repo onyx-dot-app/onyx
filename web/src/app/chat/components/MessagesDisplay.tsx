@@ -107,10 +107,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   );
 
   const handleEditWithMessageId = useCallback(
-    (editedContent: string, msgId: number | null | undefined) => {
+    (editedContent: string, msgId: number) => {
       onSubmit({
         message: editedContent,
-        messageIdToResend: msgId || undefined,
+        messageIdToResend: msgId,
         currentMessageFiles: [],
         useAgentSearch: deepResearchEnabled,
       });

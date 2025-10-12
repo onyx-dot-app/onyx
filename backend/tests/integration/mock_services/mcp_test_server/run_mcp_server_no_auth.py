@@ -1,4 +1,5 @@
 import os
+import sys
 
 from fastmcp import FastMCP
 from fastmcp.server.server import FunctionTool
@@ -28,9 +29,11 @@ def make_many_tools() -> list[FunctionTool]:
 
 
 if __name__ == "__main__":
+
+    port = int(sys.argv[1] if len(sys.argv) > 1 else "8000")
     # Streamable HTTP transport (recommended)
     make_many_tools()
     host = os.getenv("MCP_SERVER_BIND_HOST", "0.0.0.0")
-    port = int(os.getenv("MCP_SERVER_PORT", "8000"))
+    port = int(os.getenv("MCP_SERVER_PORT", port))
     path = os.getenv("MCP_SERVER_PATH", "/mcp")
     mcp.run(transport="http", host=host, port=port, path=path)

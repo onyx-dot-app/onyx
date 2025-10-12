@@ -30,7 +30,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useFilters, useSourcePreferences } from "@/lib/hooks";
+import { useFilters, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -95,9 +95,10 @@ interface ActionItemProps {
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
+  tooltipSide?: "top" | "right" | "bottom" | "left";
 }
 
-export function ActionItem({
+function ActionItem({
   tool,
   Icon: ProvidedIcon,
   label: providedLabel,
@@ -107,6 +108,7 @@ export function ActionItem({
   onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
+  tooltipSide = "left",
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
@@ -131,7 +133,7 @@ export function ActionItem({
             justify-between
             px-2
             cursor-pointer
-            hover:bg-background-100
+            hover:bg-neutral-100
             dark:hover:bg-neutral-800
             dark:text-neutral-300
             rounded-lg
@@ -244,7 +246,7 @@ export function ActionItem({
           </div>
         </TooltipTrigger>
         {tool?.description && (
-          <TooltipContent side="left" width="max-w-xs">
+          <TooltipContent side={tooltipSide} width="max-w-xs">
             <Text inverted>{tool.description}</Text>
           </TooltipContent>
         )}
@@ -285,6 +287,10 @@ function MCPServerItem({
   isLoading,
 }: MCPServerItemProps) {
   const itemRef = useRef<HTMLDivElement>(null);
+  const showAuthTrigger =
+    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    server.auth_type !== MCPAuthenticationType.NONE;
+  const showReauthButton = showAuthTrigger && isAuthenticated;
 
   const getServerIcon = () => {
     if (isLoading) {
@@ -302,11 +308,13 @@ function MCPServerItem({
     return <FiLock className="text-red-500" />;
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent closing the main popup
+  const handleClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
     if (isAuthenticated && itemRef.current) {
       onToggleExpand(itemRef.current);
-    } else if (!isAuthenticated) {
+      return;
+    }
+    if (showAuthTrigger) {
       onAuthenticate();
     }
   };
@@ -316,16 +324,16 @@ function MCPServerItem({
       ref={itemRef}
       className={`
         group
-        flex 
-        items-center 
-        justify-between 
-        px-2 
-        cursor-pointer 
-        hover:bg-background-100 
+        flex
+        items-center
+        justify-between
+        px-2
+        cursor-pointer
+        hover:bg-neutral-100
         dark:hover:bg-neutral-800
         dark:text-neutral-300
-        rounded-lg 
-        py-2 
+        rounded-lg
+        py-2
         mx-1
         ${isExpanded ? "bg-accent-100 hover:bg-accent-200" : ""}
       `}
@@ -342,12 +350,28 @@ function MCPServerItem({
           </span>
         )}
       </div>
-      {isAuthenticated && tools.length > 0 && (
-        <FiChevronRight
-          className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
-          size={14}
-        />
-      )}
+      <div className="flex items-center gap-1">
+        {showReauthButton && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAuthenticate();
+            }}
+            className="p-1 text-neutral-500 hover:text-neutral-900 hover:bg-background-200 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+            aria-label="Re-authenticate MCP server"
+            title="Re-authenticate"
+          >
+            <FiKey size={14} />
+          </button>
+        )}
+        {isAuthenticated && tools.length > 0 && (
+          <FiChevronRight
+            className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+            size={14}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -482,6 +506,7 @@ function MCPToolsList({
               onForceToggle={() => toggleForcedTool(tool.id)}
               onSourceManagementOpen={onSourceManagementOpen}
               hasNoConnectors={false}
+              tooltipSide="right"
             />
           ))
         )}
@@ -920,13 +945,15 @@ export function ActionToggle({
         >
           {/* Search Input */}
           {!showSourceManagement && (
-            <InputTypeIn
-              placeholder="Search Menu"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              autoFocus
-              internal
-            />
+            <div className="pt-1 mx-2">
+              <InputTypeIn
+                placeholder="Search Menu"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                autoFocus
+                internal
+              />
+            </div>
           )}
 
           {/* Options */}
@@ -964,9 +991,6 @@ export function ActionToggle({
                       />
                     </div>
                     {(() => {
-                      const allSourceIds = getConfiguredSources(
-                        availableSources
-                      ).map((source) => source.uniqueKey);
                       const anyEnabled = selectedSources.length > 0;
                       if (anyEnabled) {
                         return (
@@ -1240,7 +1264,7 @@ export function ActionToggle({
                 they are the only ones who can manage actions. */}
                 {(isAdmin || isCurator) && (
                   <>
-                    <div className="border-b border-border mx-3.5" />
+                    <div className="border-b border-border mx-3.5 mt-2" />
                     <Link href="/admin/actions">
                       <button
                         className="
@@ -1264,7 +1288,7 @@ export function ActionToggle({
                           text-text-500
                           dark:text-neutral-500
                           dark:hover:bg-neutral-800
-                          hover:bg-background-100
+                          hover:bg-neutral-100
                           hover:text-text-500
                           transition-colors
                           rounded-lg

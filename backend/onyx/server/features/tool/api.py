@@ -64,6 +64,7 @@ def create_custom_tool(
         user_id=user.id if user else None,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
+        enabled=True,
     )
     db_session.commit()
     return ToolSnapshot.from_model(tool)
@@ -147,7 +148,7 @@ def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
-    tools = get_tools(db_session)
+    tools = get_tools(db_session, only_enabled=True)
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:

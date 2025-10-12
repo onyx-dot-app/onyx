@@ -61,13 +61,17 @@ import {
 } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
+import {
+  FullPersona,
+  PersonaLabel,
+  StarterMessage,
+} from "@/app/admin/assistants/interfaces";
 import {
   PersonaUpsertParameters,
   createPersona,
   updatePersona,
   deletePersona,
-} from "./lib";
+} from "@/app/admin/assistants/lib";
 import {
   CameraIcon,
   GroupsIconSkeleton,
@@ -76,8 +80,8 @@ import {
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
-import { LLMProviderView } from "../configuration/llm/interfaces";
-import StarterMessagesList from "./StarterMessageList";
+import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
 import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
@@ -124,6 +128,7 @@ import FilePicker from "@/app/chat/components/files/FilePicker";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import Text from "@/refresh-components/Text";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -1028,11 +1033,11 @@ export function AssistantEditor({
 
                                     {ccPairs.length === 0 && (
                                       <TooltipContent side="top" align="center">
-                                        <p className="bg-background-900 max-w-[200px] text-sm rounded-lg p-1.5 text-white">
+                                        <Text inverted>
                                           To use the Knowledge Action, you need
                                           to have at least one Connector
                                           configured.
-                                        </p>
+                                        </Text>
                                       </TooltipContent>
                                     )}
                                   </Tooltip>
@@ -1824,7 +1829,10 @@ export function AssistantEditor({
                     )}
                   </div>
                   <div className="flex gap-x-2 items-center">
-                    <Button disabled={isSubmitting || isRequestSuccessful}>
+                    <Button
+                      disabled={isSubmitting || isRequestSuccessful}
+                      type="submit"
+                    >
                       {isUpdate ? "Update" : "Create"}
                     </Button>
                     <Button secondary onClick={() => router.back()}>

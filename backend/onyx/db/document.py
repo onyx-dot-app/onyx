@@ -28,7 +28,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
 from onyx.db.enums import AccessType
@@ -55,7 +54,6 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -304,80 +302,27 @@ def get_document_counts_for_cc_pairs(
     ]
 
 
-# For use with our thread-level parallelism utils. Note that any relationships
-# you wish to use MUST be eagerly loaded, as the session will not be available
-# after this function to allow lazy loading.
-def get_document_counts_for_cc_pairs_parallel(
-    cc_pairs: list[ConnectorCredentialPairIdentifier],
+def get_document_counts_for_all_cc_pairs(
+    db_session: Session,
 ) -> Sequence[tuple[int, int, int]]:
-    with get_session_with_current_tenant() as db_session:
-        return get_document_counts_for_cc_pairs(db_session, cc_pairs)
+    """Return (connector_id, credential_id, count) for ALL CC pairs with indexed docs.
 
-
-def _get_document_counts_for_cc_pairs_batch(
-    batch: list[tuple[int, int]],
-) -> list[tuple[int, int, int]]:
-    """Worker for parallel execution: opens its own session per batch."""
-    if not batch:
-        return []
-    with get_session_with_current_tenant() as db_session:
-        stmt = (
-            select(
-                DocumentByConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id,
-                func.count(),
-            )
-            .where(
-                and_(
-                    tuple_(
-                        DocumentByConnectorCredentialPair.connector_id,
-                        DocumentByConnectorCredentialPair.credential_id,
-                    ).in_(batch),
-                    DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
-                )
-            )
-            .group_by(
-                DocumentByConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id,
-            )
-        )
-        return db_session.execute(stmt).all()  # type: ignore
-
-
-def get_document_counts_for_cc_pairs_batched_parallel(
-    cc_pairs: list[ConnectorCredentialPairIdentifier],
-    batch_size: int = 1000,
-    max_workers: int | None = None,
-) -> Sequence[tuple[int, int, int]]:
-    """Parallel variant that batches the IN-clause and runs batches concurrently.
-
-    Opens an isolated DB session per batch to avoid sharing a session across threads.
+    Executes a single grouped query so Postgres can fully leverage indexes,
+    avoiding large batched IN-lists.
     """
-    if not cc_pairs:
-        return []
-
-    cc_ids = [(x.connector_id, x.credential_id) for x in cc_pairs]
-
-    batches: list[list[tuple[int, int]]] = [
-        cc_ids[i : i + batch_size] for i in range(0, len(cc_ids), batch_size)
-    ]
-
-    funcs = [(_get_document_counts_for_cc_pairs_batch, (batch,)) for batch in batches]
-    results = run_functions_tuples_in_parallel(
-        functions_with_args=funcs, max_workers=max_workers
+    stmt = (
+        select(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+            func.count(),
+        )
+        .where(DocumentByConnectorCredentialPair.has_been_indexed.is_(True))
+        .group_by(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
     )
-
-    aggregated_counts: dict[tuple[int, int], int] = {}
-    for batch_result in results:
-        if not batch_result:
-            continue
-        for connector_id, credential_id, cnt in batch_result:
-            aggregated_counts[(connector_id, credential_id)] = cnt
-
-    return [
-        (connector_id, credential_id, cnt)
-        for (connector_id, credential_id), cnt in aggregated_counts.items()
-    ]
+    return db_session.execute(stmt).all()  # type: ignore
 
 
 def get_access_info_for_document(
