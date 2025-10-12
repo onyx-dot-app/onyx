@@ -799,16 +799,18 @@ function AppSidebarInner() {
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
-          <NavigationTab
-            icon={SvgEditBig}
-            className="!w-full"
-            folded={folded}
-            onClick={() => route({})}
-            active={Array.from(searchParams).length === 0}
-            tooltip
-          >
-            New Session
-          </NavigationTab>
+          <div data-testid="AppSidebar/new-session">
+            <NavigationTab
+              icon={SvgEditBig}
+              className="!w-full"
+              folded={folded}
+              onClick={() => route({})}
+              active={Array.from(searchParams).length === 0}
+              tooltip
+            >
+              New Session
+            </NavigationTab>
+          </div>
 
           {folded && (
             <>
@@ -854,13 +856,15 @@ function AppSidebarInner() {
                     ))}
                   </SortableContext>
                 </DndContext>
-                <NavigationTab
-                  icon={SvgMoreHorizontal}
-                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                  lowlight
-                >
-                  More Agents
-                </NavigationTab>
+                <div data-testid="AppSidebar/more-agents">
+                  <NavigationTab
+                    icon={SvgMoreHorizontal}
+                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                    lowlight
+                  >
+                    More Agents
+                  </NavigationTab>
+                </div>
               </SidebarSection>
 
               {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}

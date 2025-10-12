@@ -7,21 +7,18 @@ export function useKeyPress(
   key: string,
   enabled: boolean = true
 ) {
-  useEffect(() => {
-    if (!enabled) return;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== key) return;
-
-      event.preventDefault();
-      callback();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [callback, enabled]);
+  // useEffect(() => {
+  //   if (!enabled) return;
+  //   function handleKeyDown(event: KeyboardEvent) {
+  //     if (event.key !== key) return;
+  //     event.preventDefault();
+  //     callback();
+  //   }
+  //   document.addEventListener("keydown", handleKeyDown);
+  //   return () => {
+  //     document.removeEventListener("keydown", handleKeyDown);
+  //   };
+  // }, [callback, enabled]);
 }
 
 /**

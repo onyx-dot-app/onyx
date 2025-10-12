@@ -33,17 +33,25 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.USER_FILE_PROCESSING,
+        },
+    },
+    {
+        "name": "check-for-user-file-project-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROJECT_SYNC,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
         "name": "user-file-docid-migration",
         "task": OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
-        "schedule": timedelta(minutes=1),
+        "schedule": timedelta(minutes=10),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
             "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.USER_FILE_PROCESSING,
+            "queue": OnyxCeleryQueues.USER_FILES_INDEXING,
         },
     },
     {

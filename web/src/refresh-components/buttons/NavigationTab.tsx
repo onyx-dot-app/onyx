@@ -82,6 +82,7 @@ export interface NavigationTabProps {
   popover?: React.ReactNode;
   onPopoverChange?: (open: boolean) => void;
   className?: string;
+  iconClassName?: string;
   icon: React.FunctionComponent<SvgProps>;
   renaming?: boolean;
   setRenaming?: Dispatch<SetStateAction<boolean>>;
@@ -106,6 +107,7 @@ export default function NavigationTab({
   popover,
   onPopoverChange,
   className,
+  iconClassName,
   icon: Icon,
   renaming,
   setRenaming,

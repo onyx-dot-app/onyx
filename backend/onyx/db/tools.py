@@ -19,16 +19,23 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def get_tools(db_session: Session) -> list[Tool]:
-    return list(db_session.scalars(select(Tool)).all())
+def get_tools(db_session: Session, *, only_enabled: bool = False) -> list[Tool]:
+    query = select(Tool)
+    if only_enabled:
+        query = query.where(Tool.enabled.is_(True))
+    return list(db_session.scalars(query).all())
 
 
-def get_tools_by_mcp_server_id(mcp_server_id: int, db_session: Session) -> list[Tool]:
-    return list(
-        db_session.scalars(
-            select(Tool).where(Tool.mcp_server_id == mcp_server_id)
-        ).all()
-    )
+def get_tools_by_mcp_server_id(
+    mcp_server_id: int,
+    db_session: Session,
+    *,
+    only_enabled: bool = False,
+) -> list[Tool]:
+    query = select(Tool).where(Tool.mcp_server_id == mcp_server_id)
+    if only_enabled:
+        query = query.where(Tool.enabled.is_(True))
+    return list(db_session.scalars(query).all())
 
 
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
@@ -53,6 +60,9 @@ def create_tool__no_commit(
     user_id: UUID | None,
     db_session: Session,
     passthrough_auth: bool,
+    *,
+    mcp_server_id: int | None = None,
+    enabled: bool = True,
 ) -> Tool:
     new_tool = Tool(
         name=name,
@@ -64,6 +74,8 @@ def create_tool__no_commit(
         ),
         user_id=user_id,
         passthrough_auth=passthrough_auth,
+        mcp_server_id=mcp_server_id,
+        enabled=enabled,
     )
     db_session.add(new_tool)
     db_session.flush()  # Don't commit yet, let caller decide when to commit

@@ -153,6 +153,15 @@ export function CCPairStatus({
           Indexing
         </Badge>
       );
+    } else if (
+      lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "canceled"
+    ) {
+      badge = (
+        <Badge variant="canceled" icon={FiClock}>
+          Canceled
+        </Badge>
+      );
     } else {
       badge = (
         <Badge variant="success" icon={FiCheckCircle}>
