@@ -966,6 +966,13 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
     return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
 
 
+def sanitize_attachment_title(title: str) -> str:
+    """
+    Sanitize the attachment title to be a valid HTML attribute.
+    """
+    return title.replace("<", "_").replace(">", "_").replace(" ", "_").replace(":", "_")
+
+
 def extract_text_from_confluence_html(
     confluence_client: OnyxConfluence,
     confluence_object: dict[str, Any],
@@ -1067,6 +1074,16 @@ def extract_text_from_confluence_html(
             html_link_body.replaceWith(f"(LINK TEXT: {text_from_link})")
         except Exception as e:
             logger.warning(f"Error processing ac:link-body: {e}")
+
+    for html_attachment in soup.findAll("ri:attachment"):
+        # This extracts the text from inline attachments in the page so they can be
+        # represented in the document text as plain text
+        try:
+            html_attachment.replaceWith(
+                f"<attachment>{sanitize_attachment_title(html_attachment.attrs['ri:filename'])}</attachment>"
+            )  # to be replaced later
+        except Exception as e:
+            logger.warning(f"Error processing ac:attachment: {e}")
 
     return format_document_soup(soup)
 

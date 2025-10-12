@@ -20,10 +20,7 @@ interface InternalMemoizedHumanMessageProps
 }
 
 interface MemoizedHumanMessageProps extends BaseMemoizedHumanMessageProps {
-  handleEditWithMessageId: (
-    editedContent: string,
-    messageId: number | null | undefined
-  ) => void;
+  handleEditWithMessageId: (editedContent: string, messageId: number) => void;
 }
 
 const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
@@ -65,7 +62,14 @@ export const MemoizedHumanMessage = ({
 }: MemoizedHumanMessageProps) => {
   const onEdit = useCallback(
     (editedContent: string) => {
-      handleEditWithMessageId(editedContent, messageId ?? undefined);
+      if (messageId === null || messageId === undefined) {
+        console.warn(
+          "No message id specified; cannot edit an undefined message"
+        );
+        return;
+      }
+
+      handleEditWithMessageId(editedContent, messageId);
     },
     [handleEditWithMessageId, messageId]
   );

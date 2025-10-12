@@ -294,6 +294,10 @@ services:
         required: false
     environment:
       - DOMAIN=localhost
+      # Nginx proxy timeout settings (in seconds)
+      - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
+      - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
+      - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
       - "80:80"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
