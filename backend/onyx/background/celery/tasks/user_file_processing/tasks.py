@@ -68,6 +68,10 @@ def _user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_PROJECT_SYNC_LOCK_PREFIX}:{user_file_id}"
 
 
+def _user_file_delete_lock_key(user_file_id: str | UUID) -> str:
+    return f"{OnyxRedisLocks.USER_FILE_DELETE_LOCK_PREFIX}:{user_file_id}"
+
+
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
     soft_time_limit=300,
@@ -279,6 +283,153 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
     finally:
         if file_lock.owned():
             file_lock.release()
+
+
+@shared_task(
+    name=OnyxCeleryTask.CHECK_FOR_USER_FILE_DELETE,
+    soft_time_limit=300,
+    bind=True,
+    ignore_result=True,
+)
+def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
+    """Scan for user files with DELETING status and enqueue per-file tasks."""
+    task_logger.info("check_for_user_file_delete - Starting")
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.USER_FILE_DELETE_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+    if not lock.acquire(blocking=False):
+        return None
+    enqueued = 0
+    try:
+        with get_session_with_current_tenant() as db_session:
+            user_file_ids = (
+                db_session.execute(
+                    select(UserFile.id).where(
+                        UserFile.status == UserFileStatus.DELETING
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for user_file_id in user_file_ids:
+                self.app.send_task(
+                    OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
+                    queue=OnyxCeleryQueues.USER_FILE_DELETE,
+                    priority=OnyxCeleryPriority.HIGH,
+                )
+                enqueued += 1
+    except Exception as e:
+        task_logger.exception(
+            f"check_for_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
+        )
+        return None
+    finally:
+        if lock.owned():
+            lock.release()
+    task_logger.info(
+        f"check_for_user_file_delete - Enqueued {enqueued} tasks for tenant={tenant_id}"
+    )
+    return None
+
+
+@shared_task(
+    name=OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+    bind=True,
+    ignore_result=True,
+)
+def process_single_user_file_delete(
+    self: Task, *, user_file_id: str, tenant_id: str
+) -> None:
+    """Process a single user file delete."""
+    task_logger.info(f"process_single_user_file_delete - Starting id={user_file_id}")
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    file_lock: RedisLock = redis_client.lock(
+        _user_file_delete_lock_key(user_file_id),
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+    if not file_lock.acquire(blocking=False):
+        task_logger.info(
+            f"process_single_user_file_delete - Lock held, skipping user_file_id={user_file_id}"
+        )
+        return None
+    try:
+        with get_session_with_current_tenant() as db_session:
+            active_search_settings = get_active_search_settings(db_session)
+            document_index = get_default_document_index(
+                search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
+                httpx_client=HttpxPool.get("vespa"),
+            )
+            retry_index = RetryDocumentIndex(document_index)
+
+            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            if not user_file:
+                task_logger.info(
+                    f"process_single_user_file_delete - User file not found id={user_file_id}"
+                )
+                return None
+
+            # 1) Delete Vespa chunks for the document
+            if user_file.chunk_count and user_file.chunk_count > 0:
+                retry_index.delete_single(
+                    str(user_file.id),
+                    tenant_id=tenant_id,
+                    chunk_count=user_file.chunk_count,
+                )
+            else:
+                # Fall back to visit API to delete chunks when chunk_count is 0/unknown
+                if hasattr(document_index, "index_name"):
+                    index_name = document_index.index_name  # type: ignore[attr-defined]
+                else:
+                    index_name = "danswer_index"
+
+                clean_doc_id = replace_invalid_doc_id_characters(str(user_file.id))
+                selection = f"{index_name}.document_id=='{clean_doc_id}'"
+
+                with get_vespa_http_client() as http_client:
+                    continuation: str | None = None
+                    while True:
+                        docs, continuation = _visit_chunks(
+                            http_client=http_client,
+                            index_name=index_name,
+                            selection=selection,
+                            continuation=continuation,
+                        )
+                        if not docs:
+                            break
+                        for doc in docs:
+                            vespa_full_id = doc.get("id")
+                            if not vespa_full_id:
+                                continue
+                            vespa_doc_uuid = vespa_full_id.split("::")[-1]
+                            delete_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_uuid}"
+                            resp = http_client.delete(delete_url)
+                            resp.raise_for_status()
+                        if not continuation:
+                            break
+
+            # 2) Delete the user-uploaded file content from filestore (blob + metadata)
+            file_store = get_default_file_store()
+            file_store.delete_file(user_file.file_id, db_session=db_session)
+
+            # 3) Finally, delete the UserFile row
+            db_session.delete(user_file)
+            db_session.commit()
+            task_logger.info(
+                f"process_single_user_file_delete - Completed id={user_file_id}"
+            )
+    except Exception as e:
+        task_logger.exception(
+            f"process_single_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
+        )
+        return None
+    finally:
+        if file_lock.owned():
+            file_lock.release()
+    return None
 
 
 @shared_task(
