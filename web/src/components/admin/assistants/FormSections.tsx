@@ -5,6 +5,9 @@ import { FastField, useFormikContext } from "formik";
 import { TextFormField } from "@/components/Field";
 import { FiChevronRight, FiChevronDown } from "react-icons/fi";
 
+const MAX_DESCRIPTION_LENGTH = 600;
+import { useState, useEffect } from "react";
+
 // Isolated Name Field that only re-renders when its value changes
 export const NameField = memo(function NameField() {
   return (
@@ -105,6 +108,9 @@ export const MCPServerSection = memo(function MCPServerSection({
   onToggleServerTools: () => void;
 }) {
   const { values } = useFormikContext<any>();
+  const [expandedToolDescriptions, setExpandedToolDescriptions] = useState<
+    Record<number, boolean>
+  >({});
 
   // Calculate checkbox state locally
   const enabledCount = serverTools.filter(
@@ -153,7 +159,12 @@ export const MCPServerSection = memo(function MCPServerSection({
       {!isCollapsed && (
         <div className="ml-7 space-y-2">
           {serverTools.map((tool) => (
-            <FastField key={tool.id} name={`enabled_tools_map.${tool.id}`}>
+            <FastField
+              key={`${tool.id}-${
+                expandedToolDescriptions[tool.id] ? "expanded" : "collapsed"
+              }`}
+              name={`enabled_tools_map.${tool.id}`}
+            >
               {({ field, form }: any) => (
                 <label className="flex items-center space-x-2">
                   <input
@@ -169,7 +180,36 @@ export const MCPServerSection = memo(function MCPServerSection({
                       {tool.display_name}
                     </div>
                     <div className="text-xs text-gray-600">
-                      {tool.description}
+                      {tool.description &&
+                      tool.description.length > MAX_DESCRIPTION_LENGTH ? (
+                        <>
+                          {expandedToolDescriptions[tool.id]
+                            ? tool.description
+                            : `${tool.description.slice(
+                                0,
+                                MAX_DESCRIPTION_LENGTH
+                              )}... `}
+                          <button
+                            type="button"
+                            className="ml-1 text-blue-500 underline text-xs focus:outline-none"
+                            onClick={() =>
+                              setExpandedToolDescriptions(
+                                (prev: Record<number, boolean>) => ({
+                                  ...prev,
+                                  [tool.id]: !prev[tool.id],
+                                })
+                              )
+                            }
+                            tabIndex={0}
+                          >
+                            {expandedToolDescriptions[tool.id]
+                              ? "Show less"
+                              : "Expand"}
+                          </button>
+                        </>
+                      ) : (
+                        tool.description
+                      )}
                     </div>
                   </div>
                 </label>

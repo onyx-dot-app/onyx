@@ -146,7 +146,10 @@ export default function AIMessage({
       }
 
       // Documents from tool deltas
-      if (packet.obj.type === PacketType.SEARCH_TOOL_DELTA) {
+      if (
+        packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
+        packet.obj.type === PacketType.FETCH_TOOL_START
+      ) {
         const toolDelta = packet.obj as SearchToolDelta;
         if ("documents" in toolDelta && toolDelta.documents) {
           for (const doc of toolDelta.documents) {
@@ -364,6 +367,7 @@ export default function AIMessage({
                             onClick={() => copyAll(getTextContent(rawPackets))}
                             tertiary
                             tooltip="Copy"
+                            data-testid="AIMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgThumbsUp}
@@ -375,6 +379,7 @@ export default function AIMessage({
                             }
                             tertiary
                             tooltip="Good Response"
+                            data-testid="AIMessage/like-button"
                           />
                           <IconButton
                             icon={SvgThumbsDown}
@@ -386,19 +391,22 @@ export default function AIMessage({
                             }
                             tertiary
                             tooltip="Bad Response"
+                            data-testid="AIMessage/dislike-button"
                           />
 
                           {chatState.regenerate && llmManager && (
-                            <LLMPopover
-                              llmManager={llmManager}
-                              currentModelName={chatState.overriddenModel}
-                              onSelect={(modelName) => {
-                                const llmDescriptor =
-                                  parseLlmDescriptor(modelName);
-                                chatState.regenerate!(llmDescriptor);
-                              }}
-                              folded
-                            />
+                            <div data-testid="AIMessage/regenerate">
+                              <LLMPopover
+                                llmManager={llmManager}
+                                currentModelName={chatState.overriddenModel}
+                                onSelect={(modelName) => {
+                                  const llmDescriptor =
+                                    parseLlmDescriptor(modelName);
+                                  chatState.regenerate!(llmDescriptor);
+                                }}
+                                folded
+                              />
+                            </div>
                           )}
 
                           {nodeId &&

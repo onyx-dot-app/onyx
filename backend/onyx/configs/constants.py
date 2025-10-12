@@ -145,6 +145,13 @@ CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
+# Doc ID migration can be long-running; use a longer TTL and renew periodically
+CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT = 10 * 60  # 10 minutes (in seconds)
+
+CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
+
+CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -404,6 +411,7 @@ class OnyxRedisLocks:
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
     USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
+    USER_FILE_DOCID_MIGRATION_LOCK = "da_lock:user_file_docid_migration"
 
 
 class OnyxRedisSignals:

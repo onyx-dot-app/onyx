@@ -17,7 +17,6 @@ export interface ClientLayoutProps {
 }
 
 export function ClientLayout({
-  user,
   children,
   enableEnterprise,
   enableCloud,

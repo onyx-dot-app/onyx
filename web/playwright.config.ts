@@ -33,5 +33,13 @@ export default defineConfig({
       },
       testIgnore: ["**/codeUtils.test.ts"],
     },
+    {
+      name: "no-auth",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+      },
+      testIgnore: ["**/codeUtils.test.ts"],
+    },
   ],
 });

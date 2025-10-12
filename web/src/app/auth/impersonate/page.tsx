@@ -1,11 +1,15 @@
 "use client";
+
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useUser } from "@/components/user/UserProvider";
 import { redirect, useRouter } from "next/navigation";
-import { Formik, Form, Field } from "formik";
+import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { TextFormField } from "@/components/Field";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/Text";
 
 const ImpersonateSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
@@ -25,10 +29,10 @@ export default function ImpersonatePage() {
     redirect("/search");
   }
 
-  const handleImpersonate = async (values: {
-    email: string;
-    apiKey: string;
-  }) => {
+  const handleImpersonate = async (
+    values: { email: string; apiKey: string },
+    helpers: FormikHelpers<{ email: string; apiKey: string }>
+  ) => {
     try {
       const response = await fetch("/api/tenants/impersonate", {
         method: "POST",
@@ -46,7 +50,9 @@ export default function ImpersonatePage() {
           message: errorData.detail || "Failed to impersonate user",
           type: "error",
         });
+        helpers.setSubmitting(false);
       } else {
+        helpers.setSubmitting(false);
         router.push("/search");
       }
     } catch (error) {
@@ -55,6 +61,7 @@ export default function ImpersonatePage() {
           error instanceof Error ? error.message : "Failed to impersonate user",
         type: "error",
       });
+      helpers.setSubmitting(false);
     }
   };
 
@@ -66,62 +73,45 @@ export default function ImpersonatePage() {
       </div>
 
       <div className="flex flex-col w-full justify-center">
-        <h2 className="text-center text-xl text-strong font-bold mb-8">
-          Impersonate User
-        </h2>
+        <div className="w-full flex flex-col items-center justify-center">
+          <Text headingH3 className="mb-6 text-center">
+            Impersonate User
+          </Text>
+        </div>
 
         <Formik
           initialValues={{ email: "", apiKey: "" }}
           validationSchema={ImpersonateSchema}
-          onSubmit={handleImpersonate}
+          onSubmit={(values, helpers) => handleImpersonate(values, helpers)}
         >
-          {({ errors, touched }) => (
-            <Form className="flex flex-col items-stretch gap-y-2">
-              <div className="relative">
-                <Field
-                  type="email"
-                  name="email"
-                  placeholder="Enter user email to impersonate"
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
-                />
-                <div className="h-8">
-                  {errors.email && touched.email && (
-                    <div className="text-red-500 text-sm mt-1">
-                      {errors.email}
-                    </div>
-                  )}
-                </div>
-              </div>
+          {({ isSubmitting }) => (
+            <Form className="flex flex-col gap-spacing-paragraph">
+              <TextFormField
+                name="email"
+                type="email"
+                label="Email"
+                placeholder="email@yourcompany.com"
+              />
 
-              <div className="relative">
-                <Field
-                  type="password"
-                  name="apiKey"
-                  placeholder="Enter API Key"
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
-                />
-                <div className="h-8">
-                  {errors.apiKey && touched.apiKey && (
-                    <div className="text-red-500 text-sm mt-1">
-                      {errors.apiKey}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <TextFormField
+                name="apiKey"
+                type="password"
+                label="API Key"
+                placeholder="Enter API Key"
+              />
 
-              <button
-                type="submit"
-                className="w-full py-3 bg-agent text-white rounded-lg hover:bg-accent/90 transition-colors"
-              >
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
                 Impersonate User
-              </button>
+              </Button>
             </Form>
           )}
         </Formik>
 
-        <div className="text-sm text-text-500 mt-4 text-center px-4 rounded-md">
-          Note: This feature is only available for @onyx.app administrators
-        </div>
+        <Text
+          mainUiMuted
+          text03
+          className="mt-4 text-center px-4"
+        >{`Note: This feature is only available for @onyx.app administrators`}</Text>
       </div>
     </AuthFlowContainer>
   );

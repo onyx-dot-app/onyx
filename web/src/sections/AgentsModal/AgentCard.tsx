@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Popover,
   PopoverTrigger,
@@ -36,7 +35,6 @@ export default function AgentCard({
   pinned,
   closeModal,
 }: AgentCardProps) {
-  const router = useRouter();
   const route = useAppRouter();
   const { user } = useUser();
   const { togglePinnedAgent, refreshAgents } = useAgentsContext();
@@ -96,7 +94,10 @@ export default function AgentCard({
               {isOwnedByUser && (
                 <Popover open={kebabMenuOpen} onOpenChange={setKebabMenuOpen}>
                   <PopoverTrigger>
-                    <div className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-spacing-inline flex flex-col justify-center items-center">
+                    <div
+                      className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-spacing-inline flex flex-col justify-center items-center"
+                      data-testid="AgentCard/more"
+                    >
                       <SvgMoreHorizontal className="w-[1rem] min-h-[1rem] stroke-text-04" />
                     </div>
                   </PopoverTrigger>
@@ -104,22 +105,19 @@ export default function AgentCard({
                   <PopoverContent>
                     <PopoverMenu>
                       {[
-                        <NavigationTab
-                          key="edit"
-                          icon={SvgEditBig}
-                          onClick={() =>
-                            router.push(`/assistants/edit/${agent.id}`)
-                          }
-                        >
-                          Edit
-                        </NavigationTab>,
+                        <div key="edit" data-testid="AgentCard/edit">
+                          <NavigationTab
+                            icon={SvgEditBig}
+                            href={`/assistants/edit/${agent.id}`}
+                          >
+                            Edit
+                          </NavigationTab>
+                        </div>,
                         isPaidEnterpriseFeaturesEnabled ? (
                           <NavigationTab
                             key="stats"
                             icon={SvgBarChart}
-                            onClick={() =>
-                              router.push(`/assistants/stats/${agent.id}`)
-                            }
+                            href={`/assistants/stats/${agent.id}`}
                           >
                             Stats
                           </NavigationTab>

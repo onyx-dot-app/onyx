@@ -29,6 +29,10 @@ data:
             proxy_http_version 1.1;
             proxy_buffering off;
             proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
             proxy_pass http://api_server;
         }
 
@@ -40,6 +44,10 @@ data:
             proxy_set_header Host $host;
             proxy_http_version 1.1;
             proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
             proxy_pass http://web_server;
         }
     }

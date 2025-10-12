@@ -74,7 +74,7 @@ const iconClasses = (active: boolean | undefined) =>
   }) as const;
 
 export interface IconButtonProps
-  extends React.HTMLAttributes<HTMLButtonElement> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button states:
   active?: boolean;
   disabled?: boolean;
