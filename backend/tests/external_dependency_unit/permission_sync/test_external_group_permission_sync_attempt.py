@@ -475,3 +475,40 @@ class TestExternalGroupPermissionSyncAttempt:
         assert len(global_attempts) == 2
         global_attempt_ids = {attempt.id for attempt in global_attempts}
         assert global_attempt_ids == {global_attempt_1, global_attempt_2}
+
+    def test_external_group_sync_attempt_not_stuck_on_early_failure(
+        self, db_session: Session
+    ) -> None:
+        """Test that attempts transition to FAILED on early validation failures.
+
+        This tests the bug fix where attempts could get stuck in NOT_STARTED status
+        if validation checks failed after the attempt was created but before it was
+        marked as IN_PROGRESS.
+        """
+        cc_pair = _create_test_connector_credential_pair(db_session)
+
+        # Create an attempt (simulating the start of a sync task)
+        attempt_id = create_external_group_sync_attempt(cc_pair.id, db_session)
+
+        # Verify it starts in NOT_STARTED
+        attempt = get_external_group_sync_attempt(db_session, attempt_id)
+        assert attempt is not None
+        assert attempt.status == PermissionSyncStatus.NOT_STARTED
+        assert attempt.error_message is None
+
+        # Simulate an early validation failure (e.g., missing sync config)
+        # In the actual code, this would be called by _fail_external_group_sync_attempt()
+        error_msg = "No group sync config found for source"
+        mark_external_group_sync_attempt_failed(
+            attempt_id, db_session, error_message=error_msg
+        )
+
+        # Verify the attempt transitions to FAILED (not stuck in NOT_STARTED)
+        attempt = get_external_group_sync_attempt(db_session, attempt_id)
+        assert attempt is not None
+        assert attempt.status == PermissionSyncStatus.FAILED
+        assert attempt.error_message == error_msg
+        assert attempt.time_started is not None  # Should be set even on early failure
+        assert attempt.time_finished is not None
+        assert attempt.status.is_terminal()
+        assert not attempt.status.is_successful()
