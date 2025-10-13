@@ -184,7 +184,7 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
         logger.warning(
             "JWT token decoded successfully but no email claim found; skipping auth"
         )
-        return None
+        break
 
     return None
 
