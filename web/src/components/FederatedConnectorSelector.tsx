@@ -9,15 +9,15 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { X, Search, Settings } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
-import { Button } from "@/components/ui/button";
+import { Button as UiButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import RefreshButton from "@/refresh-components/buttons/Button";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -199,12 +199,12 @@ const EntityConfigDialog = ({
           )}
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={onClose}>
+            <UiButton variant="outline" onClick={onClose}>
               Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={isLoading}>
+            </UiButton>
+            <UiButton onClick={handleSave} disabled={isLoading}>
               Save Configuration
-            </Button>
+            </UiButton>
           </div>
         </div>
       </DialogContent>
@@ -470,21 +470,25 @@ export const FederatedConnectorSelector = ({
                     )}
                   </div>
                   <div className="flex items-center ml-2 gap-1">
-                    <button
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-                      onClick={() => openConfigDialog(connector.id)}
+                    <RefreshButton
+                      tertiary
+                      type="button"
                       aria-label="Configure entities"
                       title="Configure entities"
+                      onClick={() => openConfigDialog(connector.id)}
+                      className="flex-shrink-0 !p-1 !gap-0 !rounded-full !w-6 !h-6 !bg-neutral-100 !text-neutral-500 hover:!bg-neutral-200 hover:!text-neutral-700 dark:!bg-neutral-700 dark:!text-neutral-400 dark:hover:!bg-neutral-600 dark:hover:!text-neutral-300 [&>div:first-child]:hidden [&>div:last-child]:hidden"
                     >
                       <Settings className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-                      onClick={() => removeConnector(connector.id)}
+                    </RefreshButton>
+                    <RefreshButton
+                      tertiary
+                      type="button"
                       aria-label="Remove connector"
+                      onClick={() => removeConnector(connector.id)}
+                      className="flex-shrink-0 !p-1 !gap-0 !rounded-full !w-6 !h-6 !bg-neutral-100 !text-neutral-500 hover:!bg-neutral-200 hover:!text-neutral-700 dark:!bg-neutral-700 dark:!text-neutral-400 dark:hover:!bg-neutral-600 dark:hover:!text-neutral-300 [&>div:first-child]:hidden [&>div:last-child]:hidden"
                     >
                       <X className="h-2.5 w-2.5" />
-                    </button>
+                    </RefreshButton>
                   </div>
                 </div>
               );
