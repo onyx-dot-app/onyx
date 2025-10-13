@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import Text, { TextProps } from "./Text";
+import Text, { TextProps } from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
 interface TruncatedContextValue {

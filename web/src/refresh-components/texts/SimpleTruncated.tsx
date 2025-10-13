@@ -1,10 +1,10 @@
 import React from "react";
-import { TextProps } from "./Text";
+import { TextProps } from "@/refresh-components/texts/Text";
 import {
   TruncatedProvider,
   TruncatedTrigger,
   TruncatedContent,
-} from "./Truncated";
+} from "@/refresh-components/texts/Truncated";
 
 interface SimpleTruncatedProps extends TextProps {
   side?: "top" | "right" | "bottom" | "left";

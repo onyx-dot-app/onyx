@@ -7,9 +7,9 @@ import {
   TruncatedContent,
   TruncatedProvider,
   TruncatedTrigger,
-} from "../texts/Truncated";
-import Text from "../texts/Text";
-import SimpleTooltip from "../SimpleTooltip";
+} from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
 
 const textClasses = (active: boolean | undefined) =>
