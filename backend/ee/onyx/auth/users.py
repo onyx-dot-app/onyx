@@ -78,7 +78,7 @@ def get_public_key() -> tuple[str | dict[str, Any], str] | None:
 
 def _resolve_public_key_from_jwks(
     token: str, jwks_payload: dict[str, Any]
-) -> Any | None:
+) -> RSAAlgorithm | None:
     try:
         header = jwt.get_unverified_header(token)
     except PyJWTError as e:
@@ -134,11 +134,10 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
             public_key = key_material
 
         if public_key is None:
+            logger.error("Unable to resolve a public key for JWT verification")
             if attempt == 0:
                 get_public_key.cache_clear()
                 continue
-
-            logger.error("Unable to resolve a public key for JWT verification")
             return None
 
         try:
