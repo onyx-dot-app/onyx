@@ -4,7 +4,6 @@ import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import { Check } from "lucide-react";
 import { useField } from "formik";
-
 import { cn } from "@/lib/utils";
 
 interface BaseCheckboxProps
@@ -26,12 +25,9 @@ export const Checkbox = React.forwardRef<
     <CheckboxPrimitive.Root
       ref={ref}
       className={cn(
-        "peer shrink-0 rounded-sm border border-background-200 bg-white ring-offset-white " +
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 " +
-          "focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 " +
-          "data-[state=checked]:bg-neutral-900 data-[state=checked]:text-neutral-50 " +
-          "dark:border-background-800 dark:ring-offset-neutral-950 dark:focus-visible:ring-neutral-300 " +
-          "dark:data-[state=checked]:bg-neutral-50 dark:data-[state=checked]:text-neutral-900",
+        "rounded-04 border border-border-02",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        "bg-background-neutral-02",
         sizeClasses[size],
         className
       )}
