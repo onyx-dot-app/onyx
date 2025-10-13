@@ -1,12 +1,14 @@
 from fastapi import HTTPException
 from sqlalchemy import select, Select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, aliased
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.models import (
+    Persona,
+    Persona__UserGroup,
     User,
+    User__UserGroup,
     Validator,
 )
 from onyx.server.features.guardrails.core.schemas_validator import (
@@ -16,20 +18,40 @@ from onyx.server.features.guardrails.core.schemas_validator import (
 
 def _add_user_filters(
     stmt: Select,
-    user: User | None,
+    user: User,
 ) -> Select:
     """Применяет фильтры к запросу валидаторов (проверка прав доступа)"""
 
     # ADMIN и GLOBAL_CURATOR видят все валидаторы
     admin_roles = [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
-    if (user is None and DISABLE_AUTH) or (user and user.role in admin_roles):
+    if user and user.role in admin_roles:
         return stmt
 
-    # убирает дублирующие строки
     stmt = stmt.distinct()
+    Persona__UG = aliased(Persona__UserGroup)
+    User__UG = aliased(User__UserGroup)
 
-    # CURATOR видит только свои валидаторы
-    where_clause = Validator.user_id == user.id
+    stmt = (
+        stmt.outerjoin(Persona.validators)
+        .outerjoin(
+            Persona__UG,
+            Persona__UG.persona_id == Persona.id,
+        )
+        .outerjoin(
+            User__UG,
+            User__UG.user_group_id == Persona__UG.user_group_id,
+        )
+    )
+
+    # CURATOR видит:
+    # - чужие валидаторы, подключенные к ассистентам в группе, где он является куратором
+    # - свои валидаторы
+    where_clause = User__UG.user_id == user.id
+    if user.role == UserRole.CURATOR:
+        where_clause &= User__UG.is_curator == True  # noqa: E712
+
+    # валидаторы из групп ИЛИ свои валидаторы
+    where_clause |= Validator.user_id == user.id
 
     return stmt.where(where_clause)
 
@@ -44,7 +66,10 @@ def get_validator_by_id_for_user(
 
     stmt = (
         select(Validator)
-        .where(Validator.id == validator_id)
+        .where(
+            Validator.id == validator_id,
+            Validator.user_id.is_not(None)
+        )
         .options(
             joinedload(Validator.user),
         )
