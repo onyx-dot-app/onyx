@@ -19,6 +19,7 @@ from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.tools.models import ContextCompleteness
 from onyx.tools.models import DocumentResult
 from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.tool import Tool
@@ -137,7 +138,7 @@ def get_full_document_by_id(
                 "document_id": document_id,
                 "access_method": "error_fallback",
             },
-            confidence=0,
+            completeness=ContextCompleteness.NO_CONTEXT,
         )
 
 
@@ -156,7 +157,7 @@ def process_chunks_to_document_result(
             source=DocumentRetrievalType.INTERNAL,
             url=url,
             metadata={"access_method": "no_chunks_found"},
-            confidence=0,
+            completeness=ContextCompleteness.NO_CONTEXT,
         )
 
     # Clean up chunks and use existing inference_section_from_chunks method
@@ -180,7 +181,7 @@ def process_chunks_to_document_result(
                     "access_method": f"{source_method}_full_document",
                     "document_id": section.center_chunk.document_id,
                 },
-                confidence=95,
+                completeness=ContextCompleteness.FULL_CONTEXT,
             )
 
     # Fallback to first chunk if combination fails
@@ -212,5 +213,5 @@ def process_chunks_to_document_result(
             "access_method": f"{source_method}_single_chunk_fallback",
             "document_id": str(chunk_doc_id) if chunk_doc_id else "",
         },
-        confidence=90,
+        completeness=ContextCompleteness.PARTIAL_CONTEXT,
     )

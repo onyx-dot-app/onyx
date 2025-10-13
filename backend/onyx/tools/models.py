@@ -22,6 +22,28 @@ class DocumentRetrievalType(str, Enum):
     FEDERATED = "federated"
 
 
+class ContextCompleteness(str, Enum):
+    """
+    Indicates the completeness of the retrieved document content.
+
+    - FULL_CONTEXT: Successfully retrieved complete document content
+    - PARTIAL_CONTEXT: Retrieved partial content (e.g., single chunk, incomplete scraping)
+    - NO_CONTEXT: Failed to retrieve content (errors, authentication required, etc.)
+    """
+
+    FULL_CONTEXT = "full_context"
+    PARTIAL_CONTEXT = "partial_context"
+    NO_CONTEXT = "no_context"
+
+    def to_sort_value(self) -> int:
+        """Convert to sortable integer for ranking (higher is better)"""
+        return {
+            ContextCompleteness.FULL_CONTEXT: 100,
+            ContextCompleteness.PARTIAL_CONTEXT: 50,
+            ContextCompleteness.NO_CONTEXT: 0,
+        }[self]
+
+
 class ToolResponse(BaseModel):
     id: str | None = None
     response: Any = None
@@ -104,7 +126,10 @@ class DocumentResult(BaseModel):
     source: DocumentRetrievalType
     url: str | None = None
     metadata: dict[str, str] = {}
-    confidence: int  # 0-100
+    completeness: ContextCompleteness
+    relevance_score: int | None = (
+        None  # 0-100 score indicating match quality (optional)
+    )
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

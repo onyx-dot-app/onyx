@@ -26,6 +26,7 @@ from onyx.federated_connectors.federated_retrieval import (
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
+from onyx.tools.models import ContextCompleteness
 from onyx.tools.models import DocumentResult
 from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.models import ToolResponse
@@ -181,16 +182,17 @@ class FetchSingleFileTool(BaseTool):
         )
         document_result = document_result_response.response
         if isinstance(document_result, DocumentResult):
-            return json.dumps(
-                {
-                    "title": document_result.title,
-                    "content": document_result.content,
-                    "source": document_result.source,
-                    "url": document_result.url,
-                    "confidence": document_result.confidence,
-                    "metadata": document_result.metadata,
-                }
-            )
+            response_dict: dict[str, Any] = {
+                "title": document_result.title,
+                "content": document_result.content,
+                "source": document_result.source,
+                "url": document_result.url,
+                "completeness": document_result.completeness,
+                "metadata": document_result.metadata,
+            }
+            if document_result.relevance_score is not None:
+                response_dict["relevance_score"] = document_result.relevance_score
+            return json.dumps(response_dict)
         return json.dumps({"error": "No document found"})
 
     def run(
@@ -215,7 +217,7 @@ class FetchSingleFileTool(BaseTool):
         federated_results = self._search_federated_sources(description)
         all_results.extend(federated_results)
 
-        # 3. Deduplicate results by document ID (keep highest confidence for each unique document)
+        # 3. Deduplicate results by document ID (keep highest completeness score for each unique document)
         all_results = self._deduplicate_by_document_id(all_results)
 
         # 4. Handle results - always return the best match
@@ -229,15 +231,15 @@ class FetchSingleFileTool(BaseTool):
                 source=DocumentRetrievalType.INTERNAL,
                 url=None,
                 metadata={"search_query": description},
-                confidence=0,
+                completeness=ContextCompleteness.NO_CONTEXT,
             )
         else:
-            # Sort by confidence score and return the best match
-            all_results.sort(key=lambda x: x.confidence, reverse=True)
+            # Sort by relevance score and return the best match
+            all_results.sort(key=lambda x: self._get_relevance_score(x), reverse=True)
             best_match = all_results[0]
 
             logger.info(
-                f"Best match: title='{best_match.title}', url='{best_match.url}', confidence={best_match.confidence}"
+                f"Best match: title='{best_match.title}', url='{best_match.url}', completeness={best_match.completeness}"
             )
 
             # Check if we should show multiple options
@@ -297,7 +299,7 @@ class FetchSingleFileTool(BaseTool):
                             + (best_match.url or "No URL available"),
                             "full_document_retrieved": "true",
                         },
-                        confidence=full_doc_result.confidence,
+                        completeness=full_doc_result.completeness,
                     )
 
                     logger.info(
@@ -324,7 +326,7 @@ class FetchSingleFileTool(BaseTool):
                             + (best_match.url or "No URL available"),
                             "full_document_retrieved": "false",
                         },
-                        confidence=best_match.confidence,
+                        completeness=best_match.completeness,
                     )
 
         yield ToolResponse(id=DOCUMENT_RESULT_ID, response=result)
@@ -336,18 +338,22 @@ class FetchSingleFileTool(BaseTool):
         document_result = document_result_response.response
 
         logger.info(
-            f"Final result: title='{document_result.title}', url='{document_result.url}', confidence={document_result.confidence}"
+            f"Final result: title='{document_result.title}', "
+            f"url='{document_result.url}', completeness={document_result.completeness}"
         )
 
         if isinstance(document_result, DocumentResult):
-            return {
+            result_dict: dict[str, Any] = {
                 "title": document_result.title,
                 "content": document_result.content,
                 "source": document_result.source,
                 "url": document_result.url,
-                "confidence": document_result.confidence,
+                "completeness": document_result.completeness,
                 "metadata": document_result.metadata,
             }
+            if document_result.relevance_score is not None:
+                result_dict["relevance_score"] = document_result.relevance_score
+            return result_dict
         return {}
 
     def _extract_ticket_pattern(self, description: str) -> str | None:
@@ -438,27 +444,30 @@ class FetchSingleFileTool(BaseTool):
     def _deduplicate_by_document_id(
         self, results: list[DocumentResult]
     ) -> list[DocumentResult]:
-        """Deduplicate results by document ID, keeping the highest confidence for each unique document"""
+        """Deduplicate results by document ID, keeping the highest completeness score for each unique document"""
         document_map: dict[str, DocumentResult] = {}
 
         for result in results:
             doc_id = result.metadata.get("document_id", "unknown")
 
             # If we haven't seen this document ID, or this result has higher confidence
-            if (
-                doc_id not in document_map
-                or result.confidence > document_map[doc_id].confidence
-            ):
+            if doc_id not in document_map or self._get_relevance_score(
+                result
+            ) > self._get_relevance_score(document_map[doc_id]):
                 document_map[doc_id] = result
 
-        # Convert back to list and sort by confidence
+        # Convert back to list and sort by relevance score
         unique_results = list(document_map.values())
-        unique_results.sort(key=lambda x: x.confidence, reverse=True)
+        unique_results.sort(key=lambda x: self._get_relevance_score(x), reverse=True)
 
         logger.info(
             f"Deduplicated {len(results)} results to {len(unique_results)} unique documents"
         )
         return unique_results
+
+    def _get_relevance_score(self, result: DocumentResult) -> int:
+        """Helper to get the relevance score (defaults to 0 if not set)"""
+        return result.relevance_score if result.relevance_score is not None else 0
 
     def _search_internal_docs(self, description: str) -> list[DocumentResult]:
         """Search internal documents using direct VespaIndex retrieval"""
@@ -536,8 +545,8 @@ class FetchSingleFileTool(BaseTool):
                     f"source='{chunk.source_type}', doc_id='{chunk.document_id}'"
                 )
 
-                # Calculate fuzzy confidence score
-                fuzzy_confidence = self._calculate_confidence(chunk, description)
+                # Calculate fuzzy match score for ranking (internal use only)
+                fuzzy_score = self._calculate_fuzzy_match_score(chunk, description)
 
                 # Use real semantic score from hybrid_retrieval (Vespa relevance score)
                 raw_semantic_score = chunk.score if chunk.score is not None else 0
@@ -548,14 +557,12 @@ class FetchSingleFileTool(BaseTool):
                     semantic_score = semantic_score * 100  # Scale to 0-100
 
                 # Weighted combination: 70% fuzzy matching, 30% semantic search
-                combined_confidence = int(
-                    (fuzzy_confidence * 0.7) + (semantic_score * 0.3)
-                )
+                combined_confidence = int((fuzzy_score * 0.7) + (semantic_score * 0.3))
 
                 # Debug logging for score analysis
                 logger.debug(
                     f"Score breakdown for '{chunk.semantic_identifier}': "
-                    f"fuzzy={fuzzy_confidence:.1f}, raw_semantic={raw_semantic_score:.3f}, "
+                    f"fuzzy={fuzzy_score:.1f}, raw_semantic={raw_semantic_score:.3f}, "
                     f"scaled_semantic={semantic_score:.1f}, final={combined_confidence}"
                 )
 
@@ -588,10 +595,11 @@ class FetchSingleFileTool(BaseTool):
                         "document_id": chunk.document_id,
                         "chunk_id": str(chunk.chunk_id),
                         "semantic_score": str(semantic_score),
-                        "fuzzy_score": str(fuzzy_confidence),
+                        "fuzzy_score": str(fuzzy_score),
                         "combined_score": str(combined_confidence),
                     },
-                    confidence=combined_confidence,
+                    completeness=ContextCompleteness.FULL_CONTEXT,  # Always full context for indexed docs
+                    relevance_score=combined_confidence,  # Match quality score for ranking
                 )
                 results.append(result)
 
@@ -640,9 +648,7 @@ class FetchSingleFileTool(BaseTool):
                                     "source_type": federated_info.source.value,
                                     "chunk_id": str(chunk.chunk_id),
                                 },
-                                confidence=self._calculate_confidence(
-                                    chunk, description
-                                ),
+                                completeness=ContextCompleteness.FULL_CONTEXT,  # Always full context for indexed docs
                             )
                         )
                 except Exception as e:
@@ -654,8 +660,15 @@ class FetchSingleFileTool(BaseTool):
             logger.warning(f"Failed to get federated retrieval functions: {e}")
             return []
 
-    def _calculate_confidence(self, chunk: Any, description: str) -> int:
-        """Calculate confidence score using clean fuzzy matching"""
+    def _calculate_fuzzy_match_score(self, chunk: Any, description: str) -> int:
+        """
+        Calculate fuzzy match score for ranking documents.
+        This score represents how well the document matches the search query,
+        not the completeness of the content.
+
+        Returns:
+            int: Score from 30-95 representing match quality
+        """
         try:
             # Get chunk content and document info
             content = getattr(chunk, "content", "")
@@ -706,23 +719,23 @@ class FetchSingleFileTool(BaseTool):
                 f"Extracted words from '{normalized_description}': {desc_words}"
             )
 
-            # Calculate confidence using multiple strategies
-            scores = []
+            # Track the best score across all strategies (default: 30)
+            best_score = 30
 
             # 1. Ticket pattern matching (highest priority for tickets)
             ticket_pattern = self._extract_ticket_pattern(description)
             if ticket_pattern:
                 # Check for exact ticket match in title
                 if title_lower and ticket_pattern.lower() in title_lower:
-                    scores.append(98)  # Higher than regular exact match
+                    best_score = max(best_score, 98)
                 # Check for partial ticket match (just the number)
                 ticket_number = ticket_pattern.split("-")[-1]
                 if title_lower and ticket_number in title_lower:
-                    scores.append(95)  # High confidence for number match
+                    best_score = max(best_score, 95)
 
             # 2. Exact substring match in title (high confidence)
             if title_lower and normalized_description in title_lower:
-                scores.append(95)
+                best_score = max(best_score, 95)
 
             # 3. Word overlap in title (high confidence)
             if title_lower and desc_words:
@@ -730,7 +743,7 @@ class FetchSingleFileTool(BaseTool):
                 word_overlap = len(desc_words & title_words)
                 if word_overlap > 0:
                     overlap_score = int((word_overlap / len(desc_words)) * 85)
-                    scores.append(overlap_score)
+                    best_score = max(best_score, overlap_score)
 
             # 4. Fuzzy matching on title
             if title_lower:
@@ -742,7 +755,7 @@ class FetchSingleFileTool(BaseTool):
                         fuzz.token_set_ratio(normalized_description, title_lower),
                     ]
                 )
-                scores.append(int(fuzzy_score * 0.8))  # Weight down fuzzy matches
+                best_score = max(best_score, int(fuzzy_score * 0.8))
 
             # 5. Word overlap in content (medium confidence)
             if content_lower and desc_words:
@@ -750,7 +763,7 @@ class FetchSingleFileTool(BaseTool):
                 word_overlap = len(desc_words & content_words)
                 if word_overlap > 0:
                     overlap_score = int((word_overlap / len(desc_words)) * 60)
-                    scores.append(overlap_score)
+                    best_score = max(best_score, overlap_score)
 
             # 6. Fuzzy matching on content (lowest confidence)
             if content_lower:
@@ -761,21 +774,16 @@ class FetchSingleFileTool(BaseTool):
                         fuzz.partial_ratio(normalized_description, content_lower),
                     ]
                 )
-                scores.append(int(fuzzy_score * 0.5))  # Weight down content matches
-
-            # Take the highest score
-            final_score = max(scores) if scores else 30
-
-            # Apply bounds
-            final_score = max(30, min(int(final_score), 95))
+                best_score = max(best_score, int(fuzzy_score * 0.5))
 
             logger.debug(
-                f"Confidence scores: {scores}, final: {final_score} for '{normalized_description}' -> '{title_lower[:50]}...'"
+                f"Best match score: {best_score} for '{normalized_description}' -> '{title_lower[:50]}...'"
             )
-            return final_score
+
+            return best_score
 
         except Exception as e:
-            logger.warning(f"Error calculating confidence: {e}")
+            logger.warning(f"Error calculating fuzzy match score: {e}")
             return 30
 
     def _should_show_multiple_options(
@@ -785,32 +793,42 @@ class FetchSingleFileTool(BaseTool):
         if len(results) <= 1:
             return False
 
-        # Always show multiple options if best match has zero confidence
-        if best_match.confidence < 1:
+        best_score = self._get_relevance_score(best_match)
+
+        # Always show multiple options if best match has zero score
+        if best_score < 1:
             return True
 
-        # Check if there are other results with similar confidence scores
+        # Check if there are other results with similar scores
         # Look for results within 3 points of the best match (more restrictive)
-        confidence_threshold = best_match.confidence - 3
+        score_threshold = best_score - 50
 
         # Count how many results are close to the best match
-        close_matches = [r for r in results if r.confidence >= confidence_threshold]
+        close_matches = [
+            r for r in results if self._get_relevance_score(r) >= score_threshold
+        ]
 
-        # If there are 2 or more close matches AND the best match has decent confidence, show multiple options
+        # If there are 2 or more close matches AND the best match has decent score, show multiple options
         # But only if the gap is actually small (within 3 points)
-        if len(close_matches) >= 2 and best_match.confidence >= 30:
+        if len(close_matches) >= 2 and best_score >= 30:
             # Check if the second best is actually close
             second_best = results[1] if len(results) > 1 else None
-            if second_best and (best_match.confidence - second_best.confidence) <= 3:
+            if (
+                second_best
+                and (best_score - self._get_relevance_score(second_best)) <= 3
+            ):
                 logger.info(
-                    f"Showing multiple options: best={best_match.confidence}, close_matches={len(close_matches)}"
+                    f"Showing multiple options: best={best_score}, close_matches={len(close_matches)}"
                 )
                 return True
 
-        # Also show multiple options if there are many results (5+) and the gap is small AND confidence is low
-        if len(results) >= 5 and best_match.confidence < 35:
+        # Also show multiple options if there are many results (5+) and the gap is small AND score is low
+        if len(results) >= 5 and best_score < 35:
             second_best = results[1] if len(results) > 1 else None
-            if second_best and (best_match.confidence - second_best.confidence) <= 3:
+            if (
+                second_best
+                and (best_score - self._get_relevance_score(second_best)) <= 3
+            ):
                 logger.info(
                     f"Showing multiple options: many results ({len(results)}) with small gap"
                 )
@@ -822,17 +840,20 @@ class FetchSingleFileTool(BaseTool):
         self, results: list[DocumentResult], description: str
     ) -> DocumentResult:
         """Create response when multiple documents are found"""
-        # Sort by confidence score
-        results.sort(key=lambda x: x.confidence, reverse=True)
+        # Sort by relevance score
+        results.sort(key=lambda x: self._get_relevance_score(x), reverse=True)
 
         # Determine why we're showing multiple options
         best_match = results[0]
         second_best = results[1] if len(results) > 1 else None
 
-        if best_match.confidence < 1:
-            reason = "zero confidence scores"
-        elif second_best and (best_match.confidence - second_best.confidence) <= 3:
-            reason = f"similar confidence scores ({best_match.confidence} vs {second_best.confidence})"
+        best_score = self._get_relevance_score(best_match)
+        second_score = self._get_relevance_score(second_best) if second_best else 0
+
+        if best_score < 1:
+            reason = "zero match scores"
+        elif second_best and (best_score - second_score) <= 3:
+            reason = f"similar match scores ({best_score} vs {second_score})"
         elif len(results) >= 5:
             reason = f"many results ({len(results)}) with small gaps"
         else:
@@ -859,27 +880,21 @@ class FetchSingleFileTool(BaseTool):
             metadata={
                 "search_query": description,
                 "reason_for_multiple": reason,
-                "best_confidence": str(best_match.confidence),
-                "second_best_confidence": (
-                    str(second_best.confidence) if second_best else "None"
-                ),
-                "confidence_gap": (
-                    str(best_match.confidence - second_best.confidence)
-                    if second_best
-                    else "None"
-                ),
+                "best_score": str(best_score),
+                "second_best_score": str(second_score) if second_best else "None",
+                "score_gap": str(best_score - second_score) if second_best else "None",
                 "found_documents": json.dumps(
                     [
                         {
                             "title": result.title,
                             "url": result.url,
                             "source": result.source,
-                            "confidence": result.confidence,
+                            "relevance_score": self._get_relevance_score(result),
                             "rank": i + 1,
                         }
                         for i, result in enumerate(results[:5])  # Top 5 results
                     ]
                 ),
             },
-            confidence=0,  # Special case for multiple results
+            completeness=ContextCompleteness.FULL_CONTEXT,  # Multiple complete documents found
         )

@@ -29,6 +29,7 @@ from onyx.federated_connectors.federated_retrieval import (
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
+from onyx.tools.models import ContextCompleteness
 from onyx.tools.models import DocumentResult
 from onyx.tools.models import DocumentRetrievalType
 from onyx.tools.models import ToolResponse
@@ -130,7 +131,7 @@ class FetchUrlTool(BaseTool):
                     "content": document_result.content,
                     "source": document_result.source,
                     "url": document_result.url,
-                    "confidence": document_result.confidence,
+                    "completeness": document_result.completeness,
                 }
             )
         return json.dumps({"error": "No document found"})
@@ -179,7 +180,7 @@ class FetchUrlTool(BaseTool):
                 "content": document_result.content,
                 "source": document_result.source,
                 "url": document_result.url,
-                "confidence": document_result.confidence,
+                "completeness": document_result.completeness,
                 "metadata": document_result.metadata,
             }
 
@@ -383,12 +384,19 @@ class FetchUrlTool(BaseTool):
             # Use auto-generated patterns for all other sources
             extract_patterns = self._get_auto_extract_patterns(source_type, url)
 
+        # Extract IDs from matching patterns, prioritizing specific over generic
+        extracted_ids = []
         for pattern in extract_patterns:
             match = re.search(pattern, url)
             if match:
                 extracted_id = match.group(1)
-                # Add LIKE search pattern
-                variations.append(f"%{extracted_id}%")
+                extracted_ids.append(extracted_id)
+
+        # Only use the longest extracted ID to avoid generic matches
+        if extracted_ids:
+            # Sort by length descending and take the longest
+            longest_id = max(extracted_ids, key=len)
+            variations.append(f"%{longest_id}%")
 
         # Remove duplicates while preserving order
         seen = set()
@@ -576,7 +584,7 @@ class FetchUrlTool(BaseTool):
                                         "channel_id": channel_id,
                                         "message_ts": message_ts,
                                     },
-                                    confidence=95,
+                                    completeness=ContextCompleteness.FULL_CONTEXT,
                                 )
                             else:
                                 logger.info(
@@ -614,7 +622,7 @@ class FetchUrlTool(BaseTool):
                     source=DocumentRetrievalType.FEDERATED,
                     url=url,
                     metadata={"chunk_count": str(len(chunks))},
-                    confidence=95,
+                    completeness=ContextCompleteness.FULL_CONTEXT,
                 )
 
             return self._fetch_from_web(url)
@@ -706,7 +714,39 @@ class FetchUrlTool(BaseTool):
                     source=DocumentRetrievalType.INTERNAL,
                     url=url,
                     metadata={"error": "scraping_failed", "source_type": "web"},
-                    confidence=0,
+                    completeness=ContextCompleteness.NO_CONTEXT,
+                )
+
+            # Check if content is meaningful
+            content_stripped = content.strip()
+            content_lower = content_stripped.lower()
+            # Check for insufficient content
+            # 1. Too short
+            word_count = len(content_stripped.split())
+            # 2. Common indicators that the page couldn't be accessed properly
+            auth_indicators = [
+                "loading",
+                "please wait",
+                "redirecting",
+                "sign in",
+                "log in",
+                "authenticate",
+            ]
+            has_auth_indicator = any(
+                indicator in content_lower for indicator in auth_indicators
+            )
+            if len(content_stripped) < 100 and (word_count < 5 or has_auth_indicator):
+                return DocumentResult(
+                    title="Unable to access content",
+                    content=f"The page requires authentication or is not yet loaded. Please access it directly at: {url}",
+                    source=DocumentRetrievalType.EXTERNAL,
+                    url=url,
+                    metadata={
+                        "error": "insufficient_content",
+                        "source_type": "web",
+                        "scraped_length": str(len(content_stripped)),
+                    },
+                    completeness=ContextCompleteness.NO_CONTEXT,
                 )
 
             # Extract title from content (first line or first 100 chars)
@@ -722,7 +762,7 @@ class FetchUrlTool(BaseTool):
                     "source_type": "web",
                     "content_length": str(len(content)),
                 },
-                confidence=95,
+                completeness=ContextCompleteness.FULL_CONTEXT,
             )
 
         except Exception as e:
@@ -733,7 +773,7 @@ class FetchUrlTool(BaseTool):
                 source=DocumentRetrievalType.INTERNAL,
                 url=url,
                 metadata={"error": str(e)},
-                confidence=0,
+                completeness=ContextCompleteness.NO_CONTEXT,
             )
 
     def _extract_title_from_content(self, content: str, url: str) -> str:
