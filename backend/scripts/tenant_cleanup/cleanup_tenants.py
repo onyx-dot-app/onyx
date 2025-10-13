@@ -38,7 +38,7 @@ from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
 _active_process = None
 
 
-def signal_handler(signum, frame):
+def signal_handler(signum: int, frame: object) -> None:
     """Handle termination signals by killing active subprocess."""
     global _active_process
     if _active_process:

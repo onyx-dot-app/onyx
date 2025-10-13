@@ -35,9 +35,9 @@ def get_tenant_users(tenant_id: str) -> dict:
 
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # Query users from the tenant schema
-            stmt = select(User.email).order_by(User.email)
+            stmt = select(User).order_by(User.email)
             result = db_session.execute(stmt)
-            users = [row[0] for row in result]
+            users = [user.email for user in result.scalars()]
 
         return {"status": "success", "users": users}
 

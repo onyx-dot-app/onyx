@@ -1087,7 +1087,7 @@ class VespaIndex(DocumentIndex):
             logger.info(
                 f"No documents found with tenant_id: {tenant_id} in index: {index_name}"
             )
-            return
+            return 0
 
         # Step 2: Delete documents in batches
         delete_requests = [

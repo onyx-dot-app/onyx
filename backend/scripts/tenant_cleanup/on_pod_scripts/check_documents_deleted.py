@@ -47,6 +47,10 @@ def check_documents_deleted(tenant_id: str) -> dict:
             # Count Documents
             doc_count = db_session.scalar(select(func.count()).select_from(Document))
 
+        # Handle None values from scalar (should not happen but mypy needs it)
+        cc_count = cc_count or 0
+        doc_count = doc_count or 0
+
         # If any records remain, return error status
         if cc_count > 0 or doc_count > 0:
             return {
