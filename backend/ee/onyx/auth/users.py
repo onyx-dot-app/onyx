@@ -158,13 +158,14 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
                 get_public_key.cache_clear()
                 continue
             return None
-
-        email = payload.get("email")
-        if email:
-            result = await async_db_session.execute(
-                select(User).where(func.lower(User.email) == func.lower(email))
-            )
-            return result.scalars().first()
+        else:
+            email = payload.get("email")
+            if email:
+                result = await async_db_session.execute(
+                    select(User).where(func.lower(User.email) == func.lower(email))
+                )
+                return result.scalars().first()
+            return None
 
     return None
 
