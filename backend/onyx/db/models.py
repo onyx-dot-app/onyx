@@ -26,7 +26,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
-
+from sqlalchemy import PickleType
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
@@ -1231,7 +1231,7 @@ class Validator(Base):
         Enum(ValidatorType, native_enum=False, length=30),
         nullable=False,
     )
-    config: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
+    config: Mapped[Any] = mapped_column(PickleType, nullable=False)
 
     # для публичного доступа
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

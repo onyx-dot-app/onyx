@@ -77,7 +77,7 @@ class ValidatorResponse(BaseModel):
         examples=["Выполняет обнаружение персональных данных в тексте и маскирует их"],
     )
     validator_type: ValidatorType
-    config: dict[str, Any] = Field(
+    config: Any = Field(
         description="Настройки валидатора в формате JSON",
         examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
     )
