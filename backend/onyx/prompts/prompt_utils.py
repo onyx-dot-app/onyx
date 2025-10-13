@@ -13,6 +13,9 @@ from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
+from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
+from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 
@@ -87,6 +90,23 @@ def handle_onyx_date_awareness(
     if add_additional_info_if_no_tag and not any_tag_present:
         return prompt_str + build_date_time_string()
     return prompt_str
+
+
+def handle_company_awareness(prompt_str: str) -> str:
+    try:
+        workspace_settings = load_settings()
+        company_name = workspace_settings.company_name
+        company_description = workspace_settings.company_description
+        if company_name:
+            prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
+        if company_description:
+            prompt_str += COMPANY_DESCRIPTION_BLOCK.format(
+                company_description=company_description
+            )
+        return prompt_str
+    except Exception as e:
+        logger.error(f"Error handling company awareness: {e}")
+        return prompt_str
 
 
 def build_task_prompt_reminders(
