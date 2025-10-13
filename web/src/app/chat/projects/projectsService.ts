@@ -34,6 +34,7 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   chunk_count: number | null;
+  temp_id?: string | null;
 }
 
 export enum UserFileStatus {
@@ -71,12 +72,19 @@ export async function createProject(name: string): Promise<Project> {
 
 export async function uploadFiles(
   files: File[],
-  projectId?: number | null
+  projectId?: number | null,
+  tempIdMap?: Map<string, string>
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (projectId !== undefined && projectId !== null) {
     formData.append("project_id", String(projectId));
+  }
+  if (tempIdMap !== undefined && tempIdMap !== null) {
+    formData.append(
+      "temp_id_map",
+      JSON.stringify(Object.fromEntries(tempIdMap))
+    );
   }
 
   const response = await fetch("/api/user/projects/file/upload", {
