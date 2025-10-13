@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from functools import lru_cache
 from typing import Any
+from typing import cast
 
 import jwt
 import requests
@@ -129,16 +130,15 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
         key_material, key_format = public_key_payload
 
         if key_format == "jwks":
-            public_key = _resolve_public_key_from_jwks(
-                token, key_material  # type: ignore[arg-type]
-            )
+            jwks_data = cast(dict[str, Any], key_material)
+            public_key = _resolve_public_key_from_jwks(token, jwks_data)
         else:
             public_key = key_material
 
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
-            get_public_key.cache_clear()
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
+                get_public_key.cache_clear()
                 continue
             return None
 
@@ -151,13 +151,13 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
             )
         except InvalidTokenError as e:
             logger.error(f"Invalid JWT token: {str(e)}")
-            if attempt == 0:
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
                 get_public_key.cache_clear()
                 continue
             return None
         except PyJWTError as e:
             logger.error(f"JWT decoding error: {str(e)}")
-            if attempt == 0:
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
                 get_public_key.cache_clear()
                 continue
             return None
@@ -168,6 +168,9 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
                     select(User).where(func.lower(User.email) == func.lower(email))
                 )
                 return result.scalars().first()
+            logger.warning(
+                "JWT token decoded successfully but no email claim found; skipping auth"
+            )
             return None
 
     return None
