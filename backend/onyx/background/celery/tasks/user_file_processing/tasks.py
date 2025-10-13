@@ -46,6 +46,7 @@ from onyx.document_index.vespa.shared_utils.utils import (
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.file_store import S3BackedFileStore
+from onyx.file_store.utils import user_file_id_to_plaintext_file_name
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -71,6 +72,51 @@ def _user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
 
 def _user_file_delete_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_DELETE_LOCK_PREFIX}:{user_file_id}"
+
+
+@retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
+def _visit_chunks(
+    *,
+    http_client: httpx.Client,
+    index_name: str,
+    selection: str,
+    continuation: str | None = None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    task_logger.info(
+        f"Visiting chunks for index={index_name} with selection={selection}"
+    )
+    base_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
+    params: dict[str, str] = {
+        "selection": selection,
+        "wantedDocumentCount": "100",  # Use smaller batch size to avoid timeouts
+    }
+    if continuation:
+        params["continuation"] = continuation
+    resp = http_client.get(base_url, params=params, timeout=None)
+    resp.raise_for_status()
+    payload = resp.json()
+    return payload.get("documents", []), payload.get("continuation")
+
+
+def _get_document_chunk_count(
+    *,
+    index_name: str,
+    selection: str,
+) -> int:
+    chunk_count = 0
+    continuation = None
+    while True:
+        docs, continuation = _visit_chunks(
+            http_client=HttpxPool.get("vespa"),
+            index_name=index_name,
+            selection=selection,
+            continuation=continuation,
+        )
+        if not docs:
+            break
+        chunk_count += len(docs)
+        if not continuation:
+            break
 
 
 @shared_task(
@@ -345,70 +391,82 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
 def process_single_user_file_delete(
     self: Task, *, user_file_id: str, tenant_id: str
 ) -> None:
-    # """Process a single user file delete."""
-    # task_logger.info(f"process_single_user_file_delete - Starting id={user_file_id}")
-    # redis_client = get_redis_client(tenant_id=tenant_id)
-    # file_lock: RedisLock = redis_client.lock(
-    #     _user_file_delete_lock_key(user_file_id),
-    #     timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    # )
-    # if not file_lock.acquire(blocking=False):
-    #     task_logger.info(
-    #         f"process_single_user_file_delete - Lock held, skipping user_file_id={user_file_id}"
-    #     )
-    #     return None
-    # try:
-    #     with get_session_with_current_tenant() as db_session:
-    #         active_search_settings = get_active_search_settings(db_session)
-    #         document_index = get_default_document_index(
-    #             search_settings=active_search_settings.primary,
-    #             secondary_search_settings=active_search_settings.secondary,
-    #             httpx_client=HttpxPool.get("vespa"),
-    #         )
-    #         retry_index = RetryDocumentIndex(document_index)
+    """Process a single user file delete."""
+    task_logger.info(f"process_single_user_file_delete - Starting id={user_file_id}")
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    file_lock: RedisLock = redis_client.lock(
+        _user_file_delete_lock_key(user_file_id),
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+    if not file_lock.acquire(blocking=False):
+        task_logger.info(
+            f"process_single_user_file_delete - Lock held, skipping user_file_id={user_file_id}"
+        )
+        return None
+    try:
+        with get_session_with_current_tenant() as db_session:
+            # 20 is the documented default for httpx max_keepalive_connections
+            if MANAGED_VESPA:
+                httpx_init_vespa_pool(
+                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                )
+            else:
+                httpx_init_vespa_pool(20)
 
-    #         user_file = db_session.get(UserFile, _as_uuid(user_file_id))
-    #         if not user_file:
-    #             task_logger.info(
-    #                 f"process_single_user_file_delete - User file not found id={user_file_id}"
-    #             )
-    #             return None
+            active_search_settings = get_active_search_settings(db_session)
+            document_index = get_default_document_index(
+                search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
+                httpx_client=HttpxPool.get("vespa"),
+            )
+            retry_index = RetryDocumentIndex(document_index)
+            index_name = active_search_settings.primary.index_name
+            selection = f"{index_name}.document_id=='{user_file_id}'"
 
-    #         # 1) Delete Vespa chunks for the document
-    #         if user_file.chunk_count and user_file.chunk_count > 0:
-    #             retry_index.delete_single(
-    #                 str(user_file.id),
-    #                 tenant_id=tenant_id,
-    #                 chunk_count=user_file.chunk_count,
-    #             )
-    #         else:
-    #             # Fall back to visit API to delete chunks when chunk_count is 0/unknown
-    #             if hasattr(document_index, "index_name"):
-    #                 index_name = document_index.index_name  # type: ignore[attr-defined]
-    #             else:
-    #                 pass
+            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            if not user_file:
+                task_logger.info(
+                    f"process_single_user_file_delete - User file not found id={user_file_id}"
+                )
+                return None
 
-    #             replace_invalid_doc_id_characters(str(user_file.id))
-    #             selection = f"{index_name}.document_id=='{clean_doc_id}'"
+            # 1) Delete Vespa chunks for the document
+            chunk_count = 0
+            if user_file.chunk_count is None or user_file.chunk_count == 0:
+                chunk_count = _get_document_chunk_count(
+                    index_name=index_name,
+                    selection=selection,
+                )
+            else:
+                chunk_count = user_file.chunk_count
 
-    #         # 2) Delete the user-uploaded file content from filestore (blob + metadata)
-    #         file_store = get_default_file_store()
-    #         file_store.delete_file(user_file.file_id, db_session=db_session)
+            retry_index.delete_single(
+                doc_id=user_file_id,
+                tenant_id=tenant_id,
+                chunk_count=chunk_count,
+            )
 
-    #         # 3) Finally, delete the UserFile row
-    #         db_session.delete(user_file)
-    #         db_session.commit()
-    #         task_logger.info(
-    #             f"process_single_user_file_delete - Completed id={user_file_id}"
-    #         )
-    # except Exception as e:
-    #     task_logger.exception(
-    #         f"process_single_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
-    #     )
-    #     return None
-    # finally:
-    #     if file_lock.owned():
-    #         file_lock.release()
+            # 2) Delete the user-uploaded file content from filestore (blob + metadata)
+            file_store = get_default_file_store()
+            file_store.delete_file(user_file.file_id, db_session=db_session)
+            file_store.delete_file(
+                user_file_id_to_plaintext_file_name(user_file.id), db_session=db_session
+            )
+
+            # 3) Finally, delete the UserFile row
+            db_session.delete(user_file)
+            db_session.commit()
+            task_logger.info(
+                f"process_single_user_file_delete - Completed id={user_file_id}"
+            )
+    except Exception as e:
+        task_logger.exception(
+            f"process_single_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
+        )
+        return None
+    finally:
+        if file_lock.owned():
+            file_lock.release()
     return None
 
 
@@ -556,30 +614,6 @@ def _normalize_legacy_user_file_doc_id(old_id: str) -> str:
         remainder = old_id[len(user_prefix) :]
         return file_prefix + remainder
     return old_id
-
-
-@retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
-def _visit_chunks(
-    *,
-    http_client: httpx.Client,
-    index_name: str,
-    selection: str,
-    continuation: str | None = None,
-) -> tuple[list[dict[str, Any]], str | None]:
-    task_logger.info(
-        f"Visiting chunks for index={index_name} with selection={selection}"
-    )
-    base_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
-    params: dict[str, str] = {
-        "selection": selection,
-        "wantedDocumentCount": "100",  # Use smaller batch size to avoid timeouts
-    }
-    if continuation:
-        params["continuation"] = continuation
-    resp = http_client.get(base_url, params=params, timeout=None)
-    resp.raise_for_status()
-    payload = resp.json()
-    return payload.get("documents", []), payload.get("continuation")
 
 
 def update_legacy_plaintext_file_records() -> None:
@@ -808,20 +842,10 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     selection = f"{index_name}.document_id=='{normalized_doc_id}'"
 
                     # Count all chunks for this document
-                    chunk_count = 0
-                    continuation = None
-                    while True:
-                        docs, continuation = _visit_chunks(
-                            http_client=HttpxPool.get("vespa"),
-                            index_name=index_name,
-                            selection=selection,
-                            continuation=continuation,
-                        )
-                        if not docs:
-                            break
-                        chunk_count += len(docs)
-                        if not continuation:
-                            break
+                    chunk_count = _get_document_chunk_count(
+                        index_name=index_name,
+                        selection=selection,
+                    )
 
                     task_logger.info(
                         f"Found {chunk_count} chunks for document {normalized_doc_id}"

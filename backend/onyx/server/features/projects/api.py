@@ -38,6 +38,12 @@ logger = setup_logger()
 router = APIRouter(prefix="/user/projects")
 
 
+class UserFileDeleteResult(BaseModel):
+    has_associations: bool
+    project_names: list[str] = []
+    assistant_names: list[str] = []
+
+
 @router.get("/")
 def get_projects(
     user: User | None = Depends(current_user),
@@ -364,7 +370,7 @@ def delete_user_file(
     file_id: UUID,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> Response:
+) -> UserFileDeleteResult:
     """Delete a user file belonging to the current user.
 
     This will also remove any project associations for the file.
@@ -378,13 +384,34 @@ def delete_user_file(
     if user_file is None:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Remove project associations if any
-    for project in list(user_file.projects):
-        user_file.projects.remove(project)
+    # Check associations with projects and assistants (personas)
+    project_names = [project.name for project in user_file.projects]
+    assistant_names = [assistant.name for assistant in user_file.assistants]
 
-    db_session.delete(user_file)
+    if project_names or assistant_names:
+        return UserFileDeleteResult(
+            has_associations=True,
+            project_names=project_names,
+            assistant_names=assistant_names,
+        )
+
+    # No associations found; mark as DELETING and enqueue delete task
+    user_file.status = UserFileStatus.DELETING
     db_session.commit()
-    return Response(status_code=204)
+
+    tenant_id = get_current_tenant_id()
+    task = client_app.send_task(
+        OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+        kwargs={"user_file_id": str(user_file.id), "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.USER_FILE_DELETE,
+        priority=OnyxCeleryPriority.HIGH,
+    )
+    logger.info(
+        f"Triggered delete for user_file_id={user_file.id} with task_id={task.id}"
+    )
+    return UserFileDeleteResult(
+        has_associations=False, project_names=[], assistant_names=[]
+    )
 
 
 @router.get("/file/{file_id}", response_model=UserFileSnapshot)
@@ -401,6 +428,7 @@ def get_user_file(
     user_file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.DELETING)
         .one_or_none()
     )
     if user_file is None:
@@ -430,6 +458,7 @@ def get_user_file_statuses(
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.id.in_(body.file_ids))
+        .filter(UserFile.status != UserFileStatus.DELETING)
         .all()
     )
 
