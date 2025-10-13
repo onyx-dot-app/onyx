@@ -7,6 +7,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy import select
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import EXTERNAL_USER_EMAILS
@@ -17,6 +18,8 @@ from onyx.db.document import get_documents_by_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import PermissionSyncStatus
+from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.models import DocPermissionSyncAttempt
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
