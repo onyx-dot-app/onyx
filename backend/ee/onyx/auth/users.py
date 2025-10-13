@@ -41,8 +41,12 @@ def get_public_key() -> tuple[str | dict[str, Any], str] | None:
         logger.error("JWT_PUBLIC_KEY_URL is not set")
         return None
 
-    response = requests.get(JWT_PUBLIC_KEY_URL)
-    response.raise_for_status()
+    try:
+        response = requests.get(JWT_PUBLIC_KEY_URL)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        logger.error(f"Failed to fetch JWT public key: {str(exc)}")
+        return None
     content_type = response.headers.get("Content-Type", "").lower()
     raw_body = response.text
     body_lstripped = raw_body.lstrip()
@@ -112,52 +116,56 @@ def _resolve_public_key_from_jwks(
 
 
 async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
-    try:
-        public_key: Any | None = None
+    for attempt in range(2):
+        public_key_payload = get_public_key()
+        if public_key_payload is None:
+            logger.error("Failed to retrieve public key")
+            return None
 
-        for attempt in range(2):
-            public_key_payload = get_public_key()
-            if public_key_payload is None:
-                logger.error("Failed to retrieve public key")
-                return None
+        key_material, key_format = public_key_payload
 
-            key_material, key_format = public_key_payload
-
-            if key_format == "jwks":
-                public_key = _resolve_public_key_from_jwks(
-                    token, key_material  # type: ignore[arg-type]
-                )
-            else:
-                public_key = key_material
-
-            if public_key is not None:
-                break
-
-            if attempt == 0:
-                get_public_key.cache_clear()
+        if key_format == "jwks":
+            public_key = _resolve_public_key_from_jwks(
+                token, key_material  # type: ignore[arg-type]
+            )
+        else:
+            public_key = key_material
 
         if public_key is None:
+            if attempt == 0:
+                get_public_key.cache_clear()
+                continue
+
             logger.error("Unable to resolve a public key for JWT verification")
             return None
 
-        payload = jwt_decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
+        try:
+            payload = jwt_decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
+            )
+        except InvalidTokenError as e:
+            logger.error(f"Invalid JWT token: {str(e)}")
+            if attempt == 0:
+                get_public_key.cache_clear()
+                continue
+            return None
+        except PyJWTError as e:
+            logger.error(f"JWT decoding error: {str(e)}")
+            if attempt == 0:
+                get_public_key.cache_clear()
+                continue
+            return None
+
         email = payload.get("email")
         if email:
             result = await async_db_session.execute(
                 select(User).where(func.lower(User.email) == func.lower(email))
             )
             return result.scalars().first()
-    except InvalidTokenError as e:
-        logger.error(f"Invalid JWT token: {str(e)}")
-        get_public_key.cache_clear()
-    except PyJWTError as e:
-        logger.error(f"JWT decoding error: {str(e)}")
-        get_public_key.cache_clear()
+
     return None
 
 
