@@ -254,6 +254,7 @@ class TestDocPermissionSyncAttempt:
         assert (
             error_attempt.status.is_successful()
         )  # Completed with errors is still "successful"
+<<<<<<< HEAD
 
     def test_complete_doc_permission_sync_attempt_success(
         self, db_session: Session
