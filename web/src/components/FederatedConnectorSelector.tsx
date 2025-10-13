@@ -6,18 +6,20 @@ import {
   ValidSources,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { X, Search, Settings } from "lucide-react";
+import SvgSearch from "@/icons/search";
+import SvgX from "@/icons/x";
+import SvgSettings from "@/icons/settings";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
-import { Button as UiButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import RefreshButton from "@/refresh-components/buttons/Button";
+import Button from "@/refresh-components/buttons/Button";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -199,12 +201,22 @@ const EntityConfigDialog = ({
           )}
 
           <div className="flex justify-end gap-2 pt-4">
-            <UiButton variant="outline" onClick={onClose}>
+            <Button
+              secondary
+              type="button"
+              onClick={onClose}
+              className="!py-1.5 !px-3"
+            >
               Cancel
-            </UiButton>
-            <UiButton onClick={handleSave} disabled={isLoading}>
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={isLoading}
+              className="!py-1.5 !px-3"
+            >
               Save Configuration
-            </UiButton>
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -372,7 +384,7 @@ export const FederatedConnectorSelector = ({
             allConnectorsSelected ? "bg-neutral-50 dark:bg-neutral-800" : ""
           } focus-within:ring-1 focus-within:ring-ring focus-within:border-neutral-400 dark:focus-within:border-neutral-500 transition-colors`}
         >
-          <Search className="absolute left-3 h-4 w-4 text-neutral-500 dark:text-neutral-400" />
+          <SvgSearch className="absolute left-3 h-4 w-4 stroke-current text-neutral-500 dark:text-neutral-400" />
           <input
             ref={inputRef}
             type="text"
@@ -470,25 +482,24 @@ export const FederatedConnectorSelector = ({
                     )}
                   </div>
                   <div className="flex items-center ml-2 gap-1">
-                    <RefreshButton
-                      tertiary
+                    <IconButton
+                      internal
                       type="button"
+                      tooltip="Configure entities"
                       aria-label="Configure entities"
-                      title="Configure entities"
                       onClick={() => openConfigDialog(connector.id)}
-                      className="flex-shrink-0 !p-1 !gap-0 !rounded-full !w-6 !h-6 !bg-neutral-100 !text-neutral-500 hover:!bg-neutral-200 hover:!text-neutral-700 dark:!bg-neutral-700 dark:!text-neutral-400 dark:hover:!bg-neutral-600 dark:hover:!text-neutral-300 [&>div:first-child]:hidden [&>div:last-child]:hidden"
-                    >
-                      <Settings className="h-2.5 w-2.5" />
-                    </RefreshButton>
-                    <RefreshButton
-                      tertiary
+                      icon={SvgSettings}
+                      className="!p-1 !rounded-full"
+                    />
+                    <IconButton
+                      internal
                       type="button"
                       aria-label="Remove connector"
+                      tooltip="Remove connector"
                       onClick={() => removeConnector(connector.id)}
-                      className="flex-shrink-0 !p-1 !gap-0 !rounded-full !w-6 !h-6 !bg-neutral-100 !text-neutral-500 hover:!bg-neutral-200 hover:!text-neutral-700 dark:!bg-neutral-700 dark:!text-neutral-400 dark:hover:!bg-neutral-600 dark:hover:!text-neutral-300 [&>div:first-child]:hidden [&>div:last-child]:hidden"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </RefreshButton>
+                      icon={SvgX}
+                      className="!p-1 !rounded-full"
+                    />
                   </div>
                 </div>
               );
