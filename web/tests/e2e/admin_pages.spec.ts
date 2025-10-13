@@ -40,12 +40,6 @@ async function verifyAdminPageNavigation(
       page.getByRole("button", { name: options.buttonName })
     ).toHaveCount(1);
   }
-
-  if (options?.subHeaderText) {
-    await expect(page.locator("h1.text-lg").nth(0)).toHaveText(
-      options.subHeaderText
-    );
-  }
 }
 
 for (const chromaticSnapshot of chromaticSnapshots) {

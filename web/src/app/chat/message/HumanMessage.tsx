@@ -275,6 +275,7 @@ export default function HumanMessage({
                             tertiary
                             tooltip="Copy"
                             onClick={() => copyAll(content)}
+                            data-testid="HumanMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgEdit}
@@ -284,6 +285,7 @@ export default function HumanMessage({
                               setIsEditing(true);
                               setIsHovered(false);
                             }}
+                            data-testid="HumanMessage/edit-button"
                           />
                         </div>
                       ) : (

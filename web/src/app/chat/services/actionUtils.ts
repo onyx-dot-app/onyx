@@ -54,3 +54,8 @@ export function getIconForAction(
   if (isOktaProfileTool(action)) return SvgUser;
   return SvgCpu;
 }
+
+// Check if the assistant has either search tool or web search tool available
+export function hasSearchToolsAvailable(tools: ToolSnapshot[]): boolean {
+  return tools.some((tool) => isSearchTool(tool) || isWebSearchTool(tool));
+}

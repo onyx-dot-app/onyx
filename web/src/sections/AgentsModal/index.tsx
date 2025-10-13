@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import AgentCard from "@/sections/AgentsModal/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
@@ -16,7 +15,7 @@ import {
 import SvgFilter from "@/icons/filter";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import Button from "@/refresh-components/buttons/Button";
-import Link from "next/link";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 interface AgentsSectionProps {
   title: string;
@@ -98,7 +97,6 @@ function useAgentFilters() {
 export default function AgentsModal() {
   const { agents, pinnedAgents } = useAgentsContext();
   const { agentFilters, toggleAgentFilter } = useAgentFilters();
-  const router = useRouter();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const { toggleModal } = useChatModal();
@@ -144,66 +142,70 @@ export default function AgentsModal() {
   );
 
   return (
-    <Modal id={ModalIds.AgentsModal} icon={SvgOnyxOctagon} title="Agents" sm>
-      <div className="flex flex-col sticky top-[0rem] z-10 bg-background-tint-01 p-spacing-paragraph">
-        <div className="flex flex-row items-center gap-spacing-interline">
-          <input
-            className="w-full h-[3rem] border bg-transparent rounded-08 p-padding-button"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-          />
-          <Link href="/assistants/new">
-            <Button className="h-full">Create</Button>
-          </Link>
+    <div data-testid="AgentsModal/container" aria-label="Agents Modal">
+      <Modal id={ModalIds.AgentsModal} icon={SvgOnyxOctagon} title="Agents" sm>
+        <div className="flex flex-col sticky top-[0rem] z-10 bg-background-tint-01 p-spacing-paragraph">
+          <div className="flex flex-row items-center gap-spacing-interline">
+            <InputTypeIn
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            <Button
+              href="/assistants/new"
+              onClick={() => toggleModal(ModalIds.AgentsModal, false)}
+            >
+              Create
+            </Button>
+          </div>
+
+          <div className="py-padding-content flex items-center gap-spacing-interline flex-wrap">
+            <SvgFilter className="w-[1.2rem] h-[1.2rem] stroke-text-05" />
+            <AgentBadgeSelector
+              text="Pinned"
+              selected={agentFilters[AgentFilter.Pinned]}
+              toggleFilter={() => toggleAgentFilter(AgentFilter.Pinned)}
+            />
+
+            <AgentBadgeSelector
+              text="Mine"
+              selected={agentFilters[AgentFilter.Mine]}
+              toggleFilter={() => toggleAgentFilter(AgentFilter.Mine)}
+            />
+            <AgentBadgeSelector
+              text="Private"
+              selected={agentFilters[AgentFilter.Private]}
+              toggleFilter={() => toggleAgentFilter(AgentFilter.Private)}
+            />
+            <AgentBadgeSelector
+              text="Public"
+              selected={agentFilters[AgentFilter.Public]}
+              toggleFilter={() => toggleAgentFilter(AgentFilter.Public)}
+            />
+          </div>
         </div>
 
-        <div className="py-padding-content flex items-center gap-spacing-interline flex-wrap">
-          <SvgFilter className="w-[1.2rem] h-[1.2rem] stroke-text-05" />
-          <AgentBadgeSelector
-            text="Pinned"
-            selected={agentFilters[AgentFilter.Pinned]}
-            toggleFilter={() => toggleAgentFilter(AgentFilter.Pinned)}
-          />
-
-          <AgentBadgeSelector
-            text="Mine"
-            selected={agentFilters[AgentFilter.Mine]}
-            toggleFilter={() => toggleAgentFilter(AgentFilter.Mine)}
-          />
-          <AgentBadgeSelector
-            text="Private"
-            selected={agentFilters[AgentFilter.Private]}
-            toggleFilter={() => toggleAgentFilter(AgentFilter.Private)}
-          />
-          <AgentBadgeSelector
-            text="Public"
-            selected={agentFilters[AgentFilter.Public]}
-            toggleFilter={() => toggleAgentFilter(AgentFilter.Public)}
-          />
+        <div className="flex-1 w-full p-spacing-paragraph overflow-y-auto">
+          {featuredAgents.length === 0 && allAgents.length === 0 ? (
+            <Text className="w-full h-full flex flex-col items-center justify-center">
+              No Agents configured yet...
+            </Text>
+          ) : (
+            <>
+              <AgentsSection
+                title="Featured Agents"
+                agents={featuredAgents}
+                pinnedAgents={pinnedAgents}
+              />
+              <AgentsSection
+                title="All Agents"
+                agents={allAgents}
+                pinnedAgents={pinnedAgents}
+              />
+            </>
+          )}
         </div>
-      </div>
-
-      <div className="flex-1 w-full p-spacing-paragraph overflow-y-auto">
-        {featuredAgents.length === 0 && allAgents.length === 0 ? (
-          <Text className="w-full h-full flex flex-col items-center justify-center">
-            No Agents configured yet...
-          </Text>
-        ) : (
-          <>
-            <AgentsSection
-              title="Featured Agents"
-              agents={featuredAgents}
-              pinnedAgents={pinnedAgents}
-            />
-            <AgentsSection
-              title="All Agents"
-              agents={allAgents}
-              pinnedAgents={pinnedAgents}
-            />
-          </>
-        )}
-      </div>
-    </Modal>
+      </Modal>
+    </div>
   );
 }

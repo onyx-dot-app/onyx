@@ -18,7 +18,7 @@ from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
 MCP_SERVER_HOST = os.getenv("TEST_WEB_HOSTNAME", "127.0.0.1")
-MCP_SERVER_PORT = int(os.getenv("MCP_SERVER_PORT", "8000"))
+MCP_SERVER_PORT = int(os.getenv("MCP_SERVER_PORT", "8010"))
 MCP_SERVER_URL = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}/mcp"
 MCP_HELLO_TOOL = "hello"
 
@@ -55,7 +55,7 @@ def _wait_for_port(
 @pytest.fixture(scope="module")
 def mcp_no_auth_server() -> Generator[None, None, None]:
     process = subprocess.Popen(
-        [sys.executable, str(MCP_SERVER_SCRIPT)],
+        [sys.executable, str(MCP_SERVER_SCRIPT), str(MCP_SERVER_PORT)],
         cwd=MCP_SERVER_SCRIPT.parent,
     )
 
@@ -102,7 +102,17 @@ def test_mcp_no_auth_flow(
     create_response.raise_for_status()
     server_id = create_response.json()["server_id"]
 
-    # Step b) Attach the "hello" tool from the MCP server
+    # Step b) list the server's tools
+    tools_response = requests.get(
+        f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    tools_response.raise_for_status()
+    tool_entries = tools_response.json()["tools"]
+    assert len(tool_entries) == 101
+
+    # Step c) Attach the "hello" tool from the MCP server
     update_response = requests.post(
         f"{API_SERVER_URL}/admin/mcp/servers/update",
         json={
@@ -113,7 +123,7 @@ def test_mcp_no_auth_flow(
         cookies=admin_user.cookies,
     )
     update_response.raise_for_status()
-    assert update_response.json()["updated_tools"] >= 1
+    assert update_response.json()["updated_tools"] == 1
 
     tools_response = requests.get(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",

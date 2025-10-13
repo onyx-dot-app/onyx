@@ -11,6 +11,7 @@ import {
   EmbeddingProvider,
   LITELLM_CLOUD_PROVIDER,
   AZURE_CLOUD_PROVIDER,
+  getFormattedProviderName,
 } from "../../../../components/embedding/interfaces";
 import { EmbeddingDetails } from "../EmbeddingModelSelectionForm";
 import { FiExternalLink, FiInfo, FiTrash } from "react-icons/fi";
@@ -109,7 +110,7 @@ export default function CloudEmbeddingPage({
             <div className="flex items-center mb-2">
               {provider.icon({ size: 40 })}
               <h2 className="ml-2  mt-2 text-xl font-bold">
-                {provider.provider_type}{" "}
+                {getFormattedProviderName(provider.provider_type)}{" "}
                 {provider.provider_type == EmbeddingProvider.COHERE &&
                   "(recommended)"}
               </h2>
@@ -173,7 +174,7 @@ export default function CloudEmbeddingPage({
           <div className="flex items-center mb-2">
             {LITELLM_CLOUD_PROVIDER.icon({ size: 40 })}
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {LITELLM_CLOUD_PROVIDER.provider_type}{" "}
+              {getFormattedProviderName(LITELLM_CLOUD_PROVIDER.provider_type)}{" "}
               {LITELLM_CLOUD_PROVIDER.provider_type ==
                 EmbeddingProvider.COHERE && "(recommended)"}
             </h2>
@@ -286,7 +287,7 @@ export default function CloudEmbeddingPage({
           <div className="flex items-center mb-2">
             {AZURE_CLOUD_PROVIDER.icon({ size: 40 })}
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {AZURE_CLOUD_PROVIDER.provider_type}{" "}
+              {getFormattedProviderName(AZURE_CLOUD_PROVIDER.provider_type)}{" "}
             </h2>
             <HoverPopup
               mainContent={
