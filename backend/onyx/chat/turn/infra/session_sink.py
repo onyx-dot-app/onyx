@@ -117,6 +117,7 @@ def save_iteration(
                 else None
             ),
             additional_data=iteration_answer.additional_data,
+            is_web_fetch=iteration_answer.is_web_fetch,
         )
         db_session.add(research_agent_iteration_sub_step)
 

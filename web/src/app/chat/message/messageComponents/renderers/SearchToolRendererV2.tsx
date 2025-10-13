@@ -8,16 +8,10 @@ import {
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer } from "../interfaces";
-import { ResultIcon } from "@/components/chat/sources/SourceCard";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { truncateString } from "@/lib/utils";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
-import Text from "@/refresh-components/Text";
-import { SearchToolRendererV2 } from "./SearchToolRendererV2";
-import { usePostHog } from "posthog-js/react";
 
-const INITIAL_RESULTS_TO_SHOW = 3;
-const RESULTS_PER_EXPANSION = 10;
 const MAX_TITLE_LENGTH = 25;
 
 const INITIAL_QUERIES_TO_SHOW = 3;
@@ -30,7 +24,6 @@ const constructCurrentSearchState = (
   packets: SearchToolPacket[]
 ): {
   queries: string[];
-  results: OnyxDocument[];
   isSearching: boolean;
   isComplete: boolean;
   isInternetSearch: boolean;
@@ -51,48 +44,20 @@ const constructCurrentSearchState = (
     .flatMap((delta) => delta?.queries || [])
     .filter((query, index, arr) => arr.indexOf(query) === index); // Remove duplicates
 
-  const seenDocIds = new Set<string>();
-  const results = searchDeltas
-    .flatMap((delta) => delta?.documents || [])
-    .filter((doc) => {
-      if (!doc || !doc.document_id) return false;
-      if (seenDocIds.has(doc.document_id)) return false;
-      seenDocIds.add(doc.document_id);
-      return true;
-    });
-
   const isSearching = Boolean(searchStart && !searchEnd);
   const isComplete = Boolean(searchStart && searchEnd);
   const isInternetSearch = searchStart?.is_internet_search || false;
 
-  return { queries, results, isSearching, isComplete, isInternetSearch };
+  return { queries, isSearching, isComplete, isInternetSearch };
 };
 
-export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
+export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
   onComplete,
-  renderType,
   animate,
   children,
 }) => {
-  const posthog = usePostHog();
-  const isSimpleAgentFrameworkEnabled =
-    posthog.isFeatureEnabled("simple-agent-framework") ?? false;
-
-  // If simple agent feature flag is enabled, use the V2 renderer
-  if (isSimpleAgentFrameworkEnabled) {
-    return (
-      <SearchToolRendererV2
-        packets={packets}
-        onComplete={onComplete}
-        animate={animate}
-        children={children}
-      />
-    );
-  }
-
-  // Otherwise use the original implementation
-  const { queries, results, isSearching, isComplete, isInternetSearch } =
+  const { queries, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
 
   // Track search timing for minimum display duration
@@ -103,9 +68,6 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
-
-  // Track how many results to show
-  const [resultsToShow, setResultsToShow] = useState(INITIAL_RESULTS_TO_SHOW);
 
   // Track how many queries to show
   const [queriesToShow, setQueriesToShow] = useState(INITIAL_QUERIES_TO_SHOW);
@@ -169,16 +131,6 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const status = useMemo(() => {
     const searchType = isInternetSearch ? "the web" : "internal documents";
 
-    // If we have documents to show and we're in the searched state, show "Searched"
-    if (results.length > 0) {
-      // If we're still showing as searching (before transition), show "Searching"
-      if (shouldShowAsSearching) {
-        return `Searching ${searchType}`;
-      }
-      // Otherwise show "Searched"
-      return `Searched ${searchType}`;
-    }
-
     // Handle states based on timing
     if (shouldShowAsSearched) {
       return `Searched ${searchType}`;
@@ -192,7 +144,6 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     isComplete,
     shouldShowAsSearching,
     shouldShowAsSearched,
-    results.length,
     isInternetSearch,
   ]);
 
@@ -212,106 +163,51 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     icon,
     status,
     content: (
-      <div className="flex flex-col py-padding-button gap-spacing-interline">
-        <Text text02 secondaryBody>
-          Queries
-        </Text>
-        <div className="flex flex-wrap gap-spacing-interline pl-1">
-          {queries.slice(0, queriesToShow).map((query, index) => (
-            <div
-              key={index}
-              className="animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${index * 30}ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <SourceChip2 icon={<FiSearch size={10} />} title={query} />
-            </div>
-          ))}
-          {/* Show a blurb if there are more queries than we are displaying */}
-          {queries.length > queriesToShow && (
-            <div
-              className="animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${queriesToShow * 30}ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <SourceChip2
-                title={`${queries.length - queriesToShow} more...`}
-                onClick={() => {
-                  setQueriesToShow((prevQueries) =>
-                    Math.min(
-                      prevQueries + QUERIES_PER_EXPANSION,
-                      queries.length
-                    )
-                  );
+      <div className="flex flex-col mt-1.5">
+        <div className="flex flex-col">
+          <div className="text-xs font-medium mb-1 ml-1">Queries</div>
+          <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
+            {queries.slice(0, queriesToShow).map((query, index) => (
+              <div
+                key={index}
+                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                style={{
+                  animationDelay: `${index * 30}ms`,
+                  animationFillMode: "backwards",
                 }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* If no queries, show a loading state */}
-        {queries.length === 0 && <BlinkingDot />}
-
-        <Text text02 secondaryBody>
-          {isInternetSearch ? "Results" : "Documents"}
-        </Text>
-
-        <div className="flex flex-wrap gap-2 ml-1">
-          {results.slice(0, resultsToShow).map((result, index) => (
-            <div
-              key={result.document_id}
-              className="animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${index * 30}ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <div className="text-xs">
+              >
                 <SourceChip2
-                  icon={<ResultIcon doc={result} size={10} />}
-                  title={result.semantic_identifier || ""}
-                  onClick={() => {
-                    if (result.link) {
-                      window.open(result.link, "_blank");
-                    }
-                  }}
+                  icon={<FiSearch size={10} />}
+                  title={truncateString(query, MAX_TITLE_LENGTH)}
                 />
               </div>
-            </div>
-          ))}
-          {/* Show a blurb if there are more results than we are displaying */}
-          {results.length > resultsToShow && (
-            <div
-              className="animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${
-                  Math.min(resultsToShow, results.length) * 30
-                }ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <div className="text-xs">
+            ))}
+            {/* Show a blurb if there are more queries than we are displaying */}
+            {queries.length > queriesToShow && (
+              <div
+                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                style={{
+                  animationDelay: `${queriesToShow * 30}ms`,
+                  animationFillMode: "backwards",
+                }}
+              >
                 <SourceChip2
-                  title={`${results.length - resultsToShow} more...`}
+                  title={`${queries.length - queriesToShow} more...`}
                   onClick={() => {
-                    setResultsToShow((prevResults) =>
+                    setQueriesToShow((prevQueries) =>
                       Math.min(
-                        prevResults + RESULTS_PER_EXPANSION,
-                        results.length
+                        prevQueries + QUERIES_PER_EXPANSION,
+                        queries.length
                       )
                     );
                   }}
                 />
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* If no results, and queries are showing, show a loading state */}
-          {results.length === 0 && queries.length > 0 && <BlinkingDot />}
+          {/* If no queries, show a loading state */}
+          {queries.length === 0 && <BlinkingDot />}
         </div>
       </div>
     ),

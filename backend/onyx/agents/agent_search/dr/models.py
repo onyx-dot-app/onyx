@@ -100,7 +100,7 @@ class IterationAnswer(BaseModel):
     response_type: str | None = None
     data: dict | list | str | int | float | bool | None = None
     file_ids: list[str] | None = None
-
+    is_web_fetch: bool = False
     # for image generation step-types
     generated_images: list[GeneratedImage] | None = None
 
