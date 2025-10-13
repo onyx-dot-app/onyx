@@ -1,11 +1,13 @@
 import json
 from datetime import datetime
+from enum import Enum
 from functools import lru_cache
 from typing import Any
 from typing import cast
 
 import jwt
 import requests
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
@@ -37,9 +39,14 @@ logger = setup_logger()
 _PUBLIC_KEY_FETCH_ATTEMPTS = 2
 
 
+class PublicKeyFormat(Enum):
+    JWKS = "jwks"
+    PEM = "pem"
+
+
 @lru_cache()
-def get_public_key() -> tuple[str | dict[str, Any], str] | None:
-    """Fetch and cache JWT verification material from either a PEM endpoint or a JWKS."""
+def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
+    """Fetch and cache the raw JWT verification material."""
     if JWT_PUBLIC_KEY_URL is None:
         logger.error("JWT_PUBLIC_KEY_URL is not set")
         return None
@@ -62,7 +69,7 @@ def get_public_key() -> tuple[str | dict[str, Any], str] | None:
             return None
 
         if isinstance(data, dict) and "keys" in data:
-            return data, "jwks"
+            return data, PublicKeyFormat.JWKS
 
         logger.error(
             "JWT public key URL returned JSON but no JWKS 'keys' field was found"
@@ -74,12 +81,28 @@ def get_public_key() -> tuple[str | dict[str, Any], str] | None:
         logger.error("JWT public key URL returned an empty response")
         return None
 
-    return body, "pem"
+    return body, PublicKeyFormat.PEM
+
+
+def get_public_key(token: str) -> RSAPublicKey | str | None:
+    """Return the concrete public key used to verify the provided JWT token."""
+    payload = _fetch_public_key_payload()
+    if payload is None:
+        logger.error("Failed to retrieve public key payload")
+        return None
+
+    key_material, key_format = payload
+
+    if key_format is PublicKeyFormat.JWKS:
+        jwks_data = cast(dict[str, Any], key_material)
+        return _resolve_public_key_from_jwks(token, jwks_data)
+
+    return cast(str, key_material)
 
 
 def _resolve_public_key_from_jwks(
     token: str, jwks_payload: dict[str, Any]
-) -> RSAAlgorithm | None:
+) -> RSAPublicKey | None:
     try:
         header = jwt.get_unverified_header(token)
     except PyJWTError as e:
@@ -99,6 +122,8 @@ def _resolve_public_key_from_jwks(
         candidates = [k for k in keys if k.get("kid") == kid]
     if not candidates and thumbprint:
         candidates = [k for k in keys if k.get("x5t") == thumbprint]
+    if not candidates and len(keys) == 1:
+        candidates = keys
 
     if not candidates:
         logger.warning(
@@ -114,7 +139,7 @@ def _resolve_public_key_from_jwks(
 
     jwk = candidates[0]
     try:
-        return RSAAlgorithm.from_jwk(json.dumps(jwk))
+        return cast(RSAPublicKey, RSAAlgorithm.from_jwk(json.dumps(jwk)))
     except ValueError as e:
         logger.error(f"Failed to construct RSA key from JWK: {str(e)}")
         return None
@@ -122,23 +147,11 @@ def _resolve_public_key_from_jwks(
 
 async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key_payload = get_public_key()
-        if public_key_payload is None:
-            logger.error("Failed to retrieve public key")
-            return None
-
-        key_material, key_format = public_key_payload
-
-        if key_format == "jwks":
-            jwks_data = cast(dict[str, Any], key_material)
-            public_key = _resolve_public_key_from_jwks(token, jwks_data)
-        else:
-            public_key = key_material
-
+        public_key = get_public_key(token)
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                get_public_key.cache_clear()
+                _fetch_public_key_payload.cache_clear()
                 continue
             return None
 
@@ -152,26 +165,26 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
         except InvalidTokenError as e:
             logger.error(f"Invalid JWT token: {str(e)}")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                get_public_key.cache_clear()
+                _fetch_public_key_payload.cache_clear()
                 continue
             return None
         except PyJWTError as e:
             logger.error(f"JWT decoding error: {str(e)}")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                get_public_key.cache_clear()
+                _fetch_public_key_payload.cache_clear()
                 continue
             return None
-        else:
-            email = payload.get("email")
-            if email:
-                result = await async_db_session.execute(
-                    select(User).where(func.lower(User.email) == func.lower(email))
-                )
-                return result.scalars().first()
-            logger.warning(
-                "JWT token decoded successfully but no email claim found; skipping auth"
+
+        email = payload.get("email")
+        if email:
+            result = await async_db_session.execute(
+                select(User).where(func.lower(User.email) == func.lower(email))
             )
-            return None
+            return result.scalars().first()
+        logger.warning(
+            "JWT token decoded successfully but no email claim found; skipping auth"
+        )
+        return None
 
     return None
 
