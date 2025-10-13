@@ -572,6 +572,7 @@ def connector_permission_sync_generator_task(
             tasks_generated = 0
             docs_with_errors = 0
             for doc_external_access in document_external_accesses:
+<<<<<<< HEAD
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
@@ -582,6 +583,24 @@ def connector_permission_sync_generator_task(
                 )
                 tasks_generated += result.num_updated
                 docs_with_errors += result.num_errors
+=======
+                try:
+                    redis_connector.permissions.update_db(
+                        lock=lock,
+                        new_permissions=[doc_external_access],
+                        source_string=source_type,
+                        connector_id=cc_pair.connector.id,
+                        credential_id=cc_pair.credential.id,
+                        task_logger=task_logger,
+                    )
+                    tasks_generated += 1
+                except Exception as e:
+                    docs_with_errors += 1
+                    task_logger.exception(
+                        f"Error updating permissions for doc {doc_external_access.doc_id}: {e}"
+                    )
+                    # Continue processing other documents
+>>>>>>> 37d3c054c (hook up permission syncs to celery task)
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks finished. "
