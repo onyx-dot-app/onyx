@@ -29,6 +29,7 @@ class ValidatorCreate(BaseModel):
         examples=["Валидатор персональных данных"],
     )
     description: str | None = Field(
+        default=None,
         description="Описание валидатора",
         examples=["Выполняет обнаружение персональных данных в тексте и маскирует их"],
     )
@@ -49,6 +50,7 @@ class ValidatorUpdate(BaseModel):
         examples=["Валидатор персональных данных"],
     )
     description: str | None = Field(
+        default=None,
         description="Описание валидатора",
         examples=["Выполняет обнаружение персональных данных в тексте и маскирует их"],
     )
