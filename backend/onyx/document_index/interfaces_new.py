@@ -8,6 +8,15 @@ from onyx.access.models import DocumentAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+from onyx.access.models import DocumentAccess
+from onyx.access.models import ExternalAccess
+from onyx.context.search.enums import QueryType
+from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
@@ -137,22 +146,25 @@ class Indexable(abc.ABC):
     @abc.abstractmethod
     def index(
         self,
-        chunks: Iterator[DocMetadataAwareIndexChunk],
+        chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index. This is often a batch operation
         including chunks from multiple documents.
 
-        NOTE: When a document is reindexed/updated here and has gotten shorter, it is important to delete the extra
-        chunks at the end to ensure there are no stale chunks in the index.
+        NOTE: When a document is reindexed/updated here, it must clear all of the existing document
+        chunks before reindexing. This is because the document may have gotten shorter since the
+        last run. Therefore, upserting the first 0 through n chunks may leave some old chunks that
+        have not been written over.
 
         NOTE: The chunks of a document are never separated into separate index() calls. So there is
         no worry of receiving the first 0 through n chunks in one index call and the next n through
         m chunks of a document in the next index call.
 
         Parameters:
-        - chunks: Document chunks with all of the information needed for indexing to the document index.
+        - chunks: Document chunks with all of the information needed for indexing to the document
+                index.
         - indexing_metadata: Information about chunk counts for efficient cleaning / updating
 
         Returns:
