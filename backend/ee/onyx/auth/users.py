@@ -33,6 +33,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_PUBLIC_KEY_FETCH_ATTEMPTS = 2
+
 
 @lru_cache()
 def get_public_key() -> tuple[str | dict[str, Any], str] | None:
@@ -116,7 +118,7 @@ def _resolve_public_key_from_jwks(
 
 
 async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
-    for attempt in range(2):
+    for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
         public_key_payload = get_public_key()
         if public_key_payload is None:
             logger.error("Failed to retrieve public key")
