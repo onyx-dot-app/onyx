@@ -100,7 +100,9 @@ def _resolve_public_key_from_jwks(
         candidates = [k for k in keys if k.get("x5t") == thumbprint]
 
     if not candidates:
-        logger.warning("No matching JWK found for token header kid=%s", kid)
+        logger.warning(
+            "No matching JWK found for token header (kid=%s, x5t=%s)", kid, thumbprint
+        )
         return None
 
     if len(candidates) > 1:
@@ -135,8 +137,8 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
 
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
-            if attempt == 0:
-                get_public_key.cache_clear()
+            get_public_key.cache_clear()
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
                 continue
             return None
 
