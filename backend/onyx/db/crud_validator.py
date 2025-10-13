@@ -16,6 +16,7 @@ from onyx.server.features.guardrails.core.schemas_validator import (
     ValidatorUpdate,
 )
 
+
 def _add_user_filters(
     stmt: Select,
     user: User,
@@ -43,14 +44,7 @@ def _add_user_filters(
         )
     )
 
-    # CURATOR видит:
-    # - чужие валидаторы, подключенные к ассистентам в группе, где он является куратором
-    # - свои валидаторы
-    where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
-
-    # валидаторы из групп ИЛИ свои валидаторы
+    where_clause = (User__UG.user_id == user.id) & (User__UG.is_curator == True)
     where_clause |= Validator.user_id == user.id
 
     return stmt.where(where_clause)
