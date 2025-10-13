@@ -285,10 +285,8 @@ export function useChatController({
       lastMessage?.researchType !== undefined &&
       lastMessage?.researchType !== null;
 
-    // Check if simple-agent-framework feature flag is enabled
-    const isSimpleAgentFrameworkEnabled = posthog?.isFeatureEnabled?.(
-      "simple-agent-framework"
-    );
+    const isSimpleAgentFrameworkEnabled =
+      posthog.isFeatureEnabled("simple-agent-framework") ?? false;
 
     // Always call the backend stop endpoint if feature flag is enabled
     if (isSimpleAgentFrameworkEnabled) {

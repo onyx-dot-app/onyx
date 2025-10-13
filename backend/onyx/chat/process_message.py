@@ -739,13 +739,8 @@ def stream_chat_message_objects(
                     and (file.file_id not in project_file_ids)
                 ]
             )
-        feature_flag_provider = get_default_feature_flag_provider()
-        simple_agent_framework_enabled = (
-            user
-            and feature_flag_provider.feature_enabled_for_user_tenant(
-                "simple-agent-framework", user, tenant_id
-            )
-        )
+        get_default_feature_flag_provider()
+        simple_agent_framework_enabled = True
         user_message = (
             default_build_user_message_v2(
                 user_query=final_msg.message,
