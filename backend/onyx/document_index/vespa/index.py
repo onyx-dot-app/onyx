@@ -1062,7 +1062,7 @@ class VespaIndex(DocumentIndex):
         *,
         tenant_id: str,
         index_name: str,
-    ) -> None:
+    ) -> int:
         """
         Deletes all entries in the specified index with the given tenant_id.
 
@@ -1072,6 +1072,9 @@ class VespaIndex(DocumentIndex):
         Parameters:
             tenant_id (str): The tenant ID whose documents are to be deleted.
             index_name (str): The name of the index from which to delete documents.
+
+        Returns:
+            int: The number of documents deleted.
         """
         logger.info(
             f"Deleting entries with tenant_id: {tenant_id} from index: {index_name}"
@@ -1084,7 +1087,7 @@ class VespaIndex(DocumentIndex):
             logger.info(
                 f"No documents found with tenant_id: {tenant_id} in index: {index_name}"
             )
-            return
+            return 0
 
         # Step 2: Delete documents in batches
         delete_requests = [
@@ -1093,6 +1096,7 @@ class VespaIndex(DocumentIndex):
         ]
 
         cls._apply_deletes_batched(delete_requests)
+        return len(document_ids)
 
     @classmethod
     def _get_all_document_ids_by_tenant_id(
