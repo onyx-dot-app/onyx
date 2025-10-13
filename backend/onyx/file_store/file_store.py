@@ -9,6 +9,7 @@ from typing import IO
 
 import boto3
 import puremagic
+import hashlib
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
 from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
+from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_ENDPOINT_URL
 from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
@@ -320,21 +322,45 @@ class S3BackedFileStore(FileStore):
         bucket_name = self._get_bucket_name()
         s3_key = self._get_s3_key(file_id)
 
+        file_content = ""
+        hash256 = ""
+        sha256_hasher = hashlib.sha256()
+
         # Read content from IO object
         if hasattr(content, "read"):
-            file_content = content.read()
+            while True:
+                chunk = content.read(4096) # read 4KB chunk from file
+                if not chunk:
+                    break
+                file_content += chunk.decode()
+                if S3_GENERATE_LOCAL_CHECKSUM:
+                    sha256_hasher.update(chunk) # update the sha256 hash
+            hash256 = sha256_hasher.hexdigest() # generate the fine sha256 hash of the file
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
-            file_content = content
+            file_content = content # I'm not sure how we could get here since content is an IO object that should have matched above
+            if S3_GENERATE_LOCAL_CHECKSUM:
+                sha256_hash = hashlib.sha256()
+                sha256_hash.update(file_content)
+                hash256 = sha256_hash.hexdigest()
 
         # Upload to S3
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=s3_key,
-            Body=file_content,
-            ContentType=file_type,
-        )
+        if S3_GENERATE_LOCAL_CHECKSUM:
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=file_content,
+                ContentType=file_type,
+                ChecksumSHA256=hash256
+            )
+        else:
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=file_content,
+                ContentType=file_type,
+            )
 
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             # Save metadata to database
