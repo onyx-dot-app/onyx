@@ -14,6 +14,8 @@ export interface Settings {
   anonymous_user_enabled: boolean;
   anonymous_user_path?: string;
   maximum_chat_retention_days?: number | null;
+  company_name?: string | null;
+  company_description?: string | null;
   notifications: Notification[];
   needs_reindexing: boolean;
   gpu_enabled: boolean;

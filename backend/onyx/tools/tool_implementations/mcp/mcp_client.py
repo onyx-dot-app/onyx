@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_async_sync
+from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
 logger = setup_logger()
 
@@ -203,7 +203,7 @@ def _call_mcp_client_function_sync(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        return run_async_sync(run_client_function())
+        return run_async_sync_no_cancel(run_client_function())
     except Exception as e:
         logger.error(f"Failed to call MCP client function: {e}")
         if isinstance(e, ExceptionGroup):

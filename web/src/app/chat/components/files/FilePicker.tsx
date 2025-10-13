@@ -150,16 +150,18 @@ export default function FilePicker({
       />
       <Menubar className="bg-transparent dark:bg-transparent p-0 border-0 h-8">
         <MenubarMenu>
-          <MenubarTrigger className="relative cursor-pointer flex items-center group rounded-lg text-input-text px-0 h-8">
-            {showTriggerLabel ? (
-              <LineItem icon={SvgPlusCircle}>{triggerLabel}</LineItem>
-            ) : (
-              <IconButton
-                icon={SvgPlusCircle}
-                tooltip="Attach Files"
-                tertiary
-              />
-            )}
+          <MenubarTrigger asChild className="rounded-lg px-0">
+            <span className="inline-flex">
+              {showTriggerLabel ? (
+                <LineItem icon={SvgPlusCircle}>{triggerLabel}</LineItem>
+              ) : (
+                <IconButton
+                  icon={SvgPlusCircle}
+                  tooltip="Attach Files"
+                  tertiary
+                />
+              )}
+            </span>
           </MenubarTrigger>
           <MenubarContent
             align="start"

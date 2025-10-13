@@ -45,6 +45,8 @@ class Settings(BaseModel):
 
     # is float to allow for fractional days for easier automated testing
     maximum_chat_retention_days: float | None = None
+    company_name: str | None = None
+    company_description: str | None = None
     gpu_enabled: bool | None = None
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
