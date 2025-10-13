@@ -212,40 +212,59 @@ export default function FilePicker({
   }, [recentFiles]);
 
   const handleDeleteFile = (file: ProjectFile) => {
+    const lastStatus = file.status;
     setRecentFilesSnapshot((prev) =>
       prev.map((f) =>
         f.id === file.id ? { ...f, status: UserFileStatus.DELETING } : f
       )
     );
-    deleteUserFile(file.id).then((result) => {
-      const lastStatus = file.status;
-      if (!result.has_associations) {
-        setPopup({
-          message: "File deleted successfully",
-          type: "success",
-        });
-        setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== file.id));
-        setRecentFilesSnapshot((prev) => prev.filter((f) => f.id !== file.id));
-      } else {
+    deleteUserFile(file.id)
+      .then((result) => {
+        if (!result.has_associations) {
+          setPopup({
+            message: "File deleted successfully",
+            type: "success",
+          });
+          setCurrentMessageFiles((prev) =>
+            prev.filter((f) => f.id !== file.id)
+          );
+          setRecentFilesSnapshot((prev) =>
+            prev.filter((f) => f.id !== file.id)
+          );
+        } else {
+          setRecentFilesSnapshot((prev) =>
+            prev.map((f) =>
+              f.id === file.id ? { ...f, status: lastStatus } : f
+            )
+          );
+          let projects = result.project_names.join(", ");
+          let assistants = result.assistant_names.join(", ");
+          let message = "Cannot delete file. It is associated with";
+          if (projects) {
+            message += ` projects: ${projects}`;
+          }
+          if (assistants) {
+            message += ` and assistants: ${assistants}`;
+          }
+
+          setPopup({
+            message: message,
+            type: "error",
+          });
+        }
+      })
+      .catch((error) => {
+        // Revert status and show error if the delete request fails
         setRecentFilesSnapshot((prev) =>
           prev.map((f) => (f.id === file.id ? { ...f, status: lastStatus } : f))
         );
-        let projects = result.project_names.join(", ");
-        let assistants = result.assistant_names.join(", ");
-        let message = "Cannot delete file. It is associated with";
-        if (projects) {
-          message += ` projects: ${projects}`;
-        }
-        if (assistants) {
-          message += ` and assistants: ${assistants}`;
-        }
-
         setPopup({
-          message: message,
+          message: "Failed to delete file. Please try again.",
           type: "error",
         });
-      }
-    });
+        // Useful for debugging; safe in client components
+        console.error("Failed to delete file", error);
+      });
   };
 
   return (

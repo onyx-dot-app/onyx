@@ -117,6 +117,7 @@ def _get_document_chunk_count(
         chunk_count += len(docs)
         if not continuation:
             break
+    return chunk_count
 
 
 @shared_task(
