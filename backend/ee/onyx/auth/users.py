@@ -113,14 +113,14 @@ def _resolve_public_key_from_jwks(
 
 async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
     try:
-        refresh_attempted = False
         public_key: Any | None = None
 
-        while True:
+        for attempt in range(2):
             public_key_payload = get_public_key()
             if public_key_payload is None:
                 logger.error("Failed to retrieve public key")
                 return None
+
             key_material, key_format = public_key_payload
 
             if key_format == "jwks":
@@ -130,11 +130,11 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
             else:
                 public_key = key_material
 
-            if public_key is not None or refresh_attempted:
+            if public_key is not None:
                 break
 
-            refresh_attempted = True
-            get_public_key.cache_clear()
+            if attempt == 0:
+                get_public_key.cache_clear()
 
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
@@ -144,7 +144,6 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
             token,
             public_key,
             algorithms=["RS256"],
-            audience=None,
             options={"verify_aud": False},
         )
         email = payload.get("email")
