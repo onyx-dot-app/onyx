@@ -13,8 +13,8 @@ import { deletePersona } from "@/app/admin/assistants/lib";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import Text from "@/refresh-components/Text";
-import Truncated from "@/refresh-components/Truncated";
+import Text from "@/refresh-components/texts/Text";
+import SimpleTruncated from "@/refresh-components/texts/SimpleTruncated";
 import NavigationTab from "@/refresh-components/buttons/NavigationTab";
 import SvgEditBig from "@/icons/edit-big";
 import SvgTrash from "@/icons/trash";
@@ -87,9 +87,9 @@ export default function AgentCard({
 
           <div className="flex-1 flex flex-col gap-padding-button">
             <div className="flex flex-row justify-between items-center">
-              <Truncated headingH3 text04>
+              <SimpleTruncated headingH3 text04>
                 {agent.name}
-              </Truncated>
+              </SimpleTruncated>
 
               {isOwnedByUser && (
                 <Popover open={kebabMenuOpen} onOpenChange={setKebabMenuOpen}>
@@ -147,9 +147,9 @@ export default function AgentCard({
 
             <div className="flex flex-row items-center gap-spacing-interline">
               <div className="max-w-[33%]">
-                <Truncated secondaryBody text02>
+                <SimpleTruncated secondaryBody text02>
                   By {agent.owner?.email || "Onyx"} asdf
-                </Truncated>
+                </SimpleTruncated>
               </div>
               <Text secondaryBody text01>
                 •

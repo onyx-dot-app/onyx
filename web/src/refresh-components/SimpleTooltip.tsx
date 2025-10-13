@@ -4,11 +4,13 @@ import React from "react";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
-export interface SimpleTooltipProps {
+export interface SimpleTooltipProps
+  extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
   tooltip?: string;
   children?: React.ReactNode;
 }
@@ -16,6 +18,7 @@ export interface SimpleTooltipProps {
 export default function SimpleTooltip({
   tooltip,
   children,
+  ...rest
 }: SimpleTooltipProps) {
   // Determine hover content based on the logic:
   // 1. If tooltip is defined, use tooltip
@@ -28,13 +31,15 @@ export default function SimpleTooltip({
   if (!hoverContent) return <>{children}</>;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div>{children}</div>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        <Text inverted>{hoverContent}</Text>
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>{children}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" {...rest}>
+          <Text inverted>{hoverContent}</Text>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

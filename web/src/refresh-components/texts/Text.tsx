@@ -76,6 +76,8 @@ export interface TextProps extends React.HTMLAttributes<HTMLElement> {
   text02?: boolean;
   text01?: boolean;
   inverted?: boolean;
+
+  children?: string;
 }
 
 export default function Text({

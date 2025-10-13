@@ -1,4 +1,4 @@
-import Truncated from "@/refresh-components/Truncated";
+import SimpleTruncated from "@/refresh-components/texts/SimpleTruncated";
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -38,9 +38,9 @@ export function SourceChip2({
           {icon}
         </div>
       )}
-      <Truncated text03 secondaryBody>
+      <SimpleTruncated text03 secondaryBody>
         {title}
-      </Truncated>
+      </SimpleTruncated>
       {onRemove && (
         <XIcon
           size={12}

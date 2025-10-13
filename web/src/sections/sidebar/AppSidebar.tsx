@@ -3,7 +3,7 @@
 import React, { useCallback, useState, memo, useMemo, useEffect } from "react";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,
@@ -43,7 +43,7 @@ import SvgShare from "@/icons/share";
 import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPin from "@/icons/pin";
-import { noProp } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import { PopoverMenu } from "@/components/ui/popover";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
@@ -65,6 +65,8 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { UNNAMED_CHAT } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 // Constants
 const DEFAULT_PERSONA_ID = 0;
@@ -383,71 +385,61 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         />
       )}
 
-      <NavigationTab
-        icon={project ? () => <></> : SvgBubbleText}
+      <SidebarTab
+        leftIcon={project ? undefined : SvgBubbleText}
         onClick={() => route({ chatSessionId: chatSession.id })}
         active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
-        popover={<PopoverMenu>{popoverItems}</PopoverMenu>}
-        onPopoverChange={(open) => !open && setShowMoveOptions(false)}
-        renaming={renaming}
-        setRenaming={setRenaming}
-        submitRename={submitRename}
+        // popover={<PopoverMenu>{popoverItems}</PopoverMenu>}
+        // onPopoverChange={(open) => !open && setShowMoveOptions(false)}
+        // renaming={renaming}
+        // setRenaming={setRenaming}
+        // submitRename={submitRename}
       >
         {name}
-      </NavigationTab>
+      </SidebarTab>
     </>
   );
 }
 
 export const ChatButton = memo(ChatButtonInner);
 
-interface AgentsButtonProps {
-  visibleAgent: MinimalPersonaSnapshot;
+interface AgentButtonProps {
+  agent: MinimalPersonaSnapshot;
 }
 
-function AgentsButtonInner({ visibleAgent }: AgentsButtonProps) {
+function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
   const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = pinnedAgents.some(
-    (pinnedAgent) => pinnedAgent.id === visibleAgent.id
+    (pinnedAgent) => pinnedAgent.id === agent.id
   );
 
   return (
-    <SortableItem id={visibleAgent.id}>
+    <SortableItem id={agent.id}>
       <div className="flex flex-col w-full h-full">
-        <NavigationTab
-          key={visibleAgent.id}
-          icon={getAgentIcon(visibleAgent)}
-          onClick={() => route({ agentId: visibleAgent.id })}
-          active={
-            params(SEARCH_PARAM_NAMES.PERSONA_ID) === String(visibleAgent.id)
+        <SidebarTab
+          key={agent.id}
+          leftIcon={getAgentIcon(agent)}
+          onClick={() => route({ agentId: agent.id })}
+          active={params(SEARCH_PARAM_NAMES.PERSONA_ID) === String(agent.id)}
+          rightChildren={
+            <IconButton
+              icon={SvgPin}
+              internal
+              onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+              className={cn(!pinned && "hidden group-hover/SidebarTab:flex")}
+            />
           }
-          popover={
-            <PopoverMenu>
-              {[
-                <NavigationTab
-                  key="pin-unpin-chat"
-                  icon={SvgPin}
-                  onClick={noProp(() =>
-                    togglePinnedAgent(visibleAgent, !pinned)
-                  )}
-                >
-                  {pinned ? "Unpin Agent" : "Pin Agent"}
-                </NavigationTab>,
-              ]}
-            </PopoverMenu>
-          }
-          highlight
         >
-          {visibleAgent.name}
-        </NavigationTab>
+          {agent.name}
+        </SidebarTab>
       </div>
     </SortableItem>
   );
 }
 
-const AgentsButton = memo(AgentsButtonInner);
+const AgentButton = memo(AgentButtonInner);
 
 interface SortableItemProps {
   id: number;
@@ -479,7 +471,7 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const { toggleModal } = useChatModal();
+  const { isOpen, toggleModal } = useChatModal();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
 
@@ -549,40 +541,39 @@ function AppSidebarInner() {
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
           <div data-testid="AppSidebar/new-session">
-            <NavigationTab
-              icon={SvgEditBig}
-              className="!w-full"
+            <SidebarTab
+              leftIcon={SvgEditBig}
               folded={folded}
               onClick={() => route({})}
               active={Array.from(searchParams).length === 0}
-              tooltip
             >
               New Session
-            </NavigationTab>
+            </SidebarTab>
           </div>
 
           {folded && (
             <>
-              <NavigationTab
-                icon={SvgOnyxOctagon}
-                folded
-                tooltip
+              <SidebarTab
+                leftIcon={SvgOnyxOctagon}
                 onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                active={isOpen(ModalIds.AgentsModal)}
+                folded
               >
                 Agents
-              </NavigationTab>
-              <NavigationTab
-                icon={SvgFolderPlus}
-                folded
-                tooltip
+              </SidebarTab>
+              <SidebarTab
+                leftIcon={SvgFolderPlus}
                 onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+                active={isOpen(ModalIds.CreateProjectModal)}
+                folded
               >
                 New Project
-              </NavigationTab>
+              </SidebarTab>
             </>
           )}
         </div>
 
+        {/* Main container */}
         <div className="flex flex-col gap-padding-content flex-1 overflow-y-scroll">
           {!folded && (
             <>
@@ -598,21 +589,18 @@ function AppSidebarInner() {
                     strategy={verticalListSortingStrategy}
                   >
                     {visibleAgents.map((visibleAgent) => (
-                      <AgentsButton
-                        key={visibleAgent.id}
-                        visibleAgent={visibleAgent}
-                      />
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
                     ))}
                   </SortableContext>
                 </DndContext>
                 <div data-testid="AppSidebar/more-agents">
-                  <NavigationTab
-                    icon={SvgMoreHorizontal}
+                  <SidebarTab
+                    leftIcon={SvgMoreHorizontal}
                     onClick={() => toggleModal(ModalIds.AgentsModal, true)}
                     lowlight
                   >
                     More Agents
-                  </NavigationTab>
+                  </SidebarTab>
                 </div>
               </SidebarSection>
 
@@ -640,9 +628,7 @@ function AppSidebarInner() {
         </div>
 
         {/* Bottom */}
-        <div className="flex flex-col">
-          <Settings folded={folded} />
-        </div>
+        <Settings folded={folded} />
       </SidebarWrapper>
     </>
   );

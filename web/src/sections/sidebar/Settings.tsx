@@ -8,7 +8,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
 import { Avatar } from "@/components/ui/avatar";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import NavigationTab from "@/refresh-components/buttons/NavigationTab";
 import {
   Popover,
@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 
 function getUsernameFromEmail(email?: string): string {
   if (!email) return ANONYMOUS_USER_NAME;
@@ -195,15 +196,14 @@ export default function Settings({
       }
     >
       <PopoverTrigger asChild>
-        <div className="flex flex-col w-full h-full" id="onyx-user-dropdown">
-          <NavigationTab
-            className="!w-full"
-            iconClassName="w-5 h-5"
-            icon={({ className }) => (
+        <div id="onyx-user-dropdown">
+          <SidebarTab
+            leftIcon={({ className }) => (
               <Avatar
                 className={cn(
                   "flex items-center justify-center bg-background-neutral-inverted-00",
-                  className
+                  className,
+                  "w-5 h-5"
                 )}
               >
                 <Text inverted secondaryBody>
@@ -213,10 +213,9 @@ export default function Settings({
             )}
             active={!!popupState}
             folded={folded}
-            highlight
           >
             {username}
-          </NavigationTab>
+          </SidebarTab>
         </div>
       </PopoverTrigger>
       <PopoverContent align="end" side="right">

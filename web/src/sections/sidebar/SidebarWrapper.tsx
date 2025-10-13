@@ -57,7 +57,9 @@ export default function SidebarWrapper({
           )}
         </div>
 
-        {children}
+        <div className="flex flex-col gap-padding-content flex-1">
+          {children}
+        </div>
       </div>
     </div>
   );

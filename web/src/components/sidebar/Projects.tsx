@@ -21,6 +21,7 @@ import {
 } from "@/refresh-components/contexts/ChatModalContext";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { noProp } from "@/lib/utils";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 
 interface ProjectFolderProps {
   project: Project;
@@ -129,13 +130,13 @@ export default function Projects() {
         <ProjectFolder key={project.id} project={project} />
       ))}
 
-      <NavigationTab
-        icon={SvgFolderPlus}
+      <SidebarTab
+        leftIcon={SvgFolderPlus}
         onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
         lowlight
       >
         New Project
-      </NavigationTab>
+      </SidebarTab>
     </>
   );
 }

@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from "react";
 import Link from "next/link";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { SvgProps } from "@/icons";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import {
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Truncated from "@/refresh-components/Truncated";
+import SimpleTruncated from "@/refresh-components/texts/SimpleTruncated";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import { useBoundingBox } from "@/hooks/useBoundingBox";
@@ -186,16 +186,16 @@ export default function NavigationTab({
               />
             </div>
           ) : typeof children === "string" ? (
-            <Truncated
+            <SimpleTruncated
               side="right"
               // We offset the "truncation popover" iff the popover "kebab menu" exists.
               // This is because the popover would hover OVER the kebab menu, creating a weird UI.
               // However, if no popover is specified, we don't need to offset anything.
-              offset={!!popover ? 40 : 0}
+              sideOffset={!!popover ? 40 : 0}
               className={cn("text-left", textClasses(active)[variant])}
             >
               {children}
-            </Truncated>
+            </SimpleTruncated>
           ) : (
             children
           ))}

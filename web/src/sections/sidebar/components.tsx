@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { SvgProps } from "@/icons";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
