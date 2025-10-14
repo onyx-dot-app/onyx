@@ -324,26 +324,19 @@ class S3BackedFileStore(FileStore):
 
         file_content = ""
         hash256 = ""
-        sha256_hasher = hashlib.sha256()
+        sha256_hash = hashlib.sha256()
 
         # Read content from IO object
         if hasattr(content, "read"):
-            while True:
-                chunk = content.read(4096) # read 4KB chunk from file
-                if not chunk:
-                    break
-                file_content += chunk.decode()
-                if S3_GENERATE_LOCAL_CHECKSUM:
-                    sha256_hasher.update(chunk) # update the sha256 hash
-            hash256 = sha256_hasher.hexdigest() # generate the fine sha256 hash of the file
+            file_content = content.read()
+            if S3_GENERATE_LOCAL_CHECKSUM:
+                data_bytes = str(file_content).encode()
+                sha256_hash.update(data_bytes) 
+                hash256 = sha256_hash.hexdigest() # get the sha256 has in hex format
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
-            file_content = content # I'm not sure how we could get here since content is an IO object that should have matched above
-            if S3_GENERATE_LOCAL_CHECKSUM:
-                sha256_hash = hashlib.sha256()
-                sha256_hash.update(file_content)
-                hash256 = sha256_hash.hexdigest()
+            file_content = content
 
         # Upload to S3
         if S3_GENERATE_LOCAL_CHECKSUM:
