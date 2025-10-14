@@ -14,6 +14,8 @@ import SvgLightbulbSimple from "@/icons/lightbulb-simple";
 import { OnyxIcon } from "@/components/icons/icons";
 import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { cn } from "@/lib/utils";
 
 export interface SidebarSectionProps {
   title: string;
@@ -42,5 +44,21 @@ export function getAgentIcon(
   if (agent.id === GENERAL_ASSISTANT_ID) return SvgLightbulbSimple;
   if (agent.id === IMAGE_ASSISTANT_ID || agent.id === ART_ASSISTANT_ID)
     return SvgImage;
-  return () => generateIdenticon((agent.icon_shape || 0).toString(), 16);
+  if (agent.uploaded_image_id) {
+    return ({ className }) => (
+      <div className={cn("w-full h-full", className)}>
+        <img
+          alt={agent.name}
+          src={buildImgUrl(agent.uploaded_image_id)}
+          loading="lazy"
+          className="w-full h-full rounded-full object-cover object-center"
+        />
+      </div>
+    );
+  }
+  return ({ className }) => (
+    <div className={cn("w-full h-full", className)}>
+      {generateIdenticon((agent.icon_shape || 0).toString(), 16)}
+    </div>
+  );
 }
