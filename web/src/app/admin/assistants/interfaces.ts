@@ -1,6 +1,7 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 import { KnowledgeMapAnswer } from "@/app/admin/documents/knowledge_maps/lib";
+import { APIKey } from "../guardrails/types";
 
 export interface StarterMessageBase {
   message: string;
@@ -57,6 +58,7 @@ export interface FullPersona extends Persona {
   use_default?: boolean;
   template_file?: File | null;
   selectedValidators?: Array<{id: string, name: string}>
+  validators?: APIKey[];
 }
 
 export interface PersonaLabel {

@@ -332,7 +332,7 @@ export function AssistantEditor({
     pipeline_id: existingPersona?.pipeline_id,
     use_default: existingPersona?.use_default,
     template_file: null,
-    selectedValidators: existingPersona?.selectedValidators ?? [],
+    selectedValidators: existingPersona?.validators?.map((validator) => validator.id) ?? [],
   };
 
   interface AssistantPrompt {
@@ -644,7 +644,7 @@ export function AssistantEditor({
             num_chunks: numChunks,
             user_file_ids: selectedFiles.map((file) => file.id),
             user_folder_ids: selectedFolders.map((folder) => folder.id),
-            validator_ids: values.selectedValidators.map((validator) => validator.id),
+            validator_ids: values.selectedValidators.map((validator) => String(validator)),
           };
 
           let personaResponse;
