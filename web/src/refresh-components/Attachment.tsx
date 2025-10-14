@@ -11,7 +11,7 @@ export interface AttachmentsProps {
 export default function Attachments({ fileName, open }: AttachmentsProps) {
   return (
     <div className="flex items-center border bg-background-tint-00 rounded-12 p-spacing-inline gap-spacing-inline">
-      <div className="w-full h-full p-spacing-interline bg-background-tint-01 rounded-08">
+      <div className="p-spacing-interline bg-background-tint-01 rounded-08">
         <SvgFileText className="w-[1.25rem] h-[1.25rem] stroke-text-02" />
       </div>
       <div className="flex flex-col px-spacing-interline">

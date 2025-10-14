@@ -14,7 +14,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import SvgCopy from "@/icons/copy";
-import { copyAll } from "./copyingUtils";
+import { copyAll } from "@/app/chat/message/copyingUtils";
 
 interface FileDisplayProps {
   files: FileDescriptor[];
@@ -44,13 +44,9 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
           className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
-            {textFiles.map((file) => {
-              return (
-                <div key={file.id} className="w-fit">
-                  <Attachment fileName={file.name || file.id} />
-                </div>
-              );
-            })}
+            {textFiles.map((file) => (
+              <Attachment key={file.id} fileName={file.name || file.id} />
+            ))}
           </div>
         </div>
       )}
