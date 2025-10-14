@@ -97,10 +97,9 @@ export function InMessageImage({
         >
           <IconButton
             icon={FiDownload}
-            title="Download"
+            tooltip="Download"
             onClick={handleDownload}
           />
-        </div>
       </div>
     </>
   );
