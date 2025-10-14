@@ -9,7 +9,7 @@ import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
 import { Avatar } from "@/components/ui/avatar";
 import Text from "@/refresh-components/texts/Text";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import MenuButton from "@/refresh-components/buttons/MenuButton";
 import {
   Popover,
   PopoverContent,
@@ -84,29 +84,29 @@ function SettingsPopover({
           //   </NavigationTab>
           // )),
           showAdminPanel && (
-            <NavigationTab
+            <MenuButton
               key="admin-panel"
               href="/admin/indexing/status"
               icon={SvgSettings}
             >
               Admin Panel
-            </NavigationTab>
+            </MenuButton>
           ),
           showCuratorPanel && (
-            <NavigationTab
+            <MenuButton
               key="curator-panel"
               href="/admin/indexing/status"
               icon={SvgSettings}
             >
               Curator Panel
-            </NavigationTab>
+            </MenuButton>
           ),
           <div key="user-settings" data-testid="Settings/user-settings">
-            <NavigationTab icon={SvgUser} onClick={onUserSettingsClick}>
+            <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
-            </NavigationTab>
+            </MenuButton>
           </div>,
-          <NavigationTab
+          <MenuButton
             key="notifications"
             icon={SvgBell}
             onClick={onNotificationsClick}
@@ -116,17 +116,17 @@ function SettingsPopover({
                 ? `(${notifications.length})`
                 : ""
             }`}
-          </NavigationTab>,
+          </MenuButton>,
           null,
           showLogout && (
-            <NavigationTab
+            <MenuButton
               key="log-out"
               icon={SvgLogOut}
               danger
               onClick={handleLogout}
             >
               Log out
-            </NavigationTab>
+            </MenuButton>
           ),
         ]}
       </PopoverMenu>

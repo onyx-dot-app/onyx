@@ -3,14 +3,9 @@
 import React from "react";
 import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
-import {
-  TruncatedContent,
-  TruncatedProvider,
-  TruncatedTrigger,
-} from "@/refresh-components/texts/Truncated";
-import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 const textClasses = (active: boolean | undefined) =>
   ({
@@ -65,7 +60,7 @@ export default function SidebarTab({
 }: SidebarTabProps) {
   const variant = lowlight ? "lowlight" : "defaulted";
 
-  const content = (
+  const innerContent = (
     <div
       className={cn(
         "flex flex-row justify-center items-center p-spacing-interline-mini gap-spacing-inline rounded-08 cursor-pointer hover:bg-background-tint-03 group/SidebarTab w-full select-none",
@@ -93,9 +88,12 @@ export default function SidebarTab({
         )}
         {!folded &&
           (typeof children === "string" ? (
-            <TruncatedTrigger className={cn(textClasses(active)[variant])}>
+            <Truncated
+              className={cn(textClasses(active)[variant])}
+              side="right"
+            >
               {children}
-            </TruncatedTrigger>
+            </Truncated>
           ) : (
             children
           ))}
@@ -104,19 +102,10 @@ export default function SidebarTab({
     </div>
   );
 
-  const linkedContent = href ? <Link href={href}>{content}</Link> : content;
+  const content = href ? <Link href={href}>{innerContent}</Link> : innerContent;
 
-  if (typeof children !== "string") return linkedContent;
-
-  return folded ? (
-    <SimpleTooltip tooltip={children}>{linkedContent}</SimpleTooltip>
-  ) : (
-    <TruncatedProvider>
-      {linkedContent}
-
-      <TruncatedContent>
-        <Text inverted>{children}</Text>
-      </TruncatedContent>
-    </TruncatedProvider>
-  );
+  if (typeof children !== "string") return content;
+  if (folded)
+    return <SimpleTooltip tooltip={children}>{content}</SimpleTooltip>;
+  return content;
 }

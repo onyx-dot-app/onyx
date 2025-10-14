@@ -14,8 +14,8 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTruncated from "@/refresh-components/texts/SimpleTruncated";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Truncated from "@/refresh-components/texts/Truncated";
+import MenuButton from "@/refresh-components/buttons/MenuButton";
 import SvgEditBig from "@/icons/edit-big";
 import SvgTrash from "@/icons/trash";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
@@ -87,9 +87,9 @@ export default function AgentCard({
 
           <div className="flex-1 flex flex-col gap-padding-button">
             <div className="flex flex-row justify-between items-center">
-              <SimpleTruncated headingH3 text04>
+              <Truncated headingH3 text04>
                 {agent.name}
-              </SimpleTruncated>
+              </Truncated>
 
               {isOwnedByUser && (
                 <Popover open={kebabMenuOpen} onOpenChange={setKebabMenuOpen}>
@@ -106,24 +106,24 @@ export default function AgentCard({
                     <PopoverMenu>
                       {[
                         <div key="edit" data-testid="AgentCard/edit">
-                          <NavigationTab
+                          <MenuButton
                             icon={SvgEditBig}
                             href={`/assistants/edit/${agent.id}`}
                           >
                             Edit
-                          </NavigationTab>
+                          </MenuButton>
                         </div>,
                         isPaidEnterpriseFeaturesEnabled ? (
-                          <NavigationTab
+                          <MenuButton
                             key="stats"
                             icon={SvgBarChart}
                             href={`/assistants/stats/${agent.id}`}
                           >
                             Stats
-                          </NavigationTab>
+                          </MenuButton>
                         ) : undefined,
                         null,
-                        <NavigationTab
+                        <MenuButton
                           key="delete"
                           icon={SvgTrash}
                           onClick={() => {
@@ -133,7 +133,7 @@ export default function AgentCard({
                           danger
                         >
                           Delete
-                        </NavigationTab>,
+                        </MenuButton>,
                       ]}
                     </PopoverMenu>
                   </PopoverContent>
@@ -147,9 +147,9 @@ export default function AgentCard({
 
             <div className="flex flex-row items-center gap-spacing-interline">
               <div className="max-w-[33%]">
-                <SimpleTruncated secondaryBody text02>
+                <Truncated secondaryBody text02>
                   By {agent.owner?.email || "Onyx"} asdf
-                </SimpleTruncated>
+                </Truncated>
               </div>
               <Text secondaryBody text01>
                 •
