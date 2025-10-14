@@ -19,6 +19,8 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
+from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
@@ -32,7 +34,6 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
 class WebSearchResult(BaseModel):
-    tag: str
     title: str
     link: str
     snippet: str
@@ -45,7 +46,6 @@ class WebSearchResponse(BaseModel):
 
 
 class WebFetchResult(BaseModel):
-    tag: str
     title: str
     link: str
     full_content: str
@@ -54,10 +54,6 @@ class WebFetchResult(BaseModel):
 
 class WebFetchResponse(BaseModel):
     results: List[WebFetchResult]
-
-
-def short_tag(link: str, i: int) -> str:
-    return f"{i+1}"
 
 
 @tool_accounting
@@ -114,7 +110,6 @@ def _web_search_core(
     for i, r in enumerate(all_hits):
         results.append(
             WebSearchResult(
-                tag=short_tag(r.link, i),
                 title=r.title,
                 link=r.link,
                 snippet=r.snippet or "",
@@ -206,7 +201,7 @@ def _web_fetch_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: List[str],
     search_provider: WebSearchProvider,
-) -> WebFetchResponse:
+) -> list[LlmDoc]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -222,19 +217,13 @@ def _web_fetch_core(
     )
 
     docs = search_provider.contents(urls)
-    out = []
-    for i, d in enumerate(docs):
-        out.append(
-            WebFetchResult(
-                tag=short_tag(d.link, i),  # <-- add a tag
-                title=d.title,
-                link=d.link,
-                full_content=d.full_content,
-                published_date=(
-                    d.published_date.isoformat() if d.published_date else None
-                ),
-            )
-        )
+    # Convert web content to inference sections, then to LlmDocs
+    inference_sections = [
+        dummy_inference_section_from_internet_content(doc) for doc in docs
+    ]
+    out: list[LlmDoc] = [
+        llm_doc_from_inference_section(section) for section in inference_sections
+    ]
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
@@ -265,7 +254,7 @@ def _web_fetch_core(
         )
     )
 
-    return WebFetchResponse(results=out)
+    return out
 
 
 @function_tool
@@ -292,21 +281,21 @@ def web_fetch_tool(
     ## Args
     - urls (List[str]): Absolute URLs to retrieve.
 
-    ## Returns (JSON string)
-    {
-      "results": [
-        {
-          "tag": "short_ref",
-          "title": "...",
-          "link": "https://...",
-          "full_content": "...",
-          "published_date": "2025-10-01T12:34:56Z"
-        }
-      ]
-    }
+    ## Returns (string representation of list[LlmDoc])
+    A list of LlmDoc objects containing:
+    - document_id: Unique identifier for the document
+    - content: Full extracted content from the web page (truncated to 10000 chars)
+    - blurb: Title of the page
+    - semantic_identifier: URL of the page
+    - source_type: DocumentSource.WEB
+    - metadata: Additional metadata
+    - updated_at: Published date if available
+    - link: URL of the page
+    - source_links: Dictionary mapping to the URL
+    - match_highlights: List of highlighted matches
     """
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
     response = _web_fetch_core(run_context, urls, search_provider)
-    return response.model_dump_json()
+    return str(response)
