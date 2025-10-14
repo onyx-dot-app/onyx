@@ -24,6 +24,9 @@ import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CreateButton from "@/components/ui/createButton";
+import { Button } from "@/components/ui/button";
+import { FiEdit2, FiTrash } from "react-icons/fi";
+import { deleteApiKey } from "./lib";
 
 type Validator = {
   id: string;
@@ -62,7 +65,10 @@ function Main() {
 
   const newApiKeyButton = (
     <CreateButton
-      onClick={() => setShowCreateUpdateForm(true)}
+      onClick={() => {
+        setSelectedApiKey(undefined);
+        setShowCreateUpdateForm(true);
+      }}
       text={t(k.CREATE_VALIDATOR)}
     />
   );
@@ -78,6 +84,7 @@ function Main() {
             <TableHead>{t(k.VALIDATOR_NAME_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_DESCRIPTION_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_GROUPS_HEADER)}</TableHead>
+            <TableHead className="w-40">{t(k.ACTIONS)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -92,6 +99,40 @@ function Main() {
                   .map((g) => g.name)
                   .filter(Boolean)
                   .join(", ")}
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedApiKey(v as unknown as APIKey);
+                      setShowCreateUpdateForm(true);
+                    }}
+                  >
+                    <FiEdit2 className="mr-1" />
+                    {t(k.EDIT)}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={async () => {
+                      const response = await deleteApiKey(Number(v.id));
+                      if (!response.ok) {
+                        const errorMsg = await response.text();
+                        setPopup({
+                          type: "error",
+                          message: `Failed to delete validator ${errorMsg}`,
+                        });
+                        return;
+                      }
+                      mutate("/api/validators");
+                    }}
+                  >
+                    <FiTrash className="mr-1" />
+                    {t(k.DELETE)}
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
