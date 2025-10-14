@@ -330,7 +330,6 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # don't update the status if the user file is being deleted
                 if uf.status != UserFileStatus.DELETING:
                     uf.status = UserFileStatus.FAILED
-                db_session.refresh(uf)
                 db_session.add(uf)
                 db_session.commit()
 
