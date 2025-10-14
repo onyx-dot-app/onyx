@@ -11,11 +11,16 @@ import { MessageRenderer } from "../interfaces";
 import { truncateString } from "@/lib/utils";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
+import { OnyxDocument } from "@/lib/search/interfaces";
+import { ResultIcon } from "@/components/chat/sources/SourceCard";
 
 const MAX_TITLE_LENGTH = 25;
 
 const INITIAL_QUERIES_TO_SHOW = 3;
 const QUERIES_PER_EXPANSION = 5;
+
+const INITIAL_RESULTS_TO_SHOW = 3;
+const RESULTS_PER_EXPANSION = 10;
 
 const SEARCHING_MIN_DURATION_MS = 1000; // 1 second minimum for "Searching" state
 const SEARCHED_MIN_DURATION_MS = 1000; // 1 second minimum for "Searched" state
@@ -24,6 +29,7 @@ const constructCurrentSearchState = (
   packets: SearchToolPacket[]
 ): {
   queries: string[];
+  results: OnyxDocument[];
   isSearching: boolean;
   isComplete: boolean;
   isInternetSearch: boolean;
@@ -44,11 +50,22 @@ const constructCurrentSearchState = (
     .flatMap((delta) => delta?.queries || [])
     .filter((query, index, arr) => arr.indexOf(query) === index); // Remove duplicates
 
+  // Extract documents/results from ToolDelta packets
+  const seenDocIds = new Set<string>();
+  const results = searchDeltas
+    .flatMap((delta) => delta?.documents || [])
+    .filter((doc) => {
+      if (!doc || !doc.document_id) return false;
+      if (seenDocIds.has(doc.document_id)) return false;
+      seenDocIds.add(doc.document_id);
+      return true;
+    });
+
   const isSearching = Boolean(searchStart && !searchEnd);
   const isComplete = Boolean(searchStart && searchEnd);
   const isInternetSearch = searchStart?.is_internet_search || false;
 
-  return { queries, isSearching, isComplete, isInternetSearch };
+  return { queries, results, isSearching, isComplete, isInternetSearch };
 };
 
 export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
@@ -57,7 +74,7 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
   animate,
   children,
 }) => {
-  const { queries, isSearching, isComplete, isInternetSearch } =
+  const { queries, results, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
 
   // Track search timing for minimum display duration
@@ -71,6 +88,9 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
 
   // Track how many queries to show
   const [queriesToShow, setQueriesToShow] = useState(INITIAL_QUERIES_TO_SHOW);
+
+  // Track how many results to show
+  const [resultsToShow, setResultsToShow] = useState(INITIAL_RESULTS_TO_SHOW);
 
   // Track when search starts (even if the search completes instantly)
   useEffect(() => {
@@ -131,6 +151,16 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
   const status = useMemo(() => {
     const searchType = isInternetSearch ? "the web" : "internal documents";
 
+    // If we have documents to show and we're in the searched state, show "Searched"
+    if (results.length > 0) {
+      // If we're still showing as searching (before transition), show "Searching"
+      if (shouldShowAsSearching) {
+        return `Searching ${searchType}`;
+      }
+      // Otherwise show "Searched"
+      return `Searched ${searchType}`;
+    }
+
     // Handle states based on timing
     if (shouldShowAsSearched) {
       return `Searched ${searchType}`;
@@ -144,6 +174,7 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
     isComplete,
     shouldShowAsSearching,
     shouldShowAsSearched,
+    results.length,
     isInternetSearch,
   ]);
 
@@ -209,6 +240,65 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
           {/* If no queries, show a loading state */}
           {queries.length === 0 && <BlinkingDot />}
         </div>
+
+        {/* Only show results section for internal search, not web search */}
+        {!isInternetSearch && (
+          <div className="flex flex-col mt-3">
+            <div className="text-xs font-medium mb-1 ml-1">Documents</div>
+            <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
+              {results.slice(0, resultsToShow).map((result, index) => (
+                <div
+                  key={result.document_id}
+                  className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                  style={{
+                    animationDelay: `${index * 30}ms`,
+                    animationFillMode: "backwards",
+                  }}
+                >
+                  <SourceChip2
+                    icon={<ResultIcon doc={result} size={10} />}
+                    title={truncateString(
+                      result.semantic_identifier || "",
+                      MAX_TITLE_LENGTH
+                    )}
+                    onClick={() => {
+                      if (result.link) {
+                        window.open(result.link, "_blank");
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+              {/* Show a blurb if there are more results than we are displaying */}
+              {results.length > resultsToShow && (
+                <div
+                  className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                  style={{
+                    animationDelay: `${
+                      Math.min(resultsToShow, results.length) * 30
+                    }ms`,
+                    animationFillMode: "backwards",
+                  }}
+                >
+                  <SourceChip2
+                    title={`${results.length - resultsToShow} more...`}
+                    onClick={() => {
+                      setResultsToShow((prevResults) =>
+                        Math.min(
+                          prevResults + RESULTS_PER_EXPANSION,
+                          results.length
+                        )
+                      );
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* If no results, and queries are showing, show a loading state */}
+              {results.length === 0 && queries.length > 0 && <BlinkingDot />}
+            </div>
+          </div>
+        )}
       </div>
     ),
   });
