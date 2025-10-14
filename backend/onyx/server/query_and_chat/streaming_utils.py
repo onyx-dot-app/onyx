@@ -489,18 +489,19 @@ def translate_db_message_to_packets(
 ) -> EndStepPacketList:
     use_simple_translation = True
     if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
-        get_default_feature_flag_provider()
-        CURRENT_TENANT_ID_CONTEXTVAR.get()
-        # Get user from chat_message if available
-        chat_message.chat_session.user if chat_message.chat_session else None
-        # if user and tenant_id:
-        #     use_simple_translation = feature_flag_provider.feature_enabled_for_user_tenant(
-        #         flag_key="simple-agent-framework",
-        #         user_id=user.id,
-        #         user_properties={"tenant_id": tenant_id, "email": user.email},
-        #     )
-        # else:
-        #     use_simple_translation = False
+        feature_flag_provider = get_default_feature_flag_provider()
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        user = chat_message.chat_session.user if chat_message.chat_session else None
+        if user and tenant_id:
+            use_simple_translation = (
+                feature_flag_provider.feature_enabled_for_user_tenant(
+                    flag_key="simple-agent-framework",
+                    user_id=user.id,
+                    user_properties={"tenant_id": tenant_id, "email": user.email},
+                )
+            )
+        else:
+            use_simple_translation = False
 
     if use_simple_translation:
         return translate_db_message_to_packets_simple(
