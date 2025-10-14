@@ -741,7 +741,8 @@ def stream_chat_message_objects(
             )
         feature_flag_provider = get_default_feature_flag_provider()
         simple_agent_framework_enabled = (
-            feature_flag_provider.feature_enabled_for_user_tenant(
+            user
+            and feature_flag_provider.feature_enabled_for_user_tenant(
                 flag_key="simple-agent-framework",
                 user_id=user,
                 tenant_id=chat_session.tenant_id,
