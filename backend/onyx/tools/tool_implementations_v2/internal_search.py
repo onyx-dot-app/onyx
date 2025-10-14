@@ -161,7 +161,8 @@ def internal_search_tool(
     ---
     ## Decision boundary
     - MUST call internal_search_tool if the user's query requires internal information, like
-    if they reference "we" or "us" or "our" or "internal" for example.
+    if it references "we" or "us" or "our" or "internal" or if it references
+    the organization the user works for.
 
     ## Usage hints
     - Batch a list of natural-language queries per call.

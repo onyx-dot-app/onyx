@@ -18,6 +18,7 @@ from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
 from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -47,7 +48,7 @@ from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
@@ -341,8 +342,8 @@ def translate_db_message_to_packets_simple(
                     tool_call_ids.append(sub_step.sub_step_tool_id)
 
                     sub_step_cited_docs = sub_step.cited_doc_results
+                    sub_step_saved_search_docs: list[SavedSearchDoc] = []
                     if isinstance(sub_step_cited_docs, list):
-                        sub_step_saved_search_docs: list[SavedSearchDoc] = []
                         for doc_data in sub_step_cited_docs:
                             doc_data["db_doc_id"] = 1
                             doc_data["boost"] = 1
@@ -371,7 +372,7 @@ def translate_db_message_to_packets_simple(
                             )
                     step_nr += 1
 
-                    if sub_step.is_web_fetch:
+                    if sub_step.is_web_fetch and len(sub_step_saved_search_docs) > 0:
                         is_web_fetch = True
                         fetches.append(sub_step_saved_search_docs)
 
@@ -490,18 +491,13 @@ def translate_db_message_to_packets(
     use_simple_translation = False
     if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
         feature_flag_provider = get_default_feature_flag_provider()
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        tenant_id = get_current_tenant_id()
         user = chat_message.chat_session.user if chat_message.chat_session else None
-        if user and tenant_id:
-            use_simple_translation = (
-                feature_flag_provider.feature_enabled_for_user_tenant(
-                    flag_key="simple-agent-framework",
-                    user_id=user.id,
-                    user_properties={"tenant_id": tenant_id, "email": user.email},
-                )
-            )
-        else:
-            use_simple_translation = False
+        use_simple_translation = feature_flag_provider.feature_enabled_for_user_tenant(
+            flag_key=SIMPLE_AGENT_FRAMEWORK,
+            user=user,
+            tenant_id=tenant_id,
+        )
 
     if use_simple_translation:
         return translate_db_message_to_packets_simple(

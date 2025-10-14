@@ -15,6 +15,7 @@ from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -31,7 +32,7 @@ class MockFeatureFlagProvider(FeatureFlagProvider):
     def feature_enabled(
         self, flag_key: str, user_id: Any, user_properties: dict[str, Any] | None = None
     ) -> bool:
-        if flag_key == "simple-agent-framework":
+        if flag_key == SIMPLE_AGENT_FRAMEWORK:
             return self.enabled
         return False
 

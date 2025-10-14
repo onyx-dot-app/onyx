@@ -76,6 +76,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -742,7 +743,7 @@ def stream_chat_message_objects(
         feature_flag_provider = get_default_feature_flag_provider()
         simple_agent_framework_enabled = (
             feature_flag_provider.feature_enabled_for_user_tenant(
-                flag_key="simple-agent-framework",
+                flag_key=SIMPLE_AGENT_FRAMEWORK,
                 user=user,
                 tenant_id=tenant_id,
             )
