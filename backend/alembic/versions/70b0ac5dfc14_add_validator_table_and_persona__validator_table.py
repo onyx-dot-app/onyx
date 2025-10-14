@@ -1,8 +1,8 @@
-"""add validator table and association table with persona
+"""add_validator_table_and_persona__validator_table
 
-Revision ID: 2b9492e28665
+Revision ID: 70b0ac5dfc14
 Revises: 5eb9b14f4656
-Create Date: 2025-10-06 17:35:49.231360
+Create Date: 2025-10-14 12:53:56.320116
 
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "2b9492e28665"
+revision = "70b0ac5dfc14"
 down_revision = "5eb9b14f4656"
 branch_labels = None
 depends_on = None
@@ -71,6 +71,7 @@ def upgrade() -> None:
             ["user.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("name", name="uq_validator_name"),
     )
     op.create_table(
         "persona__validator",
@@ -79,10 +80,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["persona_id"],
             ["persona.id"],
+            name="persona__validator_persona_id_fkey",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["validator_id"],
             ["validator.id"],
+            name="persona__validator_validator_id_fkey",
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("persona_id", "validator_id"),
     )
