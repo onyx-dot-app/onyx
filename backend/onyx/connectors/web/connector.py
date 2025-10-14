@@ -537,7 +537,7 @@ class WebConnector(LoadConnector):
         # First do a HEAD request to check content type without downloading the entire content
         auth_cookies = set_auth_cookies()
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True)
+            initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True, timeout=(5, 10))
         if eea_global_auth.get("login") is not None and "@@download/file" in initial_url:
             head_response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True, stream=True)
 
