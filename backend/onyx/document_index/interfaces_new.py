@@ -1,13 +1,14 @@
 import abc
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel
 
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
@@ -17,31 +18,32 @@ from shared_configs.model_server_models import Embedding
 # databases, the individual objects stored are called documents, but in this case it refers to a chunk.
 
 
-@dataclass(frozen=True)
-class DocumentInsertionRecord:
+class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document
     """
+
+    model_config = {"frozen": True}
 
     document_id: str
     already_existed: bool
 
 
-@dataclass(frozen=True)
-class DocumentSectionRequest:
+class DocumentSectionRequest(BaseModel):
     """
     Request for a document section or whole document
     If no min_chunk_ind is provided it should start at the beginning of the document
     If no max_chunk_ind is provided it should go to the end of the document
     """
 
+    model_config = {"frozen": True}
+
     document_id: str
     min_chunk_ind: int | None = None
     max_chunk_ind: int | None = None
 
 
-@dataclass
-class IndexingMetadata:
+class IndexingMetadata(BaseModel):
     """
     Information about chunk counts for efficient cleaning / updating of document chunks. A common pattern to ensure
     that no chunks are left over is to delete all of the chunks for a document and then re-index the document. This
@@ -53,8 +55,7 @@ class IndexingMetadata:
     large_chunks_enabled: bool  # Meaning larger chunks should also get deleted
 
 
-@dataclass
-class DocumentMetadata:
+class DocumentMetadata(BaseModel):
     """
     Document information that needs to be inserted into Postgres on first time encountering this
     document during indexing across any of the connectors.
@@ -66,8 +67,7 @@ class DocumentMetadata:
     semantic_identifier: str
     first_link: str
     doc_updated_at: datetime | None = None
-    # Emails, not necessarily attached to users
-    # Users may not be in Onyx
+    # Emails, not necessarily attached to users. Users may not be in Onyx.
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
     from_ingestion_api: bool = False
@@ -76,8 +76,7 @@ class DocumentMetadata:
     doc_metadata: dict[str, Any] | None = None
 
 
-@dataclass
-class UserProjects:
+class UserProjects(BaseModel):
     """
     Used by the Projects feature. Documents added to projects must also be indexed for RAG.
     """
@@ -85,8 +84,7 @@ class UserProjects:
     user_project_ids: list[int] | None = None
 
 
-@dataclass
-class MetadataUpdateRequest:
+class MetadataUpdateRequest(BaseModel):
     """
     Updates to the documents that can happen without there being an update to the contents of the document.
     """
@@ -182,9 +180,8 @@ class Deletable(abc.ABC):
         self,
         doc_id: str,
         *,
-        chunk_count: (
-            int | None
-        ),  # Passed in in case it helps the efficiency of the delete implementation
+        # Passed in in case it helps the efficiency of the delete implementation
+        chunk_count: int | None,
     ) -> int:
         """
         Given a single document, hard delete all of the chunks for the document from the document index
@@ -235,7 +232,7 @@ class IdRetrievalCapable(abc.ABC):
     def id_based_retrieval(
         self,
         chunk_requests: list[DocumentSectionRequest],
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """
         Fetch chunk(s) based on document id
 
@@ -272,7 +269,7 @@ class HybridCapable(abc.ABC):
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """
         Run hybrid search and return a list of inference chunks.
 
@@ -306,7 +303,7 @@ class RandomCapable(abc.ABC):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 10,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """Retrieve random chunks matching the filters"""
         raise NotImplementedError
 
