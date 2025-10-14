@@ -82,7 +82,11 @@ def _internal_search_core(
                 # get retrieved docs to send to the rest of the graph
                 if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
                     response = cast(SearchResponseSummary, tool_response.response)
-                    retrieved_sections: list[InferenceSection] = response.top_sections
+                    # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
+                    docs_to_feed_llm = 15
+                    retrieved_sections: list[InferenceSection] = response.top_sections[
+                        :docs_to_feed_llm
+                    ]
 
                     # Convert InferenceSections to LlmDocs for return value
                     retrieved_llm_docs_for_query = [
