@@ -33,7 +33,7 @@ def _add_user_filters(
     User__UG = aliased(User__UserGroup)
 
     stmt = (
-        stmt.outerjoin(Persona.validators)
+        stmt.outerjoin(Validator.personas)
         .outerjoin(
             Persona__UG,
             Persona__UG.persona_id == Persona.id,
