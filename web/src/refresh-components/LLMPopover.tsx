@@ -4,23 +4,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  getDisplayNameForModel,
-  LlmDescriptor,
-  useLlmManager,
-} from "@/lib/hooks";
+import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { modelSupportsImageInput, structureValue } from "@/lib/llm/utils";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/Text";
 
 interface LLMPopoverProps {
+  llmManager: LlmManager;
   requiresImageGeneration?: boolean;
   folded?: boolean;
   onSelect?: (value: string) => void;
@@ -28,18 +24,13 @@ interface LLMPopoverProps {
 }
 
 export default function LLMPopover({
+  llmManager,
   requiresImageGeneration,
   folded,
   onSelect,
   currentModelName,
 }: LLMPopoverProps) {
-  const { currentAgent } = useAgentsContext();
-  const { currentChat, llmProviders } = useChatContext();
-  const llmManager = useLlmManager(
-    llmProviders,
-    currentChat || undefined,
-    currentAgent || undefined
-  );
+  const { llmProviders } = useChatContext();
 
   const [open, setOpen] = useState(false);
   const { user } = useUser();
@@ -89,7 +80,12 @@ export default function LLMPopover({
         {getDisplayNameForModel(llmManager.currentLlm.modelName)}
       </SelectButton>
     ),
-    [llmManager.currentLlm, open, setOpen, folded]
+    [
+      llmManager.currentLlm.modelName,
+      llmManager.currentLlm.provider,
+      open,
+      folded,
+    ]
   );
 
   const llmOptionsToChooseFrom = useMemo(
@@ -117,7 +113,7 @@ export default function LLMPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div>{triggerContent}</div>
+        <div data-testid="llm-popover-trigger">{triggerContent}</div>
       </PopoverTrigger>
       <PopoverContent
         side="top"

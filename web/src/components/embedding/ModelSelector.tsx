@@ -3,6 +3,7 @@ import {
   EmbeddingModelDescriptor,
   getIconForRerankType,
   getTitleForRerankType,
+  getFormattedProviderName,
   HostedEmbeddingModel,
   CloudEmbeddingModel,
 } from "./interfaces";
@@ -47,7 +48,7 @@ export function ModelPreview({
             <div>
               <span className="font-semibold text-text-700">Provider:</span>
               <div className="text-text-600">
-                {model.provider_type || "Self-hosted"}
+                {getFormattedProviderName(model.provider_type)}
               </div>
             </div>
 

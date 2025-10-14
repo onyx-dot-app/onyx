@@ -32,7 +32,10 @@ import SvgBubbleText from "@/icons/bubble-text";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import { ModalIds, useModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  ModalIds,
+  useChatModal,
+} from "@/refresh-components/contexts/ChatModalContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import SvgTrash from "@/icons/trash";
@@ -476,7 +479,7 @@ function AppSidebarInner() {
   const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
-  const { toggleModal } = useModal();
+  const { toggleModal } = useChatModal();
   const { chatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
 
@@ -545,16 +548,18 @@ function AppSidebarInner() {
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <div className="flex flex-col gap-spacing-interline">
-          <NavigationTab
-            icon={SvgEditBig}
-            className="!w-full"
-            folded={folded}
-            onClick={() => route({})}
-            active={Array.from(searchParams).length === 0}
-            tooltip
-          >
-            New Session
-          </NavigationTab>
+          <div data-testid="AppSidebar/new-session">
+            <NavigationTab
+              icon={SvgEditBig}
+              className="!w-full"
+              folded={folded}
+              onClick={() => route({})}
+              active={Array.from(searchParams).length === 0}
+              tooltip
+            >
+              New Session
+            </NavigationTab>
+          </div>
 
           {folded && (
             <>
@@ -600,13 +605,15 @@ function AppSidebarInner() {
                     ))}
                   </SortableContext>
                 </DndContext>
-                <NavigationTab
-                  icon={SvgMoreHorizontal}
-                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                  lowlight
-                >
-                  More Agents
-                </NavigationTab>
+                <div data-testid="AppSidebar/more-agents">
+                  <NavigationTab
+                    icon={SvgMoreHorizontal}
+                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                    lowlight
+                  >
+                    More Agents
+                  </NavigationTab>
+                </div>
               </SidebarSection>
 
               <SidebarSection title="Projects">

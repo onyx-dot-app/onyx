@@ -30,7 +30,10 @@ export default function MessageSwitcher({
   const next = handle(totalPages, handleNext);
 
   return (
-    <div className="flex flex-row items-center gap-spacing-inline">
+    <div
+      className="flex flex-row items-center gap-spacing-inline"
+      data-testid="MessageSwitcher/container"
+    >
       <IconButton
         icon={SvgChevronLeft}
         onClick={previous}

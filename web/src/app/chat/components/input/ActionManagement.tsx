@@ -30,7 +30,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterManager, useFilters, useSourcePreferences } from "@/lib/hooks";
+import { useFilters, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -40,6 +40,7 @@ import {
   FiLock,
   FiCheck,
   FiLoader,
+  FiSettings,
 } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
@@ -93,9 +94,11 @@ interface ActionItemProps {
   onToggle: () => void;
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
+  hasNoConnectors?: boolean;
+  tooltipSide?: "top" | "right" | "bottom" | "left";
 }
 
-export function ActionItem({
+function ActionItem({
   tool,
   Icon: ProvidedIcon,
   label: providedLabel,
@@ -104,12 +107,18 @@ export function ActionItem({
   onToggle,
   onForceToggle,
   onSourceManagementOpen,
+  hasNoConnectors = false,
+  tooltipSide = "left",
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const label = tool ? tool.display_name || tool.name : providedLabel!;
   // Generate test ID based on tool name if available
   const toolName = tool?.name || providedLabel || "";
+
+  // Check if this is the internal search tool with no connectors
+  const isSearchToolWithNoConnectors =
+    tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
 
   return (
     <TooltipProvider>
@@ -119,20 +128,25 @@ export function ActionItem({
             data-testid={`tool-option-${toolName}`}
             className={`
             group
-            flex 
-            items-center 
-            justify-between 
-            px-2 
-            cursor-pointer 
-            hover:bg-background-100 
+            flex
+            items-center
+            justify-between
+            px-2
+            cursor-pointer
+            hover:bg-neutral-100
             dark:hover:bg-neutral-800
             dark:text-neutral-300
-            rounded-lg 
-            py-2 
+            rounded-lg
+            py-2
             mx-1
             ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
           `}
             onClick={() => {
+              // If no connectors, don't allow forcing the tool
+              if (isSearchToolWithNoConnectors) {
+                return;
+              }
+
               // If disabled, un-disable the tool
               if (onToggle && disabled) {
                 onToggle();
@@ -143,7 +157,7 @@ export function ActionItem({
           >
             <div
               className={`flex items-center gap-2 flex-1 ${
-                disabled ? "opacity-50" : ""
+                isSearchToolWithNoConnectors || disabled ? "opacity-50" : ""
               } ${isForced && "text-blue-500"}`}
             >
               <Icon
@@ -156,57 +170,83 @@ export function ActionItem({
               />
               <span
                 className={`text-sm font-medium select-none ${
-                  disabled ? "line-through" : ""
+                  isSearchToolWithNoConnectors || disabled ? "line-through" : ""
                 }`}
               >
                 {label}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div
-                className={`
-                  flex
-                  items-center
-                  gap-2
-                  transition-opacity
-                  duration-200
-                  ${
-                    disabled
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100"
-                  }
-                `}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle();
-                }}
-              >
-                <DisableIcon
-                  className={`transition-colors cursor-pointer ${
-                    disabled
-                      ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
-                      : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-                  }`}
-                />
-              </div>
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+              {!isSearchToolWithNoConnectors && (
                 <div
+                  className={`
+                    flex
+                    items-center
+                    gap-2
+                    transition-opacity
+                    duration-200
+                    ${
+                      disabled
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100"
+                    }
+                  `}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSourceManagementOpen?.();
+                    onToggle();
                   }}
                 >
-                  <FiChevronRight
-                    size={16}
-                    className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                  <DisableIcon
+                    className={`transition-colors cursor-pointer ${
+                      disabled
+                        ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
+                        : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                    }`}
                   />
+                </div>
+              )}
+              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+                <div
+                  className={`
+                    flex
+                    items-center
+                    gap-2
+                    transition-opacity
+                    duration-200
+                    ${
+                      isSearchToolWithNoConnectors
+                        ? "opacity-0 group-hover:opacity-100"
+                        : ""
+                    }
+                  `}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isSearchToolWithNoConnectors) {
+                      // Navigate to add connector page
+                      window.location.href = "/admin/add-connector";
+                    } else {
+                      onSourceManagementOpen?.();
+                    }
+                  }}
+                >
+                  {isSearchToolWithNoConnectors ? (
+                    <FiSettings
+                      size={16}
+                      className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                    />
+                  ) : (
+                    <FiChevronRight
+                      size={16}
+                      className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                    />
+                  )}
                 </div>
               )}
             </div>
           </div>
         </TooltipTrigger>
         {tool?.description && (
-          <TooltipContent side="left" width="max-w-xs">
+          <TooltipContent side={tooltipSide} width="max-w-xs">
             <Text inverted>{tool.description}</Text>
           </TooltipContent>
         )}
@@ -247,6 +287,10 @@ function MCPServerItem({
   isLoading,
 }: MCPServerItemProps) {
   const itemRef = useRef<HTMLDivElement>(null);
+  const showAuthTrigger =
+    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    server.auth_type !== MCPAuthenticationType.NONE;
+  const showReauthButton = showAuthTrigger && isAuthenticated;
 
   const getServerIcon = () => {
     if (isLoading) {
@@ -264,11 +308,13 @@ function MCPServerItem({
     return <FiLock className="text-red-500" />;
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent closing the main popup
+  const handleClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
     if (isAuthenticated && itemRef.current) {
       onToggleExpand(itemRef.current);
-    } else if (!isAuthenticated) {
+      return;
+    }
+    if (showAuthTrigger) {
       onAuthenticate();
     }
   };
@@ -278,16 +324,16 @@ function MCPServerItem({
       ref={itemRef}
       className={`
         group
-        flex 
-        items-center 
-        justify-between 
-        px-2 
-        cursor-pointer 
-        hover:bg-background-100 
+        flex
+        items-center
+        justify-between
+        px-2
+        cursor-pointer
+        hover:bg-neutral-100
         dark:hover:bg-neutral-800
         dark:text-neutral-300
-        rounded-lg 
-        py-2 
+        rounded-lg
+        py-2
         mx-1
         ${isExpanded ? "bg-accent-100 hover:bg-accent-200" : ""}
       `}
@@ -304,12 +350,28 @@ function MCPServerItem({
           </span>
         )}
       </div>
-      {isAuthenticated && tools.length > 0 && (
-        <FiChevronRight
-          className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
-          size={14}
-        />
-      )}
+      <div className="flex items-center gap-1">
+        {showReauthButton && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAuthenticate();
+            }}
+            className="p-1 text-neutral-500 hover:text-neutral-900 hover:bg-background-200 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+            aria-label="Re-authenticate MCP server"
+            title="Re-authenticate"
+          >
+            <FiKey size={14} />
+          </button>
+        )}
+        {isAuthenticated && tools.length > 0 && (
+          <FiChevronRight
+            className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+            size={14}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -443,6 +505,8 @@ function MCPToolsList({
               onToggle={() => toggleToolForCurrentAssistant(tool.id)}
               onForceToggle={() => toggleForcedTool(tool.id)}
               onSourceManagementOpen={onSourceManagementOpen}
+              hasNoConnectors={false}
+              tooltipSide="right"
             />
           ))
         )}
@@ -520,8 +584,11 @@ export function ActionToggle({
 
   const { isAdmin, isCurator } = useUser();
 
-  const { availableTools } = useChatContext();
+  const { availableTools, ccPairs } = useChatContext();
   const availableToolIds = availableTools.map((tool) => tool.id);
+
+  // Check if there are any connectors available
+  const hasNoConnectors = ccPairs.length === 0;
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -584,9 +651,26 @@ export function ActionToggle({
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
-  const displayTools = selectedAssistant.tools.filter(
-    (tool) => !tool.mcp_server_id && availableToolIds.includes(tool.id)
-  );
+  // Also filter out internal search tool for basic users when there are no connectors
+  const displayTools = selectedAssistant.tools.filter((tool) => {
+    // Filter out MCP tools
+    if (tool.mcp_server_id) return false;
+
+    // Filter out tools that are not available
+    if (!availableToolIds.includes(tool.id)) return false;
+
+    // Filter out internal search tool for non-admin/curator users when there are no connectors
+    if (
+      tool.in_code_tool_id === SEARCH_TOOL_ID &&
+      hasNoConnectors &&
+      !isAdmin &&
+      !isCurator
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
@@ -861,13 +945,15 @@ export function ActionToggle({
         >
           {/* Search Input */}
           {!showSourceManagement && (
-            <InputTypeIn
-              placeholder="Search Menu"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              autoFocus
-              internal
-            />
+            <div className="pt-1 mx-2">
+              <InputTypeIn
+                placeholder="Search Menu"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                autoFocus
+                internal
+              />
+            </div>
           )}
 
           {/* Options */}
@@ -905,9 +991,6 @@ export function ActionToggle({
                       />
                     </div>
                     {(() => {
-                      const allSourceIds = getConfiguredSources(
-                        availableSources
-                      ).map((source) => source.uniqueKey);
                       const anyEnabled = selectedSources.length > 0;
                       if (anyEnabled) {
                         return (
@@ -1113,6 +1196,7 @@ export function ActionToggle({
                       setOpen(false);
                     }}
                     onSourceManagementOpen={() => setShowSourceManagement(true)}
+                    hasNoConnectors={hasNoConnectors}
                   />
                 ))}
 
@@ -1180,7 +1264,7 @@ export function ActionToggle({
                 they are the only ones who can manage actions. */}
                 {(isAdmin || isCurator) && (
                   <>
-                    <div className="border-b border-border mx-3.5" />
+                    <div className="border-b border-border mx-3.5 mt-2" />
                     <Link href="/admin/actions">
                       <button
                         className="
@@ -1204,7 +1288,7 @@ export function ActionToggle({
                           text-text-500
                           dark:text-neutral-500
                           dark:hover:bg-neutral-800
-                          hover:bg-background-100
+                          hover:bg-neutral-100
                           hover:text-text-500
                           transition-colors
                           rounded-lg

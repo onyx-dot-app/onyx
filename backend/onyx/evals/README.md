@@ -14,7 +14,7 @@ The evaluation system uses [Braintrust](https://www.braintrust.dev/) to run auto
 
 Kick off a remote job
 ```bash
-onyx/backend$ python onyx/evals/eval_cli.py --remote --api-key <SUPER_CLOUD_USER_API_KEY> --search-permissions-email <email account to reference> --remote --remote-dataset-name Simple
+onyx/backend$ python -m dotenv -f .vscode/.env run -- python onyx/evals/eval_cli.py --remote --api-key <SUPER_CLOUD_USER_API_KEY> --search-permissions-email <email account to reference> --remote --remote-dataset-name Simple
 ```
 
 You can also run the CLI directly from the command line:

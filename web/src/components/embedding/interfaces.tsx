@@ -266,10 +266,10 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.GOOGLE,
-        model_name: "text-embedding-005",
-        description: "Google's most recent text embedding model.",
+        model_name: "gemini-embedding-001",
+        description: "Google's Gemini embedding model. Powerful and efficient.",
         pricePerMillion: 0.025,
-        model_dim: 768,
+        model_dim: 3072,
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
@@ -279,8 +279,8 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
       {
         provider_type: EmbeddingProvider.GOOGLE,
-        model_name: "textembedding-gecko@003",
-        description: "Google's Gecko embedding model. Powerful and efficient.",
+        model_name: "text-embedding-005",
+        description: "Smaller, lighter-weight embedding model from Google.",
         pricePerMillion: 0.025,
         model_dim: 768,
         normalize: false,
@@ -332,6 +332,27 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     ],
   },
 ];
+
+export const getFormattedProviderName = (providerType: string | null) => {
+  if (!providerType) return "Self-hosted";
+
+  switch (providerType) {
+    case "openai":
+      return "OpenAI";
+    case "cohere":
+      return "Cohere";
+    case "voyage":
+      return "Voyage AI";
+    case "google":
+      return "Google";
+    case "litellm":
+      return "LiteLLM";
+    case "azure":
+      return "Azure";
+    default:
+      return providerType.charAt(0).toUpperCase() + providerType.slice(1);
+  }
+};
 
 export const getTitleForRerankType = (type: string) => {
   switch (type) {

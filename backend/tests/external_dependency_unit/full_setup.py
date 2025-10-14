@@ -12,7 +12,6 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
-from onyx.seeding.load_docs import seed_initial_documents
 from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
 from shared_configs import configs as shared_configs_module
@@ -30,7 +29,7 @@ def ensure_full_deployment_setup(
 
     - Initializes DB engine and sets tenant context
     - Skips model warm-ups during setup
-    - Runs setup_onyx (Postgres defaults, Vespa indices, seeded docs)
+    - Runs setup_onyx (Postgres defaults, Vespa indices)
     - Initializes file store (best-effort)
     - Ensures Vespa indices exist
     - Installs NLTK stopwords and punkt_tab
@@ -87,8 +86,6 @@ def ensure_full_deployment_setup(
                 raise RuntimeError(
                     "Vespa did not initialize within the specified timeout."
                 )
-
-        seed_initial_documents(db_session, tenant)
 
         _SETUP_COMPLETE = True
     finally:

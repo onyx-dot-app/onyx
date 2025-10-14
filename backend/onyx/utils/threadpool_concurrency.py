@@ -283,7 +283,7 @@ def run_functions_in_parallel(
     return results
 
 
-def run_async_sync(coro: Awaitable[T]) -> T:
+def run_async_sync_no_cancel(coro: Awaitable[T]) -> T:
     """
     async-to-sync converter. Basically just executes asyncio.run in a separate thread.
     Which is probably somehow inefficient or not ideal but fine for now.

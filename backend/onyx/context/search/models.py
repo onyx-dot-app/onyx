@@ -423,6 +423,35 @@ class SavedSearchDoc(SearchDoc):
         """Create SavedSearchDoc from serialized dictionary data (e.g., from database JSON)"""
         return cls(**data)
 
+    @classmethod
+    def from_url(cls, url: str) -> "SavedSearchDoc":
+        """Create a SavedSearchDoc from a URL for internet search documents.
+
+        Uses the INTERNET_SEARCH_DOC_ prefix for document_id to match the format
+        used by inference sections created from internet content.
+        """
+        return cls(
+            # db_doc_id can be a filler value since these docs are not saved to the database.
+            db_doc_id=0,
+            document_id="INTERNET_SEARCH_DOC_" + url,
+            chunk_ind=0,
+            semantic_identifier=url,
+            link=url,
+            blurb="",
+            source_type=DocumentSource.WEB,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            is_relevant=None,
+            relevance_explanation=None,
+            match_highlights=[],
+            updated_at=None,
+            primary_owners=None,
+            secondary_owners=None,
+            is_internet=True,
+        )
+
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, SavedSearchDoc):
             return NotImplemented

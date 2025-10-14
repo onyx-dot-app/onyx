@@ -70,7 +70,12 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Single thread (monitoring doesn't need parallelism)
    - Cloud-specific monitoring tasks
 
-8. **Beat Worker** (`beat`)
+8. **User File Processing Worker** (`user_file_processing`)
+   - Processes user-uploaded files
+   - Handles user file indexing and project synchronization
+   - Configurable concurrency
+
+9. **Beat Worker** (`beat`)
    - Celery's scheduler for periodic tasks
    - Uses DynamicTenantScheduler for multi-tenant support
    - Schedules tasks like:
@@ -81,6 +86,31 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - KG processing (every 60 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
+
+#### Worker Deployment Modes
+
+Onyx supports two deployment modes for background workers, controlled by the `USE_LIGHTWEIGHT_BACKGROUND_WORKER` environment variable:
+
+**Lightweight Mode** (default, `USE_LIGHTWEIGHT_BACKGROUND_WORKER=true`):
+- Runs a single consolidated `background` worker that handles all background tasks:
+  - Pruning operations (from `heavy` worker)
+  - Knowledge graph processing (from `kg_processing` worker)
+  - Monitoring tasks (from `monitoring` worker)
+  - User file processing (from `user_file_processing` worker)
+- Lower resource footprint (single worker process)
+- Suitable for smaller deployments or development environments
+- Default concurrency: 6 threads
+
+**Standard Mode** (`USE_LIGHTWEIGHT_BACKGROUND_WORKER=false`):
+- Runs separate specialized workers as documented above (heavy, kg_processing, monitoring, user_file_processing)
+- Better isolation and scalability
+- Can scale individual workers independently based on workload
+- Suitable for production deployments with higher load
+
+The deployment mode affects:
+- **Backend**: Worker processes spawned by supervisord or dev scripts
+- **Helm**: Which Kubernetes deployments are created
+- **Dev Environment**: Which workers `dev_run_background_jobs.py` spawns
 
 #### Key Features
 

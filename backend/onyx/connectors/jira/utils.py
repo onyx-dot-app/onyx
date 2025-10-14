@@ -65,6 +65,7 @@ def extract_text_from_adf(adf: dict | None) -> str:
 
     WARNING: This function is incomplete and will e.g. skip lists!
     """
+    # TODO: complete this function
     texts = []
     if adf is not None and "content" in adf:
         for block in adf["content"]:

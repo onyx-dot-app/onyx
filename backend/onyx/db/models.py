@@ -2473,6 +2473,7 @@ class Tool(Base):
     mcp_server_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
     )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
@@ -3283,7 +3284,9 @@ class UserFile(Base):
         back_populates="user_files",
     )
     file_id: Mapped[str] = mapped_column(nullable=False)
-    document_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        nullable=False
+    )  # TODO(subash): legacy document_id, will be removed in a future migration
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow

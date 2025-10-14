@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -87,12 +86,6 @@ class GraphConfig(BaseModel):
     behavior: GraphSearchConfig
     # Only needed for agentic search
     persistence: GraphPersistence
-
-    @model_validator(mode="after")
-    def validate_search_tool(self) -> "GraphConfig":
-        if self.behavior.use_agentic_search and self.tooling.search_tool is None:
-            raise ValueError("search_tool must be provided for agentic search")
-        return self
 
     class Config:
         arbitrary_types_allowed = True

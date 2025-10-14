@@ -1,13 +1,12 @@
 import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser } from "../utils/auth";
+import { loginAsRandomUser, loginAs } from "../utils/auth";
 import {
-  navigateToAssistantInHistorySidebar,
   sendMessage,
   verifyCurrentModel,
   switchModel,
   startNewChat,
-  verifyAssistantIsChosen,
 } from "../utils/chatActions";
+import { ensureImageGenerationEnabled } from "../utils/assistantUtils";
 
 // fails in CI, works locally
 // test won't be relevant soon as we'll have a default assistant
@@ -24,10 +23,12 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
 
   // Configure user settings: Set default model to o3 Mini
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").click();
+  await page.getByTestId("Settings/user-settings").click();
   await page.getByRole("combobox").nth(1).click();
   await page.getByLabel("GPT 5", { exact: true }).click();
-  await page.getByLabel("Close modal").click();
+  // Click outside the modal at the very bottom right of the viewport
+  const { width, height } = page.viewportSize()!;
+  await page.mouse.click(width - 1, height - 1);
   await page.waitForTimeout(5000);
   await verifyCurrentModel(page, "GPT 5");
 
@@ -37,7 +38,7 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyCurrentModel(page, "GPT 4o Mini");
 
   // Create a custom assistant with a specific model
-  await page.getByRole("button", { name: "Explore Assistants" }).click();
+  await page.getByTestId("AppSidebar/more-agents").click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.waitForTimeout(2000);
   await page.getByTestId("name").fill("Sample Name");
@@ -60,4 +61,43 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   // Switch back to Default Assistant and verify its model
   await startNewChat(page);
   await verifyCurrentModel(page, "GPT 5");
+});
+
+test("Non-image-generation model visibility in chat input bar", async ({
+  page,
+}) => {
+  // Setup: Clear cookies and log in as admin
+  await page.context().clearCookies();
+  await loginAs(page, "admin");
+
+  // Ensure Image Generation is enabled in default assistant
+  await ensureImageGenerationEnabled(page);
+
+  // Navigate to the chat page
+  await page.goto("http://localhost:3000/chat");
+  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
+
+  const testModelDisplayName = "GPT 4o Mini";
+
+  // Open the LLM popover by clicking the model selector button
+  const llmPopoverTrigger = page.locator('[data-testid="llm-popover-trigger"]');
+  await llmPopoverTrigger.click();
+
+  // Wait for the popover to open
+  await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+
+  // Verify that the non-vision model appears in the list
+  // The model name is displayed via getDisplayNameForModel, so we search for text containing the model name
+  // Use .first() since there might be multiple providers with the same model
+  const modelButton = page
+    .locator('[role="dialog"]')
+    .locator("button")
+    .filter({ hasText: testModelDisplayName })
+    .first();
+
+  await expect(modelButton).toBeVisible();
+
+  // Optionally, select the model to verify it works
+  await modelButton.click();
+  await verifyCurrentModel(page, testModelDisplayName);
 });

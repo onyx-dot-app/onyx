@@ -54,13 +54,18 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
-        proxy_set_header X-Forwarded-Host $forwarded_host; 
+        proxy_set_header X-Forwarded-Host $forwarded_host;
         proxy_set_header X-Forwarded-Port $forwarded_port;
         proxy_set_header Host $host;
 
         # need to use 1.1 to support chunked transfers
         proxy_http_version 1.1;
         proxy_buffering off;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
 
         # we don't want nginx trying to do something clever with
         # redirects, we set the Host: header above already.
@@ -73,11 +78,16 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
-        proxy_set_header X-Forwarded-Host $forwarded_host; 
+        proxy_set_header X-Forwarded-Host $forwarded_host;
         proxy_set_header X-Forwarded-Port $forwarded_port;
         proxy_set_header Host $host;
 
         proxy_http_version 1.1;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
 
         # we don't want nginx trying to do something clever with
         # redirects, we set the Host: header above already.
@@ -94,19 +104,25 @@ server {
     listen 443 ssl default_server;
 
     client_max_body_size 5G;    # Maximum upload size
-    
+
     location / {
         # misc headers
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         # don't use forwarded schema, host, or port here - this is the entry point
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host; 
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
         proxy_set_header Host $host;
 
         proxy_http_version 1.1;
         proxy_buffering off;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
+
         # we don't want nginx trying to do something clever with
         # redirects, we set the Host: header above already.
         proxy_redirect off;
