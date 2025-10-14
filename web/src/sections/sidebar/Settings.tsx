@@ -20,7 +20,7 @@ import SvgSettings from "@/icons/settings";
 import SvgLogOut from "@/icons/log-out";
 import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
@@ -50,26 +50,32 @@ function SettingsPopover({
     errorHandlingFetcher
   );
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const showAdminPanel = (!user || isAdmin) && !removeAdminPanelLink;
   const showCuratorPanel = user && isCurator;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
-  async function handleLogout() {
-    const isSuccess = await logout();
+  const handleLogout = () => {
+    logout().then((response) => {
+      if (!response?.ok) {
+        alert("Failed to logout");
+        return;
+      }
 
-    if (!isSuccess) {
-      alert("Failed to logout");
-      return;
-    }
+      const currentUrl = `${pathname}${
+        searchParams?.toString() ? `?${searchParams.toString()}` : ""
+      }`;
 
-    router.push(
-      `/auth/login?next=${encodeURIComponent(
-        window.location.pathname + window.location.search
-      )}`
-    );
-  }
+      const encodedRedirect = encodeURIComponent(currentUrl);
+
+      router.push(
+        `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
+      );
+    });
+  };
 
   return (
     <>
