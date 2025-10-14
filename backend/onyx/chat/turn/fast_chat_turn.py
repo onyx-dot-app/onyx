@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 from agents import Agent
@@ -73,7 +72,7 @@ def _fast_chat_turn_core(
     agent = Agent(
         name="Assistant",
         model=dependencies.llm_model,
-        tools=cast(list, dependencies.tools),  # type: ignore[arg-type]
+        tools=dependencies.tools,
         model_settings=ModelSettings(
             temperature=dependencies.llm.config.temperature,
             include_usage=True,
