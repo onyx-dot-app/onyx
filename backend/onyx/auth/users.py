@@ -1040,7 +1040,10 @@ async def optional_user(
 
     # check if an API key is present
     if user is None:
-        hashed_api_key = get_hashed_api_key_from_request(request)
+        try:
+            hashed_api_key = get_hashed_api_key_from_request(request)
+        except ValueError:
+            hashed_api_key = None
         if hashed_api_key:
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
 
