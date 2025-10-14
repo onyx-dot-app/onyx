@@ -42,8 +42,8 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   async function handleRename(newName: string) {
-    setName(newName);
     await renameProject(project.id, newName);
+    setName(newName);
   }
 
   const popoverItems = [
