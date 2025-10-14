@@ -24,7 +24,7 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
       {open && (
         <IconButton
           aria-label="Expand document"
-          onClick={() => open()}
+          onClick={open}
           icon={SvgMaximize2}
           internal
         />

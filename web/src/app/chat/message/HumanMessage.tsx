@@ -29,16 +29,15 @@ interface MessageEditingProps {
 
 function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   const [close, setClose] = useState(true);
-  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const textFiles = files.filter(
     (file) => file.type == ChatFileType.PLAIN_TEXT
   );
-
-  const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
+  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
+  const csvFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
     <>
-      {textFiles && textFiles.length > 0 && (
+      {textFiles.length > 0 && (
         <div
           id="onyx-file"
           className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
@@ -51,22 +50,23 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
         </div>
       )}
 
-      {imageFiles && imageFiles.length > 0 && (
+      {imageFiles.length > 0 && (
         <div
           id="onyx-image"
           className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
-            {imageFiles.map((file) => {
-              return <InMessageImage key={file.id} fileId={file.id} />;
-            })}
+            {imageFiles.map((file) => (
+              <InMessageImage key={file.id} fileId={file.id} />
+            ))}
           </div>
         </div>
       )}
-      {csvImgFiles && csvImgFiles.length > 0 && (
+
+      {csvFiles.length > 0 && (
         <div className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}>
           <div className="flex flex-col gap-2">
-            {csvImgFiles.map((file) => {
+            {csvFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
                   {close ? (
