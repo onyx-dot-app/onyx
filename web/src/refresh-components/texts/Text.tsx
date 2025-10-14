@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import React from "react";
 
 const fonts = {
   // Heading
@@ -77,8 +76,6 @@ export interface TextProps extends React.HTMLAttributes<HTMLElement> {
   text02?: boolean;
   text01?: boolean;
   inverted?: boolean;
-
-  children?: React.ReactNode;
 }
 
 export default function Text({
