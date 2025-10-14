@@ -122,6 +122,7 @@ def _internal_search_core(
                                     retrieved_sections
                                 )
                             },
+                            queries=[query],
                         )
                     )
                     break

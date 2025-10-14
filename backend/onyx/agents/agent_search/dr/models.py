@@ -105,6 +105,9 @@ class IterationAnswer(BaseModel):
     is_web_fetch: bool = False
     # for image generation step-types
     generated_images: list[GeneratedImage] | None = None
+    # for multi-query search tools (v2 web search and internal search)
+    # TODO: Clean this up to be more flexible to tools
+    queries: list[str] | None = None
 
 
 class AggregatedDRContext(BaseModel):

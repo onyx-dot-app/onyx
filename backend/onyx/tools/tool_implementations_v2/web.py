@@ -144,6 +144,7 @@ def _web_search_core(
                 for i, inference_section in enumerate(inference_sections)
             },
             claims=[],
+            queries=queries,
         )
     )
     return WebSearchResponse(results=results)

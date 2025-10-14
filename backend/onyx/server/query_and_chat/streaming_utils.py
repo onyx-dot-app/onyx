@@ -333,7 +333,11 @@ def translate_db_message_to_packets_simple(
                 is_web_fetch: bool = False
 
                 for sub_step in sub_steps:
-                    tasks.append(sub_step.sub_step_instructions or "")
+                    # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
+                    if sub_step.queries:
+                        tasks.extend(sub_step.queries)
+                    else:
+                        tasks.append(sub_step.sub_step_instructions or "")
                     tool_call_ids.append(sub_step.sub_step_tool_id)
 
                     sub_step_cited_docs = sub_step.cited_doc_results
@@ -560,7 +564,11 @@ def translate_db_message_to_packets(
                 cited_docs: list[SavedSearchDoc] = []
 
                 for sub_step in sub_steps:
-                    tasks.append(sub_step.sub_step_instructions or "")
+                    # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
+                    if sub_step.queries:
+                        tasks.extend(sub_step.queries)
+                    else:
+                        tasks.append(sub_step.sub_step_instructions or "")
                     tool_call_ids.append(sub_step.sub_step_tool_id)
 
                     sub_step_cited_docs = sub_step.cited_doc_results
