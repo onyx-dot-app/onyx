@@ -20,7 +20,7 @@ export function handleEnterPress(
   return handleKeyPress("Enter", callback, passthrough);
 }
 
-export function onEscapePress(callback: () => void, enabled?: boolean) {
+export function useEscapePress(callback: () => void, enabled?: boolean) {
   useEffect(() => {
     if (!enabled) return;
 

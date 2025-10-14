@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { handleEnterPress, onEscapePress } from "@/lib/typingUtils";
+import { handleEnterPress, useEscapePress } from "@/lib/typingUtils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 
 interface ButtonRenamingProps {
@@ -19,7 +19,7 @@ export default function ButtonRenaming({
     initialName || UNNAMED_CHAT
   );
 
-  onEscapePress(onClose, true);
+  useEscapePress(onClose, true);
 
   async function submitRename() {
     const newName = renamingValue.trim();
