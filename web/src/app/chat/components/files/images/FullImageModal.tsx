@@ -29,7 +29,8 @@ export function FullImageModal({
         <Dialog.Content
           className={cn(
             "fixed inset-0 flex items-center justify-center p-4 z-[100]",
-            "max-w-screen-lg h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4"
+            "max-w-screen-lg h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4",
+            "focus:outline-none"
           )}
         >
           <img

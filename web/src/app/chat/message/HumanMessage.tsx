@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
-import ToolResult from "@/components/tools/ToolResult";
 import CsvContent from "@/components/tools/CSVContent";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
@@ -15,6 +14,7 @@ import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import SvgCopy from "@/icons/copy";
 import { copyAll } from "@/app/chat/message/copyingUtils";
+import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
 
 interface FileDisplayProps {
   files: FileDescriptor[];
@@ -71,10 +71,10 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
                 <div key={file.id} className="w-fit">
                   {close ? (
                     <>
-                      <ToolResult
-                        csvFileDescriptor={file}
+                      <ExpandableContentWrapper
+                        fileDescriptor={file}
                         close={() => setClose(false)}
-                        contentComponent={CsvContent}
+                        ContentComponent={CsvContent}
                       />
                     </>
                   ) : (
