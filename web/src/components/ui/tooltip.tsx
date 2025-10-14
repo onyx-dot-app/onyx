@@ -5,10 +5,10 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "@/lib/utils";
 
-// Default the provider delay to a snappier, consistent value
+// Default the provider delay to a consistent value (10s hover to appear)
 const TooltipProvider: React.FC<
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>
-> = ({ delayDuration = 400, skipDelayDuration = 200, ...props }) => (
+> = ({ delayDuration = 10000, skipDelayDuration = 0, ...props }) => (
   <TooltipPrimitive.Provider
     delayDuration={delayDuration}
     skipDelayDuration={skipDelayDuration}

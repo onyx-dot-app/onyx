@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { FiTrash2, FiRefreshCw } from "react-icons/fi";
 import { StarterMessage } from "./interfaces";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ export default function StarterMessagesList({
   setFieldValue: any;
 }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const tooltipTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleInputChange = (index: number, value: string) => {
     setFieldValue(`starter_messages.${index}.message`, value);
@@ -86,9 +87,23 @@ export default function StarterMessagesList({
               <Button
                 type="button"
                 size="sm"
-                onMouseEnter={() => setTooltipOpen(true)}
-                onMouseLeave={() => setTooltipOpen(false)}
+                onMouseEnter={() => {
+                  if (tooltipTimerRef.current)
+                    clearTimeout(tooltipTimerRef.current);
+                  tooltipTimerRef.current = setTimeout(
+                    () => setTooltipOpen(true),
+                    10000
+                  );
+                }}
+                onMouseLeave={() => {
+                  if (tooltipTimerRef.current)
+                    clearTimeout(tooltipTimerRef.current);
+                  setTooltipOpen(false);
+                }}
                 onClick={() => {
+                  if (tooltipTimerRef.current)
+                    clearTimeout(tooltipTimerRef.current);
+                  setTooltipOpen(false);
                   const shouldSubmit =
                     values.filter((msg) => msg.message.trim() !== "").length <
                       4 &&

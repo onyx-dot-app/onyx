@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useRouter } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -52,6 +52,7 @@ function DefaultAssistantConfig() {
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const [originalPrompt, setOriginalPrompt] = useState<string>("");
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const { data: availableTools } = useSWR<AvailableTool[]>(
     "/api/admin/default-assistant/available-tools",
     errorHandlingFetcher
@@ -125,6 +126,29 @@ function DefaultAssistantConfig() {
 
   const handleSystemPromptChange = (value: string) => {
     setSystemPrompt(value);
+  };
+
+  const handleSystemPromptKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (e.key === "Enter" && e.shiftKey) {
+      // Manually insert a newline without triggering any default behaviors
+      e.preventDefault();
+      const el = promptRef.current;
+      const start = el?.selectionStart ?? systemPrompt.length;
+      const end = el?.selectionEnd ?? systemPrompt.length;
+      const next =
+        systemPrompt.slice(0, start) + "\n" + systemPrompt.slice(end);
+      setSystemPrompt(next);
+      // Restore caret position after React updates the value
+      requestAnimationFrame(() => {
+        if (promptRef.current) {
+          const pos = start + 1;
+          promptRef.current.selectionStart = pos;
+          promptRef.current.selectionEnd = pos;
+        }
+      });
+    }
   };
 
   const handleSaveSystemPrompt = async () => {
@@ -202,6 +226,8 @@ function DefaultAssistantConfig() {
                 )}
                 rows={8}
                 value={systemPrompt}
+                ref={promptRef}
+                onKeyDown={handleSystemPromptKeyDown}
                 onChange={(e) => handleSystemPromptChange(e.target.value)}
                 placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
               />

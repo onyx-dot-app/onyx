@@ -111,7 +111,8 @@ export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
                 src={buildImgUrl(agent.uploaded_image_id)}
                 loading="lazy"
                 className={cn(
-                  "rounded-full object-cover object-center transition-opacity duration-300"
+                  // Prevent theme filters from altering PNG colors in dark mode
+                  "rounded-full object-cover object-center transition-opacity duration-300 filter-none mix-blend-normal"
                 )}
                 width={size}
                 height={size}

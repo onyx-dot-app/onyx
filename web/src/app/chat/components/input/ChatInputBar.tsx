@@ -423,10 +423,20 @@ function ChatInputBarInner({
           aria-multiline
           placeholder={
             selectedAssistant.id === 0
-              ? `How can ${
+              ? `Hi ${
+                  (user?.email?.split("@")[0] || "there")
+                    .charAt(0)
+                    .toUpperCase() +
+                  (user?.email?.split("@")[0] || "there").slice(1)
+                }, how can ${
                   settings?.enterpriseSettings?.application_name || "Onyx"
-                } help you today`
-              : `How can ${selectedAssistant.name} help you today`
+                } help you today?`
+              : `Hi ${
+                  (user?.email?.split("@")[0] || "there")
+                    .charAt(0)
+                    .toUpperCase() +
+                  (user?.email?.split("@")[0] || "there").slice(1)
+                }, how can ${selectedAssistant.name} help you today?`
           }
           value={message}
           onKeyDown={(event) => {

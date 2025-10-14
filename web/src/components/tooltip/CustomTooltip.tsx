@@ -45,7 +45,7 @@ export const CustomTooltip = ({
   medium,
   wrap,
   showTick = false,
-  delay = 300,
+  delay = 10000,
   position = "bottom",
   disabled = false,
   className,
@@ -75,7 +75,8 @@ export const CustomTooltip = ({
   const showTooltip = () => {
     hoverCountRef.current = true;
 
-    const showDelay = groupHovered ? 0 : delay;
+    // Always apply the configured delay; do not skip on group hover
+    const showDelay = delay;
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true);
       setGroupHovered(true);

@@ -12,6 +12,7 @@ import {
 } from "@/lib/constants";
 import SvgLightbulbSimple from "@/icons/lightbulb-simple";
 import { OnyxIcon } from "@/components/icons/icons";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { cn } from "@/lib/utils";
@@ -49,5 +50,19 @@ export function getAgentIcon(
   if (agent.id === GENERAL_ASSISTANT_ID) return SvgLightbulbSimple;
   if (agent.id === IMAGE_ASSISTANT_ID || agent.id === ART_ASSISTANT_ID)
     return SvgImage;
+  if (agent.uploaded_image_id) {
+    return ({ className }: SvgProps) => (
+      <img
+        alt={agent.name}
+        src={buildImgUrl(agent.uploaded_image_id as string)}
+        loading="lazy"
+        className={cn(
+          // Ensure dark mode does not tint/alter PNG colors
+          "rounded-full object-cover object-center filter-none mix-blend-normal",
+          className
+        )}
+      />
+    );
+  }
   return () => generateIdenticon((agent.icon_shape || 0).toString(), 16);
 }

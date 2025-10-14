@@ -10,11 +10,19 @@ import SvgChevronDownSmall from "@/icons/chevron-down-small";
 
 const MARGIN = 5;
 
-const baseClassNames = (active?: boolean) =>
+const baseClassNames = (active?: boolean, variant?: "action" | "defaulted") =>
   ({
     enabled: [
-      active && "bg-background-neutral-00",
-      "hover:bg-background-tint-02",
+      // Active action buttons: blue background and keep it on hover
+      active && variant === "action"
+        ? "bg-action-link-01 hover:bg-action-link-01"
+        : undefined,
+      // Active defaulted buttons: neutral active background
+      active && variant !== "action" ? "bg-background-neutral-00" : undefined,
+      // Only apply gray hover when not an active action button
+      !(active && variant === "action")
+        ? "hover:bg-background-tint-02"
+        : undefined,
     ],
     disabled: ["bg-background-neutral-02"],
   }) as const;
@@ -128,7 +136,7 @@ export default function SelectButton({
 
       <button
         className={cn(
-          baseClassNames(active)[state],
+          baseClassNames(active, variant)[state],
           "group/SelectButton flex items-center px-spacing-interline py-spacing-interline-mini rounded-12 h-fit w-fit",
           className
         )}

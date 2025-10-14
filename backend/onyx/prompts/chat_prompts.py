@@ -5,7 +5,7 @@ from onyx.prompts.constants import QUESTION_PAT
 
 REQUIRE_CITATION_STATEMENT = """
 Cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document number. \
-DO NOT provide any links following the citations. In other words, avoid using the format [1](https://example.com). \
+DO NOT provide any links following the citations. Avoid using the format [1](https://example.com). \
 Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
 Try to cite inline as opposed to leaving all citations until the very end of the response.
 """.rstrip()

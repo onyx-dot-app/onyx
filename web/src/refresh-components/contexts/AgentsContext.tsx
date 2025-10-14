@@ -101,6 +101,17 @@ export function AgentsProvider({
     setAgents(await fetchAllAgents());
   }
 
+  // Keep pinned agent objects in sync when the master agents list updates
+  useEffect(() => {
+    setPinnedAgents((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev.map(
+        (pinned) => agents.find((a) => a.id === pinned.id) || pinned
+      );
+      return next;
+    });
+  }, [agents]);
+
   function togglePinnedAgent(
     agent: MinimalPersonaSnapshot,
     shouldPin: boolean

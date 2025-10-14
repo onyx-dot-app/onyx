@@ -215,7 +215,7 @@ export default function Settings({
             folded={folded}
             highlight
           >
-            {username}
+            {username.charAt(0).toUpperCase() + username.slice(1)}
           </NavigationTab>
         </div>
       </PopoverTrigger>
