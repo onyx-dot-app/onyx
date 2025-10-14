@@ -44,12 +44,13 @@ export function getAgentIcon(
   if (agent.id === GENERAL_ASSISTANT_ID) return SvgLightbulbSimple;
   if (agent.id === IMAGE_ASSISTANT_ID || agent.id === ART_ASSISTANT_ID)
     return SvgImage;
-  if (agent.uploaded_image_id) {
+  const uploadedImageId = agent.uploaded_image_id;
+  if (uploadedImageId) {
     return ({ className }) => (
       <div className={cn("w-full h-full", className)}>
         <img
           alt={agent.name}
-          src={buildImgUrl(agent.uploaded_image_id)}
+          src={buildImgUrl(uploadedImageId)}
           loading="lazy"
           className="w-full h-full rounded-full object-cover object-center"
         />
