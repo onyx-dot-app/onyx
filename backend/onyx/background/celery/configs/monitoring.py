@@ -1,4 +1,5 @@
 import onyx.background.celery.configs.base as shared_config
+from onyx.configs.app_configs import CELERY_WORKER_MONITORING_CONCURRENCY
 
 broker_url = shared_config.broker_url
 broker_connection_retry_on_startup = shared_config.broker_connection_retry_on_startup
@@ -16,6 +17,6 @@ task_default_priority = shared_config.task_default_priority
 task_acks_late = shared_config.task_acks_late
 
 # Monitoring worker specific settings
-worker_concurrency = 1  # Single worker is sufficient for monitoring
+worker_concurrency = CELERY_WORKER_MONITORING_CONCURRENCY
 worker_pool = "threads"
 worker_prefetch_multiplier = 1
