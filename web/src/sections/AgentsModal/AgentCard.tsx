@@ -148,7 +148,7 @@ export default function AgentCard({
             <div className="flex flex-row items-center gap-spacing-interline">
               <div className="max-w-[33%]">
                 <Truncated secondaryBody text02>
-                  By {agent.owner?.email || "Onyx"} asdf
+                  By {agent.owner?.email || "Onyx"}
                 </Truncated>
               </div>
               <Text secondaryBody text01>

@@ -9,7 +9,7 @@ import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
