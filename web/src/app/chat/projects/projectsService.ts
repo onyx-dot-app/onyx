@@ -196,7 +196,7 @@ export async function getProjectDetails(
 export async function unlinkFileFromProject(
   projectId: number,
   fileId: string
-): Promise<void> {
+): Promise<Response> {
   const response = await fetch(
     `/api/user/projects/${encodeURIComponent(
       projectId
@@ -206,12 +206,13 @@ export async function unlinkFileFromProject(
   if (!response.ok) {
     handleRequestError("Unlink file from project", response);
   }
+  return response;
 }
 
 export async function linkFileToProject(
   projectId: number,
   fileId: string
-): Promise<ProjectFile> {
+): Promise<Response> {
   const response = await fetch(
     `/api/user/projects/${encodeURIComponent(
       projectId
@@ -221,7 +222,7 @@ export async function linkFileToProject(
   if (!response.ok) {
     handleRequestError("Link file to project", response);
   }
-  return response.json();
+  return response;
 }
 
 export async function deleteUserFile(

@@ -78,7 +78,7 @@ const createOptimisticFile = (
   };
 };
 
-function buildHashedFileKey(file: File): string {
+function buildFileKey(file: File): string {
   const namePrefix = (file.name ?? "").slice(0, 50);
   return `${file.size}|${namePrefix}`;
 }
@@ -112,10 +112,7 @@ interface ProjectsContextType {
   refreshRecentFiles: () => Promise<void>;
   deleteUserFile: (fileId: string) => Promise<UserFileDeleteResult>;
   unlinkFileFromProject: (projectId: number, fileId: string) => Promise<void>;
-  linkFileToProject?: (
-    projectId: number,
-    fileId: string
-  ) => Promise<ProjectFile>;
+  linkFileToProject?: (projectId: number, file: ProjectFile) => void;
   lastFailedFiles: ProjectFile[];
   clearLastFailedFiles: () => void;
 }
@@ -247,14 +244,15 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
         await fetchProjects();
         if (currentProjectId === projectId) {
           setCurrentProjectDetails(null);
+          setAllCurrentProjectFiles([]);
+          projectToUploadFilesMapRef.current.delete(projectId);
+          route();
         }
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to delete project";
         throw err;
       }
     },
-    [fetchProjects, currentProjectId]
+    [fetchProjects, currentProjectId, projectToUploadFilesMapRef, route]
   );
 
   const getRecentFiles = useCallback(async (): Promise<ProjectFile[]> => {
@@ -278,7 +276,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     for (const f of files) {
       const tempId = optimisticFiles.find((o) => o.name === f.name)?.temp_id;
       if (tempId) {
-        tempIdMap.set(buildHashedFileKey(f), tempId);
+        tempIdMap.set(buildFileKey(f), tempId);
       }
     }
     return tempIdMap;
@@ -295,9 +293,10 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       );
       const tempIdMap = getTempIdMap(files, optimisticFiles);
       console.log("tempIdMap", tempIdMap);
-      setAllRecentFiles((prev) => [...prev, ...optimisticFiles]);
+      setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
       if (projectId) {
-        setAllCurrentProjectFiles((prev) => [...prev, ...optimisticFiles]);
+        console.log("optimisticFiles", optimisticFiles);
+        setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
       svcUploadFiles(files, projectId, tempIdMap)
@@ -461,8 +460,18 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     // Initial load - only fetch recent files since projects come from props
     getRecentFiles().then((recent) => {
       setRecentFiles(recent);
+      setAllRecentFiles(recent);
     });
   }, [getRecentFiles]);
+
+  useEffect(() => {
+    setAllRecentFiles((prev) =>
+      prev.map((f) => {
+        const newFile = recentFiles.find((f2) => f2.id === f.id);
+        return newFile ? { ...f, ...newFile } : f;
+      })
+    );
+  }, [recentFiles]);
 
   useEffect(() => {
     if (currentProjectId) {
@@ -655,19 +664,42 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
         return result;
       },
       unlinkFileFromProject: async (projectId: number, fileId: string) => {
-        await svcUnlinkFileFromProject(projectId, fileId);
-        if (currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        await refreshRecentFiles();
+        const file = allCurrentProjectFiles.find((f) => f.id === fileId);
+        if (!file) return;
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => f.id !== file.id)
+        );
+        svcUnlinkFileFromProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) => [file, ...prev]);
+            }
+          }
+        });
       },
-      linkFileToProject: async (projectId: number, fileId: string) => {
-        const file = await svcLinkFileToProject(projectId, fileId);
-        if (currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        await refreshRecentFiles();
-        return file;
+      linkFileToProject: async (projectId: number, file: ProjectFile) => {
+        const existing = allCurrentProjectFiles.find((f) => f.id === file.id);
+        if (existing) return;
+        setAllCurrentProjectFiles((prev) => [file, ...prev]);
+        svcLinkFileToProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) =>
+                prev.filter((f) => f.id !== file.id)
+              );
+            }
+          }
+        });
       },
     }),
     [
@@ -676,6 +708,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentProjectDetails,
       currentProjectId,
       currentMessageFiles,
+      allRecentFiles,
+      allCurrentProjectFiles,
+      beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,
       fetchProjects,
