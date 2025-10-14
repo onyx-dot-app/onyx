@@ -18,7 +18,6 @@ import { usePostHog } from "posthog-js/react";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
-const MAX_TITLE_LENGTH = 25;
 
 const INITIAL_QUERIES_TO_SHOW = 3;
 const QUERIES_PER_EXPANSION = 5;
@@ -70,28 +69,18 @@ const constructCurrentSearchState = (
 
 export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
+  state,
   onComplete,
   renderType,
   animate,
+  stopPacketSeen,
   children,
 }) => {
   const posthog = usePostHog();
   const isSimpleAgentFrameworkEnabled =
     posthog.isFeatureEnabled("simple-agent-framework") ?? false;
 
-  // If simple agent feature flag is enabled, use the V2 renderer
-  if (isSimpleAgentFrameworkEnabled) {
-    return (
-      <SearchToolRendererV2
-        packets={packets}
-        onComplete={onComplete}
-        animate={animate}
-        children={children}
-      />
-    );
-  }
-
-  // Otherwise use the original implementation
+  // Initialize all hooks at the top level (before any conditional returns)
   const { queries, results, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
 
@@ -198,6 +187,22 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
 
   // Determine the icon based on search type
   const icon = isInternetSearch ? FiGlobe : FiSearch;
+
+  // If simple agent feature flag is enabled, use the V2 renderer
+  if (isSimpleAgentFrameworkEnabled) {
+    return (
+      <SearchToolRendererV2
+        packets={packets}
+        state={state}
+        onComplete={onComplete}
+        renderType={renderType}
+        animate={animate}
+        stopPacketSeen={stopPacketSeen}
+      >
+        {children}
+      </SearchToolRendererV2>
+    );
+  }
 
   // Don't render anything if search hasn't started
   if (queries.length === 0) {

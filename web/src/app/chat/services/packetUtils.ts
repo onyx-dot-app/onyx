@@ -1,4 +1,3 @@
-import { CitationMap } from "../interfaces";
 import {
   CitationDelta,
   MessageDelta,

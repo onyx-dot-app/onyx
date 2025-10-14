@@ -72,13 +72,10 @@ import {
   PacketType,
 } from "../services/streamingModels";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { Klee_One } from "next/font/google";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 import { useAppParams } from "@/hooks/appNavigation";
 
-const TEMP_USER_MESSAGE_ID = -1;
-const TEMP_ASSISTANT_MESSAGE_ID = -2;
 const SYSTEM_MESSAGE_ID = -3;
 
 export interface OnSubmitProps {
@@ -195,7 +192,7 @@ export function useChatController({
   const navigatingAway = useRef(false);
 
   // Local state that doesn't need to be in the store
-  const [maxTokens, setMaxTokens] = useState<number>(4096);
+  const [_maxTokens, setMaxTokens] = useState<number>(4096);
 
   // Sync store state changes
   useEffect(() => {
@@ -984,7 +981,7 @@ export function useChatController({
             )}`,
           });
         }
-      } catch (error) {
+      } catch {
         setPopup({
           type: "error",
           message: "Failed to upload file",
