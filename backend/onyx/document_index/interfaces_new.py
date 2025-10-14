@@ -12,11 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel
+
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
