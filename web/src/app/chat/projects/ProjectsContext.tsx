@@ -12,7 +12,12 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
-import type { CategorizedFiles, Project, ProjectFile } from "./projectsService";
+import type {
+  CategorizedFiles,
+  Project,
+  ProjectFile,
+  UserFileDeleteResult,
+} from "./projectsService";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -105,7 +110,7 @@ interface ProjectsContextType {
   getFilesInProject: (projectId: number) => Promise<ProjectFile[]>;
   refreshCurrentProjectDetails: () => Promise<void>;
   refreshRecentFiles: () => Promise<void>;
-  deleteUserFile: (fileId: string) => Promise<void>;
+  deleteUserFile: (fileId: string) => Promise<UserFileDeleteResult>;
   unlinkFileFromProject: (projectId: number, fileId: string) => Promise<void>;
   linkFileToProject?: (
     projectId: number,
@@ -639,12 +644,15 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       lastFailedFiles,
       clearLastFailedFiles: () => setLastFailedFiles([]),
       deleteUserFile: async (fileId: string) => {
-        await svcDeleteUserFile(fileId);
-        // Refresh current project details and recent files to reflect deletion
-        if (currentProjectId) {
-          await refreshCurrentProjectDetails();
+        const result = await svcDeleteUserFile(fileId);
+        // If no associations, backend enqueues deletion and status moves to DELETING; refresh lists
+        if (!result.has_associations) {
+          if (currentProjectId) {
+            await refreshCurrentProjectDetails();
+          }
+          await refreshRecentFiles();
         }
-        await refreshRecentFiles();
+        return result;
       },
       unlinkFileFromProject: async (projectId: number, fileId: string) => {
         await svcUnlinkFileFromProject(projectId, fileId);

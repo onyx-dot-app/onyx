@@ -82,7 +82,7 @@ def run_jobs() -> None:
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
-        "--queues=user_file_processing,user_file_project_sync",
+        "--queues=user_file_processing,user_file_project_sync,user_file_delete",
     ]
 
     cmd_worker_monitoring = [

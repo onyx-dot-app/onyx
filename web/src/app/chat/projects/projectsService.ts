@@ -37,12 +37,19 @@ export interface ProjectFile {
   temp_id?: string | null;
 }
 
+export interface UserFileDeleteResult {
+  has_associations: boolean;
+  project_names: string[];
+  assistant_names: string[];
+}
+
 export enum UserFileStatus {
   UPLOADING = "UPLOADING", //UI only
   PROCESSING = "PROCESSING",
   COMPLETED = "COMPLETED",
   FAILED = "FAILED",
   CANCELED = "CANCELED",
+  DELETING = "DELETING",
 }
 
 export type ProjectDetails = {
@@ -217,7 +224,9 @@ export async function linkFileToProject(
   return response.json();
 }
 
-export async function deleteUserFile(fileId: string): Promise<void> {
+export async function deleteUserFile(
+  fileId: string
+): Promise<UserFileDeleteResult> {
   const response = await fetch(
     `/api/user/projects/file/${encodeURIComponent(fileId)}`,
     {
@@ -227,6 +236,7 @@ export async function deleteUserFile(fileId: string): Promise<void> {
   if (!response.ok) {
     handleRequestError("Delete file", response);
   }
+  return (await response.json()) as UserFileDeleteResult;
 }
 
 export async function getUserFile(fileId: string): Promise<ProjectFile> {
