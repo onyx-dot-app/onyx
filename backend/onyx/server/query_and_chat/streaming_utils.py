@@ -487,7 +487,7 @@ def translate_db_message_to_packets(
     remove_doc_content: bool = False,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
-    use_simple_translation = True
+    use_simple_translation = False
     if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
         feature_flag_provider = get_default_feature_flag_provider()
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
