@@ -8,6 +8,8 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   TextFormField,
   SelectorFormField,
+  MultiSelectField,
+  BooleanFormField,
 } from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
@@ -49,31 +51,46 @@ export const OnyxApiKeyForm = ({
           initialValues={{  
             name: apiKey?.name,
             description: apiKey?.description,
-            // Store config in the textarea as a pretty JSON string
-            config: apiKey?.config ? JSON.stringify(apiKey.config, null, 2) : "",
+            // Dynamic config values are flattened into form values by field name
+            ...(apiKey?.config || {}),
             template: "",
             validator_type: apiKey?.validator_type,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Prepare the payload with the UserRole
-            let parsedConfig: any = undefined;
+            // Build config object from dynamic fields based on selected template schema
+            let configObject: Record<string, any> | undefined = undefined;
             try {
-              parsedConfig = values.config ? JSON.parse(values.config as unknown as string) : undefined;
-            } catch (e) {
-              formikHelpers.setSubmitting(false);
-              setPopup({
-                message: "Invalid JSON in config",
-                type: "error",
-              });
-              return;
+              const selectedTemplate = Array.isArray(templates)
+                ? templates.find((t) => String(t?.id) === (values.template as unknown as string))
+                : undefined;
+              const schema: any[] | undefined = selectedTemplate?.config;
+              if (Array.isArray(schema)) {
+                configObject = schema.reduce((acc: Record<string, any>, field: any) => {
+                  acc[field.name] = (values as any)[field.name];
+                  return acc;
+                }, {});
+              } else {
+                // If no template selected, try to infer config keys from values present in apiKey.config
+                if (apiKey?.config) {
+                  configObject = Object.keys(apiKey.config).reduce(
+                    (acc: Record<string, any>, key: string) => {
+                      acc[key] = (values as any)[key];
+                      return acc;
+                    },
+                    {}
+                  );
+                }
+              }
+            } catch (_) {
+              // noop, leave configObject undefined
             }
 
             const payload = {
               name: values.name,
               description: values.description,
-              config: parsedConfig,
+              config: configObject,
               validator_type: values.validator_type
             };
 
@@ -122,10 +139,21 @@ export const OnyxApiKeyForm = ({
                   const tpl = Array.isArray(templates)
                     ? templates.find((t) => String(t?.id) === selectedId)
                     : undefined;
-                  if (tpl && tpl.config !== undefined) {
+                  // Initialize dynamic fields from template schema and set validator_type
+                  if (tpl && Array.isArray(tpl.config)) {
                     try {
-                      const pretty = JSON.stringify(tpl.config, null, 2);
-                      setFieldValue("config", pretty);
+                      tpl.config.forEach((field: any) => {
+                        switch (field.type) {
+                          case "multiselect":
+                            setFieldValue(field.name, (values as any)[field.name] || []);
+                            break;
+                          case "checkbox":
+                            setFieldValue(field.name, (values as any)[field.name] ?? false);
+                            break;
+                          default:
+                            setFieldValue(field.name, (values as any)[field.name] ?? "");
+                        }
+                      });
                       setFieldValue("validator_type", tpl.validator_type);
                     } catch (_) {
                       // noop
@@ -148,15 +176,84 @@ export const OnyxApiKeyForm = ({
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
-              <TextFormField
-                maxWidth="max-w-lg"
-                name="config"
-                label={t(k.VALIDATOR_SETTINGS_LABEL)}
-                placeholder={t(k.VALIDATOR_SETTINGS_PLACEHOLDER)}
-                className="[&_input]:placeholder:text-text-muted/50"
-                isTextArea={true}
-                isCode={true}
-              />
+              {/* Dynamic fields rendered from selected template schema */}
+              {(() => {
+                const selectedTemplate = Array.isArray(templates)
+                  ? templates.find((t) => String(t?.id) === (values.template as unknown as string))
+                  : undefined;
+                const schema: any[] | undefined = selectedTemplate?.config;
+                if (!Array.isArray(schema)) {
+                  return null;
+                }
+
+                return (
+                  <div className="flex flex-col gap-4 mt-2 max-w-lg">
+                    {schema.map((field) => {
+                      if (!field || !field.type || !field.name) return null;
+                      switch (field.type) {
+                        case "select": {
+                          const options = (field.values || []).map((v: string) => ({ value: v, name: v }));
+                          return (
+                            <SelectorFormField
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                              options={options}
+                              onSelect={(selected) => setFieldValue(field.name, selected)}
+                            />
+                          );
+                        }
+                        case "multiselect": {
+                          const options = (field.values || []).map((v: string) => ({ value: v, label: v }));
+                          return (
+                            <MultiSelectField
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                              options={options}
+                              selectedInitially={(values as any)[field.name] || []}
+                              onChange={(selected) => setFieldValue(field.name, selected)}
+                            />
+                          );
+                        }
+                        case "text": {
+                          return (
+                            <TextFormField
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                              autoCompleteDisabled={true}
+                            />
+                          );
+                        }
+                        case "range": {
+                          return (
+                            <TextFormField
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                              type="number"
+                              min={field.minValue}
+                              autoCompleteDisabled={true}
+                            />
+                          );
+                        }
+                        case "checkbox": {
+                          return (
+                            <BooleanFormField
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                            />
+                          );
+                        }
+                        default:
+                          return null;
+                      }
+                    })}
+                  </div>
+                );
+              })()}
 
               <Button
                 type="submit"
