@@ -34,5 +34,5 @@ export function useEscapePress(callback: () => void, enabled?: boolean) {
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [enabled]);
+  }, [callback, enabled]);
 }
