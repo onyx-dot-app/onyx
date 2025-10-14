@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
-import { DocumentPreview } from "@/app/chat/components/files/documents/DocumentPreview";
+import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
 import ToolResult from "@/components/tools/ToolResult";
 import CsvContent from "@/components/tools/CSVContent";
@@ -47,10 +47,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
             {textFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
-                  <DocumentPreview
-                    fileName={file.name || file.id}
-                    alignBubble={alignBubble}
-                  />
+                  <Attachment fileName={file.name || file.id} />
                 </div>
               );
             })}
@@ -85,11 +82,9 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
                       />
                     </>
                   ) : (
-                    <DocumentPreview
+                    <Attachment
                       open={() => setClose(true)}
                       fileName={file.name || file.id}
-                      maxWidth="max-w-64"
-                      alignBubble={alignBubble}
                     />
                   )}
                 </div>
