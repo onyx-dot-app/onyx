@@ -11,13 +11,10 @@ Try to cite inline as opposed to leaving all citations until the very end of the
 """.rstrip()
 
 REQUIRE_CITATION_STATEMENT_V2 = """
-Cite relevant statements INLINE using the format [[document_id]](https://example.com) with the document id \
-(returned from tool calls in format LlmDoc) in between the brackets. If you don't have a document_id from an \
-LlmDoc returned by a tool call, don't cite. To cite multiple documents, use \
-[[document_id_1]](https://example.com), [[document_id_2]](https://example.com) format instead of \
-[[document_id_1]](https://example.com), [[document_id_2]](https://example.com) format instead of \
-[[document_id_1, document_id_2]](https://example.com). Cite inline instead of leaving all citations \
-until the very end of the response.
+Cite relevant statements INLINE using the format [[1]](https://example.com) with the document number (an integer) in between
+the brackets. To cite multiple documents, use [[1]](https://example.com), [[2]](https://example.com) format instead of \
+[[1, 2]](https://example.com). \
+Try to cite inline as opposed to leaving all citations until the very end of the response.
 """.rstrip()
 
 NO_CITATION_STATEMENT = """
