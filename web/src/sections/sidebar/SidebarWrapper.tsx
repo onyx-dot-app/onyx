@@ -19,7 +19,7 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-full flex flex-col bg-background-tint-02 p-padding-button justify-between gap-padding-content group/SidebarWrapper",
+          "h-screen flex flex-col bg-background-tint-02 p-padding-button justify-between gap-padding-content group/SidebarWrapper",
           folded ? "w-[4rem]" : "w-[15rem]"
         )}
       >
@@ -57,9 +57,7 @@ export default function SidebarWrapper({
           )}
         </div>
 
-        <div className="flex flex-col gap-padding-content flex-1">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );
