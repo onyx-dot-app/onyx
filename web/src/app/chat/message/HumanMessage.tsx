@@ -30,10 +30,12 @@ interface MessageEditingProps {
 function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const textFiles = files.filter(
-    (file) => file.type == ChatFileType.PLAIN_TEXT
+    (file) =>
+      file.type === ChatFileType.PLAIN_TEXT ||
+      file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type == ChatFileType.CSV);
+  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
 
   return (
     <>
