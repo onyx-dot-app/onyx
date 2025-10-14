@@ -92,7 +92,9 @@ interface ProjectsContextType {
   beginUpload: (
     files: File[],
     projectId?: number | null,
-    setPopup?: (popup: PopupSpec) => void
+    setPopup?: (popup: PopupSpec) => void,
+    onSuccess?: (uploaded: CategorizedFiles) => void,
+    onFailure?: (failedTempIds: string[]) => void
   ) => Promise<ProjectFile[]>;
   allRecentFiles: ProjectFile[];
   allCurrentProjectFiles: ProjectFile[];
@@ -286,26 +288,26 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     async (
       files: File[],
       projectId?: number | null,
-      setPopup?: (popup: PopupSpec) => void
+      setPopup?: (popup: PopupSpec) => void,
+      onSuccess?: (uploaded: CategorizedFiles) => void,
+      onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
       const optimisticFiles = files.map((f) =>
         createOptimisticFile(f, projectId)
       );
       const tempIdMap = getTempIdMap(files, optimisticFiles);
-      console.log("tempIdMap", tempIdMap);
       setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
       if (projectId) {
-        console.log("optimisticFiles", optimisticFiles);
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
       svcUploadFiles(files, projectId, tempIdMap)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
-          console.log("uploadedFiles", uploadedFiles);
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
           );
+
           setAllRecentFiles((prev) =>
             prev.map((f) => {
               if (f.temp_id) {
@@ -315,7 +317,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
               return f;
             })
           );
-
           setCurrentMessageFiles((prev) =>
             prev.map((f) => {
               if (f.temp_id) {
@@ -325,7 +326,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
               return f;
             })
           );
-
           if (projectId) {
             setAllCurrentProjectFiles((prev) =>
               prev.map((f) => {
@@ -354,6 +354,21 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
                 " | "
               )}`,
             });
+
+            const failedNameSet = new Set<string>([
+              ...unsupported,
+              ...nonAccepted,
+            ]);
+            const failedTempIds = Array.from(
+              new Set(
+                optimisticFiles
+                  .filter((f) => f.temp_id && failedNameSet.has(f.name))
+                  .map((f) => f.temp_id as string)
+              )
+            );
+            if (failedTempIds.length > 0) {
+              onFailure?.(failedTempIds);
+            }
           }
           if (uploadedFiles.length > 0) {
             setTrackedUploadIds((prev) => {
@@ -362,9 +377,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
               return next;
             });
           }
+          onSuccess?.(uploaded);
         })
         .catch((err) => {
-          console.error("Failed to upload files", err);
           // Roll back optimistic inserts on failure
           const optimisticTempIds = new Set(
             optimisticFiles
@@ -397,6 +412,8 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
             type: "error",
             message: "Failed to upload files",
           });
+
+          onFailure?.(Array.from(optimisticTempIds));
         })
         .finally(() => {
           if (projectId && currentProjectId === projectId) {

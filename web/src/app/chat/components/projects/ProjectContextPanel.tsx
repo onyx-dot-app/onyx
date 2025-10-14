@@ -93,7 +93,7 @@ export function FileCard({
         className={`flex h-9 w-9 items-center justify-center rounded-08 p-spacing-interline
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
-        {isProcessing ? (
+        {isProcessing || file.status === UserFileStatus.UPLOADING ? (
           <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
         ) : (
           <SvgFileText className="h-5 w-5 stroke-text-02" />
