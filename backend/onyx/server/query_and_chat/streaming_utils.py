@@ -492,7 +492,7 @@ def translate_db_message_to_packets(
     if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
         feature_flag_provider = get_default_feature_flag_provider()
         tenant_id = get_current_tenant_id()
-        user = chat_message.chat_session.user if chat_message.chat_session else None
+        user = chat_message.chat_session.user
         use_simple_translation = feature_flag_provider.feature_enabled_for_user_tenant(
             flag_key=SIMPLE_AGENT_FRAMEWORK,
             user=user,
