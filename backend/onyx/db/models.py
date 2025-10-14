@@ -145,27 +145,6 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     refresh_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
 
 
-class Validator__UserGroup(Base):
-    __tablename__ = "validator__user_group"
-
-    validator_id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "validator.id",
-            ondelete="CASCADE",
-            name="validator__user_group_validator_id_fkey",
-        ),
-        primary_key=True,
-    )
-    user_group_id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "user_group.id",
-            ondelete="CASCADE",
-            name="validator__user_group_user_group_id_fkey",
-        ),
-        primary_key=True,
-    )
-
-
 class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
@@ -1231,10 +1210,7 @@ class Validator(Base):
         Enum(ValidatorType, native_enum=False, length=30),
         nullable=False,
     )
-    config: Mapped[Any] = mapped_column(PickleType, nullable=False)
-
-    # для публичного доступа
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    config: Mapped[Any] = mapped_column(postgresql.JSONB(), nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -1244,17 +1220,16 @@ class Validator(Base):
     )
 
     # cвязь с пользователем-владельцем
-    user: Mapped[User | None] = relationship("User", back_populates="owned_validators", foreign_keys=[user_id])
+    user: Mapped[User | None] = relationship(
+        "User",
+        back_populates="owned_validators",
+        foreign_keys=[user_id]
+    )
+    # cвязь с ассистентом
     personas: Mapped[list["Persona"]] = relationship(
         "Persona",
         secondary="persona__validator",
         back_populates="validators"
-    )
-
-    groups: Mapped[list["UserGroup"]] = relationship(
-        "UserGroup",
-        secondary=Validator__UserGroup.__table__,
-        back_populates="validators",
     )
 
     __table_args__ = (
@@ -2326,13 +2301,6 @@ class UserGroup(Base):
     credentials: Mapped[list[Credential]] = relationship(
         "Credential",
         secondary=Credential__UserGroup.__table__,
-    )
-
-    # Guardrails validators
-    validators: Mapped[list["Validator"]] = relationship(
-        "Validator",
-        secondary=Validator__UserGroup.__table__,
-        back_populates="groups"
     )
 
 
