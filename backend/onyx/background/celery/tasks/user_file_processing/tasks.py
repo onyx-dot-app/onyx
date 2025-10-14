@@ -297,7 +297,10 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                     task_logger.error(
                         f"process_single_user_file - Indexing pipeline failed id={user_file_id}"
                     )
-                    uf.status = UserFileStatus.FAILED
+                    # don't update the status if the user file is being deleted
+                    db_session.refresh(uf)
+                    if uf.status != UserFileStatus.DELETING:
+                        uf.status = UserFileStatus.FAILED
                     db_session.add(uf)
                     db_session.commit()
                     return None
@@ -306,7 +309,10 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 task_logger.exception(
                     f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
                 )
-                uf.status = UserFileStatus.FAILED
+                db_session.refresh(uf)
+                # don't update the status if the user file is being deleted
+                if uf.status != UserFileStatus.DELETING:
+                    uf.status = UserFileStatus.FAILED
                 db_session.add(uf)
                 db_session.commit()
                 return None
@@ -321,7 +327,10 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
         with get_session_with_current_tenant() as db_session:
             uf = db_session.get(UserFile, _as_uuid(user_file_id))
             if uf:
-                uf.status = UserFileStatus.FAILED
+                # don't update the status if the user file is being deleted
+                if uf.status != UserFileStatus.DELETING:
+                    uf.status = UserFileStatus.FAILED
+                db_session.refresh(uf)
                 db_session.add(uf)
                 db_session.commit()
 

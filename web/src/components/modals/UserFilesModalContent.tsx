@@ -338,7 +338,6 @@ export default function UserFilesModalContent({
                 )}
                 {!showRemove && <div className="p-spacing-inline"></div>}
                 {showRemove &&
-                  String(f.status) !== UserFileStatus.PROCESSING &&
                   String(f.status) !== UserFileStatus.UPLOADING &&
                   String(f.status) !== UserFileStatus.DELETING && (
                     <IconButton
