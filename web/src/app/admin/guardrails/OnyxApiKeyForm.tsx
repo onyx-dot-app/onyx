@@ -136,6 +136,7 @@ export const OnyxApiKeyForm = ({
                 disabled={!Array.isArray(templates) || templates.length === 0}
                 onSelect={(selected) => {
                   const selectedId = selected as string;
+                  setFieldValue("template", selectedId);
                   const tpl = Array.isArray(templates)
                     ? templates.find((t) => String(t?.id) === selectedId)
                     : undefined;
