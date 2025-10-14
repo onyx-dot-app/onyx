@@ -21,7 +21,6 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
 from onyx.server.query_and_chat.streaming_models import CitationDelta
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -218,11 +217,13 @@ def _process_citations_for_final_answer(
         display_doc_id_to_rank_map=display_doc_id_to_rank_map,
     )
 
-    collected_citations: list[CitationInfo] = []
+    # Process the final answer through citation processor
+    collected_citations: list = []
     for response_part in citation_processor.process_token(final_answer):
         if hasattr(response_part, "citation_num"):  # It's a CitationInfo
             collected_citations.append(response_part)
 
+    # Emit citation events if we found any citations
     if collected_citations:
         dependencies.emitter.emit(Packet(ind=index, obj=CitationStart()))
         dependencies.emitter.emit(
