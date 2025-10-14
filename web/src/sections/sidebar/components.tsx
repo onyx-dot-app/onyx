@@ -46,7 +46,9 @@ export function getAgentIcon(
     return SvgImage;
   const uploadedImageId = agent.uploaded_image_id;
   if (uploadedImageId) {
-    return ({ className }) => (
+    const UploadedImageIcon: React.FunctionComponent<SvgProps> = ({
+      className,
+    }) => (
       <div className={cn("w-full h-full", className)}>
         <img
           alt={agent.name}
@@ -56,10 +58,14 @@ export function getAgentIcon(
         />
       </div>
     );
+    UploadedImageIcon.displayName = "SidebarUploadedAgentIcon";
+    return UploadedImageIcon;
   }
-  return ({ className }) => (
+  const GeneratedIcon: React.FunctionComponent<SvgProps> = ({ className }) => (
     <div className={cn("w-full h-full", className)}>
       {generateIdenticon((agent.icon_shape || 0).toString(), 16)}
     </div>
   );
+  GeneratedIcon.displayName = "SidebarGeneratedAgentIcon";
+  return GeneratedIcon;
 }
