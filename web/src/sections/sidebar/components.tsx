@@ -14,6 +14,8 @@ import SvgLightbulbSimple from "@/icons/lightbulb-simple";
 import { OnyxIcon } from "@/components/icons/icons";
 import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { cn } from "@/lib/utils";
 
 export interface SidebarSectionProps {
   title: string;
@@ -42,5 +44,28 @@ export function getAgentIcon(
   if (agent.id === GENERAL_ASSISTANT_ID) return SvgLightbulbSimple;
   if (agent.id === IMAGE_ASSISTANT_ID || agent.id === ART_ASSISTANT_ID)
     return SvgImage;
-  return () => generateIdenticon((agent.icon_shape || 0).toString(), 16);
+  const uploadedImageId = agent.uploaded_image_id;
+  if (uploadedImageId) {
+    const UploadedImageIcon: React.FunctionComponent<SvgProps> = ({
+      className,
+    }) => (
+      <div className={cn("w-full h-full", className)}>
+        <img
+          alt={agent.name}
+          src={buildImgUrl(uploadedImageId)}
+          loading="lazy"
+          className="w-full h-full rounded-full object-cover object-center"
+        />
+      </div>
+    );
+    UploadedImageIcon.displayName = "SidebarUploadedAgentIcon";
+    return UploadedImageIcon;
+  }
+  const GeneratedIcon: React.FunctionComponent<SvgProps> = ({ className }) => (
+    <div className={cn("w-full h-full", className)}>
+      {generateIdenticon((agent.icon_shape || 0).toString(), 16)}
+    </div>
+  );
+  GeneratedIcon.displayName = "SidebarGeneratedAgentIcon";
+  return GeneratedIcon;
 }
