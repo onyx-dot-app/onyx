@@ -31,7 +31,7 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useCallback, useEffect, memo, useRef } from "react";
 import remarkGfm from "remark-gfm";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
@@ -45,6 +45,9 @@ import {
   getFileTypeDefinitionForField,
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
+import Text from "@/refresh-components/texts/Text";
+import SvgPlusCircle from "@/icons/plus-circle";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 export function SectionHeader({
   children,
@@ -155,7 +158,7 @@ export function ToolTipDetails({
           <FiInfo size={12} />
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
-          {children}
+          <Text inverted>{children}</Text>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -720,9 +723,7 @@ export const BooleanFormField = memo(function BooleanFormField({
             </FastField>
             {disabled && disabledTooltip && (
               <TooltipContent side="top" align="center">
-                <p className="bg-background-neutral-inverted-00 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-text-inverted-05">
-                  {disabledTooltip}
-                </p>
+                <Text inverted>{disabledTooltip}</Text>
               </TooltipContent>
             )}
           </Tooltip>
@@ -838,21 +839,17 @@ export function TextArrayField<T extends Yup.AnyObject>({
                 </div>
               ))}
 
-            <Button
+            <CreateButton
               onClick={() => {
                 if (!disabled) {
                   arrayHelpers.push("");
                 }
               }}
-              className="mt-3 disabled:cursor-not-allowed"
-              variant="update"
-              size="sm"
               type="button"
-              icon={FiPlus}
               disabled={disabled}
             >
               Add New
-            </Button>
+            </CreateButton>
           </div>
         )}
       />

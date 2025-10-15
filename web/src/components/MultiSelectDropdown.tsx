@@ -137,8 +137,6 @@ const MultiSelectDropdown = ({
           onCreateOption={handleCreateOption}
           onInputChange={handleInputChange}
           inputValue={inputValue}
-          className="react-select-container"
-          classNamePrefix="react-select"
           menuPlacement={direction}
           styles={getReactSelectStyles()}
         />
@@ -150,8 +148,6 @@ const MultiSelectDropdown = ({
           onChange={handleChange}
           onInputChange={handleInputChange}
           inputValue={inputValue}
-          className="react-select-container"
-          classNamePrefix="react-select"
           menuPlacement={direction}
           styles={getReactSelectStyles()}
         />

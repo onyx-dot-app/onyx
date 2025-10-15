@@ -10,7 +10,7 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
@@ -625,7 +625,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button type="button" secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>
