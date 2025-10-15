@@ -1,8 +1,8 @@
-"""add_is_web_fetch_and_queries_to_research_agent_iteration_sub_step
+"""add queries and is web fetch to iteration answer
 
-Revision ID: a3953b9bffda
+Revision ID: 6f4f86aef280
 Revises: 96a5702df6aa
-Create Date: 2025-10-14 00:00:00.000000
+Create Date: 2025-10-14 18:08:30.920123
 
 """
 
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision = "a3953b9bffda"
+revision = "6f4f86aef280"
 down_revision = "96a5702df6aa"
 branch_labels = None
 depends_on = None
