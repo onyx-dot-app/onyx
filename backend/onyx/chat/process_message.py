@@ -747,6 +747,7 @@ def stream_chat_message_objects(
                 user=user,
                 tenant_id=tenant_id,
             )
+            and not new_msg_req.use_agentic_search
         )
         prompt_user_message = (
             default_build_user_message_v2(
@@ -810,7 +811,7 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-        if simple_agent_framework_enabled and not new_msg_req.use_agentic_search:
+        if simple_agent_framework_enabled:
             yield from _fast_message_stream(
                 answer,
                 tools,
