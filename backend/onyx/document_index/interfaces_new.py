@@ -1,11 +1,10 @@
 import abc
-from datetime import datetime
+from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel
 
 from onyx.access.models import DocumentAccess
-from onyx.access.models import ExternalAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -55,35 +54,6 @@ class IndexingMetadata(BaseModel):
     large_chunks_enabled: bool  # Meaning larger chunks should also get deleted
 
 
-class DocumentMetadata(BaseModel):
-    """
-    Document information that needs to be inserted into Postgres on first time encountering this
-    document during indexing across any of the connectors.
-    """
-
-    connector_id: int
-    credential_id: int
-    document_id: str
-    semantic_identifier: str
-    first_link: str
-    doc_updated_at: datetime | None = None
-    # Emails, not necessarily attached to users. Users may not be in Onyx.
-    primary_owners: list[str] | None = None
-    secondary_owners: list[str] | None = None
-    from_ingestion_api: bool = False
-
-    external_access: ExternalAccess | None = None
-    doc_metadata: dict[str, Any] | None = None
-
-
-class UserProjects(BaseModel):
-    """
-    Used by the Projects feature. Documents added to projects must also be indexed for RAG.
-    """
-
-    user_project_ids: list[int] | None = None
-
-
 class MetadataUpdateRequest(BaseModel):
     """
     Updates to the documents that can happen without there being an update to the contents of the document.
@@ -95,24 +65,27 @@ class MetadataUpdateRequest(BaseModel):
     document_sets: set[str] | None = None
     boost: float | None = None
     hidden: bool | None = None
+    secondary_index_updated: bool | None = None
+    project_ids: set[int] | None = None
 
 
-class Verifiable(abc.ABC):
+class SchemaVerifiable(abc.ABC):
     """
     Class must implement document index schema verification. For example, verify that all of the
     necessary attributes for indexing, querying, filtering, and fields to return from search are
     all valid in the schema.
     """
 
-    @abc.abstractmethod
     def __init__(
         self,
         index_name: str,
+        tenant_id: int | None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.index_name: str = index_name
+        self.index_name = index_name
+        self.tenant_id = tenant_id
 
     @abc.abstractmethod
     def ensure_indices_exist(
@@ -140,17 +113,15 @@ class Indexable(abc.ABC):
     @abc.abstractmethod
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterator[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index. This is often a batch operation
         including chunks from multiple documents.
 
-        NOTE: When a document is reindexed/updated here, it must clear all of the existing document
-        chunks before reindexing. This is because the document may have gotten shorter since the
-        last run. Therefore, upserting the first 0 through n chunks may leave some old chunks that
-        have not been written over.
+        NOTE: When a document is reindexed/updated here and has gotten shorter, it is important to delete the extra
+        chunks at the end to ensure there are no stale chunks in the index.
 
         NOTE: The chunks of a document are never separated into separate index() calls. So there is
         no worry of receiving the first 0 through n chunks in one index call and the next n through
@@ -204,6 +175,7 @@ class Updatable(abc.ABC):
     - Document-set membership
     - Boost value (learning from feedback mechanism)
     - Whether the document is hidden or not, hidden documents are not returned from search
+    - Which Projects the document is a part of
     """
 
     @abc.abstractmethod
@@ -301,15 +273,16 @@ class RandomCapable(abc.ABC):
     @abc.abstractmethod
     def random_retrieval(
         self,
-        filters: IndexFilters,
-        num_to_retrieve: int = 10,
+        filters: IndexFilters | None = None,
+        num_to_retrieve: int = 100,
+        secondary_index_updated: bool | None = None,
     ) -> list[InferenceChunk]:
         """Retrieve random chunks matching the filters"""
         raise NotImplementedError
 
 
 class BaseIndex(
-    Verifiable,
+    SchemaVerifiable,
     Indexable,
     Updatable,
     Deletable,
@@ -327,7 +300,7 @@ class BaseIndex(
 
 
 class DocumentIndex(
-    HybridCapable, BaseIndex, IdRetrievalCapable, RandomCapable, abc.ABC
+    HybridCapable, IdRetrievalCapable, RandomCapable, BaseIndex, abc.ABC
 ):
     """
     A valid document index that can plug into all Onyx flows must implement all of these
