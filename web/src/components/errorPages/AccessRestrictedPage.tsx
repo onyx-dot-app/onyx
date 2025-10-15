@@ -1,13 +1,15 @@
 "use client";
-import { FiLock } from "react-icons/fi";
+
 import ErrorPageLayout from "./ErrorPageLayout";
 import { fetchCustomerPortal } from "@/lib/billing/utils";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY } from "@/lib/constants";
+import Text from "@/refresh-components/Text";
+import SvgLock from "@/icons/lock";
 
 const fetchResubscriptionSession = async () => {
   const response = await fetch("/api/tenants/create-subscription-session", {
@@ -84,56 +86,50 @@ export default function AccessRestricted() {
 
   return (
     <ErrorPageLayout>
-      <h1 className="text-2xl font-semibold flex items-center gap-2 mb-4 text-gray-800 dark:text-gray-200">
-        <p>Access Restricted</p>
-        <FiLock className="text-error inline-block" />
-      </h1>
-      <div className="space-y-4 text-gray-600 dark:text-gray-300">
-        <p>
+      <div className="flex items-center gap-2 mb-4">
+        <Text headingH2>Access Restricted</Text>
+        <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
+      </div>
+      <div className="space-y-4">
+        <Text text03>
           We regret to inform you that your access to Onyx has been temporarily
           suspended due to a lapse in your subscription.
-        </p>
-        <p>
+        </Text>
+        <Text text03>
           To reinstate your access and continue benefiting from Onyx&apos;s
           powerful features, please update your payment information.
-        </p>
-        <p>
+        </Text>
+        <Text text03>
           If you&apos;re an admin, you can manage your subscription by clicking
           the button below. For other users, please reach out to your
           administrator to address this matter.
-        </p>
-        <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
-          <Button
-            onClick={handleResubscribe}
-            disabled={isLoading}
-            className="w-full sm:w-auto"
-          >
+        </Text>
+        <div className="flex flex-row gap-spacing-interline">
+          <Button onClick={handleResubscribe} disabled={isLoading}>
             {isLoading ? "Loading..." : "Resubscribe"}
           </Button>
           <Button
-            variant="outline"
+            secondary
             onClick={handleManageSubscription}
             disabled={isLoading}
-            className="w-full sm:w-auto"
           >
             Manage Existing Subscription
           </Button>
           <Button
-            variant="outline"
+            secondary
             onClick={async () => {
               await logout();
               window.location.reload();
             }}
-            className="w-full sm:w-auto"
           >
             Log out
           </Button>
         </div>
-        {error && <p className="text-error">{error}</p>}
-        <p>
+        {error && <Text className="text-status-error-05">{error}</Text>}
+        <Text text03>
           Need help? Join our{" "}
           <a
-            className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            className="text-action-link-05 hover:text-action-link-06"
             href="https://discord.gg/4NA5SbzrWb"
             target="_blank"
             rel="noopener noreferrer"
@@ -141,7 +137,7 @@ export default function AccessRestricted() {
             Discord community
           </a>{" "}
           for support.
-        </p>
+        </Text>
       </div>
     </ErrorPageLayout>
   );
