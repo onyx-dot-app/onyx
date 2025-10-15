@@ -27,7 +27,7 @@ export function SidebarSection({ title, children }: SidebarSectionProps) {
     <div className="flex flex-col gap-spacing-inline">
       <Text
         secondaryBody
-        text02
+        text03
         className="px-spacing-interline sticky top-[0rem] bg-background-tint-02 z-10"
       >
         {title}

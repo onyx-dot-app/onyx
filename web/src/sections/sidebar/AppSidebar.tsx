@@ -623,7 +623,7 @@ function AppSidebarInner() {
               {/* Recents */}
               <SidebarSection title="Recents">
                 {isHistoryEmpty ? (
-                  <Text text01 className="px-padding-button">
+                  <Text text03 className="px-spacing-interline">
                     Try sending a message! Your chat history will appear here.
                   </Text>
                 ) : (
