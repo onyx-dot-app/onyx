@@ -1,5 +1,7 @@
+import re
 from datetime import datetime
 from typing import cast
+from typing import List
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -22,6 +24,26 @@ logger = setup_logger()
 _SOURCE_MATERIAL_PROMPT = "Can yut please put together all of the supporting material?"
 
 
+def _find_citation_numbers_with_positions(text: str) -> List[int]:
+    """
+    Find all citation numbers with their positions in the text.
+
+    Args:
+        text: The input text to search for citations
+
+    Returns:
+        List of citation_numbers
+    """
+    pattern = r"\[\[(\d+)\]\]"
+
+    results = []
+    for match in re.finditer(pattern, text):
+        citation_number = int(match.group(1))
+        results.append(citation_number)
+
+    return results
+
+
 def rewriter(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> FinalUpdate | OrchestrationUpdate:
@@ -41,22 +63,17 @@ def rewriter(
     if not base_question:
         raise ValueError("Question is required for closer")
 
-    graph_config.behavior.research_type
-
-    state.assistant_system_prompt
-    state.assistant_task_prompt
-
     final_answer = state.final_answer
 
     all_cited_documents = state.all_cited_documents
 
-    state.iteration_responses
-
     claims: list[str] = []
 
     claims = []
+    claim_dict = {}
+    claim_supporting_cites = []
     for iteration_response_nr, iteration_response in enumerate(
-        state.iteration_responses
+        state.global_iteration_responses
     ):
         for iteration_claim_nr, iteration_claim in enumerate(
             iteration_response.claims or []
@@ -64,9 +81,18 @@ def rewriter(
             claims.append(
                 f"Claim Nr: {iteration_response_nr}-{iteration_claim_nr}\nClaim:\n{iteration_claim}"
             )
+            claim_dict[f"{iteration_response_nr}-{iteration_claim_nr}"] = (
+                iteration_claim
+            )
+            claim_supporting_cites.extend(
+                _find_citation_numbers_with_positions(iteration_claim)
+            )
     claim_str = "\n\n".join(claims)
+    claim_supporting_cites = list(set(claim_supporting_cites))
 
-    print(claim_str)
+    # get cite links
+    # for cite in all_cited_documents:
+    #    if cite.type == "file":
 
     claim_tension_prompt = CLAIM_CONTRADICTION_PROMPT.build(
         claim_str=claim_str,
@@ -75,15 +101,34 @@ def rewriter(
     claim_tension_response = invoke_llm_json(
         llm=graph_config.tooling.primary_llm,
         prompt=claim_tension_prompt,
-        max_tokens=graph_config.tooling.primary_llm.config.max_input_tokens,
         schema=ClaimTensionResponse,
     )
 
     contradictions = claim_tension_response.contradictions
     clarification_needs = claim_tension_response.clarification_needs
 
+    web_sources = []
+    internal_sources = []
+    for cite_nr in claim_supporting_cites:
+        cite = all_cited_documents[cite_nr - 1]
+        if cite.type == "web":
+            web_sources.append(cite.center_chunk.source_links[0])
+        else:
+            internal_sources.append(cite.center_chunk.source_links[0])
+
+    # resolve:
+
     print(contradictions[0].description)
     print(clarification_needs[0].description)
+
+    claim_supporting_cites = []
+    for contradiction in contradictions:
+        for claim_number in contradiction.claim_numbers:
+            claim_dict[claim_number]
+            claim_supporting_cites.append(claim_dict[claim_number])
+    for clarification_need in clarification_needs:
+        for claim_number in clarification_need.claim_numbers:
+            claim_supporting_cites.append(claim_dict[claim_number])
 
     return FinalUpdate(
         final_answer=final_answer,

@@ -70,6 +70,7 @@ class AnswerUpdate(LoggerUpdate):
 class FinalUpdate(LoggerUpdate):
     final_answer: str | None = None
     all_cited_documents: list[InferenceSection] = []
+    global_iteration_responses: list[IterationAnswer] = []
 
 
 ## Graph Input State

@@ -271,7 +271,7 @@ def closer(
     else:
         final_questions = "(No final question specifications)"
 
-    if research_type in [ResearchType.THOUGHTFUL, ResearchType.FAST]:
+    if research_type in [ResearchType.FAST]:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS.build(
             base_question=prompt_question,
             final_questions=final_questions or "(No final question specifications)",
@@ -279,7 +279,7 @@ def closer(
             or "(No final user instructions)",
             # iteration_responses_w_docs_string=iteration_responses_w_docs_string,
         )
-    elif research_type == ResearchType.DEEP:
+    elif research_type in [ResearchType.THOUGHTFUL, ResearchType.DEEP]:
         final_answer_base_prompt = FINAL_ANSWER_PROMPT_W_SUB_ANSWERS.build(
             base_question=prompt_question,
             final_questions=final_questions or "(No final question specifications)",
@@ -346,6 +346,7 @@ def closer(
     return FinalUpdate(
         final_answer=final_answer,
         all_cited_documents=all_cited_documents,
+        global_iteration_responses=aggregated_context_w_docs.global_iteration_responses,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

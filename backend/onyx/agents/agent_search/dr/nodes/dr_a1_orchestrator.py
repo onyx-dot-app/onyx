@@ -613,9 +613,9 @@ def orchestrator(
     # message_history_for_continuation.append(
     #     AIMessage(content=tool_choice_wrapper_prompt)
     # )
-    new_messages.append(
-        AIMessage(content=tool_choice_wrapper_prompt + "\n\n" + _NEXT_ACTION_PROMPT)
-    )
+    # new_messages.append(
+    #    AIMessage(content=tool_choice_wrapper_prompt + "\n\n" + _NEXT_ACTION_PROMPT)
+    # )
 
     purpose_tokens: list[str] = [""]
     purpose = ""
