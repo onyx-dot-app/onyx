@@ -15,7 +15,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.access.models import DocumentAccess
-from onyx.access.models import ExternalAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -148,17 +147,15 @@ class Indexable(abc.ABC):
     @abc.abstractmethod
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterator[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index. This is often a batch operation
         including chunks from multiple documents.
 
-        NOTE: When a document is reindexed/updated here, it must clear all of the existing document
-        chunks before reindexing. This is because the document may have gotten shorter since the
-        last run. Therefore, upserting the first 0 through n chunks may leave some old chunks that
-        have not been written over.
+        NOTE: When a document is reindexed/updated here and has gotten shorter, it is important to delete the extra
+        chunks at the end to ensure there are no stale chunks in the index.
 
         NOTE: The chunks of a document are never separated into separate index() calls. So there is
         no worry of receiving the first 0 through n chunks in one index call and the next n through
