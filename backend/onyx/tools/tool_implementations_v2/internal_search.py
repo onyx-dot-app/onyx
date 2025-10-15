@@ -163,6 +163,8 @@ def internal_search(
     - MUST call this tool if the user's query requires internal information, like
     if it references "we" or "us" or "our" or "internal" or if it references
     the organization the user works for.
+    - MUST call this tool if the user's query sounds like the name of a specific internal document,
+    like some keyword that could be a document name.
 
     ## Usage hints
     - Batch a list of natural-language queries per call.
