@@ -154,14 +154,14 @@ def _web_search_core(
 
 
 @function_tool
-def web_search_tool(
+def web_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
     Tool for searching the public internet. Useful for up to date information on PUBLIC knowledge.
     ---
     ## Decision boundary
-    - You MUST call `web_search_tool` to discover sources when the request involves:
+    - You MUST call this tool to discover sources when the request involves:
       - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
       - Recommendations, or any query where the specific sources matter.
       - Verifiable claims, quotes, or citations.
@@ -269,9 +269,7 @@ def _web_fetch_core(
 
 
 @function_tool
-def web_fetch_tool(
-    run_context: RunContextWrapper[ChatTurnContext], urls: List[str]
-) -> str:
+def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -> str:
     """
     Tool for fetching and extracting full content from web pages.
 

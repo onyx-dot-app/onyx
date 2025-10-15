@@ -151,7 +151,7 @@ def _internal_search_core(
 
 
 @function_tool
-def internal_search_tool(
+def internal_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
@@ -160,7 +160,7 @@ def internal_search_tool(
     Will return a combination of keyword and semantic search results.
     ---
     ## Decision boundary
-    - MUST call internal_search_tool if the user's query requires internal information, like
+    - MUST call this tool if the user's query requires internal information, like
     if it references "we" or "us" or "our" or "internal" or if it references
     the organization the user works for.
 

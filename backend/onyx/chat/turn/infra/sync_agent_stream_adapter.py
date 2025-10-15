@@ -174,4 +174,3 @@ class SyncAgentStream(Generic[T]):
             finally:
                 loop.close()
                 self._loop = None
-                self._streamed = None

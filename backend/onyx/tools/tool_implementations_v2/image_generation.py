@@ -139,7 +139,7 @@ def _image_generation_core(
 # message back to the LLM. This is needed for image_generation since we configure our agent
 # to stop at this tool.
 @function_tool(failure_error_function=None)
-def image_generation_tool(
+def image_generation(
     run_context: RunContextWrapper[ChatTurnContext], prompt: str, shape: str = "square"
 ) -> str:
     """
