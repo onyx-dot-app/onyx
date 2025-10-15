@@ -15,6 +15,7 @@ import { BlinkingDot } from "../../BlinkingDot";
 import Text from "@/refresh-components/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
 import { usePostHog } from "posthog-js/react";
+import { ResearchType } from "@/app/chat/interfaces";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
@@ -67,7 +68,10 @@ const constructCurrentSearchState = (
   return { queries, results, isSearching, isComplete, isInternetSearch };
 };
 
-export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
+export const SearchToolRenderer: MessageRenderer<
+  SearchToolPacket,
+  { researchType?: string | null }
+> = ({
   packets,
   state,
   onComplete,
@@ -79,6 +83,8 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const posthog = usePostHog();
   const isSimpleAgentFrameworkEnabled =
     posthog.isFeatureEnabled("simple-agent-framework") ?? false;
+  // Check if this message has a research_type, which indicates it's using the simple agent framework
+  const isDeepResearch = state.researchType === ResearchType.Deep;
 
   // Initialize all hooks at the top level (before any conditional returns)
   const { queries, results, isSearching, isComplete, isInternetSearch } =
@@ -188,8 +194,8 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   // Determine the icon based on search type
   const icon = isInternetSearch ? FiGlobe : FiSearch;
 
-  // If simple agent feature flag is enabled, use the V2 renderer
-  if (isSimpleAgentFrameworkEnabled) {
+  // If this message has a research type, use the V2 renderer (simple agent framework)
+  if (isSimpleAgentFrameworkEnabled && !isDeepResearch) {
     return (
       <SearchToolRendererV2
         packets={packets}

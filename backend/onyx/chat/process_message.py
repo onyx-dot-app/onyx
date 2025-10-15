@@ -810,7 +810,7 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-        if simple_agent_framework_enabled:
+        if simple_agent_framework_enabled and not new_msg_req.use_agentic_search:
             yield from _fast_message_stream(
                 answer,
                 tools,

@@ -33,6 +33,7 @@ import {
   Message,
   MessageResponseIDInfo,
   RegenerationState,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -278,10 +279,7 @@ export function useChatController({
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
     // Check if the current message uses agent search (any non-null research type)
-    const isAgentSearchMessage =
-      lastMessage?.researchType !== undefined &&
-      lastMessage?.researchType !== null;
-
+    const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
     const isSimpleAgentFrameworkEnabled =
       posthog.isFeatureEnabled("simple-agent-framework") ?? false;
 
@@ -296,7 +294,7 @@ export function useChatController({
     }
 
     // Only do the subsequent cleanup if the message was agent search or feature flag is not enabled
-    if (isAgentSearchMessage || !isSimpleAgentFrameworkEnabled) {
+    if (isDeepResearch || !isSimpleAgentFrameworkEnabled) {
       abortSession(currentSession);
 
       if (

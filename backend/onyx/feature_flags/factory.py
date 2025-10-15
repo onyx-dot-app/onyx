@@ -3,7 +3,6 @@ from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
-from shared_configs.configs import MULTI_TENANT
 
 
 def get_default_feature_flag_provider() -> FeatureFlagProvider:
@@ -19,10 +18,10 @@ def get_default_feature_flag_provider() -> FeatureFlagProvider:
     Returns:
         FeatureFlagProvider: The configured feature flag provider instance
     """
-    if MULTI_TENANT:
-        return fetch_versioned_implementation_with_fallback(
-            module="onyx.feature_flags.factory",
-            attribute="get_posthog_feature_flag_provider",
-            fallback=lambda: NoOpFeatureFlagProvider(),
-        )()
-    return NoOpFeatureFlagProvider()
+    # if MULTI_TENANT:
+    return fetch_versioned_implementation_with_fallback(
+        module="onyx.feature_flags.factory",
+        attribute="get_posthog_feature_flag_provider",
+        fallback=lambda: NoOpFeatureFlagProvider(),
+    )()
+    # return NoOpFeatureFlagProvider()
