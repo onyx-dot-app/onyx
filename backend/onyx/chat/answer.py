@@ -161,37 +161,39 @@ class Answer:
 
         processed_stream = []
         for packet in stream:
-            for packet in stream:
-                logger.info("\n\n=== НАЧАЛО ПАКЕТА ===\n\n")
-                logger.info("\nТип пакета: %s", type(packet).__name__)
+            logger.info("\n\n=== НАЧАЛО ПАКЕТА ===\n\n")
 
-                # Проверяем основные атрибуты
-                if hasattr(packet, 'id'):
-                    logger.info("\npacket.id: %s", packet.id)
+            logger.info("\nПакет: %s", packet)
 
-                # Проверяем наличие текстовых полей
-                text_fields = []
-                if hasattr(packet, 'content'):
-                    text_fields.append(f"\ncontent: {packet.content}")
+            logger.info("\nТип пакета: %s", type(packet).__name__)
 
-                if hasattr(packet, 'response'):
-                    text_fields.append(f"\nresponse: {str(packet.response)}")
+            # Проверяем основные атрибуты
+            if hasattr(packet, 'id'):
+                logger.info("\npacket.id: %s", packet.id)
 
-                if hasattr(packet, 'answer_piece'):
-                    text_fields.append(f"\nanswer_piece: {packet.answer_piece}")
+            # Проверяем наличие текстовых полей
+            text_fields = []
+            if hasattr(packet, 'content'):
+                text_fields.append(f"\ncontent: {packet.content}")
 
-                if hasattr(packet, 'refined_answer_improvement'):
-                    text_fields.append(f"\nrefined_answer_improvement: {packet.refined_answer_improvement}")
+            if hasattr(packet, 'response'):
+                text_fields.append(f"\nresponse: {str(packet.response)}")
 
-                if hasattr(packet, 'tool_result'):
-                    text_fields.append(f"\ntool_result: {str(packet.tool_result)}")
+            if hasattr(packet, 'answer_piece'):
+                text_fields.append(f"\nanswer_piece: {packet.answer_piece}")
 
-                if text_fields:
-                    logger.info("\nТекстовые поля: %s", " | ".join(text_fields))
-                else:
-                    logger.info("\nТекстовых полей не найдено")
+            if hasattr(packet, 'refined_answer_improvement'):
+                text_fields.append(f"\nrefined_answer_improvement: {packet.refined_answer_improvement}")
 
-                logger.info("\n\n=== КОНЕЦ ПАКЕТА ===\n\n")
+            if hasattr(packet, 'tool_result'):
+                text_fields.append(f"\ntool_result: {str(packet.tool_result)}")
+
+            if text_fields:
+                logger.info("\nТекстовые поля: %s", " | ".join(text_fields))
+            else:
+                logger.info("\nТекстовых полей не найдено")
+
+            logger.info("\n\n=== КОНЕЦ ПАКЕТА ===\n\n")
 
             if self.is_cancelled():
                 packet = StreamStopInfo(stop_reason=StreamStopReason.CANCELLED)
@@ -199,6 +201,10 @@ class Answer:
                 break
             processed_stream.append(packet)
             yield packet
+
+            logger.info("\nСписок пакетов processed_stream: %ы\n", processed_stream)
+
+
 
         self._processed_stream = processed_stream
 
