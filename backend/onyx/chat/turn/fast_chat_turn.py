@@ -110,7 +110,7 @@ def _fast_chat_turn_core(
         _process_stream(
             agent_stream, chat_session_id, dependencies, ctx, emit_message_to_user=False
         )
-        new_input = agent_stream._streamed.to_input_list()
+        new_input = agent_stream.streamed.to_input_list()
         last_message = messages[-1]
         # special case for image gen is last tool called
         new_input[-1] = {

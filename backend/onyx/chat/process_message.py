@@ -33,7 +33,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import (
     default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message_v2
 from onyx.chat.turn import fast_chat_turn
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -749,18 +748,10 @@ def stream_chat_message_objects(
             )
             and not new_msg_req.use_agentic_search
         )
-        prompt_user_message = (
-            default_build_user_message_v2(
-                user_query=final_msg.message,
-                prompt_config=prompt_config,
-                files=latest_query_files,
-            )
-            if simple_agent_framework_enabled
-            else default_build_user_message(
-                user_query=final_msg.message,
-                prompt_config=prompt_config,
-                files=latest_query_files,
-            )
+        prompt_user_message = default_build_user_message(
+            user_query=final_msg.message,
+            prompt_config=prompt_config,
+            files=latest_query_files,
         )
         system_message = (
             default_build_system_message_v2(prompt_config, llm.config)

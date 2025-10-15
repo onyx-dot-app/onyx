@@ -86,24 +86,6 @@ def default_build_system_message(
     return SystemMessage(content=tag_handled_prompt)
 
 
-def default_build_user_message_v2(
-    user_query: str,
-    prompt_config: PromptConfig,
-    files: list[InMemoryChatFile] = [],
-) -> HumanMessage:
-    user_prompt = user_query
-    user_prompt = user_prompt.strip()
-    tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
-    user_msg = HumanMessage(
-        content=(
-            build_content_with_imgs(tag_handled_prompt, files)
-            if files
-            else tag_handled_prompt
-        )
-    )
-    return user_msg
-
-
 def default_build_user_message(
     user_query: str,
     prompt_config: PromptConfig,
