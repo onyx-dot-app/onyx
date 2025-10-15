@@ -12,7 +12,7 @@ import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
 import { usePostHog } from "posthog-js/react";
 import { ResearchType } from "@/app/chat/interfaces";

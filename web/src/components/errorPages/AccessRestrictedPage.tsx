@@ -8,7 +8,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY } from "@/lib/constants";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgLock from "@/icons/lock";
 
 const fetchResubscriptionSession = async () => {

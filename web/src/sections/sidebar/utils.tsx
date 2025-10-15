@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import Text from "@/refresh-components/Text";
 import { SvgProps } from "@/icons";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
@@ -16,26 +15,6 @@ import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";
-
-export interface SidebarSectionProps {
-  title: string;
-  children?: React.ReactNode;
-}
-
-export function SidebarSection({ title, children }: SidebarSectionProps) {
-  return (
-    <div className="flex flex-col gap-spacing-inline">
-      <Text
-        secondaryBody
-        text03
-        className="px-spacing-interline sticky top-[0rem] bg-background-tint-02 z-10"
-      >
-        {title}
-      </Text>
-      <div className="flex flex-col">{children}</div>
-    </div>
-  );
-}
 
 export function getAgentIcon(
   agent: MinimalPersonaSnapshot

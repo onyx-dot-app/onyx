@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 function md5ToBits(str: string): number[] {
   const md5hex = crypto.createHash("md5").update(str).digest("hex");

@@ -7,7 +7,7 @@ import { InMessageImage } from "@/app/chat/components/files/images/InMessageImag
 import CsvContent from "@/components/tools/CSVContent";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";

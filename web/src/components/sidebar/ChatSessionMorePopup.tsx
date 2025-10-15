@@ -18,7 +18,7 @@ import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import MenuButton from "@/refresh-components/buttons/MenuButton";
 import SvgShare from "@/icons/share";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
@@ -26,7 +26,7 @@ import SvgFolder from "@/icons/folder";
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
-import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
+import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -145,23 +145,23 @@ export function ChatSessionMorePopup({
     if (!showMoveOptions) {
       return [
         showShareModal && (
-          <NavigationTab
+          <MenuButton
             key="share"
             icon={SvgShare}
             onClick={noProp(() => showShareModal(chatSession))}
           >
             Share
-          </NavigationTab>
+          </MenuButton>
         ),
-        <NavigationTab
+        <MenuButton
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </NavigationTab>,
+        </MenuButton>,
         projectId && (
-          <NavigationTab
+          <MenuButton
             key="remove"
             icon={SvgFolder}
             onClick={noProp(() => handleRemoveChatSessionFromProject())}
@@ -169,17 +169,17 @@ export function ChatSessionMorePopup({
             {`Remove from ${
               projects.find((p) => p.id === projectId)?.name ?? "Project"
             }`}
-          </NavigationTab>
+          </MenuButton>
         ),
         null,
-        <NavigationTab
+        <MenuButton
           key="delete"
           icon={SvgTrash}
           onClick={noProp(() => setIsDeleteModalOpen(true))}
           danger
         >
           Delete
-        </NavigationTab>,
+        </MenuButton>,
       ];
     }
     return [
@@ -191,7 +191,7 @@ export function ChatSessionMorePopup({
       ...filteredProjects
         .filter((candidate) => candidate.id !== projectId)
         .map((target) => (
-          <NavigationTab
+          <MenuButton
             key={target.id}
             icon={SvgFolder}
             onClick={noProp(() =>
@@ -199,7 +199,7 @@ export function ChatSessionMorePopup({
             )}
           >
             {target.name}
-          </NavigationTab>
+          </MenuButton>
         )),
     ];
   }, [
