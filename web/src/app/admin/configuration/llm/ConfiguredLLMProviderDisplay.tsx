@@ -8,7 +8,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({

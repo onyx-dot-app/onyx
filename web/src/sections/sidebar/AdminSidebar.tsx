@@ -7,10 +7,9 @@ import {
   useSettingsContext,
 } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
-import Text from "@/refresh-components/Text";
-import { SidebarSection } from "@/sections/sidebar/components";
+import Text from "@/refresh-components/texts/Text";
+import { SidebarSection } from "@/sections/sidebar/SidebarSection";
 import Settings from "@/sections/sidebar/Settings";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -42,6 +41,8 @@ import {
 } from "@/components/icons/icons";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 
 const connectors_items = () => [
   {
@@ -317,39 +318,43 @@ export default function AdminSidebar({
 
   return (
     <SidebarWrapper>
-      <NavigationTab
-        icon={({ className }) => (
-          <CgArrowsExpandUpLeft className={className} size={16} />
-        )}
-        href="/chat"
-      >
-        Exit Admin
-      </NavigationTab>
+      <div className="px-spacing-interline">
+        <SidebarTab
+          leftIcon={({ className }) => (
+            <CgArrowsExpandUpLeft className={className} size={16} />
+          )}
+          href="/chat"
+        >
+          Exit Admin
+        </SidebarTab>
+      </div>
 
-      <div className="flex flex-col flex-1 overflow-y-auto gap-padding-content">
+      {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
+      <VerticalShadowScroller className="flex px-spacing-interline gap-padding-content">
         {items.map((collection, index) => (
           <SidebarSection key={index} title={collection.name}>
             <div className="flex flex-col w-full">
               {collection.items.map(({ link, icon: Icon, name }, index) => (
-                <NavigationTab
+                <SidebarTab
                   key={index}
                   href={link}
                   active={pathname.startsWith(link)}
-                  icon={({ className }) => (
+                  leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}
                 >
                   {name}
-                </NavigationTab>
+                </SidebarTab>
               ))}
             </div>
           </SidebarSection>
         ))}
-      </div>
-      <div className="flex flex-col gap-spacing-interline">
+      </VerticalShadowScroller>
+
+      <div className="flex flex-col px-spacing-interline gap-spacing-interline">
         {combinedSettings.webVersion && (
           <Text text02 secondaryBody className="px-spacing-interline">
-            Onyx version: {combinedSettings.webVersion}
+            {`Onyx version: ${combinedSettings.webVersion}`}
           </Text>
         )}
         <Settings removeAdminPanelLink />

@@ -54,6 +54,8 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
+from sqlalchemy import nulls_last
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -103,6 +105,7 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
@@ -324,8 +327,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         user_create.role = UserRole.ADMIN
 
+                user_created = False
                 try:
-                    user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+                    user = await super().create(
+                        user_create, safe=safe, request=request
+                    )  # type: ignore
+                    user_created = True
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -351,10 +358,41 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         role=user_create.role,
                     )
                     user = await self.update(user_update, user)
+                if user_created:
+                    await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
+
+    async def _assign_default_pinned_assistants(
+        self, user: User, db_session: AsyncSession
+    ) -> None:
+        if user.pinned_assistants is not None:
+            return
+
+        result = await db_session.execute(
+            select(Persona.id)
+            .where(
+                Persona.is_default_persona.is_(True),
+                Persona.is_public.is_(True),
+                Persona.is_visible.is_(True),
+                Persona.deleted.is_(False),
+            )
+            .order_by(
+                nulls_last(Persona.display_priority.asc()),
+                Persona.id.asc(),
+            )
+        )
+        default_persona_ids = list(result.scalars().all())
+        if not default_persona_ids:
+            return
+
+        await self.user_db.update(
+            user,
+            {"pinned_assistants": default_persona_ids},
+        )
+        user.pinned_assistants = default_persona_ids
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
@@ -476,6 +514,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
+                    await self._assign_default_pinned_assistants(user, db_session)
                     await self.on_after_register(user, request)
 
             else:

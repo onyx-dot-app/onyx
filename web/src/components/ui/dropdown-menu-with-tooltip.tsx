@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 interface DropdownMenuItemWithTooltipProps
   extends React.ComponentPropsWithoutRef<typeof DropdownMenuItem> {

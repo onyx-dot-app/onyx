@@ -7,6 +7,7 @@ from onyx.agents.agent_search.dr.models import InferenceSection
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
+from onyx.chat.models import LlmDoc
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -20,6 +21,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
@@ -30,7 +32,7 @@ def _internal_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
     search_tool: SearchTool,
-) -> list[InferenceSection]:
+) -> list[LlmDoc]:
     """Core internal search logic that can be tested with dependency injection"""
     index = run_context.context.current_run_step
     run_context.context.run_dependencies.emitter.emit(
@@ -58,9 +60,9 @@ def _internal_search_core(
         )
     )
 
-    def execute_single_query(query: str, parallelization_nr: int) -> list:
-        """Execute a single query and return the retrieved documents"""
-        retrieved_docs_for_query: list[InferenceSection] = []
+    def execute_single_query(query: str, parallelization_nr: int) -> list[LlmDoc]:
+        """Execute a single query and return the retrieved documents as LlmDocs"""
+        retrieved_llm_docs_for_query: list[LlmDoc] = []
 
         with get_session_with_current_tenant() as search_db_session:
             for tool_response in search_tool.run(
@@ -80,8 +82,16 @@ def _internal_search_core(
                 # get retrieved docs to send to the rest of the graph
                 if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
                     response = cast(SearchResponseSummary, tool_response.response)
-                    retrieved_docs = response.top_sections
-                    retrieved_docs_for_query = retrieved_docs
+                    # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
+                    docs_to_feed_llm = 15
+                    retrieved_sections: list[InferenceSection] = response.top_sections[
+                        :docs_to_feed_llm
+                    ]
+
+                    # Convert InferenceSections to LlmDocs for return value
+                    retrieved_llm_docs_for_query = [
+                        section_to_llm_doc(section) for section in retrieved_sections
+                    ]
 
                     run_context.context.run_dependencies.emitter.emit(
                         Packet(
@@ -90,13 +100,13 @@ def _internal_search_core(
                                 type="internal_search_tool_delta",
                                 queries=[],
                                 documents=convert_inference_sections_to_search_docs(
-                                    retrieved_docs, is_internet=False
+                                    retrieved_sections, is_internet=False
                                 ),
                             ),
                         )
                     )
                     run_context.context.aggregated_context.cited_documents.extend(
-                        retrieved_docs
+                        retrieved_sections
                     )
                     run_context.context.aggregated_context.global_iteration_responses.append(
                         IterationAnswer(
@@ -112,13 +122,16 @@ def _internal_search_core(
                             answer="",
                             cited_documents={
                                 i: inference_section
-                                for i, inference_section in enumerate(retrieved_docs)
+                                for i, inference_section in enumerate(
+                                    retrieved_sections
+                                )
                             },
+                            queries=[query],
                         )
                     )
                     break
 
-        return retrieved_docs_for_query
+        return retrieved_llm_docs_for_query
 
     # Execute all queries in parallel using run_functions_in_parallel
     function_calls = [
@@ -128,7 +141,7 @@ def _internal_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_retrieved_docs: list[InferenceSection] = []
+    all_retrieved_docs: list[LlmDoc] = []
     for result_id in search_results_dict:
         retrieved_docs = search_results_dict[result_id]
         if retrieved_docs:
@@ -148,7 +161,8 @@ def internal_search_tool(
     ---
     ## Decision boundary
     - MUST call internal_search_tool if the user's query requires internal information, like
-    if they reference "we" or "us" or "our" or "internal" for example.
+    if it references "we" or "us" or "our" or "internal" or if it references
+    the organization the user works for.
 
     ## Usage hints
     - Batch a list of natural-language queries per call.
@@ -158,25 +172,18 @@ def internal_search_tool(
     ## Args
     - queries (list[str]): The search queries.
 
-    ## Returns (list of InferenceSection objects as string)
-    Each InferenceSection contains:
-    - center_chunk: The main InferenceChunk with fields like:
-        - document_id: Unique document identifier
-        - chunk_id: Chunk index within document
-        - semantic_identifier: Human-readable document name
-        - title: Document title (may be None)
-        - source_links: List of URLs to the source
-        - blurb: Text excerpt from the chunk
-        - content: Full chunk content
-        - source_type: Type of document source (e.g., web, confluence, etc.)
-        - metadata: Additional document metadata
-        - updated_at: When document was last updated
-        - primary_owners: List of primary document owners
-        - secondary_owners: List of secondary document owners
-        - score: Relevance score
-        - match_highlights: Highlighted matching text snippets
-    - chunks: List of InferenceChunk objects (context chunks around center_chunk)
-    - combined_content: Merged text content from all chunks in the section
+    ## Returns (list of LlmDoc objects as string)
+    Each LlmDoc contains:
+    - document_id: Unique document identifier
+    - content: Full document content (combined from all chunks in the section)
+    - blurb: Text excerpt from the document
+    - semantic_identifier: Human-readable document name
+    - source_type: Type of document source (e.g., web, confluence, etc.)
+    - metadata: Additional document metadata
+    - updated_at: When document was last updated
+    - link: Primary URL to the source (may be None). Used for citations.
+    - source_links: Dictionary of URLs to the source
+    - match_highlights: Highlighted matching text snippets
     """
     search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
     if search_pipeline_instance is None:

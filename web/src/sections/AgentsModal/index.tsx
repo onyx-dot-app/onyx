@@ -6,7 +6,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import Modal from "@/refresh-components/modals/Modal";
 import {
   ModalIds,
