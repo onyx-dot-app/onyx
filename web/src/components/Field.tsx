@@ -32,8 +32,7 @@ import { FaMarkdown } from "react-icons/fa";
 import { useState, useCallback, useEffect, memo, useRef } from "react";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
-import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
-import { CheckedState } from "@radix-ui/react-checkbox";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
@@ -707,7 +706,6 @@ export const BooleanFormField = memo(function BooleanFormField({
                 <TooltipTrigger asChild>
                   <Checkbox
                     id={checkboxId}
-                    size="sm"
                     className={`
                       ${disabled ? "opacity-50" : ""}
                       ${removeIndent ? "mr-2" : "mx-3"}`}

@@ -18,4 +18,6 @@ task_acks_late = shared_config.task_acks_late
 
 worker_concurrency = CELERY_WORKER_BACKGROUND_CONCURRENCY
 worker_pool = "threads"
-worker_prefetch_multiplier = 1
+# Increased from 1 to 4 to handle fast light worker tasks more efficiently
+# This allows the worker to prefetch multiple tasks per thread
+worker_prefetch_multiplier = 4

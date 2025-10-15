@@ -93,16 +93,19 @@ Onyx supports two deployment modes for background workers, controlled by the `US
 
 **Lightweight Mode** (default, `USE_LIGHTWEIGHT_BACKGROUND_WORKER=true`):
 - Runs a single consolidated `background` worker that handles all background tasks:
+  - Light worker tasks (Vespa operations, permissions sync, deletion)
+  - Document processing (indexing pipeline)
+  - Document fetching (connector data retrieval)
   - Pruning operations (from `heavy` worker)
   - Knowledge graph processing (from `kg_processing` worker)
   - Monitoring tasks (from `monitoring` worker)
   - User file processing (from `user_file_processing` worker)
-- Lower resource footprint (single worker process)
+- Lower resource footprint (fewer worker processes)
 - Suitable for smaller deployments or development environments
-- Default concurrency: 6 threads
+- Default concurrency: 20 threads (increased to handle combined workload)
 
 **Standard Mode** (`USE_LIGHTWEIGHT_BACKGROUND_WORKER=false`):
-- Runs separate specialized workers as documented above (heavy, kg_processing, monitoring, user_file_processing)
+- Runs separate specialized workers as documented above (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
 - Better isolation and scalability
 - Can scale individual workers independently based on workload
 - Suitable for production deployments with higher load

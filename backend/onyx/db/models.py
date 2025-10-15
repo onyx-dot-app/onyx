@@ -3437,6 +3437,8 @@ class ResearchAgentIterationSubStep(Base):
     # for search-based step-types
     cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
     claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    is_web_fetch: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    queries: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
 
     # for image generation step-types
     generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(

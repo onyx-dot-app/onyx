@@ -204,6 +204,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
                 onMessageSelection={onMessageSelection}
+                researchType={message.researchType}
               />
             </div>
           );

@@ -2,9 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
-import { DocumentPreview } from "@/app/chat/components/files/documents/DocumentPreview";
+import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
-import ToolResult from "@/components/tools/ToolResult";
 import CsvContent from "@/components/tools/CSVContent";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
@@ -14,7 +13,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import SvgCopy from "@/icons/copy";
-import { copyAll } from "./copyingUtils";
+import { copyAll } from "@/app/chat/message/copyingUtils";
+import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
 
 interface FileDisplayProps {
   files: FileDescriptor[];
@@ -29,67 +29,60 @@ interface MessageEditingProps {
 
 function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   const [close, setClose] = useState(true);
-  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const textFiles = files.filter(
-    (file) => file.type == ChatFileType.PLAIN_TEXT
+    (file) =>
+      file.type === ChatFileType.PLAIN_TEXT ||
+      file.type === ChatFileType.DOCUMENT
   );
-
-  const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
+  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
+  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
 
   return (
     <>
-      {textFiles && textFiles.length > 0 && (
+      {textFiles.length > 0 && (
         <div
           id="onyx-file"
           className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
-            {textFiles.map((file) => {
-              return (
-                <div key={file.id} className="w-fit">
-                  <DocumentPreview
-                    fileName={file.name || file.id}
-                    alignBubble={alignBubble}
-                  />
-                </div>
-              );
-            })}
+            {textFiles.map((file) => (
+              <Attachment key={file.id} fileName={file.name || file.id} />
+            ))}
           </div>
         </div>
       )}
 
-      {imageFiles && imageFiles.length > 0 && (
+      {imageFiles.length > 0 && (
         <div
           id="onyx-image"
           className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
-            {imageFiles.map((file) => {
-              return <InMessageImage key={file.id} fileId={file.id} />;
-            })}
+            {imageFiles.map((file) => (
+              <InMessageImage key={file.id} fileId={file.id} />
+            ))}
           </div>
         </div>
       )}
-      {csvImgFiles && csvImgFiles.length > 0 && (
+
+      {csvFiles.length > 0 && (
         <div className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}>
           <div className="flex flex-col gap-2">
-            {csvImgFiles.map((file) => {
+            {csvFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
                   {close ? (
                     <>
-                      <ToolResult
-                        csvFileDescriptor={file}
+                      <ExpandableContentWrapper
+                        fileDescriptor={file}
                         close={() => setClose(false)}
-                        contentComponent={CsvContent}
+                        ContentComponent={CsvContent}
                       />
                     </>
                   ) : (
-                    <DocumentPreview
+                    <Attachment
                       open={() => setClose(true)}
                       fileName={file.name || file.id}
-                      maxWidth="max-w-64"
-                      alignBubble={alignBubble}
                     />
                   )}
                 </div>

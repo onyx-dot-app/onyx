@@ -1,9 +1,17 @@
 import dataclasses
+from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from agents import CodeInterpreterTool
+from agents import ComputerTool
+from agents import FileSearchTool
 from agents import FunctionTool
+from agents import HostedMCPTool
+from agents import ImageGenerationTool as AgentsImageGenerationTool
+from agents import LocalShellTool
 from agents import Model
+from agents import WebSearchTool
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -20,13 +28,25 @@ from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
+# Type alias for all tool types accepted by the Agent
+AgentToolType = (
+    FunctionTool
+    | FileSearchTool
+    | WebSearchTool
+    | ComputerTool
+    | HostedMCPTool
+    | LocalShellTool
+    | AgentsImageGenerationTool
+    | CodeInterpreterTool
+)
+
 
 @dataclass
 class ChatTurnDependencies:
     llm_model: Model
     llm: LLM
     db_session: Session
-    tools: list[FunctionTool]
+    tools: Sequence[FunctionTool]
     redis_client: Redis
     emitter: Emitter
     search_pipeline: SearchTool | None = None

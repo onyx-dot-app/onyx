@@ -21,7 +21,7 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.prompts.prompt_utils import handle_company_awareness
@@ -38,7 +38,7 @@ def default_build_system_message_v2(
     llm_config: LLMConfig,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
-    system_prompt += REQUIRE_CITATION_STATEMENT
+    system_prompt += REQUIRE_CITATION_STATEMENT_V2
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
     if (

@@ -10,6 +10,13 @@ Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2]
 Try to cite inline as opposed to leaving all citations until the very end of the response.
 """.rstrip()
 
+REQUIRE_CITATION_STATEMENT_V2 = """
+Cite relevant statements INLINE using the format [[1]](https://example.com) with the document number (an integer) in between
+the brackets. To cite multiple documents, use [[1]](https://example.com), [[2]](https://example.com) format instead of \
+[[1, 2]](https://example.com). \
+Try to cite inline as opposed to leaving all citations until the very end of the response.
+""".rstrip()
+
 NO_CITATION_STATEMENT = """
 Do not provide any citations even if there are examples in the chat history.
 """.rstrip()
