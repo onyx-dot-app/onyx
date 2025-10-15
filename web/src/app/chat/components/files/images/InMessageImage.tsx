@@ -100,6 +100,7 @@ export function InMessageImage({
             tooltip="Download"
             onClick={handleDownload}
           />
+        </div>
       </div>
     </>
   );
