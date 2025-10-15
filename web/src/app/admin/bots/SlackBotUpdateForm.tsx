@@ -117,7 +117,7 @@ export const ExistingSlackBotForm = ({
           </div>
 
           {isExpanded && (
-            <div className="bg-white border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}
