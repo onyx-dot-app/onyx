@@ -96,7 +96,7 @@ services:
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
         update-ca-certificates;
       fi &&
-      /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+      /app/scripts/supervisord_entrypoint.sh"
     env_file:
       - path: .env
         required: false
@@ -108,6 +108,7 @@ services:
       - indexing_model_server
     restart: unless-stopped
     environment:
+      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - REDIS_HOST=${REDIS_HOST:-cache}

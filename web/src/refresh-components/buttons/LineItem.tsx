@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 

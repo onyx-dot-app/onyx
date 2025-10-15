@@ -210,7 +210,7 @@ export default function AIMessage({
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
   // Calculate unique source count
-  const uniqueSourceCount = useMemo(() => {
+  const _uniqueSourceCount = useMemo(() => {
     const uniqueDocIds = new Set<string>();
     for (const citation of citations) {
       if (citation.document_id) {

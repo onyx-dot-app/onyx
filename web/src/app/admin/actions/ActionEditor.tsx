@@ -278,7 +278,6 @@ function ActionForm({
                         >
                           <Checkbox
                             id="passthrough_auth"
-                            size="sm"
                             checked={values.passthrough_auth}
                             disabled={values.customHeaders.some(
                               (header) =>
