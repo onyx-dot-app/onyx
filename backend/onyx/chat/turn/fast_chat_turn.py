@@ -5,6 +5,8 @@ from agents import Agent
 from agents import ModelSettings
 from agents import RawResponsesStreamEvent
 from agents import StopAtTools
+from agents.tracing import trace
+from pydantic import BaseModel
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -22,6 +24,7 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -30,7 +33,11 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations_v2.image_generation import image_generation_tool
+from onyx.tools.tool_implementations_v2.image_generation import image_generation
+
+
+class ReadyToAnswer(BaseModel):
+    pass
 
 
 def _fast_chat_turn_core(
@@ -71,36 +78,52 @@ def _fast_chat_turn_core(
         message_id=message_id,
         research_type=research_type,
     )
-    agent = Agent(
-        name="Assistant",
-        model=dependencies.llm_model,
-        tools=cast(list[AgentToolType], dependencies.tools),
-        model_settings=ModelSettings(
-            temperature=dependencies.llm.config.temperature,
-            include_usage=True,
-        ),
-        tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation_tool.name]),
-    )
-    # By default, the agent can only take 10 turns. For our use case, it should be higher.
-    max_turns = 25
-    agent_stream: SyncAgentStream = SyncAgentStream(
-        agent=agent,
-        input=messages,
-        context=ctx,
-        max_turns=max_turns,
-    )
-    for ev in agent_stream:
-        connected = is_connected(
-            chat_session_id,
-            dependencies.redis_client,
+    with trace("fast_chat_turn"):
+        tool_caller_agent = Agent(
+            name="Tool Caller",
+            model=dependencies.llm_model,
+            tools=cast(list[AgentToolType], dependencies.tools),
+            model_settings=ModelSettings(
+                temperature=dependencies.llm.config.temperature,
+                include_usage=True,
+            ),
+            tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
+            output_type=ReadyToAnswer,
         )
-        if not connected:
-            _emit_clean_up_packets(dependencies, ctx)
-            agent_stream.cancel()
-            break
-        obj = _default_packet_translation(ev, ctx)
-        if obj:
-            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        final_answer_agent = Agent(
+            name="Final Response",
+            model=dependencies.llm_model,
+            tools=[],
+            model_settings=ModelSettings(
+                temperature=dependencies.llm.config.temperature,
+                include_usage=True,
+            ),
+        )
+        # By default, the agent can only take 10 turns. For our use case, it should be higher.
+        max_turns = 25
+        agent_stream: SyncAgentStream = SyncAgentStream(
+            agent=tool_caller_agent,
+            input=messages,
+            context=ctx,
+            max_turns=max_turns,
+        )
+        _process_stream(
+            agent_stream, chat_session_id, dependencies, ctx, emit_message_to_user=False
+        )
+        new_input = agent_stream._streamed.to_input_list()
+        last_message = messages[-1]
+        # special case for image gen is last tool called
+        new_input[-1] = {
+            "role": "user",
+            "content": f" {REQUIRE_CITATION_STATEMENT_V2}.\n Query: {last_message['content']}",
+        }
+        final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
+            agent=final_answer_agent,
+            input=new_input,
+            context=ctx,
+            max_turns=max_turns,
+        )
+        _process_stream(final_answer_agent_stream, chat_session_id, dependencies, ctx)
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
@@ -150,6 +173,28 @@ def fast_chat_turn(
         research_type,
         starter_global_iteration_responses=None,
     )
+
+
+def _process_stream(
+    agent_stream: SyncAgentStream,
+    chat_session_id: UUID,
+    dependencies: ChatTurnDependencies,
+    ctx: ChatTurnContext,
+    emit_message_to_user: bool = True,
+) -> None:
+    for ev in agent_stream:
+        connected = is_connected(
+            chat_session_id,
+            dependencies.redis_client,
+        )
+        if not connected:
+            _emit_clean_up_packets(dependencies, ctx)
+            agent_stream.cancel()
+            break
+        if emit_message_to_user:
+            obj = _default_packet_translation(ev, ctx)
+            if obj:
+                dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
 
 
 # TODO: Maybe in general there's a cleaner way to handle cancellation in the middle of a tool call?
