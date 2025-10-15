@@ -249,6 +249,17 @@ def fetch_llm_provider_view(
     return LLMProviderView.from_model(provider_model)
 
 
+def fetch_model_configuration_by_name(
+    db_session: Session, model_name: str
+) -> ModelConfiguration | None:
+    """Fetch a model configuration by its model name across all providers."""
+    return db_session.scalar(
+        select(ModelConfiguration)
+        .where(ModelConfiguration.name == model_name)
+        .options(selectinload(ModelConfiguration.llm_provider))
+    )
+
+
 def remove_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> None:
