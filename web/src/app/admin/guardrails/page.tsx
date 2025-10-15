@@ -29,7 +29,8 @@ import { FiEdit2, FiTrash } from "react-icons/fi";
 import { deleteApiKey } from "./lib";
 
 type Validator = {
-  id: string;
+  id: number;
+  owner?: { id?: string; email?: string } | null;
   name: string;
   description?: string | null;
   settings?: Record<string, any> | null;
@@ -81,8 +82,10 @@ function Main() {
       <Text className="mb-4">{t(k.NO_DATA_AVAILABLE)}</Text>  : <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
+            <TableHead>ID</TableHead>
             <TableHead>{t(k.VALIDATOR_NAME_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_DESCRIPTION_HEADER)}</TableHead>
+            <TableHead>{t(k.VALIDATOR_OWNER_HEADER)}</TableHead>
             <TableHead>{t(k.VALIDATOR_GROUPS_HEADER)}</TableHead>
             <TableHead className="w-40">{t(k.ACTIONS)}</TableHead>
           </TableRow>
@@ -90,9 +93,13 @@ function Main() {
         <TableBody>
           {validators.map((v) => (
             <TableRow key={v.id}>
+              <TableCell className="max-w-20 break-words">{v.id}</TableCell>
               <TableCell className="max-w-64 break-words">{v.name}</TableCell>
               <TableCell className="max-w-96 break-words">
                 {v.description || ""}
+              </TableCell>
+              <TableCell className="max-w-64 break-words">
+                {v.owner?.email || ""}
               </TableCell>
               <TableCell className="max-w-64 break-words">
                 {(v.groups || [])

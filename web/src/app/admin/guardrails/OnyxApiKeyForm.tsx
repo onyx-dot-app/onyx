@@ -38,6 +38,19 @@ export const OnyxApiKeyForm = ({
 
   const isUpdate = apiKey !== undefined;
 
+  const initialTemplateId = React.useMemo(() => {
+    if (!isUpdate) return "";
+    if (!Array.isArray(templates) || templates.length === 0) return "";
+    try {
+      const candidate = templates.find(
+        (t) => String(t?.validator_type) === String(apiKey?.validator_type)
+      );
+      return candidate ? String(candidate.id) : "";
+    } catch (_) {
+      return "";
+    }
+  }, [isUpdate, templates, apiKey]);
+
   return (
     <Modal onOutsideClick={onClose} width="w-2/6">
       <>
@@ -48,12 +61,13 @@ export const OnyxApiKeyForm = ({
         <Separator />
 
         <Formik
+          enableReinitialize
           initialValues={{  
             name: apiKey?.name,
             description: apiKey?.description,
             // Dynamic config values are flattened into form values by field name
             ...(apiKey?.config || {}),
-            template: "",
+            template: initialTemplateId,
             validator_type: apiKey?.validator_type,
           }}
           onSubmit={async (values, formikHelpers) => {

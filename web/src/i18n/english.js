@@ -1904,6 +1904,7 @@ module.exports = {
   [k.VALIDATOR_PERSONAS_HEADER]: `Assistants`,
   [k.VALIDATOR_GROUPS_HEADER]: `Groups`,
   [k.VALIDATOR_ACTIVE_HEADER]: `Active`,
+  [k.VALIDATOR_OWNER_HEADER]: `Owner`,
   [k.FAILED_TO_FETCH_VALIDATORS]: `Failed to fetch validators`,
   [k.ACTIVE]: `Active`,
   [k.INACTIVE]: `Inactive`,

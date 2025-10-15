@@ -1591,6 +1591,7 @@ module.exports = {
   [k.VALIDATOR_PERSONAS_HEADER]: `Ассистенты`,
   [k.VALIDATOR_GROUPS_HEADER]: `Группы`,
   [k.VALIDATOR_ACTIVE_HEADER]: `Активность`,
+  [k.VALIDATOR_OWNER_HEADER]: `Владелец`,
   [k.FAILED_TO_FETCH_VALIDATORS]: `Не удалось получить список валидаторов`,
   [k.ACTIVE]: `Активен`,
   [k.INACTIVE]: `Неактивен`,
