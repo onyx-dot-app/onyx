@@ -368,7 +368,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def _assign_default_pinned_assistants(
         self, user: User, db_session: AsyncSession
     ) -> None:
-        if user.pinned_assistants:
+        if user.pinned_assistants is not None:
             return
 
         result = await db_session.execute(
