@@ -300,9 +300,10 @@ def test_web_fetch_core_basic_functionality() -> None:
         answer.question
         == "Fetch content from URLs: https://example.com/1, https://example.com/2"
     )
-    assert len(answer.cited_documents) == 0
+    assert len(answer.cited_documents) == 2
 
-    # Verify cited_documents were NOT added to aggregated_context (they are added during search)
+    # Verify cited_documents were added to the answer but NOT to aggregated_context.cited_documents
+    # (web fetch adds documents to the answer but not to the global cited_documents list)
     assert len(test_run_context.context.aggregated_context.cited_documents) == 0
 
     # Verify emitter events were captured
