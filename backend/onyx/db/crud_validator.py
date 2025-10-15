@@ -70,7 +70,7 @@ def get_validator_by_id_for_user(
     )
 
     stmt = _add_user_filters(stmt=stmt, user=user)
-    validator = db_session.scalars(stmt).one_or_none()
+    validator = db_session.scalars(stmt).unique().one_or_none()
 
     if not validator:
         raise HTTPException(
