@@ -128,7 +128,7 @@ import FilePicker from "@/app/chat/components/files/FilePicker";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);

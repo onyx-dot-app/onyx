@@ -14,7 +14,7 @@ import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
 } from "../../stores/useChatSessionStore";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 

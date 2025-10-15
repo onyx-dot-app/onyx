@@ -10,7 +10,7 @@ import SvgX from "@/icons/x";
 import SvgSettings from "@/icons/settings";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Input } from "@/components/ui/input";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

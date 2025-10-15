@@ -1,5 +1,5 @@
 import SvgFileText from "@/icons/file-text";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMaximize2 from "@/icons/maximize-2";
 
