@@ -42,6 +42,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { useSearchParams } from "next/navigation";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -133,7 +134,7 @@ function AppSidebarInner() {
       <CreateProjectModal />
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        <div className="flex flex-col gap-spacing-interline">
+        <div className="flex flex-col px-spacing-interline gap-spacing-interline">
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               leftIcon={SvgEditBig}
@@ -167,8 +168,8 @@ function AppSidebarInner() {
           )}
         </div>
 
-        {/* Main container */}
-        <div className="flex flex-col gap-padding-content flex-1 overflow-y-scroll">
+        {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
+        <VerticalShadowScroller className="gap-padding-content px-spacing-interline">
           {!folded && (
             <>
               {/* Agents */}
@@ -229,10 +230,11 @@ function AppSidebarInner() {
               </SidebarSection>
             </>
           )}
-        </div>
+        </VerticalShadowScroller>
 
-        {/* Bottom */}
-        <Settings folded={folded} />
+        <div className="px-spacing-interline">
+          <Settings folded={folded} />
+        </div>
       </SidebarWrapper>
     </>
   );

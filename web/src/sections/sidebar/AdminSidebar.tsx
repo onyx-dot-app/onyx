@@ -42,6 +42,7 @@ import {
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 
 const connectors_items = () => [
   {
@@ -317,16 +318,19 @@ export default function AdminSidebar({
 
   return (
     <SidebarWrapper>
-      <SidebarTab
-        leftIcon={({ className }) => (
-          <CgArrowsExpandUpLeft className={className} size={16} />
-        )}
-        href="/chat"
-      >
-        Exit Admin
-      </SidebarTab>
+      <div className="px-spacing-interline">
+        <SidebarTab
+          leftIcon={({ className }) => (
+            <CgArrowsExpandUpLeft className={className} size={16} />
+          )}
+          href="/chat"
+        >
+          Exit Admin
+        </SidebarTab>
+      </div>
 
-      <div className="flex flex-col flex-1 overflow-y-auto gap-padding-content">
+      {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
+      <VerticalShadowScroller className="flex px-spacing-interline gap-padding-content">
         {items.map((collection, index) => (
           <SidebarSection key={index} title={collection.name}>
             <div className="flex flex-col w-full">
@@ -345,8 +349,9 @@ export default function AdminSidebar({
             </div>
           </SidebarSection>
         ))}
-      </div>
-      <div className="flex flex-col gap-spacing-interline">
+      </VerticalShadowScroller>
+
+      <div className="flex flex-col px-spacing-interline gap-spacing-interline">
         {combinedSettings.webVersion && (
           <Text text02 secondaryBody className="px-spacing-interline">
             {`Onyx version: ${combinedSettings.webVersion}`}
