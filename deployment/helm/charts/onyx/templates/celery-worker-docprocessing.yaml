@@ -35,8 +35,19 @@ spec:
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
-      {{- with .Values.celery_worker_docprocessing.nodeSelector }}
+      {{- $ns := .Values.celery_worker_docprocessing.nodeSelector | default .Values.global.nodeSelector -}}
+      {{- $tol := .Values.celery_worker_docprocessing.tolerations | default .Values.global.tolerations -}}
+      {{- $aff := .Values.celery_worker_docprocessing.affinity | default .Values.global.affinity -}}
+      {{- with $ns }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tol }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $aff }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
