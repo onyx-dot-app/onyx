@@ -125,14 +125,14 @@ function InputTypeInInner(
         )}
         {...props}
       />
-      {value && (
+      <div className={cn(!value && "invisible")}>
         <IconButton
           icon={SvgX}
           disabled={disabled}
           onClick={handleClear}
           internal
         />
-      )}
+      </div>
     </div>
   );
 }

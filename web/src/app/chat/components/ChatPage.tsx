@@ -19,9 +19,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
-import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -272,10 +270,6 @@ export function ChatPage({
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
-
-  const [currentFeedback, setCurrentFeedback] = useState<
-    [FeedbackType, number] | null
-  >(null);
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -748,8 +742,6 @@ export function ChatPage({
 
       <ChatPopup />
 
-      <FeedbackModal setPopup={setPopup} />
-
       <ChatSearchModal
         open={isChatSearchModalOpen}
         onCloseModal={() => setIsChatSearchModalOpen(false)}
@@ -858,7 +850,7 @@ export function ChatPage({
                       deepResearchEnabled={deepResearchEnabled}
                       currentMessageFiles={currentMessageFiles}
                       setPresentingDocument={setPresentingDocument}
-                      setCurrentFeedback={setCurrentFeedback}
+                      setCurrentFeedback={() => {}}
                       onSubmit={onSubmit}
                       onMessageSelection={onMessageSelection}
                       stopGenerating={stopGenerating}
