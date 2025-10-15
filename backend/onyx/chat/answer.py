@@ -161,6 +161,38 @@ class Answer:
 
         processed_stream = []
         for packet in stream:
+            for packet in stream:
+                logger.info("\n\n=== НАЧАЛО ПАКЕТА ===\n\n")
+                logger.info("\nТип пакета: %s", type(packet).__name__)
+
+                # Проверяем основные атрибуты
+                if hasattr(packet, 'id'):
+                    logger.info("\npacket.id: %s", packet.id)
+
+                # Проверяем наличие текстовых полей
+                text_fields = []
+                if hasattr(packet, 'content'):
+                    text_fields.append(f"\ncontent: {packet.content}")
+
+                if hasattr(packet, 'response'):
+                    text_fields.append(f"\nresponse: {str(packet.response)}")
+
+                if hasattr(packet, 'answer_piece'):
+                    text_fields.append(f"\nanswer_piece: {packet.answer_piece}")
+
+                if hasattr(packet, 'refined_answer_improvement'):
+                    text_fields.append(f"\nrefined_answer_improvement: {packet.refined_answer_improvement}")
+
+                if hasattr(packet, 'tool_result'):
+                    text_fields.append(f"\ntool_result: {str(packet.tool_result)}")
+
+                if text_fields:
+                    logger.info("\nТекстовые поля: %s", " | ".join(text_fields))
+                else:
+                    logger.info("\nТекстовых полей не найдено")
+
+                logger.info("\n\n=== КОНЕЦ ПАКЕТА ===\n\n")
+
             if self.is_cancelled():
                 packet = StreamStopInfo(stop_reason=StreamStopReason.CANCELLED)
                 yield packet
