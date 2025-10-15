@@ -30,7 +30,7 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations_v2.image_generation import image_generation_tool
+from onyx.tools.tool_implementations_v2.image_generation import image_generation
 
 
 def _fast_chat_turn_core(
@@ -79,7 +79,7 @@ def _fast_chat_turn_core(
             temperature=dependencies.llm.config.temperature,
             include_usage=True,
         ),
-        tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation_tool.name]),
+        tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
     )
     # By default, the agent can only take 10 turns. For our use case, it should be higher.
     max_turns = 25
