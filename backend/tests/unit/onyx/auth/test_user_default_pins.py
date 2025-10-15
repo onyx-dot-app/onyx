@@ -36,6 +36,7 @@ async def test_assign_default_pinned_assistants_populates_ids(
     assert db_session.execute.await_count == 1
     user_db.update.assert_awaited_once()
     await_args = user_db.update.await_args
+    assert await_args
     assert await_args.args == (mock_user, {"pinned_assistants": [1, 5, 10]})
     assert mock_user.pinned_assistants == [1, 5, 10]
 
