@@ -748,7 +748,7 @@ def stream_chat_message_objects(
                 tenant_id=tenant_id,
             )
         )
-        user_message = (
+        prompt_user_message = (
             default_build_user_message_v2(
                 user_query=final_msg.message,
                 prompt_config=prompt_config,
@@ -767,7 +767,7 @@ def stream_chat_message_objects(
             else default_build_system_message(prompt_config, llm.config)
         )
         prompt_builder = AnswerPromptBuilder(
-            user_message=user_message,
+            user_message=prompt_user_message,
             system_message=system_message,
             message_history=message_history,
             llm_config=llm.config,

@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 from agents import Agent
@@ -17,6 +18,7 @@ from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
 from onyx.chat.turn.infra.session_sink import save_iteration
 from onyx.chat.turn.infra.sync_agent_stream_adapter import SyncAgentStream
+from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
@@ -72,7 +74,7 @@ def _fast_chat_turn_core(
     agent = Agent(
         name="Assistant",
         model=dependencies.llm_model,
-        tools=dependencies.tools,
+        tools=cast(list[AgentToolType], dependencies.tools),
         model_settings=ModelSettings(
             temperature=dependencies.llm.config.temperature,
             include_usage=True,
