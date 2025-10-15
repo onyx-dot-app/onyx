@@ -724,8 +724,6 @@ export const BooleanFormField = memo(function BooleanFormField({
             {disabled && disabledTooltip && (
               <TooltipContent side="top" align="center">
                 <Text inverted>{disabledTooltip}</Text>
-                {/* <p className="bg-background-neutral-inverted-00 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-text-inverted-05">
-                </p> */}
               </TooltipContent>
             )}
           </Tooltip>
