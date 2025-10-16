@@ -165,6 +165,30 @@ logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
 
+def merge_packets(packets: list[OnyxAnswerPiece]) -> str:
+    """Объединяет пакеты OnyxAnswerPiece в один текст"""
+    merged_text = ""
+
+    for packet in packets:
+        if isinstance(packet, OnyxAnswerPiece):
+            if packet.answer_piece is not None:
+                merged_text += packet.answer_piece
+
+    return merged_text
+
+
+def split_packets(text: str, chunk_size: int = 3) -> list[OnyxAnswerPiece]:
+    """Разделяет текст на пакеты OnyxAnswerPiece"""
+    packets = []
+
+    # Разбиваем текст на куски указанного размера
+    for idx in range(0, len(text), chunk_size):
+        chunk = text[idx:idx + chunk_size]
+        packets.append(OnyxAnswerPiece(answer_piece=chunk))
+
+    return packets
+
+
 def _translate_citations(
     citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
 ) -> MessageSpecificCitations:
@@ -1064,6 +1088,40 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
         )
 
+        onyx_answer_piece_packets = []
+        stream_stop_info_packets = []
+        other_packets = []
+
+        for packet in answer.processed_streamed_output:
+            if isinstance(packet, OnyxAnswerPiece):
+                onyx_answer_piece_packets.append(packet)
+            elif isinstance(packet, StreamStopInfo):
+                stream_stop_info_packets.append(packet)
+            else:
+                other_packets.append(packet)
+
+        if onyx_answer_piece_packets:
+            # 1. Собираем текст из пакетов OnyxAnswerPiece
+            merged_text = merge_packets(packets=onyx_answer_piece_packets)
+            logger.info("\nСобранный текст из пакетов OnyxAnswerPiece: %s", merged_text)
+
+            if merged_text and merged_text.strip():
+
+                # 2. Отправляем текст на валидацию
+                validated_text = merged_text
+
+                # 3. Разбиваем валидированный текст обратно на пакеты OnyxAnswerPiece
+                splitted_onyx_answer_piece_packets = split_packets(text=validated_text)
+                logger.info("\nРазбитый текст на пакеты OnyxAnswerPiece: %s", splitted_onyx_answer_piece_packets)
+
+                # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
+                other_packets.extend(splitted_onyx_answer_piece_packets)
+        else:
+            logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
+
+        other_packets.extend(stream_stop_info_packets)
+        logger.info("\nОбщий список пакетов после валидации: %s", other_packets)
+
         # reference_db_search_docs = None
         # qa_docs_response = None
         # # any files to associate with the AI message e.g. dall-e generated images
@@ -1076,7 +1134,9 @@ def stream_chat_message_objects(
             lambda: AnswerPostInfo(ai_message_files=[])
         )
         refined_answer_improvement = True
-        for packet in answer.processed_streamed_output:
+
+        # 5. Отправляем пакеты пользователю
+        for packet in other_packets:
             if isinstance(packet, ToolResponse):
                 level, level_question_num = (
                     (packet.level, packet.level_question_num)
@@ -1253,14 +1313,14 @@ def stream_chat_message_objects(
                     tool_response = cast(LangflowResponseSummary, packet.response)
 
                     yield LangflowToolResponse(
-                        response=tool_response.tool_result,
+                        response=tool_response.tool_result,  # Текст
                         tool_name=tool_response.tool_name,
                     )
                 elif packet.id == LANGFLOW_RESPONSE_SUMMARY_ID:
                     tool_response = cast(ResumeResponseSummary, packet.response)
 
                     yield ResumeToolResponse(
-                        response=tool_response.tool_result,
+                        response=tool_response.tool_result,  # Текст
                         tool_name=tool_response.tool_name,
                     )
                 elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
@@ -1289,7 +1349,7 @@ def stream_chat_message_objects(
                         )
                     else:
                         yield CustomToolResponse(
-                            response=custom_tool_response.tool_result,
+                            response=custom_tool_response.tool_result,  # Текст
                             tool_name=custom_tool_response.tool_name,
                         )
 
