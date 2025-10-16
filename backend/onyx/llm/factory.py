@@ -1,3 +1,6 @@
+import os
+from typing import Any
+
 from agents import ModelSettings
 from agents.models.interface import Model
 
@@ -11,6 +14,8 @@ from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
+from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
@@ -421,6 +426,7 @@ def get_llm_model_and_settings(
     temperature: float | None = None,
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
+    model_kwargs: dict[str, Any] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> tuple[Model, ModelSettings]:
     from onyx.llm.litellm_singleton import LitellmModel
@@ -437,6 +443,24 @@ def get_llm_model_and_settings(
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
+    # NOTE: have to set these as environment variables for Litellm since
+    # not all are able to passed in but they always support them set as env
+    # variables. We'll also try passing them in, since litellm just ignores
+    # addtional kwargs (and some kwargs MUST be passed in rather than set as
+    # env variables)
+    model_kwargs = model_kwargs or {}
+    if custom_config:
+        for k, v in custom_config.items():
+            if provider == "vertex_ai":
+                if k == VERTEX_CREDENTIALS_FILE_KWARG:
+                    model_kwargs[k] = v
+                    continue
+                elif k == VERTEX_LOCATION_KWARG:
+                    model_kwargs[k] = v
+                    continue
+
+            # for all values, set them as env variables
+            os.environ[k] = v
     # Build the full model name in provider/model format
     model_name = f"{provider}/{model}"
 
@@ -452,6 +476,7 @@ def get_llm_model_and_settings(
         temperature=temperature,
         include_usage=True,
         extra_headers=extra_headers if extra_headers else None,
+        extra_args=model_kwargs,
     )
 
     return litellm_model, model_settings
