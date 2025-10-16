@@ -19,6 +19,7 @@ import SvgImage from "@/icons/image";
 import SvgTrash from "@/icons/trash";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface UserFilesModalProps {
   title: string;
@@ -177,16 +178,11 @@ export default function UserFilesModalContent({
                   accept={"*/*"}
                 />
 
-                <Button
-                  defaulted
-                  secondary
-                  leftIcon={SvgPlusCircle}
-                  onClick={triggerUploadPicker}
-                >
-                  <span className="text-text-03 font-main-action">
-                    Add Files
-                  </span>
-                </Button>
+                <button onClick={triggerUploadPicker}>
+                  <LineItem icon={SvgPlusCircle}>
+                    <p className="text-text-03 font-main-action">Add Files</p>
+                  </LineItem>
+                </button>
               </>
             )}
           </div>
