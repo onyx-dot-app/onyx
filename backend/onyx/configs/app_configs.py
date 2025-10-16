@@ -718,6 +718,17 @@ BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
 BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
 
+#####
+# Langfuse Configuration
+#####
+# Enable Langfuse tracing for LangGraph/LangChain applications
+LANGFUSE_ENABLED = os.environ.get("LANGFUSE_ENABLED", "").lower() == "true"
+# Langfuse API credentials
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+# Langfuse host URL (defaults to cloud instance)
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
+
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
 )
@@ -891,7 +902,9 @@ S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
 # Should we force S3 local checksumming
-S3_GENERATE_LOCAL_CHECKSUM = os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
