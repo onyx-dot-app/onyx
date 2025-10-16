@@ -15,7 +15,7 @@ env:
   # Bedrock
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_REGION_NAME: ${{ secrets.AWS_REGION_NAME }}
+  AWS_REGION_NAME: ${{ vars.AWS_REGION_NAME }}
 
   # API keys for testing
   COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
@@ -23,7 +23,7 @@ env:
   LITELLM_API_URL: ${{ secrets.LITELLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
-  AZURE_API_URL: ${{ secrets.AZURE_API_URL }}
+  AZURE_API_URL: ${{ vars.AZURE_API_URL }}
 
 jobs:
   model-check:

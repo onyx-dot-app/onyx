@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import uuid
 from abc import ABC
@@ -6,10 +7,11 @@ from io import BytesIO
 from typing import Any
 from typing import cast
 from typing import IO
+from typing import NotRequired
+from typing import TypedDict
 
 import boto3
 import puremagic
-import hashlib
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
@@ -18,10 +20,10 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
 from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
-from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_ENDPOINT_URL
 from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
+from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -39,6 +41,10 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class S3PutKwargs(TypedDict):
+    ChecksumSHA256: NotRequired[str]
 
 
 class FileStore(ABC):
@@ -322,38 +328,32 @@ class S3BackedFileStore(FileStore):
         bucket_name = self._get_bucket_name()
         s3_key = self._get_s3_key(file_id)
 
-        file_content = ""
         hash256 = ""
         sha256_hash = hashlib.sha256()
+        kwargs: S3PutKwargs = {}
 
         # Read content from IO object
         if hasattr(content, "read"):
             file_content = content.read()
             if S3_GENERATE_LOCAL_CHECKSUM:
                 data_bytes = str(file_content).encode()
-                sha256_hash.update(data_bytes) 
-                hash256 = sha256_hash.hexdigest() # get the sha256 has in hex format
+                sha256_hash.update(data_bytes)
+                hash256 = sha256_hash.hexdigest()  # get the sha256 has in hex format
+                kwargs["ChecksumSHA256"] = hash256
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
             file_content = content
 
         # Upload to S3
-        if S3_GENERATE_LOCAL_CHECKSUM:
-            s3_client.put_object(
-                Bucket=bucket_name,
-                Key=s3_key,
-                Body=file_content,
-                ContentType=file_type,
-                ChecksumSHA256=hash256
-            )
-        else:
-            s3_client.put_object(
-                Bucket=bucket_name,
-                Key=s3_key,
-                Body=file_content,
-                ContentType=file_type,
-            )
+
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=file_content,
+            ContentType=file_type,
+            **kwargs,
+        )
 
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             # Save metadata to database
