@@ -331,8 +331,8 @@ class S3BackedFileStore(FileStore):
             file_content = content.read()
             if S3_GENERATE_LOCAL_CHECKSUM:
                 data_bytes = str(file_content).encode()
-                sha256_hash.update(data_bytes) 
-                hash256 = sha256_hash.hexdigest() # get the sha256 has in hex format
+                sha256_hash.update(data_bytes)
+                hash256 = sha256_hash.hexdigest()  # get the sha256 has in hex format
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
@@ -345,7 +345,7 @@ class S3BackedFileStore(FileStore):
                 Key=s3_key,
                 Body=file_content,
                 ContentType=file_type,
-                ChecksumSHA256=hash256
+                ChecksumSHA256=hash256,
             )
         else:
             s3_client.put_object(
