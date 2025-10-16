@@ -39,6 +39,9 @@ export interface SidebarTabProps {
 
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLDivElement>;
+  onIconClick?: React.MouseEventHandler<HTMLDivElement>;
+  onIconHover?: (isHovering: boolean) => void;
+  onTextClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
   className?: string;
   leftIcon?: React.FunctionComponent<SvgProps>;
@@ -52,6 +55,9 @@ export default function SidebarTab({
   lowlight,
 
   onClick,
+  onIconClick,
+  onIconHover,
+  onTextClick,
   href,
   className,
   leftIcon: LeftIcon,
@@ -76,24 +82,46 @@ export default function SidebarTab({
         )}
       >
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
+          <div
+            className="w-[1rem] h-[1rem] flex flex-col items-center justify-center"
+            onClick={(e) => {
+              if (onIconClick) {
+                e.stopPropagation();
+                onIconClick(e);
+              }
+            }}
+            onMouseEnter={() => onIconHover?.(true)}
+            onMouseLeave={() => onIconHover?.(false)}
+          >
             <LeftIcon
               className={cn(
                 "h-[1rem]",
                 "w-[1rem]",
-                iconClasses(active)[variant]
+                iconClasses(active)[variant],
+                onIconClick && "cursor-pointer"
               )}
             />
           </div>
         )}
         {!folded &&
           (typeof children === "string" ? (
-            <Truncated
-              className={cn(textClasses(active)[variant])}
-              side="right"
+            <div
+              className="w-full"
+              onClick={(e) => {
+                if (onTextClick) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onTextClick(e);
+                }
+              }}
             >
-              {children}
-            </Truncated>
+              <Truncated
+                className={cn(textClasses(active)[variant])}
+                side="right"
+              >
+                {children}
+              </Truncated>
+            </div>
           ) : (
             children
           ))}

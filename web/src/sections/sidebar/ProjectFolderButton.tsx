@@ -27,6 +27,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
+import { OpenFolderIcon } from "@/components/icons/CustomIcons";
+import { SvgProps } from "@/icons";
 
 interface ProjectFolderProps {
   project: Project;
@@ -42,6 +44,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [isHoveringIcon, setIsHoveringIcon] = useState(false);
 
   // Make project droppable
   const dropId = `project-${project.id}`;
@@ -52,6 +55,28 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
       project,
     },
   });
+
+  const getFolderIcon = (): React.FunctionComponent<SvgProps> => {
+    if (open) {
+      return isHoveringIcon
+        ? SvgFolder
+        : (OpenFolderIcon as React.FunctionComponent<SvgProps>);
+    } else {
+      return isHoveringIcon
+        ? (OpenFolderIcon as React.FunctionComponent<SvgProps>)
+        : SvgFolder;
+    }
+  };
+
+  const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setOpen((prev) => !prev);
+  };
+
+  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    route({ projectId: project.id });
+  };
 
   async function handleRename(newName: string) {
     await renameProject(project.id, newName);
@@ -78,7 +103,13 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   ];
 
   return (
-    <>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "transition-colors duration-200",
+        isOver && "bg-background-tint-03 rounded-08"
+      )}
+    >
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
         <ConfirmationModal
@@ -105,55 +136,46 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
       {/* Project Folder */}
       <Popover onOpenChange={setPopoverOpen}>
         <PopoverAnchor>
-          <div
-            ref={setNodeRef}
-            className={cn(
-              "transition-colors duration-200",
-              isOver && "bg-background-tint-03 rounded-08"
-            )}
-          >
-            <SidebarTab
-              leftIcon={SvgFolder}
-              active={
-                params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)
-              }
-              onClick={() => {
-                setOpen((prev) => !prev);
-                route({ projectId: project.id });
-              }}
-              rightChildren={
-                <>
-                  <PopoverTrigger asChild onClick={noProp()}>
-                    <div>
-                      <IconButton
-                        icon={SvgMoreHorizontal}
-                        className={cn(
-                          !popoverOpen && "hidden",
-                          !isEditing && "group-hover/SidebarTab:flex"
-                        )}
-                        active={popoverOpen}
-                        internal
-                      />
-                    </div>
-                  </PopoverTrigger>
+          <SidebarTab
+            leftIcon={getFolderIcon()}
+            active={
+              params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)
+            }
+            onIconClick={handleIconClick}
+            onIconHover={setIsHoveringIcon}
+            onTextClick={handleTextClick}
+            rightChildren={
+              <>
+                <PopoverTrigger asChild onClick={noProp()}>
+                  <div>
+                    <IconButton
+                      icon={SvgMoreHorizontal}
+                      className={cn(
+                        !popoverOpen && "hidden",
+                        !isEditing && "group-hover/SidebarTab:flex"
+                      )}
+                      active={popoverOpen}
+                      internal
+                    />
+                  </div>
+                </PopoverTrigger>
 
-                  <PopoverContent side="right" align="end">
-                    {popoverItems}
-                  </PopoverContent>
-                </>
-              }
-            >
-              {isEditing ? (
-                <ButtonRenaming
-                  initialName={project.name}
-                  onRename={handleRename}
-                  onClose={() => setIsEditing(false)}
-                />
-              ) : (
-                name
-              )}
-            </SidebarTab>
-          </div>
+                <PopoverContent side="right" align="end">
+                  {popoverItems}
+                </PopoverContent>
+              </>
+            }
+          >
+            {isEditing ? (
+              <ButtonRenaming
+                initialName={project.name}
+                onRename={handleRename}
+                onClose={() => setIsEditing(false)}
+              />
+            ) : (
+              name
+            )}
+          </SidebarTab>
         </PopoverAnchor>
       </Popover>
 
@@ -167,7 +189,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
             draggable
           />
         ))}
-    </>
+    </div>
   );
 }
 

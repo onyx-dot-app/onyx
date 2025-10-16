@@ -1,6 +1,7 @@
 import { ChatSession } from "@/app/chat/interfaces";
 import { LOCAL_STORAGE_KEYS, DEFAULT_PERSONA_ID } from "./constants";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { moveChatSession } from "@/app/chat/projects/projectsService";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export const shouldShowMoveModal = (chatSession: ChatSession): boolean => {
   const hideModal =
@@ -12,12 +13,8 @@ export const shouldShowMoveModal = (chatSession: ChatSession): boolean => {
   return !hideModal && chatSession.persona_id !== DEFAULT_PERSONA_ID;
 };
 
-type PopupType = "success" | "error" | "info" | "warning";
-
-type SetPopupFn = (popup: { type: PopupType; message: string }) => void;
-
 export const showErrorNotification = (
-  setPopup: SetPopupFn,
+  setPopup: (popup: PopupSpec) => void,
   message: string
 ) => {
   setPopup({ type: "error", message });
@@ -41,9 +38,10 @@ export const handleMoveOperation = async (
     fetchProjects,
     currentProjectId,
   }: MoveOperationParams,
-  setPopup: SetPopupFn
+  setPopup: (popup: PopupSpec) => void
 ) => {
   try {
+    await moveChatSession(targetProjectId, chatSession.id);
     const projectRefreshPromise = currentProjectId
       ? refreshCurrentProjectDetails()
       : fetchProjects();

@@ -22,14 +22,11 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDroppable } from "@dnd-kit/core";
 import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import SvgSidebar from "@/icons/sidebar";
 import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings";
@@ -53,7 +50,6 @@ import type { Project } from "@/app/chat/projects/projectsService";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { useSearchParams } from "next/navigation";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
@@ -62,11 +58,7 @@ import {
   DEFAULT_PERSONA_ID,
   LOCAL_STORAGE_KEYS,
 } from "./constants";
-import {
-  shouldShowMoveModal,
-  showErrorNotification,
-  handleMoveOperation,
-} from "./sidebarUtils";
+import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 import { ChatSession } from "@/app/chat/interfaces";
@@ -100,14 +92,14 @@ function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
   });
 
   return (
-    <div ref={setNodeRef}>
-      <SidebarSection
-        title="Recents"
-        className={cn(
-          "transition-colors duration-200 rounded-08",
-          isOver && "bg-background-tint-03"
-        )}
-      >
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "transition-colors duration-200 rounded-08 h-full",
+        isOver && "bg-background-tint-03"
+      )}
+    >
+      <SidebarSection title="Recents">
         {isHistoryEmpty ? (
           <Text text01 className="px-padding-button">
             Try sending a message! Your chat history will appear here.
@@ -228,6 +220,7 @@ function AppSidebarInner() {
   // Handle chat to project drag and drop
   const handleChatProjectDragEnd = useCallback(
     async (event: DragEndEvent) => {
+      console.log("handleChatProjectDragEnd", event);
       const { active, over } = event;
       if (!over) return;
 

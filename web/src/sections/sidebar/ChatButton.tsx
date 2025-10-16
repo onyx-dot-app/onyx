@@ -264,7 +264,6 @@ function ChatButtonInner({
 
   async function performMove(targetProjectId: number) {
     try {
-      await moveChatSession(targetProjectId, chatSession.id);
       await handleMoveOperation(
         {
           chatSession,
