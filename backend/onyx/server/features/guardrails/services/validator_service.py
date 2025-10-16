@@ -1,69 +1,137 @@
 from onyx.db.enums import ValidatorType
 from onyx.db.models import Persona, Validator
-from onyx.server.features.guardrails.validators.detect_pii import validate_detect_pii
+from onyx.server.features.guardrails.validators.detect_pii import (
+    mask_pii,
+    unmask_pii,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def validate_message_with_persona_validators(
-    persona: Persona,
-    message: str,
-) -> str:
-    """Основная функция валидации сообщения через валидаторы ассистента.
+class ValidatorManager:
+    """Управляет валидацией сообщений через подключенные к ассистенту валидаторы.
 
-    Args:
-        persona: Объект ассистента, по которому будут извлекаться подключённые валидаторы
-        message: Входное сообщение для валидации
-    Returns:
-        str: Валидированное сообщение
+    Обеспечивает последовательное применение валидаторов к входящим сообщениям
+    пользователя и исходящим ответам LLM. Поддерживает передачу контекста между
+    валидациями (например, маппинг PII данных для маскирования/демаскирования).
     """
 
-    # Если к ассистенту не подключены валидаторы - возвращаем исходное сообщение
-    if not persona.validators:
-        return message
+    def __init__(self, persona: Persona):
+        self.persona = persona
+        self._validators = persona.validators
+        self._context = {}
 
-    # Применяем валидаторы последовательно
-    validated_message = message  # Начинаем с исходного сообщения
+    def validate_message(self, message: str, direction: str) -> str:
+        """Применяет цепочку валидаторов к сообщению в указанном направлении.
 
-    for validator in persona.validators:
-        # Каждый следующий валидатор получает результат предыдущего
-        validated_message = apply_validator(
-            validator=validator,
-            message=validated_message,
-        )
+        Валидаторы применяются последовательно, каждый получает результат
+        предыдущего. В случае ошибки в отдельном валидаторе цепочка не прерывается,
+        а сообщение сохраняет последнее успешное состояние.
+        """
 
-    return validated_message
-
-
-def apply_validator(validator: Validator, message: str) -> str:
-    """Применяет конкретный валидатор к сообщению в зависимости от типа"""
-
-    try:
-        config = validator.config or {}
-
-        # Выбираем функцию валидации по типу валидатора
-        if validator.validator_type == ValidatorType.DETECT_PII:
-            return validate_detect_pii(
-                message=message,
-                config=config,
-            )
-        else:
-            logger.warning(f"Unknown validator type: {validator.validator_type}")
+        if not self._validators or not message or not message.strip():
             return message
 
-    except Exception as e:
-        logger.error(f"Error applying validator {validator.name}: {e}")
-        return message  # в случае ошибки возвращаем исходное сообщение
+        validated_message = message
+
+        for validator in self._validators:
+            try:
+
+                validated_message = self._apply_validator(
+                    validator=validator,
+                    message=validated_message,
+                    config=validator.config,
+                    direction=direction,
+                )
+
+            except Exception as e:
+                logger.error(
+                    "Ошибка при выполнении валидатора (name: %s, ID: %s): %s",
+                    validator.name, validator.id, repr(e)
+                )
+
+        return validated_message
+
+    def _apply_validator(
+        self,
+        validator: Validator,
+        message: str,
+        config: dict,
+        direction: str
+    ):
+        """Внутренний метод применения конкретного валидатора.
+
+        В зависимости от направления (input/output) и типа валидатора выполняет
+        соответствующую логику обработки сообщения. Для PII-валидаторов поддерживает
+        маскирование входящих данных и демаскирование исходящих с сохранением контекста.
+        """
+
+        if direction == "input":
+
+            # Маскирование данных
+            if validator.validator_type == ValidatorType.DETECT_PII:
+                masked_message, mapping = mask_pii(
+                    text=message, config=config
+                )
+                self._context[validator.validator_type] = mapping
+
+                logger.info(
+                    "\n%s-валидация | Маскирование | Результат:\n%s",
+                    direction, masked_message,
+                )
+                return masked_message
+
+            # Классификация и перенаправление запросов, не относящихся к заданным темам
+            # Защита от манипулирования LLM (Jailbreaking)
+
+        elif direction == "output":
+
+            # Демаскирование данных
+            if validator.validator_type == ValidatorType.DETECT_PII:
+                unmasked_message = unmask_pii(
+                    llm_response=message, mapping=self._context[validator.validator_type]
+                )
+                del self._context[validator.validator_type]
+
+                logger.info(
+                    "\n%s-валидация | Демаскирование | Результат:\n%s",
+                    direction, unmasked_message,
+                )
+                return unmasked_message
+
+            # Валидация JSON-структуры
+            # Проверка ответов на токсичность
+            # Проверка длины ответа
+            # Фильтрация запрещенных слов
+            # Проверка на соответствие определенному стилю
+            # Проверка на наличие ключевых сущностей в ответе
+            # Проверка галлюцинаций в выводе модели
+
+        return message
 
 
 if __name__=="__main__":
-    validator_1 = Validator(validator_type="DETECT_PII", config={"pii_entities": ["EMAIL_ADDRESS"]})
+    from onyx.server.features.guardrails.init_validators import initialize_presidio_analyzer
+    initialize_presidio_analyzer()
+
+    validator_1 = Validator(
+        id=1,
+        name="Перс данные",
+        validator_type="DETECT_PII",
+        config={"pii_entities": ["EMAIL_ADDRESS", "RUS_PHONE_NUMBER"]}
+    )
     persona = Persona(
         validators=[
             validator_1,
         ],
     )
-    message = "Напиши мне на почту test@gmail.com"
-    validated_message = validate_message_with_persona_validators(persona=persona, message=message)
-    print(validated_message)
+    message = "Напиши мне на почту test@gmail.com и запиши мой номер 8 800 555 3555"
+    print(f"Исходное сообщение: {message}")
+
+    validator_manager = ValidatorManager(persona=persona)
+    masked_message = validator_manager.validate_message(message=message, direction="input")
+    print(f"Маскированное сообщение: {masked_message}")
+
+    unmasked_message = validator_manager.validate_message(message=masked_message, direction="output")
+    print(f"Демаскированное сообщение: {unmasked_message}")

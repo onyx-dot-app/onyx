@@ -105,7 +105,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.features.guardrails.services.validator_service import validate_message_with_persona_validators
+from onyx.server.features.guardrails.services.validator_service import ValidatorManager
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -504,8 +504,9 @@ def stream_chat_message_objects(
             raise RuntimeError("No persona specified or found for chat session")
 
         # Валидация сообщения пользователя
-        validated_message = validate_message_with_persona_validators(
-            persona=persona, message=new_msg_req.message,
+        validator_manager = ValidatorManager(persona=persona)
+        validated_message = validator_manager.validate_message(
+            message=new_msg_req.message, direction="input"
         )
 
         if validated_message:
@@ -1108,10 +1109,12 @@ def stream_chat_message_objects(
             if merged_text and merged_text.strip():
 
                 # 2. Отправляем текст на валидацию
-                validated_text = merged_text
+                validated_message = validator_manager.validate_message(
+                    message=merged_text, direction="input"
+                )
 
                 # 3. Разбиваем валидированный текст обратно на пакеты OnyxAnswerPiece
-                splitted_onyx_answer_piece_packets = split_packets(text=validated_text)
+                splitted_onyx_answer_piece_packets = split_packets(text=validated_message)
                 logger.info("\nРазбитый текст на пакеты OnyxAnswerPiece: %s", splitted_onyx_answer_piece_packets)
 
                 # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
