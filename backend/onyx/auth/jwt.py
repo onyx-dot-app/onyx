@@ -11,6 +11,7 @@ from jwt import decode as jwt_decode
 from jwt import InvalidTokenError
 from jwt import PyJWTError
 from jwt.algorithms import RSAAlgorithm
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
@@ -164,8 +165,6 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
 
         email = payload.get("email")
         if email:
-            from sqlalchemy import select
-
             result = await async_db_session.execute(
                 select(User).where(func.lower(User.email) == func.lower(email))
             )
