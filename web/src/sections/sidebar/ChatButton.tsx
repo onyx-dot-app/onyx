@@ -114,6 +114,7 @@ function ChatButtonInner({
 }: ChatButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
   const [renaming, setRenaming] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
@@ -150,6 +151,9 @@ function ChatButtonInner({
       },
       disabled: !draggable || renaming,
     });
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const filteredProjects = useMemo(() => {
     if (!searchTerm) return projects;
     const term = searchTerm.toLowerCase();
@@ -370,8 +374,8 @@ function ChatButtonInner({
               : undefined,
             opacity: isDragging ? 0.5 : 1,
           }}
-          {...attributes}
-          {...listeners}
+          {...(mounted ? attributes : {})}
+          {...(mounted ? listeners : {})}
         >
           <Popover
             onOpenChange={(state) => {
