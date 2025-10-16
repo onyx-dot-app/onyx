@@ -6,13 +6,7 @@ import {
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "@/app/chat/interfaces";
-import {
-  MutableRefObject,
-  RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import { MutableRefObject, RefObject, useEffect, useRef } from "react";
 import {
   BackendMessage,
   ChatSession,
@@ -21,6 +15,7 @@ import {
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -491,7 +486,7 @@ export function processRawChatHistory(
 
   let assistantMessageInd = 0;
 
-  rawMessages.forEach((messageInfo, ind) => {
+  rawMessages.forEach((messageInfo, _ind) => {
     const packetsForMessage = packets[assistantMessageInd];
     if (messageInfo.message_type === "assistant") {
       assistantMessageInd++;
@@ -527,6 +522,7 @@ export function processRawChatHistory(
       ...(messageInfo.message_type === "assistant"
         ? {
             retrievalType: retrievalType,
+            researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
             documents: messageInfo?.context_docs?.top_documents || [],
             citations: messageInfo?.citations || {},

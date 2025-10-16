@@ -6,14 +6,14 @@ import {
   useProjectsContext,
 } from "@/app/chat/projects/ProjectsContext";
 import NavigationTab from "@/refresh-components/buttons/NavigationTab";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import { PopoverMenu } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
-import { ChatButton } from "@/sections/sidebar/AppSidebar";
+import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import SvgFolderPlus from "@/icons/folder-plus";
 import {

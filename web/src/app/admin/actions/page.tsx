@@ -1,7 +1,7 @@
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
 import { Separator } from "@/components/ui/separator";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";

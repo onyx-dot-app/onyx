@@ -25,12 +25,12 @@ import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { useEscape } from "@/hooks/useKeyPress";
 import CoreModal from "@/refresh-components/modals/CoreModal";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgFileText from "@/icons/file-text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
-import Truncated from "@/refresh-components/Truncated";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 export function FileCard({
   file,

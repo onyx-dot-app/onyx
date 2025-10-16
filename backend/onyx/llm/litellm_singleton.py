@@ -7,7 +7,6 @@ All other modules should import litellm from here instead of directly.
 import litellm
 from agents.extensions.models.litellm_model import LitellmModel
 
-from onyx.configs.app_configs import BRAINTRUST_ENABLED
 
 # Import litellm
 
@@ -16,9 +15,6 @@ from onyx.configs.app_configs import BRAINTRUST_ENABLED
 # parameters like frequency and presence, just ignore them
 litellm.drop_params = True
 litellm.telemetry = False
-
-if BRAINTRUST_ENABLED:
-    litellm.callbacks = ["braintrust"]
 
 # Export the configured litellm module
 __all__ = ["litellm", "LitellmModel"]

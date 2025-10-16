@@ -9,6 +9,7 @@ from agents import RunContextWrapper
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -336,7 +337,7 @@ def run_internal_search_core_with_dependencies(
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
-) -> list[InferenceSection]:
+) -> list[LlmDoc]:
     """Helper function to run the real _internal_search_core with injected dependencies"""
     from unittest.mock import patch
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
@@ -473,6 +474,14 @@ def test_internal_search_core_basic_functionality(
     # Assert
     assert isinstance(result, list)
     assert len(result) == 2
+    # Verify result contains LlmDoc objects
+    assert all(isinstance(doc, LlmDoc) for doc in result)
+    assert result[0].document_id == "doc1"
+    assert result[0].semantic_identifier == "test_doc_1"
+    assert result[0].content == "First test document content"
+    assert result[1].document_id == "doc2"
+    assert result[1].semantic_identifier == "test_doc_2"
+    assert result[1].content == "Second test document content"
 
     # Verify context was updated (decorator increments current_run_step)
     assert fake_run_context.context.current_run_step == 2
@@ -600,6 +609,8 @@ def test_internal_search_core_with_multiple_queries(
     assert isinstance(result, list)
     # Should have results from all queries
     assert len(result) > 0
+    # Verify result contains LlmDoc objects
+    assert all(isinstance(doc, LlmDoc) for doc in result)
 
     # Verify all queries were executed
     assert len(call_queries) == len(queries)

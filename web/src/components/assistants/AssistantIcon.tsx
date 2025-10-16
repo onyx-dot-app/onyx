@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 type IconSize = number | "xs" | "small" | "medium" | "large" | "header";
 
 function md5ToBits(str: string): number[] {

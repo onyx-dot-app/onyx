@@ -199,6 +199,7 @@ def save_iteration(
                 else None
             ),
             additional_data=iteration_answer.additional_data,
+            queries=iteration_answer.queries,
         )
         db_session.add(research_agent_iteration_sub_step)
 

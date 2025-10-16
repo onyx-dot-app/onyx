@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import {
   ModalIds,

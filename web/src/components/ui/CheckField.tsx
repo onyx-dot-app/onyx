@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import Text from "@/refresh-components/texts/Text";
 
 interface CheckFieldProps {
   name: string;
@@ -99,8 +100,8 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>{checkboxContent}</TooltipTrigger>
-        <TooltipContent className="mb-4" side="top" align="center">
-          <p>{tooltip}</p>
+        <TooltipContent side="top" align="center" sideOffset={25}>
+          <Text inverted>{tooltip}</Text>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
