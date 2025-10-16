@@ -7,6 +7,8 @@ from collections.abc import AsyncGenerator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from enum import Enum
+from functools import lru_cache
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -17,6 +19,8 @@ from typing import Tuple
 from typing import TypeVar
 
 import jwt
+import requests
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -53,6 +57,10 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
+from jwt import decode as jwt_decode
+from jwt import InvalidTokenError
+from jwt import PyJWTError
+from jwt.algorithms import RSAAlgorithm
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
@@ -72,6 +80,7 @@ from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
 from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
@@ -107,11 +116,13 @@ from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.saml import get_saml_account
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.secrets import extract_hashed_cookie
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -127,6 +138,162 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+_PUBLIC_KEY_FETCH_ATTEMPTS = 2
+
+
+class PublicKeyFormat(Enum):
+    JWKS = "jwks"
+    PEM = "pem"
+
+
+@lru_cache()
+def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
+    """Fetch and cache the raw JWT verification material."""
+    if JWT_PUBLIC_KEY_URL is None:
+        logger.error("JWT_PUBLIC_KEY_URL is not set")
+        return None
+
+    try:
+        response = requests.get(JWT_PUBLIC_KEY_URL)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        logger.error(f"Failed to fetch JWT public key: {str(exc)}")
+        return None
+    content_type = response.headers.get("Content-Type", "").lower()
+    raw_body = response.text
+    body_lstripped = raw_body.lstrip()
+
+    if "application/json" in content_type or body_lstripped.startswith("{"):
+        try:
+            data = response.json()
+        except ValueError:
+            logger.error("JWT public key URL returned invalid JSON")
+            return None
+
+        if isinstance(data, dict) and "keys" in data:
+            return data, PublicKeyFormat.JWKS
+
+        logger.error(
+            "JWT public key URL returned JSON but no JWKS 'keys' field was found"
+        )
+        return None
+
+    body = raw_body.strip()
+    if not body:
+        logger.error("JWT public key URL returned an empty response")
+        return None
+
+    return body, PublicKeyFormat.PEM
+
+
+def get_public_key(token: str) -> RSAPublicKey | str | None:
+    """Return the concrete public key used to verify the provided JWT token."""
+    payload = _fetch_public_key_payload()
+    if payload is None:
+        logger.error("Failed to retrieve public key payload")
+        return None
+
+    key_material, key_format = payload
+
+    if key_format is PublicKeyFormat.JWKS:
+        jwks_data = cast(dict[str, Any], key_material)
+        return _resolve_public_key_from_jwks(token, jwks_data)
+
+    return cast(str, key_material)
+
+
+def _resolve_public_key_from_jwks(
+    token: str, jwks_payload: dict[str, Any]
+) -> RSAPublicKey | None:
+    try:
+        header = jwt.get_unverified_header(token)
+    except PyJWTError as e:
+        logger.error(f"Unable to parse JWT header: {str(e)}")
+        return None
+
+    keys = jwks_payload.get("keys", []) if isinstance(jwks_payload, dict) else []
+    if not keys:
+        logger.error("JWKS payload did not contain any keys")
+        return None
+
+    kid = header.get("kid")
+    thumbprint = header.get("x5t")
+
+    candidates = []
+    if kid:
+        candidates = [k for k in keys if k.get("kid") == kid]
+    if not candidates and thumbprint:
+        candidates = [k for k in keys if k.get("x5t") == thumbprint]
+    if not candidates and len(keys) == 1:
+        candidates = keys
+
+    if not candidates:
+        logger.warning(
+            "No matching JWK found for token header (kid=%s, x5t=%s)", kid, thumbprint
+        )
+        return None
+
+    if len(candidates) > 1:
+        logger.warning(
+            "Multiple JWKs matched token header kid=%s; selecting the first occurrence",
+            kid,
+        )
+
+    jwk = candidates[0]
+    try:
+        return cast(RSAPublicKey, RSAAlgorithm.from_jwk(json.dumps(jwk)))
+    except ValueError as e:
+        logger.error(f"Failed to construct RSA key from JWK: {str(e)}")
+        return None
+
+
+async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
+    for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
+        public_key = get_public_key(token)
+        if public_key is None:
+            logger.error("Unable to resolve a public key for JWT verification")
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
+                _fetch_public_key_payload.cache_clear()
+                continue
+            return None
+
+        try:
+            from sqlalchemy import func
+
+            payload = jwt_decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
+            )
+        except InvalidTokenError as e:
+            logger.error(f"Invalid JWT token: {str(e)}")
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
+                _fetch_public_key_payload.cache_clear()
+                continue
+            return None
+        except PyJWTError as e:
+            logger.error(f"JWT decoding error: {str(e)}")
+            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
+                _fetch_public_key_payload.cache_clear()
+                continue
+            return None
+
+        email = payload.get("email")
+        if email:
+            from sqlalchemy import select
+
+            result = await async_db_session.execute(
+                select(User).where(func.lower(User.email) == func.lower(email))
+            )
+            return result.scalars().first()
+        logger.warning(
+            "JWT token decoded successfully but no email claim found; skipping auth"
+        )
+        break
+
+    return None
+
 
 def is_user_admin(user: User | None) -> bool:
     if AUTH_TYPE == AuthType.DISABLED:
@@ -137,11 +304,7 @@ def is_user_admin(user: User | None) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE not in [AuthType.DISABLED, AuthType.BASIC, AuthType.GOOGLE_OAUTH]:
-        raise ValueError(
-            "User must choose a valid user authentication method: "
-            "disabled, basic, or google_oauth"
-        )
+    # All auth types are valid (DISABLED, BASIC, GOOGLE_OAUTH, OIDC, SAML, CLOUD)
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 
@@ -1062,8 +1225,23 @@ async def optional_user_(
     user: User | None,
     async_db_session: AsyncSession,
 ) -> User | None:
-    """NOTE: `request` and `db_session` are not used here, but are included
-    for the EE version of this function."""
+    # Check if the user has a session cookie from SAML
+    if AUTH_TYPE == AuthType.SAML:
+        saved_cookie = extract_hashed_cookie(request)
+
+        if saved_cookie:
+            saml_account = await get_saml_account(
+                cookie=saved_cookie, async_db_session=async_db_session
+            )
+            user = saml_account.user if saml_account else None
+
+    # If user is still None, check for JWT in Authorization header
+    if user is None and JWT_PUBLIC_KEY_URL is not None:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[len("Bearer ") :].strip()
+            user = await verify_jwt_token(token, async_db_session)
+
     return user
 
 
