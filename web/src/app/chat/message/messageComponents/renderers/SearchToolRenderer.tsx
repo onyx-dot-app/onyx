@@ -12,11 +12,13 @@ import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
+import { SearchToolRendererV2 } from "./SearchToolRendererV2";
+import { usePostHog } from "posthog-js/react";
+import { ResearchType } from "@/app/chat/interfaces";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
-const MAX_TITLE_LENGTH = 25;
 
 const INITIAL_QUERIES_TO_SHOW = 3;
 const QUERIES_PER_EXPANSION = 5;
@@ -66,13 +68,25 @@ const constructCurrentSearchState = (
   return { queries, results, isSearching, isComplete, isInternetSearch };
 };
 
-export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
+export const SearchToolRenderer: MessageRenderer<
+  SearchToolPacket,
+  { researchType?: string | null }
+> = ({
   packets,
+  state,
   onComplete,
   renderType,
   animate,
+  stopPacketSeen,
   children,
 }) => {
+  const posthog = usePostHog();
+  const isSimpleAgentFrameworkEnabled =
+    posthog.isFeatureEnabled("simple-agent-framework") ?? false;
+  // Check if this message has a research_type, which indicates it's using the simple agent framework
+  const isDeepResearch = state.researchType === ResearchType.Deep;
+
+  // Initialize all hooks at the top level (before any conditional returns)
   const { queries, results, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
 
@@ -179,6 +193,22 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
 
   // Determine the icon based on search type
   const icon = isInternetSearch ? FiGlobe : FiSearch;
+
+  // If this message has a research type, use the V2 renderer (simple agent framework)
+  if (isSimpleAgentFrameworkEnabled && !isDeepResearch) {
+    return (
+      <SearchToolRendererV2
+        packets={packets}
+        state={state}
+        onComplete={onComplete}
+        renderType={renderType}
+        animate={animate}
+        stopPacketSeen={stopPacketSeen}
+      >
+        {children}
+      </SearchToolRendererV2>
+    );
+  }
 
   // Don't render anything if search hasn't started
   if (queries.length === 0) {

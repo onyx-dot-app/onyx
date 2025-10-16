@@ -38,7 +38,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSettings from "@/icons/settings";
 

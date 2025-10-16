@@ -3,7 +3,6 @@ from typing import Any
 
 import braintrust
 from agents import set_trace_processors
-from braintrust import init_logger
 from braintrust.wrappers.openai import BraintrustTracingProcessor
 from braintrust_langchain import set_global_handler
 from braintrust_langchain.callbacks import BraintrustCallbackHandler
@@ -30,11 +29,11 @@ def _mask(data: Any) -> Any:
 def setup_braintrust() -> None:
     """Initialize Braintrust logger and set up global callback handler."""
 
-    braintrust.init_logger(
+    logger = braintrust.init_logger(
         project=BRAINTRUST_PROJECT,
         api_key=BRAINTRUST_API_KEY,
     )
     braintrust.set_masking_function(_mask)
     handler = BraintrustCallbackHandler()
     set_global_handler(handler)
-    set_trace_processors([BraintrustTracingProcessor(init_logger(BRAINTRUST_PROJECT))])
+    set_trace_processors([BraintrustTracingProcessor(logger)])

@@ -1,4 +1,4 @@
-import Truncated from "@/refresh-components/Truncated";
+import Truncated from "@/refresh-components/texts/Truncated";
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";

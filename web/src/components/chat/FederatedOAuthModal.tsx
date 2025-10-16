@@ -9,7 +9,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;

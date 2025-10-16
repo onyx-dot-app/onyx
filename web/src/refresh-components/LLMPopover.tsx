@@ -13,7 +13,7 @@ import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 interface LLMPopoverProps {
   llmManager: LlmManager;
