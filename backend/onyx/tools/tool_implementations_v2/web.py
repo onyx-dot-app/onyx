@@ -168,12 +168,12 @@ def web_search(
       - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
       - Recommendations, or any query where the specific sources matter.
       - Verifiable claims, quotes, or citations.
-    - After ANY successful `web_search_tool` call that yields candidate URLs, you MUST call
-      `web_fetch_tool` on the selected URLs BEFORE answering. Do NOT answer from snippets.
+    - After ANY successful `web_search` call that yields candidate URLs, you MUST call
+      `open_url` on the selected URLs BEFORE answering. Do NOT answer from snippets.
 
     ## When NOT to use
     - Casual chat, rewriting/summarizing user-provided text, or translation.
-    - When the user already provided URLs (go straight to `web_fetch_tool`).
+    - When the user already provided URLs (go straight to `open_url`).
 
     ## Usage hints
     - Batch a list of natural-language queries per call.
@@ -281,9 +281,10 @@ def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -
 
     ---
     ## Decision boundary
-    - You MUST use `web_fetch_tool` before quoting, citing, or relying on page content.
-    - Use it whenever you already have URLs (from the user or from `web_search_tool`).
+    - You MUST use this tool before quoting, citing, or relying on page content.
+    - Use it whenever you already have URLs (from the user or from `web_search`).
     - Do NOT answer questions based on search snippets alone.
+    - After a web_search call, strong bias towards using this tool to investigate further.
 
     ## When NOT to use
     - If you do not yet have URLs (search first).

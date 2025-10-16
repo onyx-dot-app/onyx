@@ -1,11 +1,13 @@
+from typing import Any
 from typing import cast
+from typing import Dict
 from uuid import UUID
 
 from agents import Agent
 from agents import RawResponsesStreamEvent
 from agents import StopAtTools
+from agents.agent_output import AgentOutputSchemaBase
 from agents.tracing import trace
-from pydantic import BaseModel
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -36,8 +38,34 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations_v2.image_generation import image_generation
 
 
-class ReadyToAnswer(BaseModel):
-    ready_to_answer: bool = True
+class ReadyToAnswer(AgentOutputSchemaBase):
+    """
+    Useful for doing a code-orchestrated handoff when you only want to save
+    tool calls and intermediate values and you want the agent to generate
+    a concise response.
+    """
+
+    def is_plain_text(self) -> bool:
+        return False
+
+    def name(self) -> str:
+        return "ReadyToAnswer"
+
+    def json_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "ready": {"type": "boolean"},
+            },
+            "required": ["ready"],
+            "additionalProperties": False,
+        }
+
+    def is_strict_json_schema(self) -> bool:
+        return False
+
+    def validate_json(self, json_str: str) -> dict[str, Any]:
+        return {}
 
 
 # Todo -- this can be refactored out and played with in evals + normal demo
@@ -59,7 +87,7 @@ def _run_agent_loop(
         tools=cast(list[AgentToolType], dependencies.tools),
         model_settings=dependencies.model_settings,
         tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
-        output_type=ReadyToAnswer,
+        output_type=ReadyToAnswer(),
     )
 
     # By default, the agent can only take 10 turns. For our use case, it should be higher.
