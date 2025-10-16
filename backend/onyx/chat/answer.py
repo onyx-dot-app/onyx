@@ -196,7 +196,15 @@ class Answer:
             logger.info("\n\n=== КОНЕЦ ПАКЕТА ===\n\n")
 
             if self.is_cancelled():
+                logger.info("\n\n=== НАЧАЛО ПАКЕТА StreamStopInfo ===\n\n")
+                logger.info("\nПакет: %s", packet)
+
                 packet = StreamStopInfo(stop_reason=StreamStopReason.CANCELLED)
+                processed_stream.append(packet)
+
+                logger.info("\n\n=== КОНЕЦ ПАКЕТА StreamStopInfo ===\n\n")
+                logger.info("\nСписок пакетов processed_stream: %s\n", processed_stream)
+
                 yield packet
                 break
             processed_stream.append(packet)
