@@ -56,6 +56,12 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
+from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
+from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
+from onyx.db.permission_sync_attempt import (
+    mark_doc_permission_sync_attempt_in_progress,
+)
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -111,6 +117,14 @@ def _get_fence_validation_block_expiration() -> int:
 
 
 """Jobs / utils for kicking off doc permissions sync tasks."""
+
+
+def _fail_doc_permission_sync_attempt(attempt_id: int, error_msg: str) -> None:
+    """Helper to mark a doc permission sync attempt as failed with an error message."""
+    with get_session_with_current_tenant() as db_session:
+        mark_doc_permission_sync_attempt_failed(
+            attempt_id, db_session, error_message=error_msg
+        )
 
 
 def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -379,6 +393,15 @@ def connector_permission_sync_generator_task(
     doc_permission_sync_ctx_dict["request_id"] = self.request.id
     doc_permission_sync_ctx.set(doc_permission_sync_ctx_dict)
 
+    with get_session_with_current_tenant() as db_session:
+        attempt_id = create_doc_permission_sync_attempt(
+            connector_credential_pair_id=cc_pair_id,
+            db_session=db_session,
+        )
+        task_logger.info(
+            f"Created doc permission sync attempt: {attempt_id} for cc_pair={cc_pair_id}"
+        )
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
     r = get_redis_client()
@@ -389,22 +412,28 @@ def connector_permission_sync_generator_task(
     start = time.monotonic()
     while True:
         if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise ValueError(
+            error_msg = (
                 f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
                 f"fence={redis_connector.permissions.fence_key}"
             )
+            _fail_doc_permission_sync_attempt(attempt_id, error_msg)
+            raise ValueError(error_msg)
 
         if not redis_connector.permissions.fenced:  # The fence must exist
-            raise ValueError(
+            error_msg = (
                 f"connector_permission_sync_generator_task - fence not found: "
                 f"fence={redis_connector.permissions.fence_key}"
             )
+            _fail_doc_permission_sync_attempt(attempt_id, error_msg)
+            raise ValueError(error_msg)
 
         payload = redis_connector.permissions.payload  # The payload must exist
         if not payload:
-            raise ValueError(
+            error_msg = (
                 "connector_permission_sync_generator_task: payload invalid or not found"
             )
+            _fail_doc_permission_sync_attempt(attempt_id, error_msg)
+            raise ValueError(error_msg)
 
         if payload.celery_task_id is None:
             logger.info(
@@ -432,9 +461,11 @@ def connector_permission_sync_generator_task(
 
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        task_logger.warning(
+        error_msg = (
             f"Permission sync task already running, exiting...: cc_pair={cc_pair_id}"
         )
+        task_logger.warning(error_msg)
+        _fail_doc_permission_sync_attempt(attempt_id, error_msg)
         return None
 
     try:
@@ -470,11 +501,15 @@ def connector_permission_sync_generator_task(
             source_type = cc_pair.connector.source
             sync_config = get_source_perm_sync_config(source_type)
             if sync_config is None:
-                logger.error(f"No sync config found for {source_type}")
+                error_msg = f"No sync config found for {source_type}"
+                logger.error(error_msg)
+                _fail_doc_permission_sync_attempt(attempt_id, error_msg)
                 return None
 
             if sync_config.doc_sync_config is None:
                 if sync_config.censoring_config:
+                    error_msg = f"Doc sync config is None but censoring config exists for {source_type}"
+                    _fail_doc_permission_sync_attempt(attempt_id, error_msg)
                     return None
 
                 raise ValueError(
@@ -482,6 +517,8 @@ def connector_permission_sync_generator_task(
                 )
 
             logger.info(f"Syncing docs for {source_type} with cc_pair={cc_pair_id}")
+
+            mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
             payload = redis_connector.permissions.payload
             if not payload:
@@ -533,8 +570,9 @@ def connector_permission_sync_generator_task(
             )
 
             tasks_generated = 0
+            docs_with_errors = 0
             for doc_external_access in document_external_accesses:
-                redis_connector.permissions.update_db(
+                result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
                     source_string=source_type,
@@ -542,11 +580,23 @@ def connector_permission_sync_generator_task(
                     credential_id=cc_pair.credential.id,
                     task_logger=task_logger,
                 )
-                tasks_generated += 1
+                tasks_generated += result.num_updated
+                docs_with_errors += result.num_errors
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks finished. "
-                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+            )
+
+            complete_doc_permission_sync_attempt(
+                db_session=db_session,
+                attempt_id=attempt_id,
+                total_docs_synced=tasks_generated,
+                docs_with_permission_errors=docs_with_errors,
+            )
+            task_logger.info(
+                f"Completed doc permission sync attempt {attempt_id}: "
+                f"{tasks_generated} docs, {docs_with_errors} errors"
             )
 
             redis_connector.permissions.generator_complete = tasks_generated
@@ -560,6 +610,11 @@ def connector_permission_sync_generator_task(
         task_logger.exception(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id}"
         )
+
+        with get_session_with_current_tenant() as db_session:
+            mark_doc_permission_sync_attempt_failed(
+                attempt_id, db_session, error_message=error_msg
+            )
 
         redis_connector.permissions.generator_clear()
         redis_connector.permissions.taskset_clear()

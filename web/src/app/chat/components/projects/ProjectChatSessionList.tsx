@@ -9,7 +9,7 @@ import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import SvgBubbleText from "@/icons/bubble-text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { formatRelativeTime } from "./project_utils";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export default function ProjectChatSessionList() {
   const {

@@ -19,9 +19,10 @@ import SvgFileText from "@/icons/file-text";
 import SvgExternalLink from "@/icons/external-link";
 import SvgTrash from "@/icons/trash";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Text from "@/refresh-components/Text";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import Text from "@/refresh-components/texts/Text";
+
 // Small helper to render an icon + label row
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center gap-2 w-full">{children}</div>
@@ -244,8 +245,11 @@ export default function FilePicker({
           if (projects) {
             message += ` projects: ${projects}`;
           }
+          if (projects && assistants) {
+            message += " and ";
+          }
           if (assistants) {
-            message += ` and assistants: ${assistants}`;
+            message += `assistants: ${assistants}`;
           }
 
           setPopup({

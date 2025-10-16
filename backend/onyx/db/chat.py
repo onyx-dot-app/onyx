@@ -970,6 +970,7 @@ def translate_db_message_to_chat_message_detail(
             chat_message.search_docs, remove_doc_content=remove_doc_content
         ),
         message_type=chat_message.message_type,
+        research_type=chat_message.research_type,
         time_sent=chat_message.time_sent,
         citations=chat_message.citations,
         files=chat_message.files or [],

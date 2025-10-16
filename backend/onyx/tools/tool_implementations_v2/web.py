@@ -14,6 +14,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     WebSearchProvider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
+    dummy_inference_section_from_internet_content,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
 from onyx.chat.turn.models import ChatTurnContext
@@ -138,12 +141,13 @@ def _web_search_core(
             parallelization_nr=0,
             question=queries_str,
             reasoning=f"I am now using Web Search to gather information on {queries_str}",
-            answer="Cool",
+            answer="",
             cited_documents={
                 i: inference_section
                 for i, inference_section in enumerate(inference_sections)
             },
-            claims=["web_search"],
+            claims=[],
+            queries=queries,
         )
     )
     return WebSearchResponse(results=results)
@@ -252,8 +256,12 @@ def _web_fetch_core(
             question=f"Fetch content from URLs: {', '.join(urls)}",
             reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
             answer="",
-            cited_documents={},
+            cited_documents={
+                i: dummy_inference_section_from_internet_content(d)
+                for i, d in enumerate(docs)
+            },
             claims=[],
+            is_web_fetch=True,
         )
     )
 

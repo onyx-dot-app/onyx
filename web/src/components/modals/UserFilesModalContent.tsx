@@ -10,7 +10,7 @@ import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgPlusCircle from "@/icons/plus-circle";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import { SvgProps } from "@/icons";
 import SvgSearch from "@/icons/search";
@@ -19,7 +19,7 @@ import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgTrash from "@/icons/trash";
 import SvgCheck from "@/icons/check";
-import Truncated from "@/refresh-components/Truncated";
+import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 

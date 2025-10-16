@@ -34,7 +34,7 @@ import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 function SourceTileTooltipWrapper({
   sourceMetadata,

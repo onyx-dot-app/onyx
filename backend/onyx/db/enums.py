@@ -25,6 +25,32 @@ class IndexingStatus(str, PyEnum):
         )
 
 
+class PermissionSyncStatus(str, PyEnum):
+    """Status enum for permission sync attempts"""
+
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    SUCCESS = "success"
+    CANCELED = "canceled"
+    FAILED = "failed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+    def is_terminal(self) -> bool:
+        terminal_states = {
+            PermissionSyncStatus.SUCCESS,
+            PermissionSyncStatus.COMPLETED_WITH_ERRORS,
+            PermissionSyncStatus.CANCELED,
+            PermissionSyncStatus.FAILED,
+        }
+        return self in terminal_states
+
+    def is_successful(self) -> bool:
+        return (
+            self == PermissionSyncStatus.SUCCESS
+            or self == PermissionSyncStatus.COMPLETED_WITH_ERRORS
+        )
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"

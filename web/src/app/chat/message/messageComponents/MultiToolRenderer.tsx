@@ -11,7 +11,7 @@ import { RendererComponent } from "./renderMessageComponent";
 import { isToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { cn } from "@/lib/utils";
 

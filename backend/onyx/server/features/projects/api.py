@@ -407,7 +407,7 @@ def delete_user_file(
     project_names = [project.name for project in user_file.projects]
     assistant_names = [assistant.name for assistant in user_file.assistants]
 
-    if project_names or assistant_names:
+    if len(project_names) > 0 or len(assistant_names) > 0:
         return UserFileDeleteResult(
             has_associations=True,
             project_names=project_names,
