@@ -330,6 +330,7 @@ class S3BackedFileStore(FileStore):
 
         hash256 = ""
         sha256_hash = hashlib.sha256()
+        kwargs: S3PutKwargs = {}
 
         # Read content from IO object
         if hasattr(content, "read"):
@@ -338,15 +339,14 @@ class S3BackedFileStore(FileStore):
                 data_bytes = str(file_content).encode()
                 sha256_hash.update(data_bytes)
                 hash256 = sha256_hash.hexdigest()  # get the sha256 has in hex format
+                kwargs["ChecksumSHA256"] = hash256
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
             file_content = content
 
         # Upload to S3
-        kwargs: S3PutKwargs = {}
-        if S3_GENERATE_LOCAL_CHECKSUM:
-            kwargs["ChecksumSHA256"] = hash256
+
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
