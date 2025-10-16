@@ -135,12 +135,12 @@ class SyncAgentStream(Generic[T]):
                     await self.streamed.cancel()  # type: ignore[func-returns-value]
 
                 # Consume async events and forward into the thread-safe queue
-                async for ev in self._streamed.stream_events():
+                async for ev in self.streamed.stream_events():
                     # Early exit if a late cancel arrives
                     if self._cancel_requested.is_set():
                         # Try to cancel gracefully; don't break until cancel takes effect
                         try:
-                            await self._streamed.cancel()  # type: ignore[func-returns-value]
+                            await self.streamed.cancel()  # type: ignore[func-returns-value]
                         except Exception:
                             pass
                         break
