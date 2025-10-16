@@ -6,7 +6,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
-import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -545,35 +544,6 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     if user is None:
         raise ValueError("Invalid or missing user.")
     return UserRoleResponse(role=user.role)
-
-
-def get_current_auth_token_expiration_jwt(
-    user: User | None, request: Request
-) -> datetime | None:
-    if user is None:
-        return None
-
-    try:
-        # Get the JWT from the cookie
-        jwt_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-        if not jwt_token:
-            logger.error("No JWT token found in cookies")
-            return None
-
-        # Decode the JWT
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-
-        # Get the 'exp' (expiration) claim from the token
-        exp = decoded_token.get("exp")
-        if exp:
-            return datetime.fromtimestamp(exp)
-        else:
-            logger.error("No 'exp' claim found in JWT")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error decoding JWT: {e}")
-        return None
 
 
 def get_current_auth_token_creation_redis(
