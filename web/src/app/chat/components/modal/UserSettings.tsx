@@ -20,58 +20,23 @@ import { Loader2, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
-import { UserPersonalization, ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import SvgTrash from "@/icons/trash";
 import SvgExternalLink from "@/icons/external-link";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 
 type SettingsSection =
   | "settings"
   | "password"
   | "connectors"
   | "personalization";
-
-interface AutoResizeTextareaProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}
-
-function AutoResizeTextarea({
-  value,
-  onChange,
-  placeholder,
-}: AutoResizeTextareaProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [value]);
-
-  return (
-    <Textarea
-      ref={textareaRef}
-      value={value}
-      placeholder={placeholder}
-      className="min-h-[3rem] resize-none"
-      onChange={(event) => {
-        onChange(event.target.value);
-        const target = event.currentTarget;
-        target.style.height = "auto";
-        target.style.height = `${target.scrollHeight}px`;
-      }}
-    />
-  );
-}
 
 interface UserSettingsProps {
   onClose: () => void;
@@ -106,14 +71,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
-  const [personalizationValues, setPersonalizationValues] =
-    useState<UserPersonalization>({
-      name: "",
-      role: "",
-      memories: [],
-      use_memories: true,
-    });
-
   const { popup, setPopup } = usePopup();
 
   // Fetch federated-connector info so the modal can list/refresh them
@@ -140,16 +97,28 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     (ccPairs && ccPairs.length > 0) ||
     (federatedConnectors && federatedConnectors.length > 0);
 
-  useEffect(() => {
-    setPersonalizationValues({
-      name: user?.personalization?.name ?? "",
-      role: user?.personalization?.role ?? "",
-      memories: user?.personalization?.memories ?? [],
-      use_memories: user?.personalization?.use_memories ?? true,
-    });
-  }, [user]);
-
   const showPasswordSection = Boolean(user?.password_configured);
+
+  const {
+    personalizationValues,
+    updatePersonalizationField,
+    toggleUseMemories,
+    updateMemoryAtIndex,
+    addMemory,
+    handleSavePersonalization,
+    isSavingPersonalization,
+  } = useUserPersonalization(user, updateUserPersonalization, {
+    onSuccess: () =>
+      setPopup({
+        message: "Personalization updated successfully",
+        type: "success",
+      }),
+    onError: () =>
+      setPopup({
+        message: "Failed to update personalization",
+        type: "error",
+      }),
+  });
 
   const sections = useMemo(() => {
     const visibleSections: { id: SettingsSection; label: string }[] = [
@@ -390,37 +359,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     }
   };
 
-  const handleSavePersonalization = async () => {
-    const trimmedMemories = personalizationValues.memories
-      .map((memory) => memory.trim())
-      .filter((memory) => memory.length > 0);
-
-    try {
-      const updatedPersonalization = {
-        ...personalizationValues,
-        memories: trimmedMemories,
-      };
-
-      await updateUserPersonalization(updatedPersonalization);
-      setPersonalizationValues(updatedPersonalization);
-      setPopup({
-        message: "Personalization updated successfully",
-        type: "success",
-      });
-    } catch (error) {
-      setPopup({
-        message: "Failed to update personalization",
-        type: "error",
-      });
-      setPersonalizationValues({
-        name: user?.personalization?.name ?? "",
-        role: user?.personalization?.role ?? "",
-        memories: user?.personalization?.memories ?? [],
-        use_memories: user?.personalization?.use_memories ?? true,
-      });
-    }
-  };
-
   return (
     <div className="flex flex-col gap-padding-content p-padding-content">
       {sections.length > 1 && (
@@ -595,10 +533,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
               <Input
                 value={personalizationValues.name}
                 onChange={(event) =>
-                  setPersonalizationValues((prev) => ({
-                    ...prev,
-                    name: event.target.value,
-                  }))
+                  updatePersonalizationField("name", event.target.value)
                 }
                 placeholder="Set how Onyx should refer to you"
               />
@@ -610,10 +545,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
               <Input
                 value={personalizationValues.role}
                 onChange={(event) =>
-                  setPersonalizationValues((prev) => ({
-                    ...prev,
-                    role: event.target.value,
-                  }))
+                  updatePersonalizationField("role", event.target.value)
                 }
                 placeholder="Share your role to tailor responses"
               />
@@ -627,12 +559,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
               </div>
               <Switch
                 checked={personalizationValues.use_memories}
-                onCheckedChange={(checked) =>
-                  setPersonalizationValues((prev) => ({
-                    ...prev,
-                    use_memories: checked,
-                  }))
-                }
+                onCheckedChange={(checked) => toggleUseMemories(checked)}
               />
             </div>
             <div className="border-t border-border pt-4 space-y-3">
@@ -643,15 +570,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                     Keep personal notes that should inform future chats.
                   </SubLabel>
                 </div>
-                <Button
-                  tertiary
-                  onClick={() =>
-                    setPersonalizationValues((prev) => ({
-                      ...prev,
-                      memories: [...prev.memories, ""],
-                    }))
-                  }
-                >
+                <Button tertiary onClick={addMemory}>
                   Add Memory
                 </Button>
               </div>
@@ -666,21 +585,22 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                       key={index}
                       value={memory}
                       placeholder="Write something Onyx should remember"
-                      onChange={(value) =>
-                        setPersonalizationValues((prev) => {
-                          const updatedMemories = [...prev.memories];
-                          updatedMemories[index] = value;
-                          return { ...prev, memories: updatedMemories };
-                        })
-                      }
+                      onChange={(value) => updateMemoryAtIndex(index, value)}
                     />
                   ))}
                 </div>
               )}
             </div>
             <div className="flex justify-end">
-              <Button onClick={handleSavePersonalization}>
-                Save Personalization
+              <Button
+                onClick={() => {
+                  void handleSavePersonalization();
+                }}
+                disabled={isSavingPersonalization}
+              >
+                {isSavingPersonalization
+                  ? "Saving Personalization..."
+                  : "Save Personalization"}
               </Button>
             </div>
           </div>
