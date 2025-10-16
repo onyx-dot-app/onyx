@@ -33,19 +33,20 @@ spec:
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
-      {{- $comp := .Values.celery_beat | default (dict) -}}
-      {{- $ns := ternary $comp.nodeSelector .Values.global.nodeSelector (hasKey $comp "nodeSelector") -}}
-      {{- $tol := ternary $comp.tolerations .Values.global.tolerations (hasKey $comp "tolerations") -}}
-      {{- $aff := ternary $comp.affinity .Values.global.affinity (hasKey $comp "affinity") -}}
-      {{- with $ns }}
+      {{- $component    := .Values.celery_beat | default (dict) -}}
+      {{- $global       := .Values.global      | default (dict) -}}
+      {{- $nodeSelector := ternary $component.nodeSelector $global.nodeSelector (hasKey $component "nodeSelector") -}}
+      {{- $tolerations  := ternary $component.tolerations  $global.tolerations  (hasKey $component "tolerations") -}}
+      {{- $affinity     := ternary $component.affinity     $global.affinity     (hasKey $component "affinity") -}}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with $tol }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with $aff }}
+      {{- with $affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
