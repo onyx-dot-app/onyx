@@ -202,9 +202,7 @@ class Answer:
             processed_stream.append(packet)
             yield packet
 
-            logger.info("\nСписок пакетов processed_stream: %s\n", processed_stream)
-
-
+        logger.info("\nСписок пакетов processed_stream: %s\n", processed_stream)
 
         self._processed_stream = processed_stream
 
