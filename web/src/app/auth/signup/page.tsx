@@ -12,6 +12,7 @@ import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
+import Text from "@/refresh-components/Text";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -70,13 +71,29 @@ const Page = async (props: {
 
       <>
         <div className="absolute top-10x w-full"></div>
-        <div className="flex w-full flex-col justify-center">
-          <h2 className="text-center text-xl text-strong font-bold">
-            {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
-          </h2>
+        <div className="flex w-full flex-col justify-start">
+          <div className="w-full">
+            <Text headingH2 text05>
+              {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
+            </Text>
+            <Text text03>Get started with Onyx</Text>
+          </div>
+          {cloud && authUrl && (
+            <div className="w-full justify-center mt-spacing-headline">
+              <SignInButton authorizeUrl={authUrl} authType="cloud" />
+              <div className="flex items-center w-full my-spacing-paragraph">
+                <div className="flex-grow border-t border-border-01" />
+                <Text mainUiMuted text03 className="mx-spacing-interline">
+                  or
+                </Text>
+                <div className="flex-grow border-t border-border-01" />
+              </div>
+            </div>
+          )}
+
           {cloud && (
             <>
-              <div className="w-full flex flex-col items-center space-y-4 mb-4 mt-4">
+              <div className="w-full flex flex-col mb-3">
                 <ReferralSourceSelector />
               </div>
             </>
@@ -88,16 +105,6 @@ const Page = async (props: {
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}
           />
-          {cloud && authUrl && (
-            <div className="w-full justify-center">
-              <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-background-300" />
-                <span className="px-4 text-text-500">or</span>
-                <div className="flex-grow border-t border-background-300" />
-              </div>
-              <SignInButton authorizeUrl={authUrl} authType="cloud" />
-            </div>
-          )}
         </div>
       </>
     </AuthFlowContainer>

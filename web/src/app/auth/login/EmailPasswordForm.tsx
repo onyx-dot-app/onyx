@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
+import SvgArrowRightCircle from "@/icons/arrow-right-circle";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -52,6 +53,7 @@ export default function EmailPasswordForm({
             .transform((value) => value.toLowerCase()),
           password: Yup.string().required(),
         })}
+        validateOnMount
         onSubmit={async (values: { email: string; password: string }) => {
           // Ensure email is lowercase
           const email: string = values.email.toLowerCase();
@@ -131,14 +133,15 @@ export default function EmailPasswordForm({
           }
         }}
       >
-        {({ isSubmitting }) => (
-          <Form>
+        {({ isSubmitting, isValid, dirty }) => (
+          <Form className="gap-y-3">
             <TextFormField
               name="email"
-              label="Email"
+              label="Email Address"
               type="email"
               placeholder="email@yourcompany.com"
               data-testid="email"
+              className="!rounded-08 !border-border-02"
             />
 
             <TextFormField
@@ -147,10 +150,18 @@ export default function EmailPasswordForm({
               type="password"
               placeholder="**************"
               data-testid="password"
+              className="!rounded-08 !border-border-02"
+              showPasswordToggle
+              explanationText="Password must be at least 8 characters"
             />
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
+            <Button
+              type="submit"
+              className="w-full mt-1"
+              disabled={isSubmitting || !isValid || !dirty}
+              rightIcon={isSignup ? SvgArrowRightCircle : undefined}
+            >
+              {isJoin ? "Join" : isSignup ? "Create Account" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link

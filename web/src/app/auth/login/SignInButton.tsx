@@ -2,7 +2,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { AuthType } from "@/lib/constants";
 import Link from "next/link";
-import { FaGoogle } from "react-icons/fa";
+import { FcGoogle } from "react-icons/fc";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -18,8 +18,10 @@ export default function SignInButton({
   if (authType === "google_oauth" || authType === "cloud") {
     button = (
       <div className="flex flex-row items-center justify-center w-full gap-spacing-interline">
-        <FaGoogle className="text-text-inverted-04" />
-        <Text inverted>Continue with Google</Text>
+        <FcGoogle />
+        <Text text03 mainUiAction>
+          Continue with Google
+        </Text>
       </div>
     );
   } else if (authType === "oidc") {
@@ -37,7 +39,12 @@ export default function SignInButton({
 
   return (
     <Link href={finalAuthorizeUrl}>
-      <Button className="!w-full">{button}</Button>
+      <Button
+        secondary={authType === "google_oauth" || authType === "cloud"}
+        className="!w-full"
+      >
+        {button}
+      </Button>
     </Link>
   );
 }
