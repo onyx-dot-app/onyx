@@ -91,7 +91,7 @@ function UserCard({
 
 **Strictly forbid using the `dark:` modifier in Tailwind classes.**
 
-**Reason:** The `colors.css` file already, VERY CAREFULLY defines what the exact opposite colour of each light-mode colour is. Overriding this behaviour is VERY bad and will lead to horrible UI breakages.
+**Reason:** The `colors.css` file already, VERY CAREFULLY, defines what the exact opposite colour of each light-mode colour is. Overriding this behaviour is VERY bad and will lead to horrible UI breakages.
 
 ```typescript
 // ✅ Good
@@ -155,8 +155,8 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 
 ```typescript
 // ✅ Good
-import { UserIcon } from '@/icons/UserIcon'
-import { SearchIcon } from '@/icons/SearchIcon'
+import SvgX from '@/icons/x'
+import SvgMoreHorizontal from '@/icons/more-horizontal'
 
 // ❌ Bad
 import { User } from 'lucide-react'
@@ -164,6 +164,7 @@ import { FiSearch } from 'react-icons/fi'
 ```
 
 **Missing Icons**: If an icon is needed but doesn't exist in the `web/src/icons` directory, import it from Figma using the Figma MCP tool and add it to the icons directory.
+If you need help with this step, reach out to `raunak@onyx.app`.
 
 ## 9. Text Rendering
 
@@ -177,10 +178,14 @@ import { Text } from '@/refresh-components/texts/Text'
 
 function UserCard({ name }: { name: string }) {
   return (
-    <div>
-      <Text variant="heading" size="lg">{name}</Text>
-      <Text variant="body" size="sm">User details</Text>
-    </div>
+    <Text
+      {/* The `text03` flag makes the text it renders to be coloured the 3rd-scale grey */}
+      text03
+      {/* The `mainAction` flag makes the text it renders to be "main-action" font + line-height + weightage, as described in the Figma */}
+      mainAction
+    >
+      {name}
+    </Text>
   )
 }
 
@@ -203,16 +208,15 @@ function UserCard({ name }: { name: string }) {
 
 ```typescript
 // ✅ Good
-import { Button } from '@/refresh-components/buttons/Button'
-import { Input } from '@/refresh-components/inputs/Input'
-import { Textarea } from '@/refresh-components/inputs/Textarea'
+import Button from '@/refresh-components/buttons/Button'
+import InputTypeIn from '@/refresh-components/inputs/InputTypeIn'
+import SvgPlusCircle from '@/icons/plus-circle'
 
 function ContactForm() {
   return (
     <form>
-      <Input placeholder="Name" />
-      <Textarea placeholder="Message" />
-      <Button type="submit">Submit</Button>
+      <InputTypeIn placeholder="Search..." />
+      <Button type="submit" leftIcon={SvgPlusCircle}>Submit</Button>
     </form>
   )
 }
@@ -228,7 +232,3 @@ function ContactForm() {
   )
 }
 ```
-
-## Summary
-
-These standards ensure consistency, maintainability, and adherence to the project's design system. Always follow these guidelines when contributing to the web directory, and update this document if new standards are established.
