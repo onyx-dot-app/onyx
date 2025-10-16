@@ -30,9 +30,10 @@ spec:
       securityContext:
         {{- toYaml .Values.indexCapability.podSecurityContext | nindent 8 }}
       {{- end }}
-      {{- $ns := .Values.indexCapability.nodeSelector | default .Values.global.nodeSelector -}}
-      {{- $tol := .Values.indexCapability.tolerations | default .Values.global.tolerations -}}
-      {{- $aff := .Values.indexCapability.affinity | default .Values.global.affinity -}}
+      {{- $comp := .Values.indexCapability | default (dict) -}}
+      {{- $ns := ternary $comp.nodeSelector .Values.global.nodeSelector (hasKey $comp "nodeSelector") -}}
+      {{- $tol := ternary $comp.tolerations .Values.global.tolerations (hasKey $comp "tolerations") -}}
+      {{- $aff := ternary $comp.affinity .Values.global.affinity (hasKey $comp "affinity") -}}
       {{- with $ns }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

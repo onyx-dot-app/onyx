@@ -127,10 +127,40 @@ webserver:
   affinity: {}
 ```
 
-### Behavior
-- **Component-specific values take precedence** over global values
-- If a component has empty/null values (e.g., `nodeSelector: {}`), **global values will be used as fallback**
-- Supported components:
+### Inheritance and Override Behavior
+
+The chart uses a key-based inheritance system:
+
+1. **No component key** → inherits from `global`
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   # api has NO nodeSelector key → inherits global.nodeSelector
+   ```
+
+2. **Component key with value** → overrides `global`
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   api:
+     nodeSelector:
+       node-type: gpu  # Overrides global
+   ```
+
+3. **Component key with empty value** → explicit reset (no scheduling constraint)
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   api:
+     nodeSelector: {}  # Explicitly clears nodeSelector for api pod
+   ```
+
+**Important**: To inherit global settings, **omit the key entirely** from the component configuration. Setting an empty value (`{}` or `[]`) explicitly disables that scheduling constraint for the component.
+
+### Supported Components
   - `api` - API server
   - `webserver` - Web server
   - `celery_beat` - Celery beat scheduler

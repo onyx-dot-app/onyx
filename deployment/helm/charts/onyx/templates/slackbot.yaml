@@ -32,9 +32,10 @@ spec:
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.slackbot.podSecurityContext | nindent 8 }}
-      {{- $ns := .Values.slackbot.nodeSelector | default .Values.global.nodeSelector -}}
-      {{- $tol := .Values.slackbot.tolerations | default .Values.global.tolerations -}}
-      {{- $aff := .Values.slackbot.affinity | default .Values.global.affinity -}}
+      {{- $comp := .Values.slackbot | default (dict) -}}
+      {{- $ns := ternary $comp.nodeSelector .Values.global.nodeSelector (hasKey $comp "nodeSelector") -}}
+      {{- $tol := ternary $comp.tolerations .Values.global.tolerations (hasKey $comp "tolerations") -}}
+      {{- $aff := ternary $comp.affinity .Values.global.affinity (hasKey $comp "affinity") -}}
       {{- with $ns }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -7,12 +7,15 @@ global:
   version: "latest"
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
-  # Global node selector for all components
-  nodeSelector: {}
-  # Global tolerations for all components  
-  tolerations: []
-  # Global affinity for all components
-  affinity: {}
+  
+  # Global node scheduling settings
+  # These apply to ALL components unless overridden at component level
+  # To inherit: omit the key from component config
+  # To override: set component.nodeSelector with custom value
+  # To disable: set component.nodeSelector: {} (explicit empty)
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 postgresql:
   enabled: true
@@ -108,9 +111,9 @@ inferenceCapability:
   securityContext:
     privileged: true
     runAsUser: 0
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 indexCapability:
   service:
@@ -144,9 +147,9 @@ indexCapability:
   securityContext:
     privileged: true
     runAsUser: 0
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 config:
   envConfigMapName: env-configmap
 
@@ -276,9 +279,9 @@ webserver:
   #   mountPath: "/etc/foo"
   #   readOnly: true
 
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 api:
   replicaCount: 1
@@ -357,9 +360,9 @@ api:
   #   mountPath: "/etc/foo"
   #   readOnly: true
 
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 
 ######################################################################
@@ -414,9 +417,9 @@ celery_beat:
       memory: 1Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_heavy:
   replicaCount: 1
@@ -449,9 +452,9 @@ celery_worker_heavy:
       memory: 5Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_docprocessing:
   replicaCount: 1
@@ -484,9 +487,9 @@ celery_worker_docprocessing:
       memory: 12Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_light:
   replicaCount: 1
@@ -519,9 +522,9 @@ celery_worker_light:
       memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_monitoring:
   replicaCount: 1
@@ -554,9 +557,9 @@ celery_worker_monitoring:
       memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_primary:
   replicaCount: 1
@@ -589,9 +592,9 @@ celery_worker_primary:
       memory: 16Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_user_files_indexing:
   replicaCount: 1
@@ -624,9 +627,9 @@ celery_worker_user_files_indexing:
       memory: 12Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_user_file_processing:
   replicaCount: 1
@@ -659,9 +662,9 @@ celery_worker_user_file_processing:
       memory: 12Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 slackbot:
   enabled: true
@@ -686,9 +689,9 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 celery_worker_docfetching:
   replicaCount: 1
@@ -721,9 +724,9 @@ celery_worker_docfetching:
       memory: 16Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+  # nodeSelector: {}
+  # tolerations: []
+  # affinity: {}
 
 ######################################################################
 #
