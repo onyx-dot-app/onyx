@@ -244,8 +244,11 @@ export default function FilePicker({
           if (projects) {
             message += ` projects: ${projects}`;
           }
+          if (projects && assistants) {
+            message += " and ";
+          }
           if (assistants) {
-            message += ` and assistants: ${assistants}`;
+            message += `assistants: ${assistants}`;
           }
 
           setPopup({
