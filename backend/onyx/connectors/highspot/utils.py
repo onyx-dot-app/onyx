@@ -40,9 +40,6 @@ def scrape_url_content(
             headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--disable-site-isolation-trials",
-                "--disable-web-security",
                 "--disable-features=VizDisplayCompositor",
             ],
         )
@@ -60,8 +57,8 @@ def scrape_url_content(
             has_touch=False,
             java_script_enabled=True,
             color_scheme="light",
-            bypass_csp=True,
-            ignore_https_errors=True,
+            bypass_csp=False,
+            ignore_https_errors=False,
         )
 
         # Set additional headers to mimic a real browser

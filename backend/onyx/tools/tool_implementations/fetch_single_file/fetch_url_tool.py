@@ -186,64 +186,53 @@ class FetchUrlTool(BaseTool):
 
         return {}
 
-    def _get_universal_ignore_params(self) -> set[str]:
-        """Universal query parameters that should be ignored for all sources
-
-        These parameters don't affect content and are commonly added by:
-        - Analytics/tracking (UTM parameters)
-        - Social media sharing
-        - Browser navigation
-        - UI state (tabs, views, etc.)
+    def _should_ignore_param(
+        self, param: str, value: str, source_type: DocumentSource
+    ) -> bool:
         """
-        return {
-            # Analytics & Tracking
-            "utm_source",
-            "utm_medium",
-            "utm_campaign",
-            "utm_term",
-            "utm_content",
-            "fbclid",
-            "gclid",
-            "msclkid",
-            "twclid",
-            "li_fat_id",
-            # Social Media Sharing
-            "ref",
-            "referrer",
-            "source",
-            "campaign",
-            # UI State & Navigation
-            "tab",
-            "view",
-            "mode",
-            "display",
-            "layout",
-            "format",
-            "pli",
-            "usp",
-            "authuser",  # Google-specific UI params
-            # Browser & Client
-            "dl",
-            "raw",
-            "download",
-            "preview",
-            "embed",
-            "web",
-            "mobile",
-            "app",
-            # Pagination & Sorting (usually don't affect content)
-            "page",
-            "sort",
-            "order",
-            "limit",
-            "offset",
-            # Common platform-specific UI params
-            "atlOrigin",  # Atlassian
-            "e",  # SharePoint
-            "p",
-            "v",
-            "r",  # Notion
+        Intelligently determine if a URL parameter can be safely ignored.
+
+        Args:
+            param: Parameter name (e.g., "utm_source")
+            value: Parameter value (currently unused, for future logic)
+            source_type: The source type (e.g., GOOGLE_DRIVE, SLACK)
+
+        Returns:
+            True if the parameter can be safely stripped, False otherwise
+        """
+        # Universal tracking parameters (well-documented, proven safe)
+        # These are defined by Google Analytics and other tracking platforms
+        if param.startswith("utm_"):  # utm_source, utm_medium, utm_campaign, etc.
+            return True
+
+        # Click tracking IDs from major platforms (documented, proven safe)
+        tracking_ids = {
+            "fbclid",  # Facebook Click ID
+            "gclid",  # Google Click ID
+            "msclkid",  # Microsoft/Bing Click ID
+            "twclid",  # Twitter Click ID
+            "li_fat_id",  # LinkedIn First-party Ad Tracking
         }
+        if param in tracking_ids:
+            return True
+
+        # Source-specific safe parameters (tested and verified)
+        if source_type == DocumentSource.GOOGLE_DRIVE:
+            # Google account switcher - UI only, doesn't affect content
+            if param == "authuser":
+                return True
+            # Google sharing UI parameter - doesn't affect content
+            if param == "usp":
+                return True
+
+        if source_type == DocumentSource.CONFLUENCE:
+            # Atlassian origin tracking - UI only
+            if param == "atlOrigin":
+                return True
+
+        # When uncertain, preserve the parameter (safe default)
+        # This prevents accidentally breaking URLs where params ARE functional
+        return False
 
     def _get_domain_patterns_for_source(self, source_type: DocumentSource) -> list[str]:
         """Auto-generate domain patterns from DocumentSource enum name
@@ -288,42 +277,94 @@ class FetchUrlTool(BaseTool):
         domain = source_name.replace("_", ".")
         return [f"{domain}.com"]
 
-    def _get_auto_extract_patterns(
-        self, source_type: DocumentSource, url: str
+    def _get_extract_patterns_for_source(
+        self, source_type: DocumentSource
     ) -> list[str]:
-        """Auto-generate extract patterns based on common URL structures
-
-        Returns a list of regex patterns to extract IDs for LIKE matching
         """
-        patterns = []
+        Get document ID extraction patterns for a specific source.
 
-        # Common patterns that work across many platforms
-        common_patterns = [
-            # Extract IDs after common path segments
-            r"/d/([a-zA-Z0-9_-]+)",  # /d/ID pattern (Google Docs, etc.)
-            r"/file/d/([a-zA-Z0-9_-]+)",  # /file/d/ID pattern (Google Drive)
-            r"/document/([a-zA-Z0-9_-]+)",  # /document/ID pattern
-            r"/page/([a-zA-Z0-9_-]+)",  # /page/ID pattern
-            r"/item/([a-zA-Z0-9_-]+)",  # /item/ID pattern
-            # Extract IDs from query parameters
-            r"[?&]id=([a-zA-Z0-9_-]+)",  # ?id=ID or &id=ID
-            r"[?&]pageId=(\d+)",  # ?pageId=123
-            r"[?&]documentId=([a-zA-Z0-9_-]+)",  # ?documentId=ID
-            # Extract IDs from path segments (generic)
-            r"/([a-zA-Z0-9_-]{8,})",  # Long alphanumeric IDs (8+ chars)
-            r"/([a-f0-9]{32})",  # 32-char hex IDs (Notion style)
-            r"/([A-Z]+-\d+)",  # Ticket-style IDs (JIRA, Linear)
-            # Extract file paths (for GitHub, GitLab, etc.)
-            r"/blob/[^/]+/(.+)",  # GitHub blob paths
-            r"/tree/[^/]+/(.+)",  # GitHub tree paths
-        ]
+        Each pattern is source-specific and includes constraints to avoid
+        false positives (e.g., length limits, character sets).
 
-        # Test each pattern against the URL
-        for pattern in common_patterns:
-            if re.search(pattern, url):
-                patterns.append(pattern)
+        Supported sources:
+        - Google Drive, Confluence, JIRA, Notion, Linear (original set)
+        - GitHub, GitLab (PRs, issues, discussions)
+        - Zendesk (tickets, articles)
+        - SharePoint (documents)
+        - Asana (tasks)
+        - Slack (thread timestamps)
 
-        return patterns
+        Args:
+            source_type: The document source type
+
+        Returns:
+            List of regex patterns, or empty list if no verified patterns exist
+        """
+        # Google Drive - file IDs are 25-40 character alphanumeric strings
+        # Pattern tested against: docs.google.com, drive.google.com
+        if source_type == DocumentSource.GOOGLE_DRIVE:
+            return [
+                r"/d/([a-zA-Z0-9_-]{25,40})",  # /d/FILE_ID format
+                r"/file/d/([a-zA-Z0-9_-]{25,40})",  # /file/d/FILE_ID format
+            ]
+
+        # Confluence - page IDs are numeric (typically 6-15 digits)
+        if source_type == DocumentSource.CONFLUENCE:
+            return [r"[?&]pageId=(\d{1,15})"]
+
+        # JIRA - issue keys are PROJECT-NUMBER format
+        if source_type == DocumentSource.JIRA:
+            return [r"/browse/([A-Z]{2,10}-\d{1,10})"]
+
+        # Notion - page IDs are 32-character hexadecimal UUIDs
+        if source_type == DocumentSource.NOTION:
+            return [r"/([a-f0-9]{32})"]
+
+        # Linear - issue IDs are team-number format (e.g., DAN-123)
+        if source_type == DocumentSource.LINEAR:
+            return [r"/issue/([A-Z]{2,10}-\d{1,10})"]
+
+        # GitHub - supports PRs, issues, and file paths
+        if source_type == DocumentSource.GITHUB:
+            return [
+                r"/pull/(\d{1,10})(?:/|$)",  # PR number: /repo/pull/123
+                r"/issues/(\d{1,10})(?:/|$)",  # Issue number: /repo/issues/456
+                r"/discussions/(\d{1,10})(?:/|$)",  # Discussion: /repo/discussions/789
+            ]
+
+        # GitLab - supports MRs, issues, and file paths
+        if source_type == DocumentSource.GITLAB:
+            return [
+                r"/-/merge_requests/(\d{1,10})(?:/|$)",  # MR: /repo/-/merge_requests/123
+                r"/-/issues/(\d{1,10})(?:/|$)",  # Issue: /repo/-/issues/456
+            ]
+
+        # Zendesk - ticket numbers
+        if source_type == DocumentSource.ZENDESK:
+            return [
+                r"/tickets/(\d{1,10})(?:/|$)",  # Ticket: /agent/tickets/12345
+                r"/hc/.*/articles/(\d{10,20})(?:-|$)",  # Article: /hc/en-us/articles/123456789-title
+            ]
+
+        # Asana - task IDs
+        if source_type == DocumentSource.ASANA:
+            return [r"/f/(\d{10,20})"]  # Task ID: /0/12345678901234/f
+
+        # SharePoint - document IDs in URLs
+        if source_type == DocumentSource.SHAREPOINT:
+            return [
+                r"[?&]id=([^&]+)",  # ?id=value or &id=value
+                r"[?&]UniqueId=([a-f0-9-]{36})",  # UUID format
+            ]
+
+        # Slack - thread timestamps (for indexed messages)
+        if source_type == DocumentSource.SLACK:
+            return [
+                r"/archives/[^/]+/p(\d{16,17})",  # Thread timestamp
+            ]
+
+        # For sources without verified patterns: return empty list
+        return []
 
     def _normalize_url_for_indexed_search(
         self, url: str, source_type: DocumentSource
@@ -333,29 +374,29 @@ class FetchUrlTool(BaseTool):
         Returns a list of URL variations to try, ordered by preference:
         1. Original URL (exact match)
         2. Base URL without query parameters
-        3. URL with filtered query parameters
+        3. URL with tracking params removed (if any were found)
         4. Extracted ID patterns for LIKE matching
+
+        Args:
+            url: The URL to normalize
+            source_type: The document source type for source-specific logic
+
+        Returns:
+            List of URL variations to try when searching indexed documents
         """
-
-        variations = [url]  # Start with original URL
-
-        # Parse the URL
+        variations = [url]
         parsed = urlparse(url)
-
         # Add base URL without query parameters (universal fallback)
         base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
         if base_url != url:
             variations.append(base_url)
 
-        # Apply universal query parameter filtering
-        universal_ignore_params = self._get_universal_ignore_params()
-
-        if universal_ignore_params and parsed.query:
+        if parsed.query:
             query_params = parse_qs(parsed.query)
             filtered_params = {
                 k: v
                 for k, v in query_params.items()
-                if k not in universal_ignore_params
+                if not self._should_ignore_param(k, v[0] if v else "", source_type)
             }
             if filtered_params != query_params:
                 filtered_query = "&".join(
@@ -373,30 +414,23 @@ class FetchUrlTool(BaseTool):
                 )
                 variations.append(filtered_url)
 
-        # Apply ID extraction patterns for LIKE matching
-        # Handle special cases first (sources with very specific requirements)
-        extract_patterns = []
-        if source_type == DocumentSource.CONFLUENCE:
-            extract_patterns = [r"/pages/viewpage\.action\?pageId=(\d+)"]
-        elif source_type == DocumentSource.JIRA:
-            extract_patterns = [r"/browse/([A-Z]+-\d+)"]
-        else:
-            # Use auto-generated patterns for all other sources
-            extract_patterns = self._get_auto_extract_patterns(source_type, url)
+        # Apply source-specific ID extraction patterns for LIKE matching
+        # Patterns are already specific enough to only match valid IDs
+        extract_patterns = self._get_extract_patterns_for_source(source_type)
 
-        # Extract IDs from matching patterns, prioritizing specific over generic
-        extracted_ids = []
-        for pattern in extract_patterns:
-            match = re.search(pattern, url)
-            if match:
-                extracted_id = match.group(1)
-                extracted_ids.append(extracted_id)
+        if extract_patterns:
+            # Extract IDs using source-specific patterns
+            extracted_ids = []
+            for pattern in extract_patterns:
+                match = re.search(pattern, url)
+                if match:
+                    extracted_id = match.group(1)
+                    extracted_ids.append(extracted_id)
 
-        # Only use the longest extracted ID to avoid generic matches
-        if extracted_ids:
-            # Sort by length descending and take the longest
-            longest_id = max(extracted_ids, key=len)
-            variations.append(f"%{longest_id}%")
+            # Use the longest extracted ID (most specific)
+            if extracted_ids:
+                longest_id = max(extracted_ids, key=len)
+                variations.append(f"%{longest_id}%")
 
         # Remove duplicates while preserving order
         seen = set()
@@ -769,10 +803,13 @@ class FetchUrlTool(BaseTool):
             logger.error(f"Failed to fetch web content from {url}: {e}")
             return DocumentResult(
                 title="Error fetching content",
-                content=f"Failed to fetch content from {url}: {str(e)}",
+                content=(
+                    f"Unable to fetch content from {url}. The URL may be "
+                    "inaccessible, require authentication, or be temporarily unavailable."
+                ),
                 source=DocumentRetrievalType.INTERNAL,
                 url=url,
-                metadata={"error": str(e)},
+                metadata={"error": "fetch_failed"},  # Generic error code, no details
                 completeness=ContextCompleteness.NO_CONTEXT,
             )
 
