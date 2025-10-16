@@ -8,7 +8,7 @@ import { SvgProps } from "@/icons";
 interface LineItemProps {
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
-  children?: string;
+  children?: string | React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
 }
 
@@ -32,9 +32,13 @@ export default function LineItem({
             <Icon className="h-[1rem] w-[1rem] stroke-text-03" />
           </div>
         )}
-        <Text mainUiMuted text04 className="text-left w-full">
-          {children}
-        </Text>
+        {typeof children === "string" ? (
+          <Text mainUiMuted text04 className="text-left w-full">
+            {children}
+          </Text>
+        ) : (
+          children
+        )}
       </div>
       {description && (
         <div className="flex flex-row">
