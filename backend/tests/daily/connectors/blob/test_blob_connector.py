@@ -177,7 +177,7 @@ def test_blob_s3_cross_region_and_citation_link(
     return_value=None,
 )
 @pytest.mark.parametrize(
-    "blob_connector", [(BlobType.R2, "asia_pacific_bucket")], indirect=True
+    "blob_connector", [(BlobType.R2, "asia-pacific-bucket")], indirect=True
 )
 def test_blob_r2_connector(
     mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
@@ -199,7 +199,7 @@ def test_blob_r2_connector(
 )
 @pytest.mark.parametrize(
     "blob_connector",
-    [(BlobType.R2, "onyx-daily-connector-test", {"european_residency": True})],
+    [(BlobType.R2, "onyx-daily-connector-tests", {"european_residency": True})],
     indirect=True,
 )
 def test_blob_r2_eu_residency_connector(
@@ -214,7 +214,6 @@ def test_blob_r2_eu_residency_connector(
     assert len(all_docs) >= 1
     doc = all_docs[0]
     assert len(doc.sections) >= 1
-    doc.sections[0].link
 
 
 @patch(
