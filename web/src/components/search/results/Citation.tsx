@@ -12,7 +12,7 @@ import { SubQuestionDetail } from "@/app/chat/interfaces";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 const MAX_CITATION_TEXT_LENGTH = 40;
 
