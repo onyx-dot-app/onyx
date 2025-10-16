@@ -15,7 +15,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -23,7 +23,6 @@ import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import RefreshText from "@/refresh-components/texts/Text";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
 
@@ -43,12 +42,12 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
   return (
     // <div className="flex items-center gap-spacing-inline-mini">
     <div className="flex items-center gap-spacing-inline px-spacing-inline py-spacing-interline-mini rounded-06">
-      <RefreshText mainUiMuted text03>
+      <Text mainUiMuted text03>
         {label}
-      </RefreshText>
-      <RefreshText headingH3 text05>
+      </Text>
+      <Text headingH3 text05>
         {displayValue}
-      </RefreshText>
+      </Text>
     </div>
   );
 }
