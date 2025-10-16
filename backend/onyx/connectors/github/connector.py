@@ -219,15 +219,19 @@ def _get_batch_rate_limited(
 
 
 def _get_userinfo(user: NamedUser) -> dict[str, str]:
-    return {
-        k: v
-        for k, v in {
-            "login": user.login,
-            "name": user.name,
-            "email": user.email,
-        }.items()
-        if v is not None
+    user_info = {
+        "login": user.login,
     }
+    try:
+        user_info["name"]= user.name
+    except GithubException:
+        user_info["name"] = None
+    try:
+        user_info["email"] = user.email
+    except GithubException:
+        user_info["email"] = None
+
+    return {k: v for k, v in user_info.items() if v is not None}
 
 
 def _convert_pr_to_document(
