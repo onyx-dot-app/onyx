@@ -71,6 +71,9 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
                 "GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
             ],
         }
+    else:
+        # Until we figure out the Oracle log in, this fixture only supports S3, R2, and GCS.
+        raise AssertionError(f"Unsupported bucket type: {bucket_type}")
 
     connector.load_credentials(creds)
     return connector
