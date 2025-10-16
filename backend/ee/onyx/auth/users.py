@@ -10,12 +10,18 @@ from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY
 from ee.onyx.configs.app_configs import SUPER_USERS
 from ee.onyx.server.seeding import get_seed_config
 from onyx.auth.users import current_admin_user
+from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+def verify_auth_setting() -> None:
+    # All the Auth flows are valid for EE version
+    logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 
 def get_default_admin_user_emails_() -> list[str]:
