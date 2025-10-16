@@ -60,7 +60,7 @@ import { Spinner } from "@/components/Spinner";
 import Button from "@/refresh-components/buttons/Button";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export interface AdvancedConfig {
   refreshFreq: number;

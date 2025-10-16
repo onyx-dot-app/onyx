@@ -16,8 +16,7 @@ import {
   FederatedConnectorConfig,
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
@@ -198,7 +197,7 @@ export const DocumentSetCreationForm = ({
                 )}
               </div>
 
-              <Separator className="my-6" />
+              <div className="my-6 border-t border-border-02" />
 
               <div className="space-y-6">
                 {user?.role === UserRole.CURATOR ? (
@@ -246,7 +245,7 @@ export const DocumentSetCreationForm = ({
                 {/* Federated Connectors Section */}
                 {federatedConnectors && federatedConnectors.length > 0 && (
                   <>
-                    <Separator className="my-4" />
+                    <div className="my-4 border-t border-border-02" />
                     <FederatedConnectorSelector
                       name="federated_connectors"
                       label="Federated Connectors"
@@ -264,12 +263,12 @@ export const DocumentSetCreationForm = ({
                 )}
               </div>
 
-              <div className="flex mt-6 pt-4 border-t border-neutral-200">
+              <div className="flex mt-6 pt-4 border-t border-border-02">
                 <Button
                   type="submit"
-                  variant="submit"
                   disabled={props.isSubmitting}
-                  className="w-56 mx-auto py-1.5 h-auto text-sm"
+                  className="w-56 mx-auto"
+                  primary
                 >
                   {isUpdate ? "Update Document Set" : "Create Document Set"}
                 </Button>

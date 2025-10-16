@@ -5,7 +5,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { useRouter } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { OnyxSparkleIcon } from "@/components/icons/icons";

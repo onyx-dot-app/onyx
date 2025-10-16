@@ -73,6 +73,12 @@ def fetch_per_user_query_analytics(
             ChatSession.user_id,
         )
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        # Include chats that have no explicit feedback instead of dropping them
+        .join(
+            ChatMessageFeedback,
+            ChatMessageFeedback.chat_message_id == ChatMessage.id,
+            isouter=True,
+        )
         .where(
             ChatMessage.time_sent >= start,
         )

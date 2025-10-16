@@ -8,8 +8,8 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
 import { Avatar } from "@/components/ui/avatar";
-import Text from "@/refresh-components/Text";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Text from "@/refresh-components/texts/Text";
+import MenuButton from "@/refresh-components/buttons/MenuButton";
 import {
   Popover,
   PopoverContent,
@@ -20,10 +20,11 @@ import SvgSettings from "@/icons/settings";
 import SvgLogOut from "@/icons/log-out";
 import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 
 function getUsernameFromEmail(email?: string): string {
   if (!email) return ANONYMOUS_USER_NAME;
@@ -50,26 +51,32 @@ function SettingsPopover({
     errorHandlingFetcher
   );
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const showAdminPanel = (!user || isAdmin) && !removeAdminPanelLink;
   const showCuratorPanel = user && isCurator;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
-  async function handleLogout() {
-    const isSuccess = await logout();
+  const handleLogout = () => {
+    logout().then((response) => {
+      if (!response?.ok) {
+        alert("Failed to logout");
+        return;
+      }
 
-    if (!isSuccess) {
-      alert("Failed to logout");
-      return;
-    }
+      const currentUrl = `${pathname}${
+        searchParams?.toString() ? `?${searchParams.toString()}` : ""
+      }`;
 
-    router.push(
-      `/auth/login?next=${encodeURIComponent(
-        window.location.pathname + window.location.search
-      )}`
-    );
-  }
+      const encodedRedirect = encodeURIComponent(currentUrl);
+
+      router.push(
+        `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
+      );
+    });
+  };
 
   return (
     <>
@@ -83,29 +90,29 @@ function SettingsPopover({
           //   </NavigationTab>
           // )),
           showAdminPanel && (
-            <NavigationTab
+            <MenuButton
               key="admin-panel"
               href="/admin/indexing/status"
               icon={SvgSettings}
             >
               Admin Panel
-            </NavigationTab>
+            </MenuButton>
           ),
           showCuratorPanel && (
-            <NavigationTab
+            <MenuButton
               key="curator-panel"
               href="/admin/indexing/status"
               icon={SvgSettings}
             >
               Curator Panel
-            </NavigationTab>
+            </MenuButton>
           ),
           <div key="user-settings" data-testid="Settings/user-settings">
-            <NavigationTab icon={SvgUser} onClick={onUserSettingsClick}>
+            <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
-            </NavigationTab>
+            </MenuButton>
           </div>,
-          <NavigationTab
+          <MenuButton
             key="notifications"
             icon={SvgBell}
             onClick={onNotificationsClick}
@@ -115,17 +122,17 @@ function SettingsPopover({
                 ? `(${notifications.length})`
                 : ""
             }`}
-          </NavigationTab>,
+          </MenuButton>,
           null,
           showLogout && (
-            <NavigationTab
+            <MenuButton
               key="log-out"
               icon={SvgLogOut}
               danger
               onClick={handleLogout}
             >
               Log out
-            </NavigationTab>
+            </MenuButton>
           ),
         ]}
       </PopoverMenu>
@@ -195,15 +202,14 @@ export default function Settings({
       }
     >
       <PopoverTrigger asChild>
-        <div className="flex flex-col w-full h-full" id="onyx-user-dropdown">
-          <NavigationTab
-            className="!w-full"
-            iconClassName="w-5 h-5"
-            icon={({ className }) => (
+        <div id="onyx-user-dropdown">
+          <SidebarTab
+            leftIcon={({ className }) => (
               <Avatar
                 className={cn(
                   "flex items-center justify-center bg-background-neutral-inverted-00",
-                  className
+                  className,
+                  "w-5 h-5"
                 )}
               >
                 <Text inverted secondaryBody>
@@ -213,10 +219,9 @@ export default function Settings({
             )}
             active={!!popupState}
             folded={folded}
-            highlight
           >
             {username}
-          </NavigationTab>
+          </SidebarTab>
         </div>
       </PopoverTrigger>
       <PopoverContent align="end" side="right">
