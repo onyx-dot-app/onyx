@@ -1,53 +1,109 @@
-from guardrails.hub import DetectPII
-from guardrails import Guard, settings
+from presidio_anonymizer.entities import OperatorConfig
 
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
+from onyx.server.features.guardrails.init_validators import _analyzer, _anonymizer
+from onyx.server.features.guardrails.services import generate_fake_data
 
 
-def validate_detect_pii(
-        message: str, config: dict, on_fail: str = "fix"
+ENTITY_GENERATORS = {
+    "RUS_PHONE_NUMBER": generate_fake_data.generate_fake_rus_phone_number,
+    "EMAIL_ADDRESS": generate_fake_data.generate_fake_email_address,
+    "CREDIT_CARD": generate_fake_data.generate_fake_credit_card,
+    "IP_ADDRESS": generate_fake_data.generate_fake_ip_address,
+    "URL": generate_fake_data.generate_fake_url,
+    "DOMAIN_NAME": generate_fake_data.generate_fake_domain_name,
+    "CRYPTO": generate_fake_data.generate_fake_crypto,
+}
+
+
+def mask_pii(
+    text: str,
+    config: dict,
+) -> tuple[str, dict]:
+    """Маскирование данных"""
+
+    mapping = {}
+    pii_entities = config["pii_entities"]
+
+    if not pii_entities:
+        return text, mapping
+
+    # Создаем операторы с передачей mapping в функции
+    fake_operators = {}
+
+    for entity in pii_entities:
+        if ENTITY_GENERATORS.get(entity):
+            fake_operators[entity] = OperatorConfig(
+                "custom",
+                {"lambda": lambda x, entity=entity: ENTITY_GENERATORS[entity](x, mapping)}
+            )
+
+    # Анализируем текст
+    analysis_results = _analyzer.analyze(
+        text=text,
+        entities=pii_entities,
+        language="en",
+    )
+
+    # Маскируем с фейковыми данными
+    anonymized_result = _anonymizer.anonymize(
+        text=text,
+        analyzer_results=analysis_results,
+        operators=fake_operators
+    )
+
+    return anonymized_result.text, mapping
+
+
+def unmask_pii(
+    llm_response: str,
+    mapping: dict[str, str] | None
 ) -> str:
-    """Выполняет обнаружение персональных данных в тексте.
+    """Демаскирование данных"""
 
-    Функция выполняет анализ переданного текста на наличие указанных типов
-    персональных данных и возвращает либо текст с маскированными участками,
-    либо исходный текст в зависимости от результата обнаружения.
+    if not mapping:
+        return llm_response
 
-    Args:
-        message: Текст для анализа на наличие персональных данных
-        config: Настройки валидатора, например, {"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER"]}
+    unmasked_text = llm_response
 
-    Returns:
-        validated_message: Текст с маскированными данными или исходный текст, если PII не обнаружены
+    for fake_value, original_value in mapping.items():
+        unmasked_text = unmasked_text.replace(fake_value, original_value)
 
-    Examples:
-        input: Напиши мне на почту test@gmail.com и запиши мой номер +79611234567
-        output: Напиши мне на почту <EMAIL_ADDRESS> и запиши мой номер <PHONE_NUMBER>
-    """
-    try:
-        guard = Guard().use(
-            validator=DetectPII,
-            pii_entities=config["pii_entities"],
-            on_fail=on_fail  # автоматически маскирует найденные PII
-        )
-
-        result = guard.validate(message)
-        validated_message: str = result.validated_output
-
-        return validated_message
-    except Exception as e:
-        logger.debug(f"Error during PII validation: %s", str(e))
-        return message
+    return unmasked_text
 
 
 if __name__=="__main__":
-    print("Метрики:", settings.rc.enable_metrics)
-    print("Удаленное выполнение:", getattr(settings.rc, "enable_remote_inferencing", None))
+    from onyx.server.features.guardrails.init_validators import initialize_presidio_analyzer
+    initialize_presidio_analyzer()
 
-    message = "Напиши мне на почту test@gmail.com и запиши мой номер +79611234567"
-    config = {"pii_entities": ["EMAIL_ADDRESS"]}
+    config = {
+        "pii_entities": [
+            "EMAIL_ADDRESS",
+            "RUS_PHONE_NUMBER",
+            "DOMAIN_NAME",
+            "IP_ADDRESS",
+            "URL",
+            "CREDIT_CARD",
+            "CRYPTO",
+        ]
 
-    validated_output = validate_detect_pii(message=message, config=config)
-    print(validated_output)
+    }
+    message = """
+    КЛИЕНТСКАЯ ИНФОРМАЦИЯ:
+    --------------------
+    Email: ivan@mail.ru
+    Телефон: 8-800-555-3555
+    Домен: smartsearch.ru
+    IP-адрес: 192.168.1.1
+    Веб-сайт: https://example.com
+    Банковская карта: 4276-5500-3444-6289
+    Crypto wallet: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+    """
+
+    print(f"Исходное сообщение: {message}")
+
+
+    masked_message, mapping = mask_pii(text=message, config=config)
+    print(f"Маскированное сообщение: {masked_message}")
+
+    unmasked_message = unmask_pii(llm_response=masked_message, mapping=mapping)
+    print(f"Демаскированное сообщение: {unmasked_message}")

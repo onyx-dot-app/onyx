@@ -126,6 +126,7 @@ from onyx.server.user_documents.api import router as user_documents_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.setup import setup_validators_configs
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
@@ -265,6 +266,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if AUTH_RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
+
+    setup_validators_configs()
 
     yield
 

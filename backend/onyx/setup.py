@@ -46,6 +46,7 @@ from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encode
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from onyx.seeding.load_docs import seed_initial_documents
 from onyx.seeding.load_yamls import load_chat_yamls
+from onyx.server.features.guardrails.init_validators import initialize_presidio_analyzer
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
@@ -395,3 +396,10 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
         f"Vespa setup did not succeed. Attempt limit reached. ({VESPA_ATTEMPTS})"
     )
     return False
+
+
+def setup_validators_configs():
+    try:
+        initialize_presidio_analyzer()
+    except Exception as e:
+        logger.error("Ошибка при загрузке настроек для валидаторов: %s", repr(e))
