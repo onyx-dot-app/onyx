@@ -810,6 +810,7 @@ def stream_chat_message_objects(
                 get_redis_client(),
                 chat_session_id,
                 reserved_message_id,
+                prompt_config,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -861,6 +862,7 @@ def _fast_message_stream(
     redis_client: Redis,
     chat_session_id: UUID,
     reserved_message_id: int,
+    prompt_config: PromptConfig,
 ) -> Generator[Packet, None, None]:
     from onyx.tools.tool_implementations.images.image_generation_tool import (
         ImageGenerationTool,
@@ -903,6 +905,7 @@ def _fast_message_stream(
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,
         research_type=answer.graph_config.behavior.research_type,
+        prompt_config=prompt_config,
     )
 
 

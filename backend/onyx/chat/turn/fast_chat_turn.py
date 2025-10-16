@@ -13,6 +13,7 @@ from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
@@ -24,7 +25,7 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
+from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -37,7 +38,85 @@ from onyx.tools.tool_implementations_v2.image_generation import image_generation
 
 
 class ReadyToAnswer(BaseModel):
-    pass
+    ready_to_answer: bool = True
+
+
+# Todo -- this can be refactored out and played with in evals + normal demo
+def _run_agent_loop(
+    messages: list[dict],
+    dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    ctx: ChatTurnContext,
+    prompt_config: PromptConfig,
+) -> str | None:
+    """Run the agent loop for tool calling and final answer generation.
+
+    This function can return early if ctx.no_final_message is set to True
+    after the tool calling phase.
+    """
+    tool_caller_agent = Agent(
+        name="Tool Caller",
+        model=dependencies.llm_model,
+        tools=cast(list[AgentToolType], dependencies.tools),
+        model_settings=ModelSettings(
+            temperature=dependencies.llm.config.temperature,
+            include_usage=True,
+        ),
+        tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
+        output_type=ReadyToAnswer,
+    )
+
+    # By default, the agent can only take 10 turns. For our use case, it should be higher.
+    max_turns = 25
+    agent_stream: SyncAgentStream = SyncAgentStream(
+        agent=tool_caller_agent,
+        input=messages,
+        context=ctx,
+        max_turns=max_turns,
+    )
+    _process_stream(
+        agent_stream, chat_session_id, dependencies, ctx, emit_message_to_user=False
+    )
+
+    # Early return if image generation or other tool set no_final_message flag
+    if ctx.no_final_message:
+        return
+
+    # Prepare final answer agent with task prompt and conditional citation
+    new_input = agent_stream.streamed.to_input_list()
+    last_message = messages[-1]
+
+    # Build task prompt with conditional citation based on whether documents were fetched
+    task_prompt_with_reminders = build_task_prompt_reminders_v2(
+        prompt=prompt_config,
+        use_language_hint=False,
+        should_cite=ctx.should_cite_documents,
+    )
+
+    new_input[-1] = {
+        "role": "user",
+        "content": f"{task_prompt_with_reminders}\n Query: {last_message['content']}",
+    }
+
+    final_answer_agent = Agent(
+        name="Final Response",
+        model=dependencies.llm_model,
+        tools=[],
+        model_settings=ModelSettings(
+            temperature=dependencies.llm.config.temperature,
+            include_usage=True,
+        ),
+    )
+    final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
+        agent=final_answer_agent,
+        input=new_input,
+        context=ctx,
+        max_turns=max_turns,
+    )
+    _process_stream(final_answer_agent_stream, chat_session_id, dependencies, ctx)
+    # In general, extract final answer from packets for prod but this is useful for experimentation
+    # and evals
+    return final_answer_agent_stream.streamed.final_output
 
 
 def _fast_chat_turn_core(
@@ -46,6 +125,7 @@ def _fast_chat_turn_core(
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
+    prompt_config: PromptConfig,
     # Dependency injectable arguments for testing
     starter_global_iteration_responses: list[IterationAnswer] | None = None,
     starter_cited_documents: list[InferenceSection] | None = None,
@@ -79,51 +159,13 @@ def _fast_chat_turn_core(
         research_type=research_type,
     )
     with trace("fast_chat_turn"):
-        tool_caller_agent = Agent(
-            name="Tool Caller",
-            model=dependencies.llm_model,
-            tools=cast(list[AgentToolType], dependencies.tools),
-            model_settings=ModelSettings(
-                temperature=dependencies.llm.config.temperature,
-                include_usage=True,
-            ),
-            tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
-            output_type=ReadyToAnswer,
+        _run_agent_loop(
+            messages=messages,
+            dependencies=dependencies,
+            chat_session_id=chat_session_id,
+            ctx=ctx,
+            prompt_config=prompt_config,
         )
-        final_answer_agent = Agent(
-            name="Final Response",
-            model=dependencies.llm_model,
-            tools=[],
-            model_settings=ModelSettings(
-                temperature=dependencies.llm.config.temperature,
-                include_usage=True,
-            ),
-        )
-        # By default, the agent can only take 10 turns. For our use case, it should be higher.
-        max_turns = 25
-        agent_stream: SyncAgentStream = SyncAgentStream(
-            agent=tool_caller_agent,
-            input=messages,
-            context=ctx,
-            max_turns=max_turns,
-        )
-        _process_stream(
-            agent_stream, chat_session_id, dependencies, ctx, emit_message_to_user=False
-        )
-        new_input = agent_stream.streamed.to_input_list()
-        last_message = messages[-1]
-        # special case for image gen is last tool called
-        new_input[-1] = {
-            "role": "user",
-            "content": f" {REQUIRE_CITATION_STATEMENT_V2}.\n Query: {last_message['content']}",
-        }
-        final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
-            agent=final_answer_agent,
-            input=new_input,
-            context=ctx,
-            max_turns=max_turns,
-        )
-        _process_stream(final_answer_agent_stream, chat_session_id, dependencies, ctx)
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
@@ -163,6 +205,7 @@ def fast_chat_turn(
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
+    prompt_config: PromptConfig,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -171,6 +214,7 @@ def fast_chat_turn(
         chat_session_id,
         message_id,
         research_type,
+        prompt_config,
         starter_global_iteration_responses=None,
     )
 

@@ -19,6 +19,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
@@ -44,16 +47,16 @@ class WebSearchResponse(BaseModel):
     results: List[WebSearchResult]
 
 
-class WebFetchResult(BaseModel):
+class OpenUrlResult(BaseModel):
     tag: str
     title: str
     link: str
-    full_content: str
+    truncated_content: str
     published_date: Optional[str] = None
 
 
-class WebFetchResponse(BaseModel):
-    results: List[WebFetchResult]
+class OpenUrlResponse(BaseModel):
+    results: List[OpenUrlResult]
 
 
 def short_tag(link: str, i: int) -> str:
@@ -202,11 +205,11 @@ def web_search(
 
 
 @tool_accounting
-def _web_fetch_core(
+def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: List[str],
     search_provider: WebSearchProvider,
-) -> WebFetchResponse:
+) -> OpenUrlResponse:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -225,11 +228,11 @@ def _web_fetch_core(
     out = []
     for i, d in enumerate(docs):
         out.append(
-            WebFetchResult(
-                tag=short_tag(d.link, i),  # <-- add a tag
+            OpenUrlResult(
+                tag=short_tag(d.link, i),
                 title=d.title,
                 link=d.link,
-                full_content=d.full_content,
+                truncated_content=truncate_search_result_content(d.full_content),
                 published_date=(
                     d.published_date.isoformat() if d.published_date else None
                 ),
@@ -265,7 +268,10 @@ def _web_fetch_core(
         )
     )
 
-    return WebFetchResponse(results=out)
+    # Set flag to include citation requirements since we fetched documents
+    run_context.context.should_cite_documents = True
+
+    return OpenUrlResponse(results=out)
 
 
 @function_tool
@@ -306,5 +312,5 @@ def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
-    response = _web_fetch_core(run_context, urls, search_provider)
+    response = _open_url_core(run_context, urls, search_provider)
     return response.model_dump_json()

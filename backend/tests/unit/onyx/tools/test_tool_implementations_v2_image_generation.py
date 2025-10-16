@@ -44,6 +44,7 @@ class MockRunDependencies:
 
     def __init__(self) -> None:
         self.emitter = MockEmitter()
+        self.redis_client = Mock()  # Add mock Redis client for cancellation checks
 
 
 class MockImageGenerationTool:
@@ -93,16 +94,22 @@ def create_test_run_context(
     return run_context
 
 
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_basic_functionality(
-    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
 ) -> None:
     """Test basic functionality of _image_generation_core function"""
     # Arrange
     test_run_context = create_test_run_context()
     prompt = "test image prompt"
     shape = "square"
+
+    # Mock cancellation check (not cancelled)
+    mock_is_connected.return_value = True
 
     # Mock file operations
     mock_save_files.return_value = ["file_id_1", "file_id_2"]
@@ -194,16 +201,22 @@ def test_image_generation_core_basic_functionality(
     mock_build_frontend_file_url.assert_called_with("file_id_2")
 
 
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_with_heartbeat_only(
-    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
 ) -> None:
-    """Test _image_generation_core with only heartbeat responses"""
+    """Test _image_generation_core with only heartbeat responses (no images generated)"""
     # Arrange
     test_run_context = create_test_run_context()
     prompt = "test image prompt"
     shape = "portrait"
+
+    # Mock cancellation check (not cancelled)
+    mock_is_connected.return_value = True
 
     # Create test responses with only heartbeats
     test_responses = [
@@ -219,12 +232,13 @@ def test_image_generation_core_with_heartbeat_only(
 
     test_tool = MockImageGenerationTool(responses=test_responses)
 
-    # Act & Assert
-    with pytest.raises(RuntimeError, match="No images were generated"):
-        _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
+    # Act
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
-    # Verify that even though an exception was raised, we still emitted the initial events
-    # and the SectionEnd packet was emitted by the decorator
+    # Assert - should return empty list when no images are generated
+    assert result == []
+
+    # Verify events were emitted (no delta when there are no images)
     emitter = test_run_context.context.run_dependencies.emitter
     assert len(emitter.packet_history) == 4
 
@@ -234,16 +248,20 @@ def test_image_generation_core_with_heartbeat_only(
     assert isinstance(emitter.packet_history[2].obj, ImageGenerationToolHeartbeat)
     assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
-    # Verify that the decorator properly handled the exception and updated current_run_step
+    # Verify that the decorator properly updated current_run_step
     assert test_run_context.context.current_run_step == 2
 
 
-def test_image_generation_core_exception_handling() -> None:
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
+def test_image_generation_core_exception_handling(mock_is_connected: Mock) -> None:
     """Test that _image_generation_core handles exceptions properly"""
     # Arrange
     test_run_context = create_test_run_context()
     prompt = "test image prompt"
     shape = "landscape"
+
+    # Mock cancellation check (not cancelled)
+    mock_is_connected.return_value = True
 
     # Create a tool that will raise an exception
     test_tool = MockImageGenerationTool(should_raise_exception=True)
@@ -265,15 +283,21 @@ def test_image_generation_core_exception_handling() -> None:
     assert test_run_context.context.current_run_step == 2
 
 
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_different_shapes(
-    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
 ) -> None:
     """Test _image_generation_core with different shapes"""
     # Arrange
     test_run_context = create_test_run_context()
     prompt = "test image prompt"
+
+    # Mock cancellation check (not cancelled)
+    mock_is_connected.return_value = True
 
     # Mock file operations
     mock_save_files.return_value = ["file_id_1"]
@@ -332,10 +356,13 @@ def test_image_generation_core_different_shapes(
             assert "shape" not in call_args[1]
 
 
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
 @patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
 @patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
 def test_image_generation_core_empty_response(
-    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
 ) -> None:
     """Test _image_generation_core with empty tool responses"""
     # Arrange
@@ -343,18 +370,131 @@ def test_image_generation_core_empty_response(
     prompt = "test image prompt"
     shape = "square"
 
+    # Mock cancellation check (not cancelled)
+    mock_is_connected.return_value = True
+
     # Create empty responses
     test_tool = MockImageGenerationTool(responses=[])
 
-    # Act & Assert
-    with pytest.raises(RuntimeError, match="No images were generated"):
-        _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
+    # Act
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
 
-    # Verify that even though an exception was raised, we still emitted the initial events
-    # and the SectionEnd packet was emitted by the decorator
+    # Assert - should return empty list when no images are generated
+    assert result == []
+
+    # Verify events were emitted (no delta when there are no images)
     emitter = test_run_context.context.run_dependencies.emitter
     assert len(emitter.packet_history) == 2
 
     # Check the types of emitted events
     assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
     assert isinstance(emitter.packet_history[1].obj, SectionEnd)
+
+
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
+@patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
+@patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
+def test_image_generation_core_cancellation(
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
+) -> None:
+    """Test _image_generation_core handles cancellation properly"""
+    # Arrange
+    test_run_context = create_test_run_context()
+    prompt = "test image prompt"
+    shape = "square"
+
+    # Mock cancellation check - simulate user cancellation
+    mock_is_connected.return_value = False
+
+    # Create test responses with heartbeats
+    test_responses = [
+        Mock(
+            id="image_generation_heartbeat",
+            response=None,
+        ),
+        Mock(
+            id="image_generation_heartbeat",
+            response=None,
+        ),
+    ]
+
+    test_tool = MockImageGenerationTool(responses=test_responses)
+
+    # Act
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
+
+    # Assert - should return empty list when cancelled
+    assert result == []
+
+    # Verify that we emitted the initial event before cancellation (no delta when no images)
+    emitter = test_run_context.context.run_dependencies.emitter
+    assert len(emitter.packet_history) == 2
+
+    # Check the types of emitted events
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
+
+    # Verify that the decorator properly updated current_run_step
+    assert test_run_context.context.current_run_step == 2
+
+
+@patch("onyx.tools.tool_implementations_v2.image_generation.is_connected")
+@patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
+@patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
+def test_image_generation_core_cancellation_after_heartbeat(
+    mock_build_frontend_file_url: Mock,
+    mock_save_files: Mock,
+    mock_is_connected: Mock,
+) -> None:
+    """Test _image_generation_core handles cancellation after a heartbeat"""
+    # Arrange
+    test_run_context = create_test_run_context()
+    prompt = "test image prompt"
+    shape = "square"
+
+    # Mock cancellation check - first call returns True, second returns False
+    mock_is_connected.side_effect = [True, False]
+
+    # Create test responses with heartbeats
+    test_responses = [
+        Mock(
+            id="image_generation_heartbeat",
+            response=None,
+        ),
+        Mock(
+            id="image_generation_heartbeat",
+            response=None,
+        ),
+        Mock(
+            id="image_generation_response",
+            response=[
+                ImageGenerationResponse(
+                    url="https://example.com/image1.jpg",
+                    image_data=None,
+                    revised_prompt="Revised: test image prompt",
+                ),
+            ],
+        ),
+    ]
+
+    test_tool = MockImageGenerationTool(responses=test_responses)
+
+    # Act
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
+
+    # Assert - should return empty list when cancelled
+    assert result == []
+
+    # Verify that we emitted start and one heartbeat before cancellation (no delta when no images)
+    emitter = test_run_context.context.run_dependencies.emitter
+    assert len(emitter.packet_history) == 3
+
+    # Check the types of emitted events
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+    assert isinstance(emitter.packet_history[1].obj, ImageGenerationToolHeartbeat)
+    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
+
+    # Verify that the decorator properly updated current_run_step
+    assert test_run_context.context.current_run_step == 2

@@ -64,7 +64,7 @@ def save_iteration(
         model_name=ctx.run_dependencies.llm.config.model_name,
         provider_type=ctx.run_dependencies.llm.config.model_provider,
     )
-    num_tokens = len(llm_tokenizer.encode(final_answer or ""))
+    num_tokens = len(llm_tokenizer.encode(final_answer)) + 1
     # Update the chat message and its parent message in database
     update_db_session_with_messages(
         db_session=db_session,

@@ -2,6 +2,7 @@ import asyncio
 import queue
 import threading
 from collections.abc import Iterator
+from contextlib import aclosing
 from typing import Generic
 from typing import Optional
 from typing import TypeVar
@@ -135,17 +136,18 @@ class SyncAgentStream(Generic[T]):
                     await self.streamed.cancel()  # type: ignore[func-returns-value]
 
                 # Consume async events and forward into the thread-safe queue
-                async for ev in self.streamed.stream_events():
-                    # Early exit if a late cancel arrives
-                    if self._cancel_requested.is_set():
-                        # Try to cancel gracefully; don't break until cancel takes effect
-                        try:
-                            await self.streamed.cancel()  # type: ignore[func-returns-value]
-                        except Exception:
-                            pass
-                        break
-                    # This put() may block if queue_maxsize > 0 (backpressure)
-                    self._q.put(ev)
+                async with aclosing(self.streamed.stream_events()) as agen:
+                    async for ev in agen:
+                        # Early exit if a late cancel arrives
+                        if self._cancel_requested.is_set():
+                            # Try to cancel gracefully; don't break until cancel takes effect
+                            try:
+                                await self.streamed.cancel()  # type: ignore[func-returns-value]
+                            except Exception:
+                                pass
+                            break
+                        # This put() may block if queue_maxsize > 0 (backpressure)
+                        self._q.put(ev)
 
             except BaseException as e:
                 # Save exception to surface on the sync iterator side
