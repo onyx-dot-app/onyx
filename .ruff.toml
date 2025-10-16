@@ -1,0 +1,2 @@
+# NOTE: This applies the default ruff configurations. This ensures ruff's defaults take precedence
+# over global configurations (~/.ruff.toml).
