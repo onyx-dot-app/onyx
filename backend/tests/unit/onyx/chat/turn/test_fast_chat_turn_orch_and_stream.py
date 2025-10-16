@@ -749,6 +749,7 @@ def chat_turn_dependencies(
     emitter = get_default_emitter()
     return ChatTurnDependencies(
         llm_model=fake_model,
+        model_settings=ModelSettings(temperature=0.0, include_usage=True),
         llm=fake_llm,
         db_session=fake_db_session,  # type: ignore[arg-type]
         tools=fake_tools,

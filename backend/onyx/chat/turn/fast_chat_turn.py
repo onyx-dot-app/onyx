@@ -2,7 +2,6 @@ from typing import cast
 from uuid import UUID
 
 from agents import Agent
-from agents import ModelSettings
 from agents import RawResponsesStreamEvent
 from agents import StopAtTools
 from agents.tracing import trace
@@ -58,10 +57,7 @@ def _run_agent_loop(
         name="Tool Caller",
         model=dependencies.llm_model,
         tools=cast(list[AgentToolType], dependencies.tools),
-        model_settings=ModelSettings(
-            temperature=dependencies.llm.config.temperature,
-            include_usage=True,
-        ),
+        model_settings=dependencies.model_settings,
         tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
         output_type=ReadyToAnswer,
     )
@@ -102,10 +98,7 @@ def _run_agent_loop(
         name="Final Response",
         model=dependencies.llm_model,
         tools=[],
-        model_settings=ModelSettings(
-            temperature=dependencies.llm.config.temperature,
-            include_usage=True,
-        ),
+        model_settings=dependencies.model_settings,
     )
     final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
         agent=final_answer_agent,
