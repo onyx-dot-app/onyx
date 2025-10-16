@@ -1,19 +1,18 @@
 "use client";
 
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import { SvgProps } from "@/icons";
-import SvgSearch from "@/icons/search";
 import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
@@ -73,8 +72,11 @@ export default function UserFilesModalContent({
 
   // Track container height - only grow, never shrink
   useEffect(() => {
+    let timeoutId: number | undefined;
+    let rafId: number | undefined;
+
     if (scrollAreaRef.current) {
-      requestAnimationFrame(() => {
+      rafId = requestAnimationFrame(() => {
         if (scrollAreaRef.current) {
           const viewport = scrollAreaRef.current.querySelector(
             "[data-radix-scroll-area-viewport]"
@@ -91,12 +93,21 @@ export default function UserFilesModalContent({
             }
             // After initial mount, enable transitions
             if (isInitialMount) {
-              setTimeout(() => setIsInitialMount(false), 50);
+              timeoutId = window.setTimeout(() => setIsInitialMount(false), 50);
             }
           }
         }
       });
     }
+
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+      if (rafId !== undefined) {
+        cancelAnimationFrame(rafId);
+      }
+    };
   }, [recentFiles.length, containerHeight, isInitialMount]);
 
   // Check if content is scrollable
@@ -143,27 +154,15 @@ export default function UserFilesModalContent({
         >
           <div className="flex items-center gap-2 p-spacing-interline">
             <div className="relative flex-1">
-              <SvgSearch className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 stroke-text-02 pointer-events-none" />
-              <Input
+              <InputTypeIn
                 placeholder="Search files..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-8 bg-transparent border-0 shadow-none focus:bg-transparent focus:ring-0 focus-visible:ring-0 focus:border focus:border-border-dark"
-                removeFocusRing
+                leftSearchIcon
                 autoComplete="off"
                 tabIndex={0}
                 onFocus={(e) => {
                   e.target.select();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.currentTarget.focus();
-                }}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
                 }}
               />
             </div>
@@ -178,11 +177,16 @@ export default function UserFilesModalContent({
                   accept={"*/*"}
                 />
 
-                <button onClick={triggerUploadPicker}>
-                  <LineItem icon={SvgPlusCircle}>
-                    <p className="text-text-03 font-main-action">Add Files</p>
-                  </LineItem>
-                </button>
+                <Button
+                  defaulted
+                  secondary
+                  leftIcon={SvgPlusCircle}
+                  onClick={triggerUploadPicker}
+                >
+                  <span className="text-text-03 font-main-action">
+                    Add Files
+                  </span>
+                </Button>
               </>
             )}
           </div>
@@ -237,12 +241,7 @@ export default function UserFilesModalContent({
                 <div className="p-spacing-inline-mini flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="max-w-[250px] min-w-0 flex-none">
-                      <Truncated
-                        text04
-                        secondaryAction
-                        nowrap
-                        className="truncate w-full"
-                      >
+                      <Truncated text04 secondaryAction nowrap>
                         {f.name}
                       </Truncated>
                     </div>
