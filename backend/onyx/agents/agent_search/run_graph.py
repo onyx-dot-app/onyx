@@ -15,12 +15,12 @@ from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
 from onyx.agents.agent_search.kb_search.states import MainInput as KBMainInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.chat.models import AnswerStream
+from onyx.configs.app_configs import LANGFUSE_ENABLED
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-
 GraphInput = DCMainInput | KBMainInput | DRMainInput
 
 
@@ -30,10 +30,18 @@ def manage_sync_streaming(
     graph_input: GraphInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
+    callbacks = []
+    if LANGFUSE_ENABLED:
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     for event in compiled_graph.stream(
         stream_mode="custom",
         input=graph_input,
-        config={"metadata": {"config": config, "thread_id": str(message_id)}},
+        config={
+            "metadata": {"config": config, "thread_id": str(message_id)},
+            "callbacks": callbacks,
+        },
     ):
         yield cast(CustomStreamEvent, event)
 
