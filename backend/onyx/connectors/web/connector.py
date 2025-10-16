@@ -53,9 +53,10 @@ eea_global_auth = {}
 class ScrapeSessionContext:
     """Session level context for scraping"""
 
-    def __init__(self, base_url: str, to_visit: list[str]):
+    def __init__(self, base_url: str, to_visit: list[str], lastmod: list[str]):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.lastmod = lastmod
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
 
@@ -329,7 +330,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, str | None]:
     try:
         response = requests.get(
             sitemap_url, verify=False, headers=DEFAULT_HEADERS)
@@ -341,28 +342,32 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         else:
             content = response.content
 
+        urls_data: dict[str, str | None] = {}
         soup = BeautifulSoup(content, "html.parser")
-        urls = [_ensure_absolute_url(sitemap_url, loc_tag.text)
-                for loc_tag in soup.find_all("loc")]
+        for url_tag in soup.find_all("url"):
+            loc_tag = url_tag.find("loc")
+            lastmod_tag = url_tag.find("lastmod")
+            if loc_tag and loc_tag.text:
+                urls_data[loc_tag.text] = lastmod_tag.text if lastmod_tag else None
 
         if "protected=true" in sitemap_url:
             eea_auth = soer_login()
             eea_global_auth["login"] = eea_auth
-            urls = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
+            urls_data = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
 
-        if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+        if len(urls_data.keys()) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
-            urls = list_pages_for_site(sitemap_url)
+            urls_data = list_pages_for_site(sitemap_url)
 
-        if len(urls) == 0:
-            urls = list_pages_for_site_eea(sitemap_url)
+        if len(urls_data.keys()) == 0:
+            urls_data = list_pages_for_site_eea(sitemap_url)
 
-        if len(urls) == 0:
+        if len(urls_data.keys()) == 0:
             raise ValueError(
                 f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
             )
 
-        return urls
+        return urls_data
     except requests.RequestException as e:
         raise RuntimeError(f"Failed to fetch sitemap from {sitemap_url}: {e}")
     except ValueError as e:
@@ -391,10 +396,18 @@ def _read_urls_file(location: str) -> list[str]:
 
 
 def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
-    try:
-        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
-    except (ValueError, TypeError):
-        return None
+    formats = [
+        "%a, %d %b %Y %H:%M:%S %Z",   # HTTP Last-Modified header
+        "%Y-%m-%dT%H:%M:%S%z",        # ISO 8601 with timezone (sitemap)
+        "%Y-%m-%dT%H:%M:%S",          # ISO 8601 without timezone
+        "%Y-%m-%d"                    # Date only (sitemap variant)
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(last_modified, fmt).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return None
 
 
 def _handle_cookies(context: BrowserContext, url: str) -> None:
@@ -493,8 +506,9 @@ class WebConnector(LoadConnector):
             self.to_visit_list = [_ensure_valid_url(base_url)]
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
-            self.to_visit_list = extract_urls_from_sitemap(
-                _ensure_valid_url(base_url))
+            urls_data = extract_urls_from_sitemap(_ensure_valid_url(base_url))
+            self.to_visit_list = list(urls_data.keys())
+            self.lastmod = list(urls_data.values())
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
             # Explicitly check if running in multi-tenant mode to prevent potential security risks
@@ -519,6 +533,7 @@ class WebConnector(LoadConnector):
         self,
         index: int,
         initial_url: str,
+        lastmod: str,
         session_ctx: ScrapeSessionContext,
     ) -> ScrapeResult:
         """Returns a ScrapeResult object with a doc and retry flag."""
@@ -546,7 +561,7 @@ class WebConnector(LoadConnector):
         if not is_pdf and "@@download/file" in initial_url:
             response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
             page_text = response.text
-            last_modified = response.headers.get("Last-Modified")
+            last_modified = response.headers.get("Last-Modified") or lastmod
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
@@ -565,7 +580,7 @@ class WebConnector(LoadConnector):
             response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content))
-            last_modified = response.headers.get("Last-Modified")
+            last_modified = response.headers.get("Last-Modified") or lastmod
 
             result.doc = Document(
                 id=initial_url,
@@ -588,8 +603,8 @@ class WebConnector(LoadConnector):
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
 
-            last_modified = page_response.header_value(
-                "Last-Modified") if page_response else None
+            last_modified = (page_response.header_value(
+                "Last-Modified") if page_response else None) or lastmod
             final_url = page.url
             if final_url != initial_url:
                 protected_url_check(final_url)
@@ -698,11 +713,12 @@ class WebConnector(LoadConnector):
         # make sure we can connect to the base url
         check_internet_connection(base_url)
 
-        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
+        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list, self.lastmod)
         session_ctx.initialize()
 
         while session_ctx.to_visit:
             initial_url = session_ctx.to_visit.pop()
+            lastmod = session_ctx.lastmod.pop()
             if initial_url in session_ctx.visited_links:
                 continue
             session_ctx.visited_links.add(initial_url)
@@ -728,7 +744,7 @@ class WebConnector(LoadConnector):
                     time.sleep(delay)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx)
+                    result = self._do_scrape(index, initial_url, lastmod, session_ctx)
                     if result.retry:
                         continue
 

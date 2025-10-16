@@ -47,10 +47,12 @@ def list_pages_for_site_eea(site):
         rp = init_robots_txt(site)
     except:
         logger.warning("Failed to load robots.txt")
+    urls_data = {}
     tree = sitemap_tree_for_homepage(site)
-    pages = [page.url for page in tree.all_pages() if test_url(rp, page)]
-    pages = list(dict.fromkeys(pages))
-    return(pages)
+    for page in tree.all_pages():
+        if test_url(rp, page):
+            urls_data[page.url] = page.last_modified
+    return urls_data
 
 def soer_login():
     login_url = "https://www.eea.europa.eu/++api++/@login"
