@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import uuid
 from abc import ABC
@@ -9,7 +10,6 @@ from typing import IO
 
 import boto3
 import puremagic
-import hashlib
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
@@ -18,10 +18,10 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
 from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
-from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_ENDPOINT_URL
 from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
+from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
