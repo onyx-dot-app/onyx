@@ -4,9 +4,11 @@ import { OnyxIcon } from "../icons/icons";
 export default function AuthFlowContainer({
   children,
   authState,
+  footerContent,
 }: {
   children: React.ReactNode;
   authState?: "signup" | "login" | "join";
+  footerContent?: React.ReactNode;
 }) {
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
@@ -16,13 +18,17 @@ export default function AuthFlowContainer({
       </div>
       {authState === "login" && (
         <div className="text-sm mt-4 text-center w-full text-text-04 font-medium mx-auto">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/auth/signup"
-            className="text-action-link-05 underline transition-colors duration-200"
-          >
-            Create one
-          </Link>
+          {footerContent ?? (
+            <>
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/auth/signup"
+                className="text-action-link-05 underline transition-colors duration-200"
+              >
+                Create one
+              </Link>
+            </>
+          )}
         </div>
       )}
       {authState === "signup" && (
