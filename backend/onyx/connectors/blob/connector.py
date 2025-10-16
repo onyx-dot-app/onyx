@@ -302,19 +302,16 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            subdomain = "eu/" if self.european_residency else "/"
+            subdomain = "eu/" if self.european_residency else "default/"
 
-            object_dashboard_url = f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
-            return object_dashboard_url
+            return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
             region = self.bucket_region or self.s3_client.meta.region_name
-            object_dashboard_url = f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
-            return object_dashboard_url
+            return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            object_dashboard_url = f"https://console.cloud.google.com/storage/browser/_details/{self.bucket_name}/{encoded_key}"
-            return object_dashboard_url
+            return f"https://console.cloud.google.com/storage/browser/_details/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
@@ -322,6 +319,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
+            # This should never happen!
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
     @staticmethod
