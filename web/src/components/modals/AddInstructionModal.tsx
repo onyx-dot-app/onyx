@@ -37,8 +37,6 @@ export default function AddInstructionModal() {
     toggleModal(ModalIds.AddInstructionModal, false);
   }
 
-  useKeyPress(handleSubmit, "Enter", open);
-
   return (
     <Modal
       id={ModalIds.AddInstructionModal}
