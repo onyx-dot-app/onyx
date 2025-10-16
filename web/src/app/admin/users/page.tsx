@@ -41,7 +41,8 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
       : value.toLocaleString();
 
   return (
-    <div className="flex items-center gap-spacing-inline-mini">
+    // <div className="flex items-center gap-spacing-inline-mini">
+    <div className="flex items-center gap-spacing-inline px-spacing-inline py-spacing-interline-mini rounded-06">
       <RefreshText mainUiMuted text03>
         {label}
       </RefreshText>
