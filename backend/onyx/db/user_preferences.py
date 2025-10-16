@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import Column
+from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy import update
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
+from onyx.db.models import Memory
 from onyx.db.models import User
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
@@ -120,6 +122,42 @@ def update_user_default_model(
         .values(default_model=default_model)
     )
     db_session.commit()
+
+
+def update_user_personalization(
+    user_id: UUID,
+    *,
+    personal_name: str | None,
+    personal_role: str | None,
+    use_memories: bool,
+    memories: list[str],
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # type: ignore
+        .values(
+            personal_name=personal_name,
+            personal_role=personal_role,
+            use_memories=use_memories,
+        )
+    )
+
+    db_session.execute(delete(Memory).where(Memory.user_id == user_id))
+
+    if memories:
+        db_session.add_all(
+            [Memory(user_id=user_id, memory_text=memory) for memory in memories]
+        )
+
+    db_session.commit()
+
+
+def get_memories_for_user(
+    user_id: UUID,
+    db_session: Session,
+) -> Sequence[Memory]:
+    return db_session.scalars(select(Memory).where(Memory.user_id == user_id)).all()
 
 
 def update_user_pinned_assistants(

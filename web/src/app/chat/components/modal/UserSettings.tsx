@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
@@ -20,9 +20,10 @@ import { Loader2, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
-import { ValidSources } from "@/lib/types";
+import { UserPersonalization, ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import SvgTrash from "@/icons/trash";
 import SvgExternalLink from "@/icons/external-link";
@@ -30,7 +31,47 @@ import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
-type SettingsSection = "settings" | "password" | "connectors";
+type SettingsSection =
+  | "settings"
+  | "password"
+  | "connectors"
+  | "personalization";
+
+interface AutoResizeTextareaProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
+
+function AutoResizeTextarea({
+  value,
+  onChange,
+  placeholder,
+}: AutoResizeTextareaProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [value]);
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      value={value}
+      placeholder={placeholder}
+      className="min-h-[3rem] resize-none"
+      onChange={(event) => {
+        onChange(event.target.value);
+        const target = event.currentTarget;
+        target.style.height = "auto";
+        target.style.height = `${target.scrollHeight}px`;
+      }}
+    />
+  );
+}
 
 interface UserSettingsProps {
   onClose: () => void;
@@ -43,6 +84,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
+    updateUserPersonalization,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
@@ -64,6 +106,13 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
+  const [personalizationValues, setPersonalizationValues] =
+    useState<UserPersonalization>({
+      name: "",
+      role: "",
+      memories: [],
+      use_memories: true,
+    });
 
   const { popup, setPopup } = usePopup();
 
@@ -90,6 +139,40 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const hasConnectors =
     (ccPairs && ccPairs.length > 0) ||
     (federatedConnectors && federatedConnectors.length > 0);
+
+  useEffect(() => {
+    setPersonalizationValues({
+      name: user?.personalization?.name ?? "",
+      role: user?.personalization?.role ?? "",
+      memories: user?.personalization?.memories ?? [],
+      use_memories: user?.personalization?.use_memories ?? true,
+    });
+  }, [user]);
+
+  const showPasswordSection = Boolean(user?.password_configured);
+
+  const sections = useMemo(() => {
+    const visibleSections: { id: SettingsSection; label: string }[] = [
+      { id: "settings", label: "Settings" },
+      { id: "personalization", label: "Personalization" },
+    ];
+
+    if (showPasswordSection) {
+      visibleSections.push({ id: "password", label: "Password" });
+    }
+
+    if (hasConnectors) {
+      visibleSections.push({ id: "connectors", label: "Connectors" });
+    }
+
+    return visibleSections;
+  }, [showPasswordSection, hasConnectors]);
+
+  useEffect(() => {
+    if (!sections.some((section) => section.id === activeSection)) {
+      setActiveSection(sections[0]?.id ?? "settings");
+    }
+  }, [sections, activeSection]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -280,8 +363,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   };
   const pathname = usePathname();
 
-  const showPasswordSection = user?.password_configured;
-
   const handleDeleteAllChats = async () => {
     setIsDeleteAllLoading(true);
     try {
@@ -309,42 +390,53 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     }
   };
 
+  const handleSavePersonalization = async () => {
+    const trimmedMemories = personalizationValues.memories
+      .map((memory) => memory.trim())
+      .filter((memory) => memory.length > 0);
+
+    try {
+      const updatedPersonalization = {
+        ...personalizationValues,
+        memories: trimmedMemories,
+      };
+
+      await updateUserPersonalization(updatedPersonalization);
+      setPersonalizationValues(updatedPersonalization);
+      setPopup({
+        message: "Personalization updated successfully",
+        type: "success",
+      });
+    } catch (error) {
+      setPopup({
+        message: "Failed to update personalization",
+        type: "error",
+      });
+      setPersonalizationValues({
+        name: user?.personalization?.name ?? "",
+        role: user?.personalization?.role ?? "",
+        memories: user?.personalization?.memories ?? [],
+        use_memories: user?.personalization?.use_memories ?? true,
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-padding-content p-padding-content">
-      {(showPasswordSection || hasConnectors) && (
+      {sections.length > 1 && (
         <nav>
           <ul className="flex space-x-2">
-            <li>
-              <Button
-                tertiary
-                active={activeSection === "settings"}
-                onClick={() => setActiveSection("settings")}
-              >
-                Settings
-              </Button>
-            </li>
-            {showPasswordSection && (
-              <li>
+            {sections.map(({ id, label }) => (
+              <li key={id}>
                 <Button
                   tertiary
-                  active={activeSection === "password"}
-                  onClick={() => setActiveSection("password")}
+                  active={activeSection === id}
+                  onClick={() => setActiveSection(id)}
                 >
-                  Password
+                  {label}
                 </Button>
               </li>
-            )}
-            {hasConnectors && (
-              <li>
-                <Button
-                  tertiary
-                  active={activeSection === "connectors"}
-                  onClick={() => setActiveSection("connectors")}
-                >
-                  Connectors
-                </Button>
-              </li>
-            )}
+            ))}
           </ul>
         </nav>
       )}
@@ -491,6 +583,105 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {activeSection === "personalization" && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Name
+              </label>
+              <Input
+                value={personalizationValues.name}
+                onChange={(event) =>
+                  setPersonalizationValues((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="Set how Onyx should refer to you"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Role
+              </label>
+              <Input
+                value={personalizationValues.role}
+                onChange={(event) =>
+                  setPersonalizationValues((prev) => ({
+                    ...prev,
+                    role: event.target.value,
+                  }))
+                }
+                placeholder="Share your role to tailor responses"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium">Use memories</h3>
+                <SubLabel>
+                  Allow Onyx to reference stored memories in future chats.
+                </SubLabel>
+              </div>
+              <Switch
+                checked={personalizationValues.use_memories}
+                onCheckedChange={(checked) =>
+                  setPersonalizationValues((prev) => ({
+                    ...prev,
+                    use_memories: checked,
+                  }))
+                }
+              />
+            </div>
+            <div className="border-t border-border pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Memories</h3>
+                  <SubLabel>
+                    Keep personal notes that should inform future chats.
+                  </SubLabel>
+                </div>
+                <Button
+                  tertiary
+                  onClick={() =>
+                    setPersonalizationValues((prev) => ({
+                      ...prev,
+                      memories: [...prev.memories, ""],
+                    }))
+                  }
+                >
+                  Add Memory
+                </Button>
+              </div>
+              {personalizationValues.memories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No memories saved yet.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto flex flex-col gap-3 pr-1">
+                  {personalizationValues.memories.map((memory, index) => (
+                    <AutoResizeTextarea
+                      key={index}
+                      value={memory}
+                      placeholder="Write something Onyx should remember"
+                      onChange={(value) =>
+                        setPersonalizationValues((prev) => {
+                          const updatedMemories = [...prev.memories];
+                          updatedMemories[index] = value;
+                          return { ...prev, memories: updatedMemories };
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSavePersonalization}>
+                Save Personalization
+              </Button>
             </div>
           </div>
         )}

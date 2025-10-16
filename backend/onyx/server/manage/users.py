@@ -25,6 +25,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
+from onyx.auth.noauth_user import set_no_auth_user_personalization
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
@@ -56,6 +57,7 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
@@ -72,6 +74,7 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import UserByEmail
@@ -791,6 +794,55 @@ def update_user_default_model_api(
             raise RuntimeError("This should never happen")
 
     update_user_default_model(user.id, request.default_model, db_session)
+
+
+@router.patch("/user/personalization")
+def update_user_personalization_api(
+    request: PersonalizationUpdateRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            personalization = no_auth_user.personalization
+
+            if request.name is not None:
+                personalization.name = request.name
+            if request.role is not None:
+                personalization.role = request.role
+            if request.use_memories is not None:
+                personalization.use_memories = request.use_memories
+            if request.memories is not None:
+                personalization.memories = request.memories
+
+            set_no_auth_user_personalization(store, personalization)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    new_name = request.name if request.name is not None else user.personal_name
+    new_role = request.role if request.role is not None else user.personal_role
+    current_use_memories = user.use_memories
+    new_use_memories = (
+        request.use_memories
+        if request.use_memories is not None
+        else current_use_memories
+    )
+    existing_memories = [memory.memory_text for memory in user.memories]
+    new_memories = (
+        request.memories if request.memories is not None else existing_memories
+    )
+
+    update_user_personalization(
+        user.id,
+        personal_name=new_name,
+        personal_role=new_role,
+        use_memories=new_use_memories,
+        memories=new_memories,
+        db_session=db_session,
+    )
 
 
 class ReorderPinnedAssistantsRequest(BaseModel):
