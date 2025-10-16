@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { ThreeDotsLoader } from "@/components/Loading";

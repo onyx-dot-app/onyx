@@ -18,7 +18,7 @@ import MoreHorizontal from "@/icons/more-horizontal";
 import SvgFileText from "@/icons/file-text";
 import SvgExternalLink from "@/icons/external-link";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 // Small helper to render an icon + label row
 const Row = ({ children }: { children: React.ReactNode }) => (

@@ -12,7 +12,7 @@ import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
