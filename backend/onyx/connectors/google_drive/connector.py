@@ -344,6 +344,9 @@ class GoogleDriveConnector(
     def _get_all_drives_for_user(self, user_email: str) -> set[str]:
         drive_service = get_drive_service(self.creds, user_email)
         is_service_account = isinstance(self.creds, ServiceAccountCredentials)
+        logger.info(
+            f"Getting all drives for user {user_email} with service account: {is_service_account}"
+        )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
             retrieval_function=drive_service.drives().list,

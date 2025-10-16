@@ -49,6 +49,16 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import (
+    create_external_group_sync_attempt,
+)
+from onyx.db.permission_sync_attempt import (
+    mark_external_group_sync_attempt_failed,
+)
+from onyx.db.permission_sync_attempt import (
+    mark_external_group_sync_attempt_in_progress,
+)
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
@@ -68,6 +78,14 @@ logger = setup_logger()
 
 
 _EXTERNAL_GROUP_BATCH_SIZE = 100
+
+
+def _fail_external_group_sync_attempt(attempt_id: int, error_msg: str) -> None:
+    """Helper to mark an external group sync attempt as failed with an error message."""
+    with get_session_with_current_tenant() as db_session:
+        mark_external_group_sync_attempt_failed(
+            attempt_id, db_session, error_message=error_msg
+        )
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -449,6 +467,16 @@ def _perform_external_group_sync(
     cc_pair_id: int,
     tenant_id: str,
 ) -> None:
+    # Create attempt record at the start
+    with get_session_with_current_tenant() as db_session:
+        attempt_id = create_external_group_sync_attempt(
+            connector_credential_pair_id=cc_pair_id,
+            db_session=db_session,
+        )
+        logger.info(
+            f"Created external group sync attempt: {attempt_id} for cc_pair={cc_pair_id}"
+        )
+
     with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
@@ -463,11 +491,13 @@ def _perform_external_group_sync(
         if sync_config is None:
             msg = f"No sync config found for {source_type} for cc_pair: {cc_pair_id}"
             emit_background_error(msg, cc_pair_id=cc_pair_id)
+            _fail_external_group_sync_attempt(attempt_id, msg)
             raise ValueError(msg)
 
         if sync_config.group_sync_config is None:
             msg = f"No group sync config found for {source_type} for cc_pair: {cc_pair_id}"
             emit_background_error(msg, cc_pair_id=cc_pair_id)
+            _fail_external_group_sync_attempt(attempt_id, msg)
             raise ValueError(msg)
 
         ext_group_sync_func = sync_config.group_sync_config.group_sync_func
@@ -477,14 +507,27 @@ def _perform_external_group_sync(
         )
         mark_old_external_groups_as_stale(db_session, cc_pair_id)
 
+        # Mark attempt as in progress
+        mark_external_group_sync_attempt_in_progress(attempt_id, db_session)
+        logger.info(f"Marked external group sync attempt {attempt_id} as in progress")
+
         logger.info(
             f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
         )
         external_user_group_batch: list[ExternalUserGroup] = []
+        seen_users: set[str] = set()  # Track unique users across all groups
+        total_groups_processed = 0
+        total_group_memberships_synced = 0
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
             for external_user_group in external_user_group_generator:
                 external_user_group_batch.append(external_user_group)
+
+                # Track progress
+                total_groups_processed += 1
+                total_group_memberships_synced += len(external_user_group.user_emails)
+                seen_users = seen_users.union(external_user_group.user_emails)
+
                 if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
                     logger.debug(
                         f"New external user groups: {external_user_group_batch}"
@@ -506,6 +549,13 @@ def _perform_external_group_sync(
                     source=cc_pair.connector.source,
                 )
         except Exception as e:
+            error_msg = format_error_for_logging(e)
+
+            # Mark as failed (this also updates progress to show partial progress)
+            mark_external_group_sync_attempt_failed(
+                attempt_id, db_session, error_message=error_msg
+            )
+
             # TODO: add some notification to the admins here
             logger.exception(
                 f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
@@ -516,6 +566,24 @@ def _perform_external_group_sync(
             f"Removing stale external groups for {source_type} for cc_pair: {cc_pair_id}"
         )
         remove_stale_external_groups(db_session, cc_pair_id)
+
+        # Calculate total unique users processed
+        total_users_processed = len(seen_users)
+
+        # Complete the sync attempt with final progress
+        complete_external_group_sync_attempt(
+            db_session=db_session,
+            attempt_id=attempt_id,
+            total_users_processed=total_users_processed,
+            total_groups_processed=total_groups_processed,
+            total_group_memberships_synced=total_group_memberships_synced,
+            errors_encountered=0,
+        )
+        logger.info(
+            f"Completed external group sync attempt {attempt_id}: "
+            f"{total_groups_processed} groups, {total_users_processed} users, "
+            f"{total_group_memberships_synced} memberships"
+        )
 
         mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
 

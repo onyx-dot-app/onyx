@@ -29,7 +29,11 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    default_build_system_message_v2,
+)
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message_v2
 from onyx.chat.turn import fast_chat_turn
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -71,6 +75,8 @@ from onyx.db.projects import get_project_instructions
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -83,6 +89,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -733,22 +740,36 @@ def stream_chat_message_objects(
                     and (file.file_id not in project_file_ids)
                 ]
             )
-
-        prompt_builder = AnswerPromptBuilder(
-            # TODO: for backwards compatibility, we are using the V1
-            # user_message=default_build_user_message_v2(
-            #     user_query=final_msg.message,
-            #     prompt_config=prompt_config,
-            #     files=latest_query_files,
-            # ),
-            user_message=default_build_user_message(
+        feature_flag_provider = get_default_feature_flag_provider()
+        simple_agent_framework_enabled = (
+            feature_flag_provider.feature_enabled_for_user_tenant(
+                flag_key=SIMPLE_AGENT_FRAMEWORK,
+                user=user,
+                tenant_id=tenant_id,
+            )
+            and not new_msg_req.use_agentic_search
+        )
+        prompt_user_message = (
+            default_build_user_message_v2(
                 user_query=final_msg.message,
                 prompt_config=prompt_config,
                 files=latest_query_files,
-            ),
-            # TODO: for backwards compatibility, we are using the V1
-            # system_message=default_build_system_message_v2(prompt_config, llm.config),
-            system_message=default_build_system_message(prompt_config, llm.config),
+            )
+            if simple_agent_framework_enabled
+            else default_build_user_message(
+                user_query=final_msg.message,
+                prompt_config=prompt_config,
+                files=latest_query_files,
+            )
+        )
+        system_message = (
+            default_build_system_message_v2(prompt_config, llm.config)
+            if simple_agent_framework_enabled
+            else default_build_system_message(prompt_config, llm.config)
+        )
+        prompt_builder = AnswerPromptBuilder(
+            user_message=prompt_user_message,
+            system_message=system_message,
             message_history=message_history,
             llm_config=llm.config,
             raw_user_query=final_msg.message,
@@ -790,21 +811,21 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
+        if simple_agent_framework_enabled:
+            yield from _fast_message_stream(
+                answer,
+                tools,
+                db_session,
+                get_redis_client(),
+                chat_session_id,
+                reserved_message_id,
+            )
+        else:
+            from onyx.chat.packet_proccessing import process_streamed_packets
 
-        from onyx.chat.packet_proccessing import process_streamed_packets
-
-        yield from process_streamed_packets.process_streamed_packets(
-            answer_processed_output=answer.processed_streamed_output,
-        )
-        # TODO: For backwards compatible PR, switch back to the original call
-        # yield from _fast_message_stream(
-        #     answer,
-        #     tools,
-        #     db_session,
-        #     get_redis_client(),
-        #     str(chat_session_id),
-        #     str(reserved_message_id),
-        # )
+            yield from process_streamed_packets.process_streamed_packets(
+                answer_processed_output=answer.processed_streamed_output,
+            )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")

@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { Separator } from "@/components/ui/separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";

@@ -349,10 +349,6 @@ except ValueError:
         CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
-CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
-)
-
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
@@ -360,18 +356,30 @@ CELERY_WORKER_PRIMARY_CONCURRENCY = int(
 CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
-CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT = 4
-try:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
-        os.environ.get(
-            "CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY",
-            CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT,
-        )
-    )
-except ValueError:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = (
-        CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT
-    )
+
+# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
+# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
+CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
+)
+
+# Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
+CELERY_WORKER_HEAVY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
+)
+
+CELERY_WORKER_MONITORING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_MONITORING_CONCURRENCY") or 1
+)
+
+CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
+)
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192

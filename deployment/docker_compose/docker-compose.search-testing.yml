@@ -50,7 +50,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
       - index
@@ -59,6 +59,7 @@ services:
     env_file:
       - .env_eval
     environment:
+      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - AUTH_TYPE=disabled
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index

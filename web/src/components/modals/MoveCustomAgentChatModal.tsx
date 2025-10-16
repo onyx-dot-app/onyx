@@ -4,7 +4,7 @@ import { useState } from "react";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Checkbox } from "@/components/ui/checkbox";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
 
 interface MoveCustomAgentChatModalProps {
