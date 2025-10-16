@@ -26,9 +26,6 @@ def fireflies_connector() -> FirefliesConnector:
     return connector
 
 
-@pytest.mark.xfail(
-    reason="Environment variable not set for some reason",
-)
 def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> None:
     test_data = load_test_data()
 
