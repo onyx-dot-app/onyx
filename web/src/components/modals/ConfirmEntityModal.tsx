@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import SvgAlertCircle from "@/icons/alert-circle";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;

@@ -9,6 +9,7 @@ import { LoadingAnimation } from "@/components/Loading";
 import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
+  getFormattedProviderName,
 } from "../../../../components/embedding/interfaces";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "../../configuration/llm/constants";
 import { Modal } from "@/components/Modal";
@@ -183,7 +184,9 @@ export function ProviderCreationModal({
 
   return (
     <Modal
-      title={`Configure ${selectedProvider.provider_type}`}
+      title={`Configure ${getFormattedProviderName(
+        selectedProvider.provider_type
+      )}`}
       onOutsideClick={onCancel}
       icon={selectedProvider.icon}
     >

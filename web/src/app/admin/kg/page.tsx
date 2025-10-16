@@ -28,7 +28,7 @@ import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import SvgSettings from "@/icons/settings";
 import { cn } from "@/lib/utils";
 

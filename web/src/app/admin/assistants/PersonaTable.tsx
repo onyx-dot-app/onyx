@@ -1,6 +1,6 @@
 "use client";
 
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";

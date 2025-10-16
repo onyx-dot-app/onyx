@@ -18,6 +18,7 @@ export enum PacketType {
   SEARCH_TOOL_DELTA = "internal_search_tool_delta",
   IMAGE_GENERATION_TOOL_START = "image_generation_tool_start",
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta",
+  FETCH_TOOL_START = "fetch_tool_start",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -90,6 +91,12 @@ export interface ImageGenerationToolDelta extends BaseObj {
   images: GeneratedImage[];
 }
 
+export interface FetchToolStart extends BaseObj {
+  type: "fetch_tool_start";
+  queries: string[] | null;
+  documents: OnyxDocument[] | null;
+}
+
 // Custom Tool Packets
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
@@ -141,8 +148,13 @@ export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
   | SectionEnd;
+export type FetchToolObj = FetchToolStart | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
-export type NewToolObj = SearchToolObj | ImageGenerationToolObj | CustomToolObj;
+export type NewToolObj =
+  | SearchToolObj
+  | ImageGenerationToolObj
+  | FetchToolObj
+  | CustomToolObj;
 
 export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
 
@@ -187,6 +199,11 @@ export interface SearchToolPacket {
 export interface ImageGenerationToolPacket {
   ind: number;
   obj: ImageGenerationToolObj;
+}
+
+export interface FetchToolPacket {
+  ind: number;
+  obj: FetchToolObj;
 }
 
 export interface CustomToolPacket {

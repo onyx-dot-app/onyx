@@ -22,6 +22,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
 from mcp.types import InitializeResult
+from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -50,6 +51,7 @@ from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.mcp import upsert_user_connection_config
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -1044,6 +1046,55 @@ def user_list_mcp_tools_by_id(
     return _list_mcp_tools_by_id(server_id, db, False, user)
 
 
+def _upsert_db_tools(
+    discovered_tools: list[MCPLibTool],
+    existing_by_name: dict[str, Tool],
+    processed_names: set[str],
+    mcp_server_id: int,
+    db: Session,
+) -> bool:
+    db_dirty = False
+
+    for tool in discovered_tools:
+        tool_name = tool.name
+        if not tool_name:
+            continue
+
+        processed_names.add(tool_name)
+        description = tool.description or ""
+        annotations_title = tool.annotations.title if tool.annotations else None
+        display_name = tool.title or annotations_title or tool_name
+        input_schema = tool.inputSchema
+
+        if existing_tool := existing_by_name.get(tool_name):
+            if existing_tool.description != description:
+                existing_tool.description = description
+                db_dirty = True
+            if existing_tool.display_name != display_name:
+                existing_tool.display_name = display_name
+                db_dirty = True
+            if existing_tool.mcp_input_schema != input_schema:
+                existing_tool.mcp_input_schema = input_schema
+                db_dirty = True
+            continue
+
+        new_tool = create_tool__no_commit(
+            name=tool_name,
+            description=description,
+            openapi_schema=None,
+            custom_headers=None,
+            user_id=None,
+            db_session=db,
+            passthrough_auth=False,
+            mcp_server_id=mcp_server_id,
+            enabled=False,
+        )
+        new_tool.display_name = display_name
+        new_tool.mcp_input_schema = input_schema
+        db_dirty = True
+    return db_dirty
+
+
 def _list_mcp_tools_by_id(
     server_id: int,
     db: Session,
@@ -1090,18 +1141,35 @@ def _list_mcp_tools_by_id(
     logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
     # Normalize URL to include trailing slash to avoid redirect/slow path handling
     server_url = mcp_server.server_url.rstrip("/") + "/"
-    tools = discover_mcp_tools(
+    discovered_tools = discover_mcp_tools(
         server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
         transport=mcp_server.transport,
         auth=auth,
     )
     logger.info(
-        f"Discovered {len(tools)} tools for MCP server: {mcp_server.name}: {time.time() - t1}"
+        f"Discovered {len(discovered_tools)} tools for MCP server: {mcp_server.name}: {time.time() - t1}"
     )
 
+    if is_admin:
+        existing_tools = get_tools_by_mcp_server_id(mcp_server.id, db)
+        existing_by_name = {db_tool.name: db_tool for db_tool in existing_tools}
+        processed_names: set[str] = set()
+
+        db_dirty = _upsert_db_tools(
+            discovered_tools, existing_by_name, processed_names, mcp_server.id, db
+        )
+
+        for name, db_tool in existing_by_name.items():
+            if name not in processed_names:
+                delete_tool__no_commit(db_tool.id, db)
+                db_dirty = True
+
+        if db_dirty:
+            db.commit()
+
     # Truncate tool descriptions to prevent overly long responses
-    for tool in tools:
+    for tool in discovered_tools:
         if tool.description:
             tool.description = _truncate_description(tool.description)
 
@@ -1112,7 +1180,7 @@ def _list_mcp_tools_by_id(
         server_id=server_id,
         server_name=mcp_server.name,
         server_url=mcp_server.server_url,
-        tools=tools,
+        tools=discovered_tools,
     )
 
 
@@ -1324,70 +1392,31 @@ def _upsert_mcp_server(
     return mcp_server
 
 
-def _add_tools_to_server(
+def _sync_tools_for_server(
     mcp_server: DbMCPServer,
-    selected_tools: list[str],
-    keep_tool_names: set[str],
-    user: User | None,
+    selected_tools: set[str],
     db_session: Session,
 ) -> int:
-    created_tools = 0
-    # First, discover available tools from the server to get full definitions
+    """Toggle enabled state for MCP tools that exist for the server.
+    Updates to the db model of a tool all happen when the user Lists Tools.
+    This ensures that the the tools added to the db match what the user sees in the UI,
+    even if the underlying tool has changed on the server after list tools is called.
+    That's a corner case anyways; the admin should go back and update the server by re-listing tools.
+    """
 
-    connection_config = _get_connection_config(mcp_server, True, user, db_session)
-    headers = connection_config.config.get("headers", {}) if connection_config else {}
+    updated_tools = 0
 
-    auth = None
-    if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
-        user_id = str(user.id) if user else ""
-        assert connection_config
-        auth = make_oauth_provider(
-            mcp_server,
-            user_id,
-            UNUSED_RETURN_PATH,
-            connection_config.id,
-            mcp_server.admin_connection_config_id,
-        )
-    available_tools = discover_mcp_tools(
-        mcp_server.server_url,
-        headers,
-        transport=mcp_server.transport,
-        auth=auth,
-    )
-    tools_by_name = {tool.name: tool for tool in available_tools}
+    existing_tools = get_tools_by_mcp_server_id(mcp_server.id, db_session)
+    existing_by_name = {tool.name: tool for tool in existing_tools}
 
-    for tool_name in selected_tools:
-        if tool_name not in tools_by_name:
-            logger.warning(f"Tool '{tool_name}' not found in MCP server")
-            continue
+    # Disable any existing tools that were not processed above
+    for tool_name, db_tool in existing_by_name.items():
+        should_enable = tool_name in selected_tools
+        if db_tool.enabled != should_enable:
+            db_tool.enabled = should_enable
+            updated_tools += 1
 
-        if tool_name in keep_tool_names:
-            # tool was not deleted earlier and not added now
-            continue
-
-        tool_def = tools_by_name[tool_name]
-
-        # Create Tool entry for each selected tool
-        tool = create_tool__no_commit(
-            name=tool_name,
-            description=_truncate_description(tool_def.description),
-            openapi_schema=None,  # MCP tools don't use OpenAPI
-            custom_headers=None,
-            user_id=user.id if user else None,
-            db_session=db_session,
-            passthrough_auth=False,
-        )
-
-        # Update the tool with MCP server ID, display name, and input schema
-        tool.mcp_server_id = mcp_server.id
-        annotations_title = tool_def.annotations.title if tool_def.annotations else None
-        tool.display_name = tool_def.title or annotations_title or tool_name
-        tool.mcp_input_schema = tool_def.inputSchema
-
-        created_tools += 1
-
-        logger.info(f"Created MCP tool '{tool.name}' with ID {tool.id}")
-    return created_tools
+    return updated_tools
 
 
 @admin_router.get("/servers/{server_id}", response_model=MCPServer)
@@ -1560,27 +1589,12 @@ def update_mcp_server_with_tools(
             status_code=400, detail="MCP server has no admin connection config"
         )
 
-    # Cleanup: Delete tools for this server that are not in the selected_tools list
     selected_names = set(request.selected_tools or [])
-    existing_tools = get_tools_by_mcp_server_id(request.server_id, db_session)
-    keep_tool_names = set()
-    updated_tools = 0
-    for tool in existing_tools:
-        if tool.name in selected_names:
-            keep_tool_names.add(tool.name)
-        else:
-            delete_tool__no_commit(tool.id, db_session)
-            updated_tools += 1
-    # If selected_tools is provided, create individual tools for each
-
-    if request.selected_tools:
-        updated_tools += _add_tools_to_server(
-            mcp_server,
-            request.selected_tools,
-            keep_tool_names,
-            user,
-            db_session,
-        )
+    updated_tools = _sync_tools_for_server(
+        mcp_server,
+        selected_names,
+        db_session,
+    )
 
     db_session.commit()
 

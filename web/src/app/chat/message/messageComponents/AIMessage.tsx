@@ -146,7 +146,10 @@ export default function AIMessage({
       }
 
       // Documents from tool deltas
-      if (packet.obj.type === PacketType.SEARCH_TOOL_DELTA) {
+      if (
+        packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
+        packet.obj.type === PacketType.FETCH_TOOL_START
+      ) {
         const toolDelta = packet.obj as SearchToolDelta;
         if ("documents" in toolDelta && toolDelta.documents) {
           for (const doc of toolDelta.documents) {
@@ -207,7 +210,7 @@ export default function AIMessage({
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
   // Calculate unique source count
-  const uniqueSourceCount = useMemo(() => {
+  const _uniqueSourceCount = useMemo(() => {
     const uniqueDocIds = new Set<string>();
     for (const citation of citations) {
       if (citation.document_id) {

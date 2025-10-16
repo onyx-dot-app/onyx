@@ -49,7 +49,7 @@ msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
-openai==1.99.5
+openai==1.107.1
 openpyxl==3.1.5
 passlib==1.7.4
 playwright==1.55.0
@@ -105,5 +105,6 @@ sendgrid==6.11.0
 voyageai==0.2.3
 cohere==5.6.1
 exa_py==1.15.4
-braintrust==0.2.6
+braintrust[openai-agents]==0.2.6
 braintrust-langchain==0.0.4
+openai-agents==0.3.3

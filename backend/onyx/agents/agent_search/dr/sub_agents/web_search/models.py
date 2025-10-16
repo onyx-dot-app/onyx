@@ -13,7 +13,7 @@ class ProviderType(Enum):
     EXA = "exa"
 
 
-class InternetSearchResult(BaseModel):
+class WebSearchResult(BaseModel):
     title: str
     link: str
     author: str | None = None
@@ -21,7 +21,7 @@ class InternetSearchResult(BaseModel):
     snippet: str | None = None
 
 
-class InternetContent(BaseModel):
+class WebContent(BaseModel):
     title: str
     link: str
     full_content: str
@@ -29,11 +29,11 @@ class InternetContent(BaseModel):
     scrape_successful: bool = True
 
 
-class InternetSearchProvider(ABC):
+class WebSearchProvider(ABC):
     @abstractmethod
-    def search(self, query: str) -> list[InternetSearchResult]:
+    def search(self, query: str) -> list[WebSearchResult]:
         pass
 
     @abstractmethod
-    def contents(self, urls: list[str]) -> list[InternetContent]:
+    def contents(self, urls: list[str]) -> list[WebContent]:
         pass
