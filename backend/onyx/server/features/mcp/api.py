@@ -27,7 +27,7 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
@@ -381,7 +381,7 @@ class MCPOauthState(BaseModel):
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPUserOAuthConnectResponse:
     """Connect OAuth flow for admin MCP server authentication"""
     if not user:
@@ -1032,7 +1032,7 @@ def _get_connection_config(
 def admin_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, True, user)
 
@@ -1423,7 +1423,7 @@ def _sync_tools_for_server(
 def get_mcp_server_detail(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Return details for one MCP server if user has access"""
     try:
@@ -1447,7 +1447,7 @@ def get_mcp_server_detail(
 @admin_router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
@@ -1517,7 +1517,7 @@ def get_mcp_server_db_tools(
 def upsert_mcp_server_with_tools(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server and associated tools"""
 
@@ -1572,7 +1572,7 @@ def upsert_mcp_server_with_tools(
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServerUpdateResponse:
     """Update an MCP server and associated tools"""
 
@@ -1608,7 +1608,7 @@ def update_mcp_server_with_tools(
 def delete_mcp_server_admin(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
     try:

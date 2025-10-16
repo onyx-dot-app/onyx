@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
@@ -52,7 +52,7 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -75,7 +75,7 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
@@ -97,7 +97,7 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> None:
     try:
         delete_tool__no_commit(tool_id, db_session)
@@ -120,7 +120,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate")
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)
