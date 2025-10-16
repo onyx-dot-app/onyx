@@ -23,7 +23,6 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
     Param format: (BlobType, bucket_name, {optional init kwargs})
     - The 3rd element is optional and, if provided, must be a dict.
     - Extra kwargs are passed to BlobStorageConnector.__init__.
-    - Credentials are loaded from env for S3.
 
     Example:
       @pytest.mark.parametrize(
@@ -65,8 +64,13 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
                 "R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
             ],
         }
-    else:
-        raise AssertionError("Only S3 is supported by this test fixture")
+    elif bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
+        creds = {
+            "access_key_id": os.environ["GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS"],
+            "secret_access_key": os.environ[
+                "GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
+            ],
+        }
 
     connector.load_credentials(creds)
     return connector
@@ -123,7 +127,7 @@ def test_blob_s3_connector(
 @pytest.mark.parametrize(
     "blob_connector", [(BlobType.S3, "s3-role-connector-test")], indirect=True
 )
-def test_blob_s3_cross_region_link(
+def test_blob_s3_cross_region_and_citation_link(
     mock_get_api_key: MagicMock,
     blob_connector: BlobStorageConnector,
 ) -> None:
@@ -166,3 +170,68 @@ def test_blob_s3_cross_region_link(
     assert decoded_prefix == "Chapter 6.pdf" or decoded_prefix.endswith(
         "/Chapter 6.pdf"
     )
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+@pytest.mark.parametrize(
+    "blob_connector", [(BlobType.R2, "asia_pacific_bucket")], indirect=True
+)
+def test_blob_r2_connector(
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+) -> None:
+    """Validate basic R2 connector creation and document loading"""
+
+    all_docs: list[Document] = []
+    for doc_batch in blob_connector.load_from_state():
+        all_docs.extend(doc_batch)
+
+    assert len(all_docs) >= 1
+    doc = all_docs[0]
+    assert len(doc.sections) >= 1
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+@pytest.mark.parametrize(
+    "blob_connector",
+    [(BlobType.R2, "onyx-daily-connector-test", {"european_residency": True})],
+    indirect=True,
+)
+def test_blob_r2_eu_residency_connector(
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+) -> None:
+    """Validate R2 connector with European residency setting"""
+
+    all_docs: list[Document] = []
+    for doc_batch in blob_connector.load_from_state():
+        all_docs.extend(doc_batch)
+
+    assert len(all_docs) >= 1
+    doc = all_docs[0]
+    assert len(doc.sections) >= 1
+    doc.sections[0].link
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+@pytest.mark.parametrize(
+    "blob_connector", [(BlobType.GOOGLE_CLOUD_STORAGE, "onyx-test-1")], indirect=True
+)
+def test_blob_gcs_connector(
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+) -> None:
+    all_docs: list[Document] = []
+    for doc_batch in blob_connector.load_from_state():
+        all_docs.extend(doc_batch)
+
+    # At least one object from the test bucket
+    assert len(all_docs) >= 1
+    doc = all_docs[0]
+    assert len(doc.sections) >= 1
