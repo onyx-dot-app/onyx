@@ -3,7 +3,7 @@ from typing import cast
 
 from langchain_core.runnables.schema import CustomStreamEvent
 from langchain_core.runnables.schema import StreamEvent
-from langfuse.langchain.CallbackHandler import LangchainCallbackHandler
+from langfuse.langchain import CallbackHandler
 from langgraph.graph.state import CompiledStateGraph
 
 from onyx.agents.agent_search.dc_search_analysis.graph_builder import (
@@ -32,10 +32,10 @@ def manage_sync_streaming(
     graph_input: GraphInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
-    callbacks: list[LangchainCallbackHandler] = []
+    callbacks: list[CallbackHandler] = []
     if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY:
 
-        callbacks.append(LangchainCallbackHandler())
+        callbacks.append(CallbackHandler())
     for event in compiled_graph.stream(
         stream_mode="custom",
         input=graph_input,
