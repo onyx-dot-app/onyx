@@ -17,6 +17,15 @@ class CustomConfigKeyType(Enum):
     # i.e., file based credentials (e.g., "/path/to/credentials/file.json")
     FILE_INPUT = "file_input"
 
+    # used for configuration values that require a selection from predefined options
+    SELECT = "select"
+
+
+class CustomConfigOption(BaseModel):
+    label: str
+    value: str
+    description: str | None = None
+
 
 class CustomConfigKey(BaseModel):
     name: str
@@ -26,6 +35,7 @@ class CustomConfigKey(BaseModel):
     is_secret: bool = False
     key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
     default_value: str | None = None
+    options: list[CustomConfigOption] | None = None
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):
@@ -87,6 +97,42 @@ OPEN_AI_VISIBLE_MODEL_NAMES = [
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+
+def _fallback_bedrock_regions() -> list[str]:
+    # Fall back to a conservative set of well-known Bedrock regions if boto3 data isn't available.
+    return [
+        "us-east-1",
+        "us-east-2",
+        "us-west-2",
+        "ap-northeast-1",
+        "ap-south-1",
+        "ap-southeast-1",
+        "ap-southeast-2",
+        "ap-east-1",
+        "ca-central-1",
+        "eu-central-1",
+        "eu-west-2",
+    ]
+
+
+def _build_bedrock_region_options() -> list[CustomConfigOption]:
+    try:
+        import boto3
+
+        session = boto3.session.Session()
+        regions = set(session.get_available_regions("bedrock"))
+        regions.update(session.get_available_regions("bedrock-runtime"))
+        if not regions:
+            raise ValueError("No Bedrock regions returned from boto3")
+        sorted_regions = sorted(regions)
+    except Exception:
+        sorted_regions = _fallback_bedrock_regions()
+
+    return [CustomConfigOption(label=region, value=region) for region in sorted_regions]
+
+
+BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 
 OLLAMA_PROVIDER_NAME = "ollama"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
@@ -262,6 +308,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name="AWS_REGION_NAME",
                     display_name="AWS Region Name",
+                    key_type=CustomConfigKeyType.SELECT,
+                    options=BEDROCK_REGION_OPTIONS,
                 ),
                 CustomConfigKey(
                     name="AWS_ACCESS_KEY_ID",
