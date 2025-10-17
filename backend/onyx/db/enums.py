@@ -172,3 +172,4 @@ class UserFileStatus(str, PyEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    DELETING = "DELETING"
