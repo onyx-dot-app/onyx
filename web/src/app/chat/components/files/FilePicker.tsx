@@ -19,6 +19,7 @@ import SvgFileText from "@/icons/file-text";
 import SvgExternalLink from "@/icons/external-link";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
+import Button from "@/refresh-components/buttons/Button";
 
 // Small helper to render an icon + label row
 const Row = ({ children }: { children: React.ReactNode }) => (
@@ -57,7 +58,9 @@ export function FilePickerContents({
           </Text>
 
           {recentFiles.slice(0, 3).map((f) => (
-            <button
+            <Button
+              defaulted
+              internal
               type="button"
               key={f.id}
               onClick={(e) => {
@@ -65,9 +68,9 @@ export function FilePickerContents({
                 e.preventDefault();
                 onPickRecent && onPickRecent(f);
               }}
-              className="w-full rounded-lg hover:bg-background-neutral-02 group"
+              className="w-full rounded-lg hover:bg-background-neutral-02 group !p-0 !gap-0"
             >
-              <div className="flex items-center w-full m-1 mt-2 p-0.5 group">
+              <div className="flex items-center w-full m-1 mt-2 p-0.5 group -ml-[0.1rem]">
                 <Row>
                   <div className="p-0.5">
                     {String(f.status).toLowerCase() === "processing" ? (
@@ -111,29 +114,21 @@ export function FilePickerContents({
                   </div>
                 </Row>
               </div>
-            </button>
+            </Button>
           ))}
 
           {recentFiles.length > 3 && (
-            <button
-              type="button"
+            <LineItem
+              icon={MoreHorizontal}
               onClick={() => setShowRecentFiles(true)}
-              className="w-full rounded-lg hover:bg-background-neutral-02 hover:text-neutral-900 dark:hover:text-neutral-50"
             >
-              <div className="flex items-center w-full m-1 p-1">
-                <Row>
-                  <div className="p-0.5">
-                    <MoreHorizontal className="h-4 w-4 stroke-text-02" />
-                  </div>
-                  <Text text03 mainUiBody>
-                    All Recent Files
-                  </Text>
-                </Row>
-              </div>
-            </button>
+              <Text text03 mainUiBody>
+                All Recent Files
+              </Text>
+            </LineItem>
           )}
 
-          <div className="border-b" />
+          <div className="border-b my-0.5" />
         </>
       )}
 
