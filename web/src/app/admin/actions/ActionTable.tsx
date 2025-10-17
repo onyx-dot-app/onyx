@@ -59,20 +59,22 @@ export function ActionsTable({
             <TableRow key={`mcp-${server.id}`}>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded p-1 hover:bg-background-neutral-02"
-                    onClick={() => {
-                      router.push(
-                        `/admin/actions/edit-mcp?server_id=${server.id}`
-                      );
-                    }}
-                  >
-                    <SvgEdit
-                      stroke="currentColor"
-                      className="size-4 text-text-03"
-                    />
-                  </button>
+                  {isAdmin || server.owner === user?.email ? (
+                    <button
+                      type="button"
+                      className="rounded p-1 hover:bg-background-neutral-02"
+                      onClick={() => {
+                        router.push(
+                          `/admin/actions/edit-mcp?server_id=${server.id}`
+                        );
+                      }}
+                    >
+                      <SvgEdit
+                        stroke="currentColor"
+                        className="size-4 text-text-03"
+                      />
+                    </button>
+                  ) : null}
                   <Text
                     mainUiBody
                     text04
@@ -96,30 +98,34 @@ export function ActionsTable({
               </TableCell>
               <TableCell className="whitespace-nowrap">
                 <div className="flex items-center">
-                  <button
-                    type="button"
-                    className="rounded p-1 hover:bg-background-neutral-02"
-                    onClick={async () => {
-                      const confirmDelete = window.confirm(
-                        "Delete this MCP server and all its tools and configs? This cannot be undone."
-                      );
-                      if (!confirmDelete) return;
-                      const response = await deleteMCPServer(server.id);
-                      if (response.data?.success) {
-                        router.refresh();
-                      } else {
-                        setPopup({
-                          message: `Failed to delete MCP server - ${response.error}`,
-                          type: "error",
-                        });
-                      }
-                    }}
-                  >
-                    <SvgTrash
-                      stroke="currentColor"
-                      className="size-4 text-text-03"
-                    />
-                  </button>
+                  {isAdmin || server.owner === user?.email ? (
+                    <button
+                      type="button"
+                      className="rounded p-1 hover:bg-background-neutral-02"
+                      onClick={async () => {
+                        const confirmDelete = window.confirm(
+                          "Delete this MCP server and all its tools and configs? This cannot be undone."
+                        );
+                        if (!confirmDelete) return;
+                        const response = await deleteMCPServer(server.id);
+                        if (response.data?.success) {
+                          router.refresh();
+                        } else {
+                          setPopup({
+                            message: `Failed to delete MCP server - ${response.error}`,
+                            type: "error",
+                          });
+                        }
+                      }}
+                    >
+                      <SvgTrash
+                        stroke="currentColor"
+                        className="size-4 text-text-03"
+                      />
+                    </button>
+                  ) : (
+                    <Text text03>-</Text>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

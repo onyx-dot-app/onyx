@@ -41,7 +41,9 @@ export interface ToolSnapshot {
 export interface MCPServer {
   id: number;
   name: string;
+  description?: string | null;
   server_url: string;
+  owner: string;
   transport: MCPTransportType;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;

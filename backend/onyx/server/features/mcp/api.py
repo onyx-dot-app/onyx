@@ -27,6 +27,7 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -421,6 +422,8 @@ async def _connect_oauth(
         mcp_server = get_mcp_server_by_id(server_id, db)
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
         raise HTTPException(
@@ -851,6 +854,18 @@ class ServerToolsResponse(BaseModel):
     tools: list[MCPToolDescription]
 
 
+def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) -> None:
+    if not user or user.role == UserRole.ADMIN:
+        return
+
+    user_email = user.email if user else None
+    if not user_email or server.owner != user_email:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only modify MCP servers that you created.",
+        )
+
+
 def _db_mcp_server_to_api_mcp_server(
     db_server: DbMCPServer, email: str, db: Session, include_auth_config: bool = False
 ) -> MCPServer:
@@ -956,6 +971,7 @@ def _db_mcp_server_to_api_mcp_server(
         name=db_server.name,
         description=db_server.description,
         server_url=db_server.server_url,
+        owner=db_server.owner,
         transport=db_server.transport,
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
@@ -1110,6 +1126,8 @@ def _list_mcp_tools_by_id(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
     # Get connection config based on auth type
     # TODO: for now, only the admin that set up a per-user api key server can
     # see their configuration. This is probably not ideal. Other admins
@@ -1206,6 +1224,7 @@ def _upsert_mcp_server(
                 status_code=404,
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
         client_info = None
         if mcp_server.admin_connection_config:
             client_info_raw = mcp_server.admin_connection_config.config.get(
@@ -1258,6 +1277,12 @@ def _upsert_mcp_server(
         normalized_url = (request.server_url or "").strip()
         if not normalized_url:
             raise HTTPException(status_code=400, detail="server_url is required")
+
+        if not user or not user.email:
+            raise HTTPException(
+                status_code=400,
+                detail="Authenticated user email required to create MCP servers",
+            )
 
         # Check existing servers for same server_url
         existing_servers = get_all_mcp_servers(db_session)
@@ -1431,6 +1456,8 @@ def get_mcp_server_detail(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
+    _ensure_mcp_server_owner_or_admin(server, user)
+
     email = user.email if user else ""
 
     # TODO: user permissions per mcp server not yet implemented, for now
@@ -1484,6 +1511,8 @@ def get_mcp_server_db_tools(
         mcp_server = get_mcp_server_by_id(server_id, db)
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     # Get all tools associated with this MCP server
     mcp_tools = get_tools_by_mcp_server_id(server_id, db)
@@ -1581,6 +1610,8 @@ def update_mcp_server_with_tools(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
     if (
         mcp_server.admin_connection_config_id is None
         and mcp_server.auth_type != MCPAuthenticationType.NONE
@@ -1614,6 +1645,8 @@ def delete_mcp_server_admin(
     try:
         # Ensure it exists
         server = get_mcp_server_by_id(server_id, db_session)
+
+        _ensure_mcp_server_owner_or_admin(server, user)
 
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
