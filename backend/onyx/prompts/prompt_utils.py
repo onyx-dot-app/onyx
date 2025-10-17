@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
@@ -107,6 +108,15 @@ def handle_company_awareness(prompt_str: str) -> str:
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
         return prompt_str
+
+
+def handle_memories(prompt_str: str, memories_callback: Callable[[], list[str]]) -> str:
+    memories = memories_callback()
+    if not memories:
+        return prompt_str
+    memories_str = "\n".join(memories)
+    prompt_str += f"Information about the user asking the question:\n{memories_str}\n"
+    return prompt_str
 
 
 def build_task_prompt_reminders(

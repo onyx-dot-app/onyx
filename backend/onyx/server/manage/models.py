@@ -67,6 +67,13 @@ class UserPreferences(BaseModel):
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
 
 
+class UserPersonalization(BaseModel):
+    name: str = ""
+    role: str = ""
+    use_memories: bool = True
+    memories: list[str] = Field(default_factory=list)
+
+
 class TenantSnapshot(BaseModel):
     tenant_id: str
     number_of_users: int
@@ -85,6 +92,7 @@ class UserInfo(BaseModel):
     is_verified: bool
     role: UserRole
     preferences: UserPreferences
+    personalization: UserPersonalization = Field(default_factory=UserPersonalization)
     oidc_expiry: datetime | None = None
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
@@ -138,6 +146,12 @@ class UserInfo(BaseModel):
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            personalization=UserPersonalization(
+                name=user.personal_name or "",
+                role=user.personal_role or "",
+                use_memories=user.use_memories,
+                memories=[memory.memory_text for memory in (user.memories or [])],
+            ),
         )
 
 
@@ -175,6 +189,13 @@ class HiddenUpdateRequest(BaseModel):
 
 class AutoScrollRequest(BaseModel):
     auto_scroll: bool | None
+
+
+class PersonalizationUpdateRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    use_memories: bool | None = None
+    memories: list[str] | None = None
 
 
 class SlackBotCreationRequest(BaseModel):

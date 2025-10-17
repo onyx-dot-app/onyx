@@ -15,6 +15,7 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
+from onyx.chat.memories import make_memories_callback
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
@@ -116,7 +117,6 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
-
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
@@ -762,10 +762,11 @@ def stream_chat_message_objects(
                 files=latest_query_files,
             )
         )
+        mem_callback = make_memories_callback(user, db_session)
         system_message = (
-            default_build_system_message_v2(prompt_config, llm.config)
+            default_build_system_message_v2(prompt_config, llm.config, mem_callback)
             if simple_agent_framework_enabled
-            else default_build_system_message(prompt_config, llm.config)
+            else default_build_system_message(prompt_config, llm.config, mem_callback)
         )
         prompt_builder = AnswerPromptBuilder(
             user_message=prompt_user_message,
