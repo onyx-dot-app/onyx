@@ -64,22 +64,7 @@ def save_iteration(
         model_name=ctx.run_dependencies.llm.config.model_name,
         provider_type=ctx.run_dependencies.llm.config.model_provider,
     )
-    num_tokens = len(llm_tokenizer.encode(final_answer)) + 1
-    if not final_answer:
-        final_answer = "Generated image"
-
-    # Extract generated image file IDs from iteration answers to attach to message
-    image_file_descriptors: list[dict[str, str]] = []
-    for iteration_answer in ctx.aggregated_context.global_iteration_responses:
-        if iteration_answer.generated_images:
-            for generated_image in iteration_answer.generated_images:
-                image_file_descriptors.append(
-                    {
-                        "id": generated_image.file_id,
-                        "type": "image",
-                    }
-                )
-
+    num_tokens = len(llm_tokenizer.encode(final_answer or ""))
     # Update the chat message and its parent message in database
     update_db_session_with_messages(
         db_session=db_session,
@@ -94,7 +79,6 @@ def save_iteration(
         update_parent_message=True,
         research_answer_purpose=ResearchAnswerPurpose.ANSWER,
         token_count=num_tokens,
-        files=image_file_descriptors if image_file_descriptors else None,
     )
 
     # TODO: I don't think this is the ideal schema for all use cases
