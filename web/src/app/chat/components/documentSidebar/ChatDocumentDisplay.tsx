@@ -74,6 +74,10 @@ export function ChatDocumentDisplay({
   setPresentingDocument,
 }: DocumentDisplayProps) {
   const isInternet = document.is_internet;
+  const title = useMemo(
+    () => document.semantic_identifier ?? document.document_id,
+    [document.semantic_identifier, document.document_id]
+  );
 
   if (document.score === null) {
     return null;
@@ -81,11 +85,6 @@ export function ChatDocumentDisplay({
 
   const hasMetadata =
     document.updated_at || Object.keys(document.metadata).length > 0;
-
-  const title = useMemo(
-    () => document.semantic_identifier ?? document.document_id,
-    [document.semantic_identifier, document.document_id]
-  );
 
   return (
     <button
