@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -75,19 +76,37 @@ def create_project(
 def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
+    temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
     try:
+        parsed_temp_id_map: dict[str, str] | None = None
+        if temp_id_map:
+            try:
+                parsed = json.loads(temp_id_map)
+                if isinstance(parsed, dict):
+                    # Ensure all keys/values are strings
+                    parsed_temp_id_map = {str(k): str(v) for k, v in parsed.items()}
+                else:
+                    parsed_temp_id_map = None
+            except json.JSONDecodeError:
+                parsed_temp_id_map = None
+
         # Use our consolidated function that handles indexing properly
         categorized_files_result = upload_files_to_user_files_with_indexing(
-            files=files, project_id=project_id, user=user, db_session=db_session
+            files=files,
+            project_id=project_id,
+            user=user,
+            temp_id_map=parsed_temp_id_map,
+            db_session=db_session,
         )
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
-        logger.error(f"Error uploading files - type: {type(e).__name__}")
+        # Log error with type, message, and stack for easier debugging
+        logger.exception(f"Error uploading files - {type(e).__name__}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail="Failed to upload files. Please try again or contact support if the issue persists.",

@@ -93,7 +93,7 @@ export function FileCard({
         className={`flex h-9 w-9 items-center justify-center rounded-08 p-spacing-interline
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
-        {isProcessing ? (
+        {isProcessing || file.status === UserFileStatus.UPLOADING ? (
           <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
         ) : (
           <SvgFileText className="h-5 w-5 stroke-text-02" />
@@ -129,7 +129,6 @@ export default function ProjectContextPanel({
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
 }) {
   const { popup, setPopup } = usePopup();
-  const [tempProjectFiles, setTempProjectFiles] = useState<ProjectFile[]>([]);
   const { isOpen, toggleModal } = useChatModal();
   const open = isOpen(ModalIds.ProjectFilesModal);
 
@@ -153,71 +152,23 @@ export default function ProjectContextPanel({
   const {
     currentProjectDetails,
     currentProjectId,
-    uploadFiles,
-    recentFiles,
     unlinkFileFromProject,
     linkFileToProject,
+    allRecentFiles,
+    allCurrentProjectFiles,
+    beginUpload,
+    projects,
   } = useProjectsContext();
-  const [isUploading, setIsUploading] = useState(false);
 
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
       if (!files || files.length === 0) return;
-      setIsUploading(true);
-      try {
-        // Show temporary uploading files immediately
-        const tempFiles: ProjectFile[] = Array.from(files).map((file) => ({
-          id: file.name,
-          file_id: file.name,
-          name: file.name,
-          project_id: currentProjectId,
-          user_id: null,
-          created_at: new Date().toISOString(),
-          status: UserFileStatus.UPLOADING,
-          file_type: file.type,
-          last_accessed_at: new Date().toISOString(),
-          chat_file_type: ChatFileType.DOCUMENT,
-          token_count: 0,
-          chunk_count: 0,
-        }));
-        setTempProjectFiles((prev) => [...tempFiles, ...prev]);
-
-        const result: CategorizedFiles = await uploadFiles(
-          Array.from(files),
-          currentProjectId
-        );
-        // Replace the first N temp entries with backend entries so they stay at the front
-        setTempProjectFiles((prev) => [
-          ...result.user_files,
-          ...prev.slice(tempFiles.length),
-        ]);
-        const unsupported = result?.unsupported_files || [];
-        const nonAccepted = result?.non_accepted_files || [];
-        if (unsupported.length > 0 || nonAccepted.length > 0) {
-          const parts: string[] = [];
-          if (unsupported.length > 0) {
-            parts.push(`File type not supported: ${unsupported.join(", ")}`);
-          }
-          if (nonAccepted.length > 0) {
-            parts.push(
-              `Content exceeds allowed token limit: ${nonAccepted.join(", ")}`
-            );
-          }
-          setPopup({
-            type: "warning",
-            message: `Some files were not uploaded. ${parts.join(" | ")}`,
-          });
-        }
-      } finally {
-        setIsUploading(false);
-        setTempProjectFiles([]);
-      }
+      beginUpload(Array.from(files), currentProjectId, setPopup);
     },
-    [currentProjectId, uploadFiles, setPopup]
+    [currentProjectId, beginUpload]
   );
 
-  const totalFiles =
-    (currentProjectDetails?.files || []).length + tempProjectFiles.length;
+  const totalFiles = allCurrentProjectFiles.length;
   const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
 
   const handleUploadChange = useCallback(
@@ -248,7 +199,8 @@ export default function ProjectContextPanel({
       <div className="flex flex-col gap-1 text-text-04">
         <SvgFolderOpen className="h-8 w-8 text-text-04" />
         <Text headingH2 className="font-heading-h2">
-          {currentProjectDetails?.project?.name || "Loading project..."}
+          {projects.find((p) => p.id === currentProjectId)?.name ||
+            "Loading project..."}
         </Text>
       </div>
 
@@ -302,12 +254,12 @@ export default function ProjectContextPanel({
                 </Text>
               </LineItem>
             }
-            recentFiles={recentFiles}
+            recentFiles={allRecentFiles}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
-              await linkFileToProject(currentProjectId, file.id);
+              linkFileToProject(currentProjectId, file);
             }}
             onUnpickRecent={async (file) => {
               if (!currentProjectId) return;
@@ -315,17 +267,13 @@ export default function ProjectContextPanel({
             }}
             handleUploadChange={handleUploadChange}
             className="mr-1.5"
-            selectedFileIds={(currentProjectDetails?.files || []).map(
-              (f) => f.id
-            )}
+            selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
           />
         </div>
         {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}
         <input {...getInputProps()} />
 
-        {tempProjectFiles.length > 0 ||
-        (currentProjectDetails?.files &&
-          currentProjectDetails.files.length > 0) ? (
+        {allCurrentProjectFiles.length > 0 ? (
           <>
             {/* Mobile / small screens: just show a button to view files */}
             <div className="sm:hidden">
@@ -350,27 +298,18 @@ export default function ProjectContextPanel({
             {/* Desktop / larger screens: show previews with optional View All */}
             <div className="hidden sm:flex gap-spacing-inline relative">
               {(() => {
-                const byId = new Map<string, ProjectFile>();
-                // Insert temp files first so new uploads appear at the front immediately
-                tempProjectFiles.forEach((f) => byId.set(f.id, f));
-                // Then insert backend files to overwrite temp entries while keeping order
-                (currentProjectDetails?.files || []).forEach((f) => {
-                  byId.set(f.id, f);
-                });
-                return Array.from(byId.values())
-                  .slice(0, 4)
-                  .map((f) => (
-                    <div key={f.id} className="w-40">
-                      <FileCard
-                        file={f}
-                        removeFile={async (fileId: string) => {
-                          if (!currentProjectId) return;
-                          await unlinkFileFromProject(currentProjectId, fileId);
-                        }}
-                        onFileClick={handleFileClick}
-                      />
-                    </div>
-                  ));
+                return allCurrentProjectFiles.slice(0, 4).map((f) => (
+                  <div key={f.id} className="w-40">
+                    <FileCard
+                      file={f}
+                      removeFile={async (fileId: string) => {
+                        if (!currentProjectId) return;
+                        await unlinkFileFromProject(currentProjectId, fileId);
+                      }}
+                      onFileClick={handleFileClick}
+                    />
+                  </div>
+                ));
               })()}
               {totalFiles > 4 && (
                 <button
@@ -434,10 +373,7 @@ export default function ProjectContextPanel({
             title="Project files"
             description="Sessions in this project can access the files here."
             icon={SvgFiles}
-            recentFiles={[
-              ...tempProjectFiles,
-              ...(currentProjectDetails?.files || []),
-            ]}
+            recentFiles={[...allCurrentProjectFiles]}
             onFileClick={handleFileClick}
             handleUploadChange={handleUploadChange}
             showRemove

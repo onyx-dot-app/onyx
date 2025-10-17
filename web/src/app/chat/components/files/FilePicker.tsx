@@ -78,6 +78,7 @@ export function FilePickerContents({
                 <Row>
                   <div className="p-0.5">
                     {String(f.status) === UserFileStatus.PROCESSING ||
+                    String(f.status) === UserFileStatus.UPLOADING ||
                     String(f.status) === UserFileStatus.DELETING ? (
                       <Loader2 className="h-4 w-4 animate-spin text-text-02" />
                     ) : (
