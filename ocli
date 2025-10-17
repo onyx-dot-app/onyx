@@ -95,14 +95,23 @@ def add_dependency(package: str, target_sets: List[str]):
         package_name = (
             package.split("[")[0].split("==")[0].split(">=")[0].split("<=")[0]
         )
-        already_exists = any(
-            line.strip().startswith(package_name) and not line.strip().startswith("#")
-            for line in lines
-        )
 
-        if already_exists:
-            print(f"Package '{package_name}' already in {in_file}")
+        # Find existing package line index
+        existing_index = None
+        for i, line in enumerate(lines):
+            if line.strip().startswith(package_name) and not line.strip().startswith(
+                "#"
+            ):
+                existing_index = i
+                break
+
+        if existing_index is not None:
+            # Replace existing package
+            lines[existing_index] = package
+            in_file.write_text("\n".join(lines) + "\n")
+            print(f"Replaced '{package_name}' with '{package}' in {in_file}")
         else:
+            # Add new package
             lines.append(package)
             in_file.write_text("\n".join(lines) + "\n")
             print(f"Added '{package}' to {in_file}")
@@ -110,6 +119,7 @@ def add_dependency(package: str, target_sets: List[str]):
     # Recompile all valid combinations
     print("\nRecompiling all valid combinations...")
     compile_all_combinations()
+    sync_environment()
 
 
 def remove_dependency(package: str, target_sets: List[str]):
@@ -147,6 +157,7 @@ def remove_dependency(package: str, target_sets: List[str]):
 
     print("\nRecompiling all valid combinations...")
     compile_all_combinations()
+    sync_environment()
 
 
 def compile_combination(combination: List[str]) -> str:
