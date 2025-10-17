@@ -22,6 +22,7 @@ REQUIREMENT_SETS = {
     "ee": str(REQ_DIR / "ee.in"),
     "dev": str(REQ_DIR / "dev.in"),
     "model_server": str(REQ_DIR / "model_server.in"),
+    "local_dev": str(REQ_DIR / "local_dev.in"),
 }
 
 COMPILED_FILES = {
@@ -29,6 +30,7 @@ COMPILED_FILES = {
     "ee": str(FROZEN_DIR / "ee.txt"),
     "dev": str(FROZEN_DIR / "dev.txt"),
     "model_server": str(FROZEN_DIR / "model_server.txt"),
+    "local_dev": str(FROZEN_DIR / "local_dev.txt"),
 }
 
 # Valid installation combinations
@@ -38,7 +40,7 @@ VALID_COMBINATIONS = [
     ["default", "ee"],
     ["model_server"],
     ["default", "ee", "dev"],
-    ["default", "ee", "dev", "model_server"],
+    ["default", "ee", "dev", "model_server", "local_dev"],
 ]
 
 
@@ -405,7 +407,7 @@ def sync_environment():
     run_command(cmd)
     print("\n✓ Environment synced successfully!")
     print("\nNote: For production/CI with specific combinations, use:")
-    print("  uv pip sync backend/requirements/<files>.txt")
+    print("  uv pip sync backend/requirements/frozen/<files>.txt")
 
 
 def list_dependencies():

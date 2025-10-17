@@ -10,7 +10,7 @@ response.
 ## Requirements
 
 - Python 3.11+
-- The `mcp` and `fastmcp` packages (already included in `backend/requirements/default.txt`)
+- The `mcp` and `fastmcp` packages (already included in `backend/requirements/frozen/default.txt`)
 - Network access to an Onyx deployment
 - An Onyx API key with access to the chat APIs
 
