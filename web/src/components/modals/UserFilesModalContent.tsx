@@ -20,6 +20,7 @@ import SvgTrash from "@/icons/trash";
 import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
+import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface UserFilesModalProps {
@@ -258,8 +259,12 @@ export default function UserFilesModalContent({
             >
               <div className="flex items-center p-spacing-inline flex-1 min-w-0">
                 <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
-                  {String(f.status).toLowerCase() === "processing" ||
-                  String(f.status).toLowerCase() === "uploading" ? (
+                  {String((f as ProjectFile).status) ===
+                    UserFileStatus.PROCESSING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.UPLOADING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.DELETING ? (
                     <Loader2 className="h-5 w-5 text-text-02 animate-spin" />
                   ) : (
                     <>
@@ -289,8 +294,9 @@ export default function UserFilesModalContent({
                       </Truncated>
                     </div>
                     {onFileClick &&
-                      String(f.status).toLowerCase() !== "processing" &&
-                      String(f.status).toLowerCase() !== "uploading" && (
+                      String(f.status) !== UserFileStatus.PROCESSING &&
+                      String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
                         <IconButton
                           internal
                           icon={SvgExternalLink}
@@ -307,11 +313,13 @@ export default function UserFilesModalContent({
 
                   <Text text03 secondaryBody>
                     {(() => {
-                      const s = String(f.status || "").toLowerCase();
+                      const s = String(f.status || "");
                       const typeLabel = getFileExtension(f.name);
-                      if (s === "processing") return "Processing...";
-                      if (s === "uploading") return "Uploading...";
-                      if (s === "completed") return typeLabel;
+                      if (s === UserFileStatus.PROCESSING)
+                        return "Processing...";
+                      if (s === UserFileStatus.UPLOADING) return "Uploading...";
+                      if (s === UserFileStatus.DELETING) return "Deleting...";
+                      if (s === UserFileStatus.COMPLETED) return typeLabel;
                       return f.status ? f.status : typeLabel;
                     })()}
                   </Text>
@@ -325,7 +333,8 @@ export default function UserFilesModalContent({
                 )}
                 {!showRemove && <div className="p-spacing-inline"></div>}
                 {showRemove &&
-                  String(f.status).toLowerCase() !== "processing" && (
+                  String(f.status) !== UserFileStatus.UPLOADING &&
+                  String(f.status) !== UserFileStatus.DELETING && (
                     <IconButton
                       internal
                       icon={SvgTrash}

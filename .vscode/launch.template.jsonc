@@ -232,7 +232,7 @@
         "--loglevel=INFO",
         "--hostname=background@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,docprocessing,connector_doc_fetching,user_files_indexing,connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,docprocessing,connector_doc_fetching,user_files_indexing,connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete"
       ],
       "presentation": {
         "group": "2"
@@ -348,7 +348,7 @@
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
         "-Q",
-        "user_file_processing,user_file_project_sync"
+        "user_file_processing,user_file_project_sync,user_file_delete"
       ],
       "presentation": {
         "group": "2"

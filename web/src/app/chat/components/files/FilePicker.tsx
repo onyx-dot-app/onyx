@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
@@ -10,14 +10,17 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
-import { ProjectFile } from "../../projects/projectsService";
+import { ProjectFile, UserFileStatus } from "../../projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgFiles from "@/icons/files";
 import MoreHorizontal from "@/icons/more-horizontal";
 import SvgFileText from "@/icons/file-text";
 import SvgExternalLink from "@/icons/external-link";
+import SvgTrash from "@/icons/trash";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 
@@ -32,6 +35,7 @@ interface FilePickerContentsProps {
   onFileClick?: (file: ProjectFile) => void;
   triggerUploadPicker: () => void;
   setShowRecentFiles: (show: boolean) => void;
+  onDelete?: (file: ProjectFile) => void;
 }
 
 const getFileExtension = (fileName: string): string => {
@@ -48,6 +52,7 @@ export function FilePickerContents({
   onFileClick,
   triggerUploadPicker,
   setShowRecentFiles,
+  onDelete,
 }: FilePickerContentsProps) {
   return (
     <>
@@ -72,20 +77,40 @@ export function FilePickerContents({
               <div className="flex items-center w-full m-1 mt-1 p-0.5 group">
                 <Row>
                   <div className="p-0.5">
-                    {String(f.status).toLowerCase() === "processing" ? (
+                    {String(f.status) === UserFileStatus.PROCESSING ||
+                    String(f.status) === UserFileStatus.UPLOADING ||
+                    String(f.status) === UserFileStatus.DELETING ? (
                       <Loader2 className="h-4 w-4 animate-spin text-text-02" />
                     ) : (
                       <SvgFileText className="h-4 w-4 stroke-text-02" />
                     )}
                   </div>
-                  <Text
-                    text03
-                    mainUiBody
-                    nowrap
-                    className="truncate max-w-[160px]"
-                  >
-                    {f.name}
-                  </Text>
+                  <div className="flex items-center gap-1 min-w-0">
+                    <Text
+                      text03
+                      mainUiBody
+                      nowrap
+                      className="truncate max-w-[160px]"
+                    >
+                      {f.name}
+                    </Text>
+                    {onFileClick &&
+                      String(f.status) !== UserFileStatus.PROCESSING &&
+                      String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
+                        <IconButton
+                          internal
+                          icon={SvgExternalLink}
+                          tooltip="View file"
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onFileClick(f);
+                          }}
+                        />
+                      )}
+                  </div>
 
                   <div className="relative flex items-center ml-auto mr-2">
                     <Text
@@ -96,17 +121,19 @@ export function FilePickerContents({
                       {getFileExtension(f.name)}
                     </Text>
 
-                    {onFileClick &&
-                      String(f.status).toLowerCase() !== "processing" && (
+                    {onDelete &&
+                      String(f.status) !== UserFileStatus.PROCESSING &&
+                      String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
                         <IconButton
                           internal
-                          icon={SvgExternalLink}
-                          tooltip="View file"
+                          icon={SvgTrash}
+                          tooltip="Delete file"
                           className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
-                            onFileClick(f);
+                            onDelete(f);
                           }}
                         />
                       )}
@@ -167,14 +194,80 @@ export default function FilePicker({
   const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [open, setOpen] = useState(false);
   // Snapshot of recent files to avoid re-arranging when the modal is open
-  const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<
-    ProjectFile[] | null
-  >(null);
+  const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<ProjectFile[]>(
+    []
+  );
+  const { popup, setPopup } = usePopup();
+  const { deleteUserFile, setCurrentMessageFiles } = useProjectsContext();
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
+  useEffect(() => {
+    setRecentFilesSnapshot(recentFiles.slice());
+  }, [recentFiles]);
+
+  const handleDeleteFile = (file: ProjectFile) => {
+    const lastStatus = file.status;
+    setRecentFilesSnapshot((prev) =>
+      prev.map((f) =>
+        f.id === file.id ? { ...f, status: UserFileStatus.DELETING } : f
+      )
+    );
+    deleteUserFile(file.id)
+      .then((result) => {
+        if (!result.has_associations) {
+          setPopup({
+            message: "File deleted successfully",
+            type: "success",
+          });
+          setCurrentMessageFiles((prev) =>
+            prev.filter((f) => f.id !== file.id)
+          );
+          setRecentFilesSnapshot((prev) =>
+            prev.filter((f) => f.id !== file.id)
+          );
+        } else {
+          setRecentFilesSnapshot((prev) =>
+            prev.map((f) =>
+              f.id === file.id ? { ...f, status: lastStatus } : f
+            )
+          );
+          let projects = result.project_names.join(", ");
+          let assistants = result.assistant_names.join(", ");
+          let message = "Cannot delete file. It is associated with";
+          if (projects) {
+            message += ` projects: ${projects}`;
+          }
+          if (projects && assistants) {
+            message += " and ";
+          }
+          if (assistants) {
+            message += `assistants: ${assistants}`;
+          }
+
+          setPopup({
+            message: message,
+            type: "error",
+          });
+        }
+      })
+      .catch((error) => {
+        // Revert status and show error if the delete request fails
+        setRecentFilesSnapshot((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, status: lastStatus } : f))
+        );
+        setPopup({
+          message: "Failed to delete file. Please try again.",
+          type: "error",
+        });
+        // Useful for debugging; safe in client components
+        console.error("Failed to delete file", error);
+      });
+  };
+
   return (
     <div className={cn("relative", className)}>
+      {popup}
       <input
         ref={fileInputRef}
         type="file"
@@ -196,7 +289,7 @@ export default function FilePicker({
           side="top"
         >
           <FilePickerContents
-            recentFiles={recentFiles}
+            recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
               onPickRecent && onPickRecent(file);
               setOpen(false);
@@ -205,17 +298,13 @@ export default function FilePicker({
               onFileClick && onFileClick(file);
               setOpen(false);
             }}
+            onDelete={handleDeleteFile}
             triggerUploadPicker={() => {
               triggerUploadPicker();
               setOpen(false);
             }}
             setShowRecentFiles={(show) => {
               setShowRecentFiles(show);
-              if (show) {
-                setRecentFilesSnapshot(recentFiles.slice());
-              } else {
-                setRecentFilesSnapshot(null);
-              }
               // Close the small popover when opening the dialog
               if (show) setOpen(false);
             }}
@@ -232,7 +321,7 @@ export default function FilePicker({
             title="Recent Files"
             description="Upload files or pick from your recent files."
             icon={SvgFiles}
-            recentFiles={recentFilesSnapshot ?? recentFiles}
+            recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
               onPickRecent && onPickRecent(file);
             }}
@@ -243,6 +332,8 @@ export default function FilePicker({
             onFileClick={onFileClick}
             onClose={() => setShowRecentFiles(false)}
             selectedFileIds={selectedFileIds}
+            showRemove
+            onRemove={handleDeleteFile}
           />
         </CoreModal>
       )}
