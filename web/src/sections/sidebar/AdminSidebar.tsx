@@ -100,6 +100,12 @@ const custom_assistants_items = (
         link: "/admin/actions",
       }
     );
+  } else {
+    items.push({
+      name: "Actions",
+      icon: ToolIconSkeleton,
+      link: "/admin/actions",
+    });
   }
 
   if (enableEnterprise) {

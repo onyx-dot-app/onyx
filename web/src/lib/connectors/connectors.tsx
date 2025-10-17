@@ -1155,6 +1155,15 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: true,
       },
       {
+        type: "checkbox",
+        label: "EU Data Residency",
+        name: "european_residency",
+        description:
+          "Check this box if your bucket has EU data residency enabled.",
+        optional: true,
+        default: false,
+      },
+      {
         type: "text",
         label: "Bucket Type",
         name: "bucket_type",
@@ -1812,6 +1821,7 @@ export interface R2Config {
   bucket_type: "r2";
   bucket_name: string;
   prefix: string;
+  european_residency?: boolean;
 }
 
 export interface GCSConfig {
