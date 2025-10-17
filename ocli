@@ -7,13 +7,15 @@ Manages Python dependencies across multiple requirement sets with automatic free
 import argparse
 import subprocess
 import sys
-from pathlib import Path
-from typing import List, Dict
 import tempfile
+from pathlib import Path
+from typing import Dict
+from typing import List
 
 # Configuration
 REPO_ROOT = Path(__file__).resolve().parent
-REQ_DIR = REPO_ROOT / "backend" / "requirements"
+REQ_DIR = REPO_ROOT / "backend" / "requirements" / "in"
+FROZEN_DIR = REPO_ROOT / "backend" / "requirements" / "frozen"
 
 REQUIREMENT_SETS = {
     "default": str(REQ_DIR / "default.in"),
@@ -23,10 +25,10 @@ REQUIREMENT_SETS = {
 }
 
 COMPILED_FILES = {
-    "default": str(REQ_DIR / "default.txt"),
-    "ee": str(REQ_DIR / "ee.txt"),
-    "dev": str(REQ_DIR / "dev.txt"),
-    "model_server": str(REQ_DIR / "model_server.txt"),
+    "default": str(FROZEN_DIR / "default.txt"),
+    "ee": str(FROZEN_DIR / "ee.txt"),
+    "dev": str(FROZEN_DIR / "dev.txt"),
+    "model_server": str(FROZEN_DIR / "model_server.txt"),
 }
 
 # Valid installation combinations
@@ -60,7 +62,7 @@ def initialize_project():
     # Ensure the requirements directory exists
     REQ_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Using requirements directory: {REQ_DIR}")
-    
+
     for name, filename in REQUIREMENT_SETS.items():
         filepath = Path(filename)
         if not filepath.exists():
@@ -79,38 +81,40 @@ def initialize_project():
 def add_dependency(package: str, target_sets: List[str]):
     """Add a dependency to specified requirement sets."""
     ensure_uv_installed()
-    
+
     for target in target_sets:
         if target not in REQUIREMENT_SETS:
             print(f"Error: Unknown requirement set '{target}'")
             print(f"Valid sets: {', '.join(REQUIREMENT_SETS.keys())}")
             sys.exit(1)
-    
+
     # Add package to each .in file
     for target in target_sets:
         in_file = Path(REQUIREMENT_SETS[target])
-        
+
         # Read existing content
         if in_file.exists():
             content = in_file.read_text()
             lines = content.splitlines()
         else:
             lines = []
-        
+
         # Check if package already exists
-        package_name = package.split("[")[0].split("==")[0].split(">=")[0].split("<=")[0]
+        package_name = (
+            package.split("[")[0].split("==")[0].split(">=")[0].split("<=")[0]
+        )
         already_exists = any(
             line.strip().startswith(package_name) and not line.strip().startswith("#")
             for line in lines
         )
-        
+
         if already_exists:
             print(f"Package '{package_name}' already in {in_file}")
         else:
             lines.append(package)
             in_file.write_text("\n".join(lines) + "\n")
             print(f"Added '{package}' to {in_file}")
-    
+
     # Recompile all valid combinations
     print("\nRecompiling all valid combinations...")
     compile_all_combinations()
@@ -119,32 +123,36 @@ def add_dependency(package: str, target_sets: List[str]):
 def remove_dependency(package: str, target_sets: List[str]):
     """Remove a dependency from specified requirement sets."""
     ensure_uv_installed()
-    
+
     for target in target_sets:
         if target not in REQUIREMENT_SETS:
             print(f"Error: Unknown requirement set '{target}'")
             sys.exit(1)
-    
+
     package_name = package.split("[")[0].split("==")[0].split(">=")[0].split("<=")[0]
-    
+
     for target in target_sets:
         in_file = Path(REQUIREMENT_SETS[target])
-        
+
         if not in_file.exists():
             continue
-        
+
         lines = in_file.read_text().splitlines()
         new_lines = [
-            line for line in lines
-            if not (line.strip().startswith(package_name) and not line.strip().startswith("#"))
+            line
+            for line in lines
+            if not (
+                line.strip().startswith(package_name)
+                and not line.strip().startswith("#")
+            )
         ]
-        
+
         if len(new_lines) != len(lines):
             in_file.write_text("\n".join(new_lines) + "\n")
             print(f"Removed '{package_name}' from {in_file}")
         else:
             print(f"Package '{package_name}' not found in {in_file}")
-    
+
     print("\nRecompiling all valid combinations...")
     compile_all_combinations()
 
@@ -155,51 +163,57 @@ def compile_combination(combination: List[str]) -> str:
     Returns the compiled content as a string.
     """
     ensure_uv_installed()
-    
+
     # Create a temporary combined input file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.in', delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".in", delete=False) as tmp:
         tmp_path = Path(tmp.name)
-        
+
         # Write all input files to the temp file with markers
         for name in combination:
             in_file = REQUIREMENT_SETS[name]
             if not Path(in_file).exists():
                 print(f"Warning: {in_file} does not exist, skipping")
                 continue
-            
+
             tmp.write(f"# --- {name} ---\n")
             content = Path(in_file).read_text()
             # Filter out comments and empty lines for cleaner compilation
             lines = [
-                line for line in content.splitlines()
+                line
+                for line in content.splitlines()
                 if line.strip() and not line.strip().startswith("#")
             ]
             tmp.write("\n".join(lines) + "\n")
-    
+
     try:
         # Compile the combined file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as out_tmp:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as out_tmp:
             out_tmp_path = Path(out_tmp.name)
-        
+
         cmd = [
-            "uv", "pip", "compile",
+            "uv",
+            "pip",
+            "compile",
             str(tmp_path),
-            "--output-file", str(out_tmp_path),
+            "--output-file",
+            str(out_tmp_path),
             "--generate-hashes",
         ]
-        
+
         print(f"\nCompiling combination: {', '.join(combination)}")
         run_command(cmd)
-        
+
         # Read the compiled output
         compiled_content = out_tmp_path.read_text()
-        
+
         return compiled_content
-    
+
     finally:
         # Cleanup temp files
         tmp_path.unlink(missing_ok=True)
-        if 'out_tmp_path' in locals():
+        if "out_tmp_path" in locals():
             out_tmp_path.unlink(missing_ok=True)
 
 
@@ -207,29 +221,29 @@ def extract_package_versions(compiled_content: str) -> Dict[str, str]:
     """Extract package name -> full spec mapping from compiled requirements."""
     packages = {}
     lines = compiled_content.splitlines()
-    
+
     i = 0
     while i < len(lines):
         line = lines[i].strip()
-        
+
         # Skip comments and empty lines
         if not line or line.startswith("#"):
             i += 1
             continue
-        
+
         # Parse package line (may span multiple lines with hashes)
         full_spec = line
         i += 1
-        
+
         # Collect continuation lines (hashes)
         while i < len(lines) and lines[i].strip().startswith("--hash="):
             full_spec += "\n" + lines[i]
             i += 1
-        
+
         # Extract package name
         package_name = line.split("==")[0].split("[")[0].strip().lower()
         packages[package_name] = full_spec
-    
+
     return packages
 
 
@@ -240,48 +254,48 @@ def compile_all_combinations():
     then filter down to individual files. This guarantees consistency.
     """
     ensure_uv_installed()
-    
+
     print(f"\n{'='*60}")
     print("Step 1: Compiling universal resolution (all sets together)")
     print(f"{'='*60}")
-    
+
     # Compile all sets together to get universal versions
     all_sets = list(REQUIREMENT_SETS.keys())
     universal_content = compile_combination(all_sets)
     universal_packages = extract_package_versions(universal_content)
-    
+
     print(f"  ✓ Resolved {len(universal_packages)} total packages")
-    
+
     print(f"\n{'='*60}")
     print("Step 2: Writing individual requirement files")
     print(f"{'='*60}")
-    
+
     # For each requirement set, figure out which packages it needs
     # by compiling it individually (but we'll use versions from universal resolution)
     for set_name, out_file in COMPILED_FILES.items():
         in_file = REQUIREMENT_SETS[set_name]
-        
+
         if not Path(in_file).exists():
             print(f"\nSkipping {out_file} (no {in_file})")
             continue
-        
+
         print(f"\nProcessing {set_name}:")
-        
+
         # Compile this set alone to find which packages it needs
         # (not for versions, just to know the dependency tree)
         individual_content = compile_combination([set_name])
         needed_packages = set(extract_package_versions(individual_content).keys())
-        
+
         print(f"  - Needs {len(needed_packages)} packages")
-        
+
         # Now write the output using versions from universal resolution
         missing_packages = []
-        with open(out_file, 'w') as f:
-            f.write(f"# This file is autogenerated by ocli\n")
-            f.write(f"# Do not edit manually - use 'ocli add' or 'ocli remove'\n")
-            f.write(f"# Source: {in_file}\n")
-            f.write(f"# Resolved with universal compilation for consistency\n\n")
-            
+        with open(out_file, "w") as f:
+            f.write("# This file is autogenerated by ocli\n")
+            f.write("# Do not edit manually - use 'ocli add' or 'ocli remove'\n")
+            f.write("# Source: {in_file}\n")
+            f.write("# Resolved with universal compilation for consistency\n\n")
+
             written = 0
             for pkg_name in sorted(needed_packages):
                 if pkg_name in universal_packages:
@@ -289,20 +303,22 @@ def compile_all_combinations():
                     written += 1
                 else:
                     missing_packages.append(pkg_name)
-            
+
             print(f"  ✓ Wrote {written} packages to {out_file}")
-            
+
             if missing_packages:
-                print(f"  ⚠ Warning: {len(missing_packages)} packages not in universal resolution:")
+                print(
+                    f"  ⚠ Warning: {len(missing_packages)} packages not in universal resolution:"
+                )
                 for pkg in missing_packages[:5]:  # Show first 5
                     print(f"    - {pkg}")
                 if len(missing_packages) > 5:
                     print(f"    ... and {len(missing_packages) - 5} more")
-    
+
     print(f"\n{'='*60}")
     print("✓ All requirement files compiled successfully!")
     print(f"{'='*60}")
-    
+
     # Verify all combinations still work
     print("\nVerifying all combinations resolve correctly...")
     verify_all_combinations()
@@ -311,50 +327,55 @@ def compile_all_combinations():
 def verify_all_combinations():
     """Verify that all valid combinations can be resolved together."""
     ensure_uv_installed()
-    
+
     all_valid = True
-    
+
     for combination in VALID_COMBINATIONS:
         txt_files = [COMPILED_FILES[name] for name in combination]
-        
+
         # Check all files exist
         missing = [f for f in txt_files if not Path(f).exists()]
         if missing:
             print(f"  ✗ {', '.join(combination)}: Missing files {missing}")
             all_valid = False
             continue
-        
+
         # Try to compile them together to check for conflicts
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.in', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".in", delete=False) as tmp:
             tmp_path = Path(tmp.name)
             for txt_file in txt_files:
                 tmp.write(f"-r {txt_file}\n")
-        
+
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as out_tmp:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as out_tmp:
                 out_tmp_path = Path(out_tmp.name)
-            
+
             cmd = [
-                "uv", "pip", "compile",
+                "uv",
+                "pip",
+                "compile",
                 str(tmp_path),
-                "--output-file", str(out_tmp_path),
+                "--output-file",
+                str(out_tmp_path),
                 "--quiet",
             ]
-            
+
             result = subprocess.run(cmd, check=False, capture_output=True)
-            
+
             if result.returncode == 0:
                 print(f"  ✓ {', '.join(combination)}")
             else:
                 print(f"  ✗ {', '.join(combination)}: Compilation failed")
                 print(result.stderr.decode())
                 all_valid = False
-        
+
         finally:
             tmp_path.unlink(missing_ok=True)
-            if 'out_tmp_path' in locals():
+            if "out_tmp_path" in locals():
                 out_tmp_path.unlink(missing_ok=True)
-    
+
     if all_valid:
         print("\n✓ All combinations verified successfully!")
     else:
@@ -365,18 +386,18 @@ def verify_all_combinations():
 def sync_environment():
     """Install all dependencies using uv pip sync."""
     ensure_uv_installed()
-    
+
     # Always sync all sets together
     all_sets = list(REQUIREMENT_SETS.keys())
     txt_files = [COMPILED_FILES[name] for name in all_sets]
-    
+
     # Check all files exist
     missing = [txt_file for txt_file in txt_files if not Path(txt_file).exists()]
     if missing:
         print(f"Error: Missing compiled files: {', '.join(missing)}")
         print("Run './ocli compile' first.")
         sys.exit(1)
-    
+
     # Use uv pip sync for clean installation
     cmd = ["uv", "pip", "sync"] + txt_files
     print(f"\nSyncing environment with all requirement sets: {', '.join(all_sets)}")
@@ -395,7 +416,8 @@ def list_dependencies():
         if filepath.exists():
             content = filepath.read_text()
             deps = [
-                line.strip() for line in content.splitlines()
+                line.strip()
+                for line in content.splitlines()
                 if line.strip() and not line.strip().startswith("#")
             ]
             if deps:
@@ -412,10 +434,10 @@ def main():
         description="Manage Python dependencies across multiple requirement sets using uv"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # init command
     subparsers.add_parser("init", help="Initialize requirement files")
-    
+
     # add command
     add_parser = subparsers.add_parser("add", help="Add a dependency")
     add_parser.add_argument("package", help="Package to add (e.g., 'requests>=2.28.0')")
@@ -426,7 +448,7 @@ def main():
         choices=list(REQUIREMENT_SETS.keys()),
         help="Target requirement set(s)",
     )
-    
+
     # remove command
     remove_parser = subparsers.add_parser("remove", help="Remove a dependency")
     remove_parser.add_argument("package", help="Package to remove")
@@ -438,25 +460,27 @@ def main():
         choices=list(REQUIREMENT_SETS.keys()),
         help="Target requirement set(s)",
     )
-    
+
     # compile command
-    compile_parser = subparsers.add_parser("compile", help="Compile all valid combinations")
-    
+    subparsers.add_parser("compile", help="Compile all valid combinations")
+
     # sync command
-    sync_parser = subparsers.add_parser("sync", help="Sync environment with ALL requirement sets (local dev)")
-    
+    subparsers.add_parser(
+        "sync", help="Sync environment with ALL requirement sets (local dev)"
+    )
+
     # list command
     subparsers.add_parser("list", help="List all dependencies")
-    
+
     # verify command
     subparsers.add_parser("verify", help="Verify all combinations resolve correctly")
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    
+
     if args.command == "init":
         initialize_project()
     elif args.command == "add":
