@@ -22,7 +22,7 @@ def mask_pii(
     """Маскирование данных"""
 
     mapping = {}
-    pii_entities = config["pii_entities"]
+    pii_entities = config.get("pii_entities")
 
     if not pii_entities:
         return text, mapping
