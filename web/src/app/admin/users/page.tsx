@@ -15,7 +15,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -25,6 +25,32 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
+
+interface CountDisplayProps {
+  label: string;
+  value: number | null;
+  isLoading: boolean;
+}
+
+function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
+  const displayValue = isLoading
+    ? "..."
+    : value === null
+      ? "-"
+      : value.toLocaleString();
+
+  return (
+    // <div className="flex items-center gap-spacing-inline-mini">
+    <div className="flex items-center gap-spacing-inline px-spacing-inline py-spacing-interline-mini rounded-06">
+      <Text mainUiMuted text03>
+        {label}
+      </Text>
+      <Text headingH3 text05>
+        {displayValue}
+      </Text>
+    </div>
+  );
+}
 
 const UsersTables = ({
   q,
@@ -37,6 +63,11 @@ const UsersTables = ({
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
 }) => {
+  const [currentUsersCount, setCurrentUsersCount] = useState<number | null>(
+    null
+  );
+  const [currentUsersLoading, setCurrentUsersLoading] = useState<boolean>(true);
+
   const downloadAllUsers = async () => {
     setIsDownloadingUsers(true);
     const startTime = Date.now();
@@ -97,6 +128,11 @@ const UsersTables = ({
     NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
     errorHandlingFetcher
   );
+
+  const invitedUsersCount =
+    invitedUsers === undefined ? null : invitedUsers.length;
+  const pendingUsersCount =
+    pendingUsers === undefined ? null : pendingUsers.length;
   // Show loading animation only during the initial data fetch
   if (!validDomains) {
     return <ThreeDotsLoader />;
@@ -124,7 +160,7 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-spacing-inline">
               <CardTitle>Current Users</CardTitle>
               <Button
                 leftIcon={SvgDownloadCloud}
@@ -141,6 +177,20 @@ const UsersTables = ({
               setPopup={setPopup}
               q={q}
               invitedUsersMutate={invitedUsersMutate}
+              countDisplay={
+                <CountDisplay
+                  label="Total users"
+                  value={currentUsersCount}
+                  isLoading={currentUsersLoading}
+                />
+              }
+              onTotalItemsChange={(count) => setCurrentUsersCount(count)}
+              onLoadingChange={(loading) => {
+                setCurrentUsersLoading(loading);
+                if (loading) {
+                  setCurrentUsersCount(null);
+                }
+              }}
             />
           </CardContent>
         </Card>
@@ -148,7 +198,14 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <CardTitle>Invited Users</CardTitle>
+            <div className="flex justify-between items-center gap-spacing-inline">
+              <CardTitle>Invited Users</CardTitle>
+              <CountDisplay
+                label="Total invited"
+                value={invitedUsersCount}
+                isLoading={invitedUsersLoading}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <InvitedUserTable
@@ -166,7 +223,14 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Users</CardTitle>
+              <div className="flex justify-between items-center gap-spacing-inline">
+                <CardTitle>Pending Users</CardTitle>
+                <CountDisplay
+                  label="Total pending"
+                  value={pendingUsersCount}
+                  isLoading={pendingUsersLoading}
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <PendingUsersTable
