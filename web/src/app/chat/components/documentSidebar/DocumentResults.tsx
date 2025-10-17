@@ -164,84 +164,94 @@ function DocumentResultsInner({
   return (
     <div
       id="onyx-chat-sidebar"
-      className="bg-background-tint-01 overflow-y-scroll h-full w-full flex flex-col p-padding-button gap-padding-content"
+      className="bg-background-tint-01 overflow-y-scroll h-full w-full"
     >
-      {hasCited && (
-        <div>
-          <Header onClose={closeSidebar}>Cited Sources</Header>
-          <ChatDocumentDisplayWrapper>
-            {citedDocuments.map((document) => (
-              <ChatDocumentDisplay
-                key={document.document_id}
-                setPresentingDocument={setPresentingDocument}
-                closeSidebar={closeSidebar}
-                modal={modal}
-                document={document}
-                isSelected={selectedDocumentIds.includes(document.document_id)}
-                handleSelect={(documentId) => {
-                  toggleDocumentSelection(
-                    dedupedDocuments.find(
-                      (doc) => doc.document_id === documentId
-                    )!
-                  );
-                }}
-                hideSelection={isSharedChat}
-                tokenLimitReached={tokenLimitReached}
-              />
-            ))}
-          </ChatDocumentDisplayWrapper>
-        </div>
-      )}
+      <div className="flex flex-col p-padding-button gap-padding-content">
+        {hasCited && (
+          <div>
+            <Header onClose={closeSidebar}>Cited Sources</Header>
+            <ChatDocumentDisplayWrapper>
+              {citedDocuments.map((document) => (
+                <ChatDocumentDisplay
+                  key={document.document_id}
+                  setPresentingDocument={setPresentingDocument}
+                  closeSidebar={closeSidebar}
+                  modal={modal}
+                  document={document}
+                  isSelected={selectedDocumentIds.includes(
+                    document.document_id
+                  )}
+                  handleSelect={(documentId) => {
+                    toggleDocumentSelection(
+                      dedupedDocuments.find(
+                        (doc) => doc.document_id === documentId
+                      )!
+                    );
+                  }}
+                  hideSelection={isSharedChat}
+                  tokenLimitReached={tokenLimitReached}
+                />
+              ))}
+            </ChatDocumentDisplayWrapper>
+          </div>
+        )}
 
-      {hasOther && (
-        <div>
-          <Header onClose={closeSidebar}>
-            {citedDocuments.length > 0 ? "More" : "Found Sources"}
-          </Header>
-          <ChatDocumentDisplayWrapper>
-            {otherDocuments.map((document) => (
-              <ChatDocumentDisplay
-                key={document.document_id}
-                setPresentingDocument={setPresentingDocument}
-                closeSidebar={closeSidebar}
-                modal={modal}
-                document={document}
-                isSelected={selectedDocumentIds.includes(document.document_id)}
-                handleSelect={(documentId) => {
-                  toggleDocumentSelection(
-                    dedupedDocuments.find(
-                      (doc) => doc.document_id === documentId
-                    )!
-                  );
-                }}
-                hideSelection={isSharedChat}
-                tokenLimitReached={tokenLimitReached}
-              />
-            ))}
-          </ChatDocumentDisplayWrapper>
-        </div>
-      )}
+        {hasOther && (
+          <div>
+            <Header onClose={closeSidebar}>
+              {citedDocuments.length > 0 ? "More" : "Found Sources"}
+            </Header>
+            <ChatDocumentDisplayWrapper>
+              {otherDocuments.map((document) => (
+                <ChatDocumentDisplay
+                  key={document.document_id}
+                  setPresentingDocument={setPresentingDocument}
+                  closeSidebar={closeSidebar}
+                  modal={modal}
+                  document={document}
+                  isSelected={selectedDocumentIds.includes(
+                    document.document_id
+                  )}
+                  handleSelect={(documentId) => {
+                    toggleDocumentSelection(
+                      dedupedDocuments.find(
+                        (doc) => doc.document_id === documentId
+                      )!
+                    );
+                  }}
+                  hideSelection={isSharedChat}
+                  tokenLimitReached={tokenLimitReached}
+                />
+              ))}
+            </ChatDocumentDisplayWrapper>
+          </div>
+        )}
 
-      {humanFileDescriptors && humanFileDescriptors.length > 0 && (
-        <div>
-          <Header onClose={closeSidebar}>User Files</Header>
-          <ChatDocumentDisplayWrapper>
-            {humanFileDescriptors.map((file) => (
-              <ChatDocumentDisplay
-                key={file.id}
-                setPresentingDocument={setPresentingDocument}
-                closeSidebar={closeSidebar}
-                modal={modal}
-                document={buildOnyxDocumentFromFile(file.id, file.name, false)}
-                isSelected={false}
-                handleSelect={() => {}}
-                hideSelection={true}
-                tokenLimitReached={false}
-              />
-            ))}
-          </ChatDocumentDisplayWrapper>
-        </div>
-      )}
+        {humanFileDescriptors && humanFileDescriptors.length > 0 && (
+          <div>
+            <Header onClose={closeSidebar}>User Files</Header>
+            <ChatDocumentDisplayWrapper>
+              {humanFileDescriptors.map((file) => (
+                <ChatDocumentDisplay
+                  key={file.id}
+                  setPresentingDocument={setPresentingDocument}
+                  closeSidebar={closeSidebar}
+                  modal={modal}
+                  document={buildOnyxDocumentFromFile(
+                    file.id,
+                    file.name,
+                    false
+                  )}
+                  isSelected={false}
+                  handleSelect={() => {}}
+                  hideSelection={true}
+                  tokenLimitReached={false}
+                />
+              ))}
+            </ChatDocumentDisplayWrapper>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
