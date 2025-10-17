@@ -167,7 +167,7 @@ const DocumentResultsComponent = (
   return (
     <div
       id="onyx-chat-sidebar"
-      className="bg-background-tint-01 overflow-y-scroll h-screen flex flex-col p-padding-button gap-padding-content dbg-green"
+      className="bg-background-tint-01 overflow-y-scroll h-screen flex flex-col p-padding-button gap-padding-content"
     >
       {hasCited && (
         <div>
