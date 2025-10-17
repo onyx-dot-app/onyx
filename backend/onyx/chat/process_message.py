@@ -1110,7 +1110,7 @@ def stream_chat_message_objects(
 
                 # 2. Отправляем текст на валидацию
                 validated_message = validator_manager.validate_message(
-                    message=merged_text, direction="input"
+                    message=merged_text, direction="output"
                 )
 
                 # 3. Разбиваем валидированный текст обратно на пакеты OnyxAnswerPiece
