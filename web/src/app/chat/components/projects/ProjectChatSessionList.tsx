@@ -10,6 +10,7 @@ import SvgBubbleText from "@/icons/bubble-text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 export default function ProjectChatSessionList() {
   const {
@@ -56,9 +57,10 @@ export default function ProjectChatSessionList() {
               onMouseLeave={() => setHoveredChatId(null)}
             >
               <div
-                className={`w-full rounded-08 py-2 transition-colors p-spacing-interline-mini ${
-                  hoveredChatId === chat.id ? "bg-background-tint-02" : ""
-                }`}
+                className={cn(
+                  "w-full rounded-08 py-2 transition-colors p-spacing-interline-mini",
+                  hoveredChatId === chat.id && "bg-background-tint-02"
+                )}
               >
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">
