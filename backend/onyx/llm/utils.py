@@ -52,6 +52,67 @@ MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 
+# Gemma 3 models (1B/4B/12B/27B) are multi-modal but litellm may not flag them yet.
+_GEMMA_VISION_MODEL_PREFIXES = (
+    "gemma-3-1b",
+    "gemma-3-4b",
+    "gemma-3-12b",
+    "gemma-3-27b",
+)
+
+
+def _normalize_model_name_candidates(
+    model_name: str, model_provider: str | None = None
+) -> set[str]:
+    """
+    Generate a set of candidate strings for matching model identifiers.
+
+    Model names often appear with provider prefixes, suffix qualifiers (like ":latest"),
+    or underscore separators. Normalizing these formats ensures we can reliably match
+    known multi-modal models regardless of how the user registered them.
+    """
+    normalized_values: set[str] = set()
+    raw = model_name.lower()
+    provider = (model_provider or "").lower()
+
+    def _add(value: str | None) -> None:
+        if value:
+            normalized_values.add(value)
+
+    variants = {raw, raw.replace("_", "-")}
+
+    for variant in list(variants):
+        _add(variant)
+        _add(variant.split("/")[-1])
+        _add(variant.split(":")[0])
+        _add(variant.split(":")[0].split("/")[-1])
+        if variant.startswith("huggingface-llm-"):
+            stripped = variant.split("huggingface-llm-", 1)[1]
+            _add(stripped)
+            _add(stripped.split("/")[-1])
+
+    if provider:
+        for variant in list(variants):
+            _add(f"{provider}/{variant}")
+            _add(f"{provider}/{variant.split(':')[0]}")
+
+    return {value for value in normalized_values if value}
+
+
+def _matches_additional_vision_models(model_name: str, model_provider: str) -> bool:
+    """
+    Fallback detection for multi-modal models missing metadata in litellm.
+
+    This is primarily to ensure newly released Gemma 3 vision models surface correctly
+    even before litellm ships updated cost metadata that marks them as vision-capable.
+    """
+    candidates = _normalize_model_name_candidates(model_name, model_provider)
+    return any(
+        candidate.startswith(prefix)
+        for candidate in candidates
+        for prefix in _GEMMA_VISION_MODEL_PREFIXES
+    )
+
 
 def litellm_exception_to_error_msg(
     e: Exception,
@@ -669,6 +730,7 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             )
 
     model_map = get_model_map()
+    additional_match = _matches_additional_vision_models(model_name, model_provider)
     try:
         model_obj = find_model_obj(
             model_map,
@@ -676,15 +738,20 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             model_name,
         )
         if not model_obj:
+            if additional_match:
+                return True
             raise RuntimeError(
                 f"No litellm entry found for {model_provider}/{model_name}"
             )
-        return model_obj.get("supports_vision", False)
+        supports_vision = model_obj.get("supports_vision")
+        if supports_vision:
+            return True
+        return additional_match
     except Exception:
         logger.exception(
             f"Failed to get model object for {model_provider}/{model_name}"
         )
-        return False
+        return additional_match
 
 
 def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:

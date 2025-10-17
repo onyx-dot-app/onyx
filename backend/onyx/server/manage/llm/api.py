@@ -31,7 +31,6 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import get_bedrock_model_names
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -429,43 +428,125 @@ def get_bedrock_available_models(
                 detail=f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
             )
 
+        def _normalize_model_identifier(identifier: str | None) -> str | None:
+            if not identifier:
+                return None
+
+            if identifier.startswith("arn:"):
+                for marker in (
+                    "/foundation-model/",
+                    "/Model/",
+                    "/model/",
+                    "/model-name/",
+                ):
+                    if marker in identifier:
+                        remainder = identifier.split(marker, 1)[1]
+                        return remainder.split("/")[0]
+                return identifier.split("/")[-1]
+
+            return identifier.split("/")[-1]
+
+        def _extract_identifier(data: dict, keys: tuple[str, ...]) -> str | None:
+            for key in keys:
+                value = data.get(key)
+                if value:
+                    return value
+            return None
+
+        MODEL_IDENTIFIER_KEYS = (
+            "modelId",
+            "modelArn",
+            "model",
+            "modelName",
+            "baseModelId",
+            "modelSourceIdentifier",
+        )
+
         # Available Bedrock models: text-only, streaming supported
         model_summaries = bedrock.list_foundation_models().get("modelSummaries", [])
-        available_models = {
-            model.get("modelId", "")
-            for model in model_summaries
-            if model.get("modelId")
-            and "embed" not in model.get("modelId", "").lower()
-            and model.get("responseStreamingSupported", False)
-        }
+        available_models: set[str] = set()
+        for model in model_summaries:
+            model_id = model.get("modelId")
+            if model_id and "embed" not in model_id.lower():
+                available_models.add(model_id)
 
         # Available inference profiles. Invoking these allows cross-region inference (preferred over base models).
         profile_ids: set[str] = set()
         cross_region_models: set[str] = set()
+
         try:
-            inference_profiles = bedrock.list_inference_profiles(
-                typeEquals="SYSTEM_DEFINED"
-            ).get("inferenceProfileSummaries", [])
-            for profile in inference_profiles:
-                if profile_id := profile.get("inferenceProfileId"):
+            next_token: str | None = None
+            while True:
+                kwargs: dict[str, str] = {}
+                if next_token:
+                    kwargs["nextToken"] = next_token
+                response = bedrock.list_inference_profiles(**kwargs)
+                inference_profiles = response.get("inferenceProfileSummaries", [])
+                for profile in inference_profiles:
+                    profile_id = (
+                        profile.get("inferenceProfileId")
+                        or profile.get("arn")
+                        or profile.get("profileArn")
+                    )
+                    if not profile_id:
+                        continue
                     profile_ids.add(profile_id)
 
-                    # The model id is everything after the first period in the profile id
-                    if "." in profile_id:
-                        model_id = profile_id.split(".", 1)[1]
-                        cross_region_models.add(model_id)
+                    model_identifier = _extract_identifier(
+                        profile, MODEL_IDENTIFIER_KEYS
+                    )
+                    normalized = _normalize_model_identifier(model_identifier)
+                    if normalized:
+                        available_models.add(normalized)
+                        cross_region_models.add(normalized)
+
+                next_token = response.get("nextToken")
+                if not next_token:
+                    break
         except Exception as e:
-            # Cross-region inference isn't guaranteed; ignore failures here.
             logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
+
+        # Capture any marketplace-specific endpoints exposed via dedicated API (newer Bedrock accounts).
+        list_marketplace_endpoints = getattr(
+            bedrock, "list_marketplace_model_endpoints", None
+        )
+        if callable(list_marketplace_endpoints):
+            try:
+                next_token = None
+                while True:
+                    kwargs = {}
+                    if next_token:
+                        kwargs["nextToken"] = next_token
+                    marketplace_response = list_marketplace_endpoints(**kwargs)
+                    summaries = (
+                        marketplace_response.get("marketplaceModelEndpointSummaries")
+                        or marketplace_response.get("marketplaceModelEndpoints")
+                        or []
+                    )
+                    for summary in summaries:
+                        endpoint_arn = summary.get("endpointArn")
+                        if not endpoint_arn:
+                            continue
+                        profile_ids.add(endpoint_arn)
+                        model_identifier = _extract_identifier(
+                            summary, MODEL_IDENTIFIER_KEYS
+                        )
+                        normalized = _normalize_model_identifier(model_identifier)
+                        if normalized:
+                            available_models.add(normalized)
+                    next_token = marketplace_response.get("nextToken")
+                    if not next_token:
+                        break
+            except Exception as e:
+                logger.warning(
+                    f"Couldn't fetch marketplace deployments for Bedrock: {e}"
+                )
 
         # Prefer profiles: de-dupe available models, then add profile IDs
         candidates = (available_models - cross_region_models) | profile_ids
 
-        # Keep only models we support (compatibility with litellm)
-        filtered = sorted(
-            [model for model in candidates if model in get_bedrock_model_names()],
-            reverse=True,
-        )
+        # Keep deterministic order for UI
+        filtered = sorted(candidates, reverse=True)
 
         # Unset the environment variable, even though it is set again in DefaultMultiLLM init
         os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)

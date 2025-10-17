@@ -886,6 +886,23 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
 
   // Google Models
+  "gemma-3-1b": "Gemma 3 1B",
+  "gemma-3-1b-it": "Gemma 3 1B Instruct",
+  "gemma-3-1b-instruct": "Gemma 3 1B Instruct",
+  "gemma-3-4b": "Gemma 3 4B",
+  "gemma-3-4b-it": "Gemma 3 4B Instruct",
+  "gemma-3-4b-instruct": "Gemma 3 4B Instruct",
+  "gemma-3-12b": "Gemma 3 12B",
+  "gemma-3-12b-it": "Gemma 3 12B Instruct",
+  "gemma-3-12b-instruct": "Gemma 3 12B Instruct",
+  "gemma-3-27b": "Gemma 3 27B",
+  "gemma-3-27b-it": "Gemma 3 27B Instruct",
+  "gemma-3-27b-instruct": "Gemma 3 27B Instruct",
+  "google.gemma-3-1b-instruct": "Gemma 3 1B Instruct",
+  "google.gemma-3-4b-instruct": "Gemma 3 4B Instruct",
+  "google.gemma-3-12b-instruct": "Gemma 3 12B Instruct",
+  "huggingface-llm-gemma-3-1b-instruct": "Gemma 3 1B Instruct (HF)",
+  "google.gemma-3-27b-instruct": "Gemma 3 27B Instruct",
 
   // 2.5 pro models
   "gemini-2.5-pro": "Gemini 2.5 Pro",
@@ -1035,7 +1052,29 @@ export function getDisplayNameForModel(modelName: string): string {
     return displayName || lastPart;
   }
 
-  return MODEL_DISPLAY_NAMES[modelName] || modelName;
+  const directMatch = MODEL_DISPLAY_NAMES[modelName];
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const lastSegment = modelName.split("/").pop();
+  if (lastSegment && lastSegment !== modelName) {
+    const segmentDisplay =
+      MODEL_DISPLAY_NAMES[lastSegment] || lastSegment || modelName;
+    if (segmentDisplay) {
+      return segmentDisplay;
+    }
+  }
+
+  if (modelName.includes(".")) {
+    const suffix = modelName.substring(modelName.indexOf(".") + 1);
+    const suffixDisplay = MODEL_DISPLAY_NAMES[suffix];
+    if (suffixDisplay) {
+      return suffixDisplay;
+    }
+  }
+
+  return modelName;
 }
 
 // Get source metadata for configured sources - deduplicated by source type
