@@ -15,3 +15,16 @@ validators:
           - "URL"
           - "DOMAIN_NAME"
           - "CRYPTO"
+  - id: -2
+    name: "Валидатор запретных слов"
+    description: "Обнаружение и маскирование запретных слов"
+    validator_type: "BAN_LIST"
+    config:
+      - type: "multiselect"
+        name: "banned_words"
+        label: "Список запретных слов для маскирования"
+        values:
+          - "демонстрация"
+          - "война"
+          - "бомба"
+          - "наркотики"

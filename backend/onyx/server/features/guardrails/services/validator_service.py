@@ -1,8 +1,9 @@
 from onyx.db.enums import ValidatorType
 from onyx.db.models import Persona, Validator
-from onyx.server.features.guardrails.validators.detect_pii import (
+from onyx.server.features.guardrails.validators import (
     mask_pii,
     unmask_pii,
+    mask_banned_words,
 )
 from onyx.utils.logger import setup_logger
 
@@ -77,7 +78,7 @@ class ValidatorManager:
                 self._context[validator.validator_type] = mapping
 
                 logger.info(
-                    "\n%s-валидация | Маскирование | Результат:\n%s",
+                    "\nDETECT_PII | %s-валидация | Маскирование перс. данных | Результат:\n%s",
                     direction, masked_message,
                 )
                 return masked_message
@@ -95,10 +96,22 @@ class ValidatorManager:
                 del self._context[validator.validator_type]
 
                 logger.info(
-                    "\n%s-валидация | Демаскирование | Результат:\n%s",
+                    "\nDETECT_PII | %s-валидация | Демаскирование перс. данных | Результат:\n%s",
                     direction, unmasked_message,
                 )
                 return unmasked_message
+
+            # Фильтрация запрещенных слов
+            elif validator.validator_type == ValidatorType.BAN_LIST:
+                masked_message = mask_banned_words(
+                    text=message, config=config
+                )
+
+                logger.info(
+                    "\nBAN_LIST | %s-валидация | Маскирование запретных слов | Результат:\n%s",
+                    direction, masked_message,
+                )
+                return masked_message
 
             # Валидация JSON-структуры
             # Проверка ответов на токсичность
@@ -121,9 +134,16 @@ if __name__=="__main__":
         validator_type="DETECT_PII",
         config={"pii_entities": ["EMAIL_ADDRESS", "RUS_PHONE_NUMBER"]}
     )
+    validator_2 = Validator(
+        id=2,
+        name="Запретные слова",
+        validator_type="BAN_LIST",
+        config={"banned_words": ["запиши"]}
+    )
     persona = Persona(
         validators=[
             validator_1,
+            validator_2,
         ],
     )
     message = "Напиши мне на почту test@gmail.com и запиши мой номер 8 800 555 3555"
