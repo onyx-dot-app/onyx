@@ -4,7 +4,7 @@ import {
   InvitedUserSnapshot,
   USER_ROLE_LABELS,
 } from "@/lib/types";
-import { useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import CenteredPageSelector from "./CenteredPageSelector";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -55,6 +55,9 @@ interface Props {
   setPopup: (spec: PopupSpec) => void;
   q: string;
   invitedUsersMutate: () => void;
+  countDisplay?: ReactNode;
+  onTotalItemsChange?: (count: number) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
 }
 
 interface ActionMenuProps {
@@ -71,6 +74,9 @@ const SignedUpUserTable = ({
   setPopup,
   q = "",
   invitedUsersMutate,
+  countDisplay,
+  onTotalItemsChange,
+  onLoadingChange,
 }: Props) => {
   const [filters, setFilters] = useState<{
     is_active?: boolean;
@@ -88,6 +94,7 @@ const SignedUpUserTable = ({
     totalPages,
     goToPage,
     refresh,
+    totalItems,
   } = usePaginatedFetch<User>({
     itemsPerPage: ITEMS_PER_PAGE,
     pagesPerBatch: PAGES_PER_BATCH,
@@ -97,6 +104,16 @@ const SignedUpUserTable = ({
   });
 
   const { user: currentUser } = useUser();
+
+  useEffect(() => {
+    onLoadingChange?.(isLoading);
+  }, [isLoading, onLoadingChange]);
+
+  useEffect(() => {
+    if (pageOfUsers !== null) {
+      onTotalItemsChange?.(totalItems);
+    }
+  }, [pageOfUsers, totalItems, onTotalItemsChange]);
 
   if (error) {
     return (
@@ -147,58 +164,63 @@ const SignedUpUserTable = ({
 
   const renderFilters = () => (
     <>
-      <div className="flex items-center gap-4 py-4">
-        <Select
-          value={filters.is_active?.toString() || "all"}
-          onValueChange={(selectedStatus) =>
-            setFilters((prev) => {
-              if (selectedStatus === "all") {
-                const { is_active, ...rest } = prev;
-                return rest;
-              }
-              return {
-                ...prev,
-                is_active: selectedStatus === "true",
-              };
-            })
-          }
-        >
-          <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-background-tint-00">
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="true">Active</SelectItem>
-            <SelectItem value="false">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value="roles">
-          <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
-            <SelectValue>
-              {filters.roles?.length
-                ? `${filters.roles.length} role(s) selected`
-                : "All Roles"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="bg-background-tint-00">
-            {Object.entries(USER_ROLE_LABELS)
-              .filter(([role]) => role !== UserRole.EXT_PERM_USER)
-              .map(([role, label]) => (
-                <div
-                  key={role}
-                  className="flex items-center space-x-2 px-2 py-1.5 cursor-pointer hover:bg-background-200"
-                  onClick={() => toggleRole(role as UserRole)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={filters.roles?.includes(role as UserRole) || false}
-                    onChange={(e) => e.stopPropagation()}
-                  />
-                  <label className="text-sm font-normal">{label}</label>
-                </div>
-              ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-center justify-between gap-4 py-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <Select
+            value={filters.is_active?.toString() || "all"}
+            onValueChange={(selectedStatus) =>
+              setFilters((prev) => {
+                if (selectedStatus === "all") {
+                  const { is_active, ...rest } = prev;
+                  return rest;
+                }
+                return {
+                  ...prev,
+                  is_active: selectedStatus === "true",
+                };
+              })
+            }
+          >
+            <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-background-tint-00">
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="true">Active</SelectItem>
+              <SelectItem value="false">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value="roles">
+            <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
+              <SelectValue>
+                {filters.roles?.length
+                  ? `${filters.roles.length} role(s) selected`
+                  : "All Roles"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="bg-background-tint-00">
+              {Object.entries(USER_ROLE_LABELS)
+                .filter(([role]) => role !== UserRole.EXT_PERM_USER)
+                .map(([role, label]) => (
+                  <div
+                    key={role}
+                    className="flex items-center space-x-2 px-2 py-1.5 cursor-pointer hover:bg-background-200"
+                    onClick={() => toggleRole(role as UserRole)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        filters.roles?.includes(role as UserRole) || false
+                      }
+                      onChange={(e) => e.stopPropagation()}
+                    />
+                    <label className="text-sm font-normal">{label}</label>
+                  </div>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {countDisplay}
       </div>
       <div className="flex gap-2 py-1">
         {selectedRoles.map((role) => (

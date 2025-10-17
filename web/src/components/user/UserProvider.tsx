@@ -1,13 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, UserRole } from "@/lib/types";
+import { User, UserPersonalization, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
+import { updateUserPersonalization as persistPersonalization } from "@/lib/users/UserSettings";
 
 interface UserContextType {
   user: User | null;
@@ -23,6 +24,9 @@ interface UserContextType {
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+  updateUserPersonalization: (
+    personalization: UserPersonalization
+  ) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -202,6 +206,35 @@ export function UserProvider({
     }
   };
 
+  const updateUserPersonalization = async (
+    personalization: UserPersonalization
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (!prevUser) {
+          return prevUser;
+        }
+
+        return {
+          ...prevUser,
+          personalization,
+        };
+      });
+
+      const response = await persistPersonalization(personalization);
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update personalization settings");
+      }
+
+      await refreshUser();
+    } catch (error) {
+      console.error("Error updating personalization settings:", error);
+      throw error;
+    }
+  };
+
   const toggleAssistantPinnedStatus = async (
     currentPinnedAssistantIDs: number[],
     assistantId: number,
@@ -264,6 +297,7 @@ export function UserProvider({
         updateUserAutoScroll,
         updateUserShortcuts,
         updateUserTemperatureOverrideEnabled,
+        updateUserPersonalization,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
