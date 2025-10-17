@@ -1,4 +1,3 @@
-import { FiAlertCircle } from "react-icons/fi";
 import ErrorPageLayout from "./ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
