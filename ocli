@@ -60,24 +60,14 @@ def ensure_uv_installed():
 
 
 def initialize_project():
-    """Initialize .in files if they don't exist."""
-    # Ensure the requirements directory exists
-    REQ_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"Using requirements directory: {REQ_DIR}")
+    """Initialize virtual environment in project root."""
+    ensure_uv_installed()
 
-    for name, filename in REQUIREMENT_SETS.items():
-        filepath = Path(filename)
-        if not filepath.exists():
-            print(f"Creating {filepath}")
-            filepath.touch()
-            if name == "default":
-                filepath.write_text("# Core dependencies\n")
-            elif name == "ee":
-                filepath.write_text("# Enterprise edition dependencies\n")
-            elif name == "dev":
-                filepath.write_text("# Development dependencies\n")
-            elif name == "model_server":
-                filepath.write_text("# Model server dependencies\n")
+    print(f"Initializing virtual environment in {REPO_ROOT}")
+    cmd = ["uv", "venv"]
+    run_command(cmd)
+    print("\n✓ Virtual environment created successfully!")
+    print("Activate it with: source .venv/bin/activate")
 
 
 def add_dependency(package: str, target_sets: List[str]):
