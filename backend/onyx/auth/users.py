@@ -122,7 +122,6 @@ from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -1060,7 +1059,7 @@ fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
 optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
 
 
-async def optional_user_(
+async def _check_for_saml_and_jwt(
     request: Request,
     user: User | None,
     async_db_session: AsyncSession,
@@ -1090,10 +1089,7 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-    versioned_fetch_user = fetch_versioned_implementation(
-        "onyx.auth.users", "optional_user_"
-    )
-    user = await versioned_fetch_user(request, user, async_db_session)
+    user = await _check_for_saml_and_jwt(request, user, async_db_session)
 
     # check if an API key is present
     if user is None:
