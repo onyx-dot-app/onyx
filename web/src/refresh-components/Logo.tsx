@@ -1,6 +1,7 @@
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
-import Text from "./texts/Text";
+import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
+import Text from "@/refresh-components/texts/Text";
 
 export interface LogoProps {
   folded?: boolean;
@@ -10,14 +11,23 @@ export interface LogoProps {
 export default function Logo({ folded, className }: LogoProps) {
   const settings = useSettingsContext();
 
-  if (folded) return <OnyxIcon size={24} className={className} />;
+  const logo = <OnyxIcon size={24} className={className} />;
+
+  if (folded) return logo;
 
   return settings.enterpriseSettings?.application_name ? (
-    <div className="flex flex-row">
-      <OnyxIcon size={24} />
-      <Text headingH2>{settings.enterpriseSettings.application_name}</Text>
+    <div className="flex flex-col">
+      <div className="flex flex-row items-center gap-spacing-interline">
+        {logo}
+        <Text headingH2>{settings.enterpriseSettings?.application_name}</Text>
+      </div>
+      {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+        <Text secondaryBody text03 className="ml-[33px]">
+          Powered by Onyx
+        </Text>
+      )}
     </div>
   ) : (
-    <OnyxLogoTypeIcon size={88} />
+    <OnyxLogoTypeIcon size={88} className={className} />
   );
 }
