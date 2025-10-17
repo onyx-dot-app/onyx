@@ -20,7 +20,6 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "claude-3-sonnet-20240229",
             False,
         ),
-        (ANTHROPIC_PROVIDER_NAME, "claude-2.1", False),
         (
             BEDROCK_PROVIDER_NAME,
             "anthropic.claude-3-opus-20240229-v1:0",
