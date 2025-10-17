@@ -19,6 +19,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
@@ -44,16 +47,16 @@ class WebSearchResponse(BaseModel):
     results: List[WebSearchResult]
 
 
-class WebFetchResult(BaseModel):
+class OpenUrlResult(BaseModel):
     tag: str
     title: str
     link: str
-    full_content: str
+    truncated_content: str
     published_date: Optional[str] = None
 
 
-class WebFetchResponse(BaseModel):
-    results: List[WebFetchResult]
+class OpenUrlResponse(BaseModel):
+    results: List[OpenUrlResult]
 
 
 def short_tag(link: str, i: int) -> str:
@@ -154,23 +157,23 @@ def _web_search_core(
 
 
 @function_tool
-def web_search_tool(
+def web_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
     Tool for searching the public internet. Useful for up to date information on PUBLIC knowledge.
     ---
     ## Decision boundary
-    - You MUST call `web_search_tool` to discover sources when the request involves:
+    - You MUST call this tool to discover sources when the request involves:
       - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
       - Recommendations, or any query where the specific sources matter.
       - Verifiable claims, quotes, or citations.
-    - After ANY successful `web_search_tool` call that yields candidate URLs, you MUST call
-      `web_fetch_tool` on the selected URLs BEFORE answering. Do NOT answer from snippets.
+    - After ANY successful `web_search` call that yields candidate URLs, you MUST call
+      `open_url` on the selected URLs BEFORE answering. Do NOT answer from snippets.
 
     ## When NOT to use
     - Casual chat, rewriting/summarizing user-provided text, or translation.
-    - When the user already provided URLs (go straight to `web_fetch_tool`).
+    - When the user already provided URLs (go straight to `open_url`).
 
     ## Usage hints
     - Batch a list of natural-language queries per call.
@@ -202,11 +205,11 @@ def web_search_tool(
 
 
 @tool_accounting
-def _web_fetch_core(
+def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: List[str],
     search_provider: WebSearchProvider,
-) -> WebFetchResponse:
+) -> OpenUrlResponse:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -225,11 +228,11 @@ def _web_fetch_core(
     out = []
     for i, d in enumerate(docs):
         out.append(
-            WebFetchResult(
-                tag=short_tag(d.link, i),  # <-- add a tag
+            OpenUrlResult(
+                tag=short_tag(d.link, i),
                 title=d.title,
                 link=d.link,
-                full_content=d.full_content,
+                truncated_content=truncate_search_result_content(d.full_content),
                 published_date=(
                     d.published_date.isoformat() if d.published_date else None
                 ),
@@ -265,21 +268,23 @@ def _web_fetch_core(
         )
     )
 
-    return WebFetchResponse(results=out)
+    # Set flag to include citation requirements since we fetched documents
+    run_context.context.should_cite_documents = True
+
+    return OpenUrlResponse(results=out)
 
 
 @function_tool
-def web_fetch_tool(
-    run_context: RunContextWrapper[ChatTurnContext], urls: List[str]
-) -> str:
+def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -> str:
     """
     Tool for fetching and extracting full content from web pages.
 
     ---
     ## Decision boundary
-    - You MUST use `web_fetch_tool` before quoting, citing, or relying on page content.
-    - Use it whenever you already have URLs (from the user or from `web_search_tool`).
+    - You MUST use this tool before quoting, citing, or relying on page content.
+    - Use it whenever you already have URLs (from the user or from `web_search`).
     - Do NOT answer questions based on search snippets alone.
+    - After a web_search call, strong bias towards using this tool to investigate further.
 
     ## When NOT to use
     - If you do not yet have URLs (search first).
@@ -308,5 +313,5 @@ def web_fetch_tool(
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
-    response = _web_fetch_core(run_context, urls, search_provider)
+    response = _open_url_core(run_context, urls, search_provider)
     return response.model_dump_json()

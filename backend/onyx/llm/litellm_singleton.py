@@ -15,6 +15,7 @@ from agents.extensions.models.litellm_model import LitellmModel
 # parameters like frequency and presence, just ignore them
 litellm.drop_params = True
 litellm.telemetry = False
+litellm.modify_params = True
 
 # Export the configured litellm module
 __all__ = ["litellm", "LitellmModel"]

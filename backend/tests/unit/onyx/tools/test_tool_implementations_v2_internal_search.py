@@ -4,6 +4,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from agents import ModelSettings
 from agents import RunContextWrapper
 
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -58,6 +59,7 @@ def create_fake_run_dependencies(redis_client: Any = None) -> ChatTurnDependenci
     # Create minimal ChatTurnDependencies
     return ChatTurnDependencies(
         llm_model=MagicMock(),  # Mock Model
+        model_settings=ModelSettings(temperature=0.0, include_usage=True),
         llm=MagicMock(),  # Mock LLM
         db_session=db_session,
         tools=[],  # Empty tools list for testing

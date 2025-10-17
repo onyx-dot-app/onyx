@@ -33,6 +33,10 @@ class LLMConfig(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
+def build_full_model_name(llm_config: LLMConfig) -> str:
+    return f"{llm_config.model_provider}/{llm_config.model_name}"
+
+
 def log_prompt(prompt: LanguageModelInput) -> None:
     if isinstance(prompt, list):
         for ind, msg in enumerate(prompt):

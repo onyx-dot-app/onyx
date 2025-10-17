@@ -74,7 +74,7 @@ def _okta_profile_core(
 
 
 @function_tool
-def okta_profile_tool(run_context: RunContextWrapper[ChatTurnContext]) -> str:
+def okta_profile(run_context: RunContextWrapper[ChatTurnContext]) -> str:
     """
     Retrieve the current user's profile information from Okta.
 

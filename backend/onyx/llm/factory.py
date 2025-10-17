@@ -1,3 +1,9 @@
+import os
+from typing import Any
+
+from agents import ModelSettings
+from agents.models.interface import Model
+
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -8,6 +14,8 @@ from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
+from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
@@ -100,6 +108,105 @@ def get_llms_for_persona(
         )
 
     return _create_llm(model), _create_llm(fast_model)
+
+
+def get_llm_model_and_settings_for_persona(
+    persona: Persona | PersonaOverrideConfig | None,
+    llm_override: LLMOverride | None = None,
+    additional_headers: dict[str, str] | None = None,
+    long_term_logger: LongTermLogger | None = None,
+) -> tuple[Model, ModelSettings]:
+    """Get LitellmModel and settings for a persona.
+
+    Returns a tuple of:
+    - LitellmModel instance
+    - ModelSettings configured with the persona's parameters
+    """
+    if persona is None:
+        logger.warning("No persona provided, using default LLM")
+        with get_session_with_current_tenant() as db_session:
+            llm_provider = fetch_default_provider(db_session)
+
+        if not llm_provider:
+            raise ValueError("No default LLM provider found")
+
+        model_name = llm_provider.default_model_name
+        if not model_name:
+            raise ValueError("No default model name found")
+
+        return get_llm_model_and_settings(
+            provider=llm_provider.provider,
+            model=model_name,
+            deployment_name=llm_provider.deployment_name,
+            api_key=llm_provider.api_key,
+            api_base=llm_provider.api_base,
+            api_version=llm_provider.api_version,
+            custom_config=llm_provider.custom_config,
+            temperature=GEN_AI_TEMPERATURE,
+            additional_headers=additional_headers,
+            long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=llm_provider, model_name=model_name
+            ),
+        )
+
+    provider_name_override = llm_override.model_provider if llm_override else None
+    model_version_override = llm_override.model_version if llm_override else None
+    temperature_override = llm_override.temperature if llm_override else None
+
+    provider_name = provider_name_override or persona.llm_model_provider_override
+    if not provider_name:
+        with get_session_with_current_tenant() as db_session:
+            llm_provider = fetch_default_provider(db_session)
+
+        if not llm_provider:
+            raise ValueError("No default LLM provider found")
+
+        model_name = llm_provider.default_model_name
+        if not model_name:
+            raise ValueError("No default model name found")
+
+        return get_llm_model_and_settings(
+            provider=llm_provider.provider,
+            model=model_name,
+            deployment_name=llm_provider.deployment_name,
+            api_key=llm_provider.api_key,
+            api_base=llm_provider.api_base,
+            api_version=llm_provider.api_version,
+            custom_config=llm_provider.custom_config,
+            temperature=temperature_override or GEN_AI_TEMPERATURE,
+            additional_headers=additional_headers,
+            long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=llm_provider, model_name=model_name
+            ),
+        )
+
+    with get_session_with_current_tenant() as db_session:
+        llm_provider = fetch_llm_provider_view(db_session, provider_name)
+
+    if not llm_provider:
+        raise ValueError("No LLM provider found")
+
+    model = model_version_override or persona.llm_model_version_override
+    if not model:
+        raise ValueError("No model name found")
+
+    return get_llm_model_and_settings(
+        provider=llm_provider.provider,
+        model=model,
+        deployment_name=llm_provider.deployment_name,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        custom_config=llm_provider.custom_config,
+        temperature=temperature_override,
+        additional_headers=additional_headers,
+        long_term_logger=long_term_logger,
+        max_input_tokens=get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model
+        ),
+    )
 
 
 def get_default_llm_with_vision(
@@ -305,3 +412,71 @@ def get_llm(
         long_term_logger=long_term_logger,
         max_input_tokens=max_input_tokens,
     )
+
+
+def get_llm_model_and_settings(
+    provider: str,
+    model: str,
+    max_input_tokens: int,
+    deployment_name: str | None,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    api_version: str | None = None,
+    custom_config: dict[str, str] | None = None,
+    temperature: float | None = None,
+    timeout: int | None = None,
+    additional_headers: dict[str, str] | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    long_term_logger: LongTermLogger | None = None,
+) -> tuple[Model, ModelSettings]:
+    from onyx.llm.litellm_singleton import LitellmModel
+
+    if temperature is None:
+        temperature = GEN_AI_TEMPERATURE
+
+    extra_headers = build_llm_extra_headers(additional_headers)
+
+    # NOTE: this is needed since Ollama API key is optional
+    # User may access Ollama cloud via locally hosted instance (logged in)
+    # or just via the cloud API (not logged in, using API key)
+    provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
+    if provider_extra_headers:
+        extra_headers.update(provider_extra_headers)
+
+    # NOTE: have to set these as environment variables for Litellm since
+    # not all are able to passed in but they always support them set as env
+    # variables. We'll also try passing them in, since litellm just ignores
+    # addtional kwargs (and some kwargs MUST be passed in rather than set as
+    # env variables)
+    model_kwargs = model_kwargs or {}
+    if custom_config:
+        for k, v in custom_config.items():
+            if provider == "vertex_ai":
+                if k == VERTEX_CREDENTIALS_FILE_KWARG:
+                    model_kwargs[k] = v
+                    continue
+                elif k == VERTEX_LOCATION_KWARG:
+                    model_kwargs[k] = v
+                    continue
+
+            # for all values, set them as env variables
+            os.environ[k] = v
+    # Build the full model name in provider/model format
+    model_name = f"{provider}/{model}"
+
+    # Create LitellmModel instance
+    litellm_model = LitellmModel(
+        model=model_name,
+        base_url=api_base,
+        api_key=api_key,
+    )
+
+    # Create ModelSettings with the provided configuration
+    model_settings = ModelSettings(
+        temperature=temperature,
+        include_usage=True,
+        extra_headers=extra_headers if extra_headers else None,
+        extra_args=model_kwargs,
+    )
+
+    return litellm_model, model_settings
