@@ -26,6 +26,14 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuthType } from "@/lib/hooks";
 import { InfoIcon } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -175,29 +183,31 @@ function ActionForm({
       {methodSpecs && methodSpecs.length > 0 && (
         <div className="my-4">
           <h3 className="text-base font-semibold mb-2">Available methods</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-background-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 border-b">Name</th>
-                  <th className="px-4 py-2 border-b">Summary</th>
-                  <th className="px-4 py-2 border-b">Method</th>
-                  <th className="px-4 py-2 border-b">Path</th>
-                </tr>
-              </thead>
-              <tbody>
-                {methodSpecs?.map((method: MethodSpec, index: number) => (
-                  <tr key={index} className="text-sm">
-                    <td className="px-4 py-2 border-b">{method.name}</td>
-                    <td className="px-4 py-2 border-b">{method.summary}</td>
-                    <td className="px-4 py-2 border-b">
-                      {method.method.toUpperCase()}
-                    </td>
-                    <td className="px-4 py-2 border-b">{method.path}</td>
-                  </tr>
+          <div className="rounded-lg border border-background-200 bg-background-50">
+            <Table className="min-w-full">
+              <TableHeader className="bg-background-neutral-00">
+                <TableRow noHover>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Summary</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Path</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {methodSpecs?.map((method: MethodSpec) => (
+                  <TableRow
+                    key={`${method.method}-${method.path}-${method.name}`}
+                  >
+                    <TableCell className="font-medium">{method.name}</TableCell>
+                    <TableCell>{method.summary}</TableCell>
+                    <TableCell className="uppercase">{method.method}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {method.path}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
