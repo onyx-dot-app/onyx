@@ -310,6 +310,55 @@ function ChatButtonInner({
     }
   }
 
+  const rightMenu = (
+    <>
+      <PopoverTrigger asChild onClick={noProp()}>
+        <div>
+          <IconButton
+            icon={SvgMoreHorizontal}
+            className={cn(
+              !popoverOpen && "hidden",
+              !renaming && "group-hover/SidebarTab:flex"
+            )}
+            active={popoverOpen}
+            internal
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end">
+        {popoverItems}
+      </PopoverContent>
+    </>
+  );
+
+  const popover = (
+    <Popover
+      onOpenChange={(state) => {
+        setPopoverOpen(state);
+        if (!state) setShowMoveOptions(false);
+      }}
+    >
+      <PopoverAnchor>
+        <SidebarTab
+          leftIcon={project ? () => <></> : SvgBubbleText}
+          onClick={() => route({ chatSessionId: chatSession.id })}
+          active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+          rightChildren={rightMenu}
+        >
+          {renaming ? (
+            <ButtonRenaming
+              initialName={chatSession.name}
+              onRename={handleRename}
+              onClose={() => setRenaming(false)}
+            />
+          ) : (
+            name
+          )}
+        </SidebarTab>
+      </PopoverAnchor>
+    </Popover>
+  );
+
   return (
     <>
       {popup}
@@ -377,96 +426,10 @@ function ChatButtonInner({
           {...(mounted ? attributes : {})}
           {...(mounted ? listeners : {})}
         >
-          <Popover
-            onOpenChange={(state) => {
-              setPopoverOpen(state);
-              if (!state) setShowMoveOptions(false);
-            }}
-          >
-            <PopoverAnchor>
-              <SidebarTab
-                leftIcon={project ? () => <></> : SvgBubbleText}
-                onClick={() => route({ chatSessionId: chatSession.id })}
-                active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
-                rightChildren={
-                  <>
-                    <PopoverTrigger asChild onClick={noProp()}>
-                      <div>
-                        <IconButton
-                          icon={SvgMoreHorizontal}
-                          className={cn(
-                            !popoverOpen && "hidden",
-                            !renaming && "group-hover/SidebarTab:flex"
-                          )}
-                          active={popoverOpen}
-                          internal
-                        />
-                      </div>
-                    </PopoverTrigger>
-                    <PopoverContent side="right" align="end">
-                      {popoverItems}
-                    </PopoverContent>
-                  </>
-                }
-              >
-                {renaming ? (
-                  <ButtonRenaming
-                    initialName={chatSession.name}
-                    onRename={handleRename}
-                    onClose={() => setRenaming(false)}
-                  />
-                ) : (
-                  name
-                )}
-              </SidebarTab>
-            </PopoverAnchor>
-          </Popover>
+          {popover}
         </div>
       ) : (
-        <Popover
-          onOpenChange={(state) => {
-            setPopoverOpen(state);
-            if (!state) setShowMoveOptions(false);
-          }}
-        >
-          <PopoverAnchor>
-            <SidebarTab
-              leftIcon={project ? () => <></> : SvgBubbleText}
-              onClick={() => route({ chatSessionId: chatSession.id })}
-              active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
-              rightChildren={
-                <>
-                  <PopoverTrigger asChild onClick={noProp()}>
-                    <div>
-                      <IconButton
-                        icon={SvgMoreHorizontal}
-                        className={cn(
-                          !popoverOpen && "hidden",
-                          !renaming && "group-hover/SidebarTab:flex"
-                        )}
-                        active={popoverOpen}
-                        internal
-                      />
-                    </div>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" align="end">
-                    {popoverItems}
-                  </PopoverContent>
-                </>
-              }
-            >
-              {renaming ? (
-                <ButtonRenaming
-                  initialName={chatSession.name}
-                  onRename={handleRename}
-                  onClose={() => setRenaming(false)}
-                />
-              ) : (
-                name
-              )}
-            </SidebarTab>
-          </PopoverAnchor>
-        </Popover>
+        popover
       )}
     </>
   );
