@@ -183,6 +183,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # personalization fields are exposed via the chat user settings "Personalization" tab
+    personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -238,6 +242,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
         "MCPServer", secondary="mcp_server__user", back_populates="users"
     )
+    memories: Mapped[list["Memory"]] = relationship(
+        "Memory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -253,6 +263,31 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
+
+
+class Memory(Base):
+    __tablename__ = "memory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    memory_text: Mapped[str] = mapped_column(Text, nullable=False)
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="memories")
 
 
 class ApiKey(Base):

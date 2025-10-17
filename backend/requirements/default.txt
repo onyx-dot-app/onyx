@@ -111,3 +111,5 @@ openai-agents==0.3.3
 langfuse==3.7.0
 nest_asyncio==1.6.0
 openinference-instrumentation-openai-agents==1.3.0
+python3-saml==1.15.0
+xmlsec==1.3.14

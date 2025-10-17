@@ -27,7 +27,7 @@ def fireflies_connector() -> FirefliesConnector:
 
 
 @pytest.mark.xfail(
-    reason="Environment variable not set for some reason",
+    reason="We don't have the key that is stored in GitHub Secrets and the returned data is different than expected",
 )
 def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> None:
     test_data = load_test_data()

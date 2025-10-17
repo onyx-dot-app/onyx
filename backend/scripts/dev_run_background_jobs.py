@@ -96,7 +96,7 @@ def run_jobs() -> None:
             "--loglevel=INFO",
             "--hostname=background@%n",
             "-Q",
-            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync",
+            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete",
         ]
         background_workers = [("BACKGROUND", cmd_worker_background)]
     else:
@@ -151,7 +151,7 @@ def run_jobs() -> None:
             "--loglevel=INFO",
             "--hostname=user_file_processing@%n",
             "-Q",
-            "user_file_processing,user_file_project_sync,connector_doc_permissions_sync,connector_external_group_sync,csv_generation",
+            "user_file_processing,user_file_project_sync,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,user_file_delete",
         ]
         background_workers = [
             ("HEAVY", cmd_worker_heavy),

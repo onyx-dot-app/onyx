@@ -41,6 +41,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.memories import make_memories_callback
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
 from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
@@ -75,6 +76,7 @@ from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
 from onyx.prompts.prompt_utils import handle_company_awareness
+from onyx.prompts.prompt_utils import handle_memories
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -491,7 +493,16 @@ def clarifier(
             + PROJECT_INSTRUCTIONS_SEPARATOR
             + graph_config.inputs.project_instructions
         )
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+    memories_callback = make_memories_callback(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
+    assistant_system_prompt = handle_memories(
+        assistant_system_prompt, memories_callback
+    )
 
     chat_history_string = (
         get_chat_history_string(

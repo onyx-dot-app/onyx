@@ -207,7 +207,9 @@ class UserFileIndexingAdapter:
             self.db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
         )
         for user_file in user_files:
-            user_file.status = UserFileStatus.COMPLETED
+            # don't update the status if the user file is being deleted
+            if user_file.status != UserFileStatus.DELETING:
+                user_file.status = UserFileStatus.COMPLETED
             user_file.last_project_sync_at = datetime.datetime.now(
                 datetime.timezone.utc
             )
