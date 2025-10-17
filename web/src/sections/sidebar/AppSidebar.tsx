@@ -349,7 +349,15 @@ function AppSidebarInner() {
       )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        <div className="flex flex-col px-spacing-interline gap-spacing-interline">
+        <div
+          className={cn(
+            "flex flex-col",
+            "px-spacing-interline",
+            "gap-spacing-interline",
+            "pt-spacing-paragraph",
+            "pb-spacing-paragraph"
+          )}
+        >
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               leftIcon={SvgEditBig}
@@ -462,7 +470,7 @@ function AppSidebarInner() {
           )}
         </VerticalShadowScroller>
 
-        <div className="px-spacing-interline">
+        <div className="px-spacing-interline pt-spacing-interline-mini">
           <Settings folded={folded} />
         </div>
       </SidebarWrapper>
