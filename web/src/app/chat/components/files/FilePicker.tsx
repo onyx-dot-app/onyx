@@ -122,7 +122,6 @@ export function FilePickerContents({
                     </Text>
 
                     {onDelete &&
-                      String(f.status) !== UserFileStatus.PROCESSING &&
                       String(f.status) !== UserFileStatus.UPLOADING &&
                       String(f.status) !== UserFileStatus.DELETING && (
                         <IconButton
@@ -199,11 +198,15 @@ export default function FilePicker({
   );
   const { popup, setPopup } = usePopup();
   const { deleteUserFile, setCurrentMessageFiles } = useProjectsContext();
+  const [deletedFileIds, setDeletedFileIds] = useState<string[]>([]);
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
-    setRecentFilesSnapshot(recentFiles.slice());
+    console.log("Recent files changed", recentFiles);
+    setRecentFilesSnapshot(
+      recentFiles.slice().filter((f) => !deletedFileIds.includes(f.id))
+    );
   }, [recentFiles]);
 
   const handleDeleteFile = (file: ProjectFile) => {
@@ -223,9 +226,8 @@ export default function FilePicker({
           setCurrentMessageFiles((prev) =>
             prev.filter((f) => f.id !== file.id)
           );
-          setRecentFilesSnapshot((prev) =>
-            prev.filter((f) => f.id !== file.id)
-          );
+          setDeletedFileIds((prev) => [...prev, file.id]);
+          setRecentFilesSnapshot((prev) => prev.filter((f) => f.id != file.id));
         } else {
           setRecentFilesSnapshot((prev) =>
             prev.map((f) =>

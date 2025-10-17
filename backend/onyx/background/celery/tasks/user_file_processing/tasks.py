@@ -298,23 +298,30 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                         f"process_single_user_file - Indexing pipeline failed id={user_file_id}"
                     )
                     # don't update the status if the user file is being deleted
-                    db_session.refresh(uf)
-                    if uf.status != UserFileStatus.DELETING:
+                    # Re-fetch to avoid mypy error
+                    current_user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+                    if (
+                        current_user_file
+                        and current_user_file.status != UserFileStatus.DELETING
+                    ):
                         uf.status = UserFileStatus.FAILED
-                    db_session.add(uf)
-                    db_session.commit()
+                        db_session.add(uf)
+                        db_session.commit()
                     return None
 
             except Exception as e:
                 task_logger.exception(
                     f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
                 )
-                db_session.refresh(uf)
                 # don't update the status if the user file is being deleted
-                if uf.status != UserFileStatus.DELETING:
+                current_user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+                if (
+                    current_user_file
+                    and current_user_file.status != UserFileStatus.DELETING
+                ):
                     uf.status = UserFileStatus.FAILED
-                db_session.add(uf)
-                db_session.commit()
+                    db_session.add(uf)
+                    db_session.commit()
                 return None
 
         elapsed = time.monotonic() - start
@@ -380,7 +387,7 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
                 enqueued += 1
     except Exception as e:
         task_logger.exception(
-            f"check_for_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
+            f"check_for_user_file_delete - Error enqueuing deletes - {e.__class__.__name__}"
         )
         return None
     finally:
@@ -457,10 +464,16 @@ def process_single_user_file_delete(
 
             # 2) Delete the user-uploaded file content from filestore (blob + metadata)
             file_store = get_default_file_store()
-            file_store.delete_file(user_file.file_id, db_session=db_session)
-            file_store.delete_file(
-                user_file_id_to_plaintext_file_name(user_file.id), db_session=db_session
-            )
+            try:
+                file_store.delete_file(user_file.file_id)
+                file_store.delete_file(
+                    user_file_id_to_plaintext_file_name(user_file.id)
+                )
+            except Exception as e:
+                # This block executed only if the file is not found in the filestore
+                task_logger.exception(
+                    f"process_single_user_file_delete - Error deleting file id={user_file.id} - {e.__class__.__name__}"
+                )
 
             # 3) Finally, delete the UserFile row
             db_session.delete(user_file)
