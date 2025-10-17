@@ -34,7 +34,6 @@ def manage_sync_streaming(
     message_id = config.persistence.message_id if config.persistence else None
     callbacks: list[CallbackHandler] = []
     if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY:
-
         callbacks.append(CallbackHandler())
     for event in compiled_graph.stream(
         stream_mode="custom",
