@@ -39,9 +39,6 @@ export interface SidebarTabProps {
 
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLDivElement>;
-  onIconClick?: React.MouseEventHandler<HTMLDivElement>;
-  onIconHover?: (isHovering: boolean) => void;
-  onTextClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
   className?: string;
   leftIcon?: React.FunctionComponent<SvgProps>;
@@ -55,9 +52,6 @@ export default function SidebarTab({
   lowlight,
 
   onClick,
-  onIconClick,
-  onIconHover,
-  onTextClick,
   href,
   className,
   leftIcon: LeftIcon,
@@ -82,46 +76,24 @@ export default function SidebarTab({
         )}
       >
         {LeftIcon && (
-          <div
-            className="w-[1rem] h-[1rem] flex flex-col items-center justify-center"
-            onClick={(e) => {
-              if (onIconClick) {
-                e.stopPropagation();
-                onIconClick(e);
-              }
-            }}
-            onMouseEnter={() => onIconHover?.(true)}
-            onMouseLeave={() => onIconHover?.(false)}
-          >
+          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
             <LeftIcon
               className={cn(
                 "h-[1rem]",
                 "w-[1rem]",
-                iconClasses(active)[variant],
-                onIconClick && "cursor-pointer"
+                iconClasses(active)[variant]
               )}
             />
           </div>
         )}
         {!folded &&
           (typeof children === "string" ? (
-            <div
-              className="w-full"
-              onClick={(e) => {
-                if (onTextClick) {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onTextClick(e);
-                }
-              }}
+            <Truncated
+              className={cn(textClasses(active)[variant])}
+              side="right"
             >
-              <Truncated
-                className={cn(textClasses(active)[variant])}
-                side="right"
-              >
-                {children}
-              </Truncated>
-            </div>
+              {children}
+            </Truncated>
           ) : (
             children
           ))}

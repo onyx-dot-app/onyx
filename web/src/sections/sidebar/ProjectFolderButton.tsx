@@ -68,8 +68,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     }
   };
 
-  const handleIconClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  const handleIconClick = () => {
     setOpen((prev) => !prev);
   };
 
@@ -137,13 +136,21 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
       <Popover onOpenChange={setPopoverOpen}>
         <PopoverAnchor>
           <SidebarTab
-            leftIcon={getFolderIcon()}
+            leftIcon={() => (
+              <IconButton
+                onHover={(isHovering) => setIsHoveringIcon(isHovering)}
+                icon={getFolderIcon()}
+                internal
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleIconClick();
+                }}
+              />
+            )}
             active={
               params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)
             }
-            onIconClick={handleIconClick}
-            onIconHover={setIsHoveringIcon}
-            onTextClick={handleTextClick}
+            onClick={handleTextClick}
             rightChildren={
               <>
                 <PopoverTrigger asChild onClick={noProp()}>
