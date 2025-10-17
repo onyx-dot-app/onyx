@@ -220,7 +220,6 @@ function AppSidebarInner() {
   // Handle chat to project drag and drop
   const handleChatProjectDragEnd = useCallback(
     async (event: DragEndEvent) => {
-      console.log("handleChatProjectDragEnd", event);
       const { active, over } = event;
       if (!over) return;
 
