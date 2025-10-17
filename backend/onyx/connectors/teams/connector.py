@@ -385,8 +385,10 @@ def _collect_all_teams(
     teams: list[Team] = []
     next_url: str | None = None
 
-    # Only use OData filter if team names don't have special characters (&, ', ")
-    use_filter = requested and not any(c in name for name in requested for c in "&'\"")
+    # Only use OData filter if team names don't have special characters
+    # These chars are known to cause OData/URL encoding issues: &'\"?#%+=/\
+    problematic_chars = "&'\"?#%+=/\\"
+    use_filter = requested and not any(c in name for name in requested for c in problematic_chars)
     filter = None
     if use_filter:
         escaped_names = [name.replace("'", "''") for name in requested]
@@ -411,9 +413,13 @@ def _collect_all_teams(
                 )
 
             team_collection = query.execute_query()
-        except Exception:
+        except (ClientRequestException, ValueError) as e:
             # If OData filter fails, fallback to client-side filtering
             if use_filter:
+                logger.warning(
+                    f"OData filter failed with {type(e).__name__}: {e}. "
+                    f"Falling back to client-side filtering."
+                )
                 use_filter = False
                 filter = None
                 teams = []
