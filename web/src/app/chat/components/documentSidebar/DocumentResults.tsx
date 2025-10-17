@@ -99,19 +99,16 @@ interface DocumentResultsProps {
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
-const DocumentResultsComponent = (
-  {
-    closeSidebar,
-    modal,
-    selectedDocuments,
-    toggleDocumentSelection,
-    selectedDocumentTokens,
-    maxTokens,
-    isSharedChat,
-    setPresentingDocument,
-  }: DocumentResultsProps,
-  ref: ForwardedRef<HTMLDivElement>
-) => {
+function DocumentResultsInner({
+  closeSidebar,
+  modal,
+  selectedDocuments,
+  toggleDocumentSelection,
+  selectedDocumentTokens,
+  maxTokens,
+  isSharedChat,
+  setPresentingDocument,
+}: DocumentResultsProps) {
   const idOfMessageToDisplay = useSelectedNodeForDocDisplay();
   const currentMessageTree = useCurrentMessageTree();
 
@@ -167,7 +164,7 @@ const DocumentResultsComponent = (
   return (
     <div
       id="onyx-chat-sidebar"
-      className="bg-background-tint-01 overflow-y-scroll h-screen flex flex-col p-padding-button gap-padding-content"
+      className="bg-background-tint-01 overflow-y-scroll h-full w-full flex flex-col p-padding-button gap-padding-content"
     >
       {hasCited && (
         <div>
@@ -247,7 +244,7 @@ const DocumentResultsComponent = (
       )}
     </div>
   );
-};
+}
 
-export const DocumentResults = memo(forwardRef(DocumentResultsComponent));
+export const DocumentResults = memo(DocumentResultsInner);
 DocumentResults.displayName = "DocumentResults";
