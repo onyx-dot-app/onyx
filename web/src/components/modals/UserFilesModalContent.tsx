@@ -17,8 +17,10 @@ import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgTrash from "@/icons/trash";
+import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
+import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface UserFilesModalProps {
@@ -27,11 +29,13 @@ interface UserFilesModalProps {
   icon: React.FunctionComponent<SvgProps>;
   recentFiles: ProjectFile[];
   onPickRecent?: (file: ProjectFile) => void;
+  onUnpickRecent?: (file: ProjectFile) => void;
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   showRemove?: boolean;
   onRemove?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
   onClose?: () => void;
+  selectedFileIds?: string[];
 }
 
 const getFileExtension = (fileName: string): string => {
@@ -48,22 +52,35 @@ export default function UserFilesModalContent({
   icon: Icon,
   recentFiles,
   onPickRecent,
+  onUnpickRecent,
   handleUploadChange,
   showRemove,
   onRemove,
   onFileClick,
   onClose,
+  selectedFileIds,
 }: UserFilesModalProps) {
   const [search, setSearch] = useState("");
   const [containerHeight, setContainerHeight] = useState<number>(320);
   const [isScrollable, setIsScrollable] = useState(false);
   const [isInitialMount, setIsInitialMount] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(selectedFileIds || [])
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const maxHeight = 588;
   const minHeight = 320;
   const triggerUploadPicker = () => fileInputRef.current?.click();
+
+  useEffect(() => {
+    if (selectedFileIds) {
+      setSelectedIds(new Set(selectedFileIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [selectedFileIds]);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -178,11 +195,13 @@ export default function UserFilesModalContent({
                   accept={"*/*"}
                 />
 
-                <button onClick={triggerUploadPicker}>
-                  <LineItem icon={SvgPlusCircle}>
-                    <p className="text-text-03 font-main-action">Add Files</p>
+                <div>
+                  <LineItem icon={SvgPlusCircle} onClick={triggerUploadPicker}>
+                    <Text text03 mainUiAction>
+                      Add Files
+                    </Text>
                   </LineItem>
-                </button>
+                </div>
               </>
             )}
           </div>
@@ -204,33 +223,66 @@ export default function UserFilesModalContent({
           className="flex flex-col h-full bg-background-tint-01 px-spacing-paragraph rounded-b-12"
         >
           {filtered.map((f) => (
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               key={f.id}
               className={cn(
-                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group"
+                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group",
+                onPickRecent && "hover:bg-background-tint-02"
               )}
               onClick={() => {
-                if (onPickRecent) {
+                if (!onPickRecent) return;
+                const isSelected = selectedIds.has(f.id);
+                if (isSelected) {
+                  onUnpickRecent?.(f);
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(f.id);
+                    return next;
+                  });
+                } else {
                   onPickRecent(f);
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(f.id);
+                    return next;
+                  });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.currentTarget.click();
                 }
               }}
             >
               <div className="flex items-center p-spacing-inline flex-1 min-w-0">
                 <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
-                  {String(f.status).toLowerCase() === "processing" ||
-                  String(f.status).toLowerCase() === "uploading" ? (
+                  {String((f as ProjectFile).status) ===
+                    UserFileStatus.PROCESSING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.UPLOADING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.DELETING ? (
                     <Loader2 className="h-5 w-5 text-text-02 animate-spin" />
                   ) : (
                     <>
-                      {(() => {
-                        const ext = getFileExtension(f.name).toLowerCase();
-                        const isImage = isImageExtension(ext);
-                        return isImage ? (
-                          <SvgImage className="h-5 w-5 stroke-text-02" />
-                        ) : (
-                          <SvgFileText className="h-5 w-5 stroke-text-02" />
-                        );
-                      })()}
+                      {onPickRecent && selectedIds.has(f.id) ? (
+                        <div className="w-4 h-4 flex items-center justify-center rounded-04 border border-border-01 bg-background-neutral-00 p-spacing-inline-mini">
+                          <SvgCheck className="stroke-text-02" />
+                        </div>
+                      ) : (
+                        (() => {
+                          const ext = getFileExtension(f.name).toLowerCase();
+                          const isImage = isImageExtension(ext);
+                          return isImage ? (
+                            <SvgImage className="h-5 w-5 stroke-text-02" />
+                          ) : (
+                            <SvgFileText className="h-5 w-5 stroke-text-02" />
+                          );
+                        })()
+                      )}
                     </>
                   )}
                 </div>
@@ -242,8 +294,9 @@ export default function UserFilesModalContent({
                       </Truncated>
                     </div>
                     {onFileClick &&
-                      String(f.status).toLowerCase() !== "processing" &&
-                      String(f.status).toLowerCase() !== "uploading" && (
+                      String(f.status) !== UserFileStatus.PROCESSING &&
+                      String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
                         <IconButton
                           internal
                           icon={SvgExternalLink}
@@ -260,11 +313,13 @@ export default function UserFilesModalContent({
 
                   <Text text03 secondaryBody>
                     {(() => {
-                      const s = String(f.status || "").toLowerCase();
+                      const s = String(f.status || "");
                       const typeLabel = getFileExtension(f.name);
-                      if (s === "processing") return "Processing...";
-                      if (s === "uploading") return "Uploading...";
-                      if (s === "completed") return typeLabel;
+                      if (s === UserFileStatus.PROCESSING)
+                        return "Processing...";
+                      if (s === UserFileStatus.UPLOADING) return "Uploading...";
+                      if (s === UserFileStatus.DELETING) return "Deleting...";
+                      if (s === UserFileStatus.COMPLETED) return typeLabel;
                       return f.status ? f.status : typeLabel;
                     })()}
                   </Text>
@@ -278,7 +333,8 @@ export default function UserFilesModalContent({
                 )}
                 {!showRemove && <div className="p-spacing-inline"></div>}
                 {showRemove &&
-                  String(f.status).toLowerCase() !== "processing" && (
+                  String(f.status) !== UserFileStatus.UPLOADING &&
+                  String(f.status) !== UserFileStatus.DELETING && (
                     <IconButton
                       internal
                       icon={SvgTrash}
@@ -291,7 +347,7 @@ export default function UserFilesModalContent({
                     />
                   )}
               </div>
-            </button>
+            </div>
           ))}
           {filtered.length === 0 && (
             <Text text03 secondaryBody className="px-2 py-4">
