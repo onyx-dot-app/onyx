@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from onyx.connectors.teams.connector import _collect_all_teams
 
 
-def test_hybrid_filtering():
+def test_hybrid_filtering() -> None:
     """Test that hybrid approach uses OData for safe names, client-side for special chars."""
     mock_graph_client = MagicMock()
 

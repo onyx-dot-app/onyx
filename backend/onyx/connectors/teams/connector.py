@@ -392,7 +392,7 @@ def _collect_all_teams(
         c in name for name in requested for c in problematic_chars
     )
     filter = None
-    if use_filter:
+    if use_filter and requested:
         escaped_names = [name.replace("'", "''") for name in requested]
         filter = " or ".join(
             f"displayName eq '{team_name}'" for team_name in escaped_names
