@@ -5,7 +5,7 @@ import { User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgRefreshCw from "@/icons/refresh-cw";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { LoadingAnimation } from "@/components/Loading";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";

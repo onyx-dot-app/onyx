@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
@@ -29,8 +29,14 @@ import SvgExternalLink from "@/icons/external-link";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 
-type SettingsSection = "settings" | "password" | "connectors";
+type SettingsSection =
+  | "settings"
+  | "password"
+  | "connectors"
+  | "personalization";
 
 interface UserSettingsProps {
   onClose: () => void;
@@ -43,6 +49,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
+    updateUserPersonalization,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
@@ -64,7 +71,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
-
   const { popup, setPopup } = usePopup();
 
   // Fetch federated-connector info so the modal can list/refresh them
@@ -90,6 +96,52 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const hasConnectors =
     (ccPairs && ccPairs.length > 0) ||
     (federatedConnectors && federatedConnectors.length > 0);
+
+  const showPasswordSection = Boolean(user?.password_configured);
+
+  const {
+    personalizationValues,
+    updatePersonalizationField,
+    toggleUseMemories,
+    updateMemoryAtIndex,
+    addMemory,
+    handleSavePersonalization,
+    isSavingPersonalization,
+  } = useUserPersonalization(user, updateUserPersonalization, {
+    onSuccess: () =>
+      setPopup({
+        message: "Personalization updated successfully",
+        type: "success",
+      }),
+    onError: () =>
+      setPopup({
+        message: "Failed to update personalization",
+        type: "error",
+      }),
+  });
+
+  const sections = useMemo(() => {
+    const visibleSections: { id: SettingsSection; label: string }[] = [
+      { id: "settings", label: "Settings" },
+      { id: "personalization", label: "Personalization" },
+    ];
+
+    if (showPasswordSection) {
+      visibleSections.push({ id: "password", label: "Password" });
+    }
+
+    if (hasConnectors) {
+      visibleSections.push({ id: "connectors", label: "Connectors" });
+    }
+
+    return visibleSections;
+  }, [showPasswordSection, hasConnectors]);
+
+  useEffect(() => {
+    if (!sections.some((section) => section.id === activeSection)) {
+      setActiveSection(sections[0]?.id ?? "settings");
+    }
+  }, [sections, activeSection]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -280,8 +332,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   };
   const pathname = usePathname();
 
-  const showPasswordSection = user?.password_configured;
-
   const handleDeleteAllChats = async () => {
     setIsDeleteAllLoading(true);
     try {
@@ -311,40 +361,20 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
   return (
     <div className="flex flex-col gap-padding-content p-padding-content">
-      {(showPasswordSection || hasConnectors) && (
+      {sections.length > 1 && (
         <nav>
           <ul className="flex space-x-2">
-            <li>
-              <Button
-                tertiary
-                active={activeSection === "settings"}
-                onClick={() => setActiveSection("settings")}
-              >
-                Settings
-              </Button>
-            </li>
-            {showPasswordSection && (
-              <li>
+            {sections.map(({ id, label }) => (
+              <li key={id}>
                 <Button
                   tertiary
-                  active={activeSection === "password"}
-                  onClick={() => setActiveSection("password")}
+                  active={activeSection === id}
+                  onClick={() => setActiveSection(id)}
                 >
-                  Password
+                  {label}
                 </Button>
               </li>
-            )}
-            {hasConnectors && (
-              <li>
-                <Button
-                  tertiary
-                  active={activeSection === "connectors"}
-                  onClick={() => setActiveSection("connectors")}
-                >
-                  Connectors
-                </Button>
-              </li>
-            )}
+            ))}
           </ul>
         </nav>
       )}
@@ -491,6 +521,87 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {activeSection === "personalization" && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Name
+              </label>
+              <Input
+                value={personalizationValues.name}
+                onChange={(event) =>
+                  updatePersonalizationField("name", event.target.value)
+                }
+                placeholder="Set how Onyx should refer to you"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Role
+              </label>
+              <Input
+                value={personalizationValues.role}
+                onChange={(event) =>
+                  updatePersonalizationField("role", event.target.value)
+                }
+                placeholder="Share your role to tailor responses"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium">Use memories</h3>
+                <SubLabel>
+                  Allow Onyx to reference stored memories in future chats.
+                </SubLabel>
+              </div>
+              <Switch
+                checked={personalizationValues.use_memories}
+                onCheckedChange={(checked) => toggleUseMemories(checked)}
+              />
+            </div>
+            <div className="border-t border-border pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Memories</h3>
+                  <SubLabel>
+                    Keep personal notes that should inform future chats.
+                  </SubLabel>
+                </div>
+                <Button tertiary onClick={addMemory}>
+                  Add Memory
+                </Button>
+              </div>
+              {personalizationValues.memories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No memories saved yet.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto flex flex-col gap-3 pr-1">
+                  {personalizationValues.memories.map((memory, index) => (
+                    <AutoResizeTextarea
+                      key={index}
+                      value={memory}
+                      placeholder="Write something Onyx should remember"
+                      onChange={(value) => updateMemoryAtIndex(index, value)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  void handleSavePersonalization();
+                }}
+                disabled={isSavingPersonalization}
+              >
+                {isSavingPersonalization
+                  ? "Saving Personalization..."
+                  : "Save Personalization"}
+              </Button>
             </div>
           </div>
         )}

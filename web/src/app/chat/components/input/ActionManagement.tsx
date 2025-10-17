@@ -50,7 +50,7 @@ import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useTheme } from "next-themes";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSliders from "@/icons/sliders";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
 

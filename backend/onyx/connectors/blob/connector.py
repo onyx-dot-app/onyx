@@ -7,6 +7,7 @@ from io import BytesIO
 from numbers import Integral
 from typing import Any
 from typing import Optional
+from urllib.parse import quote
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
@@ -60,17 +61,40 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
-        self.bucket_name = bucket_name
+        self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
+        self._bucket_region: Optional[str] = None
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
         logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
+
+    def _detect_bucket_region(self) -> None:
+        """Detect and cache the actual region of the S3 bucket using head_bucket."""
+        if self.s3_client is None:
+            logger.warning(
+                "S3 client not initialized. Skipping bucket region detection."
+            )
+            return
+
+        try:
+            response = self.s3_client.head_bucket(Bucket=self.bucket_name)
+            # The region is in the response headers as 'x-amz-bucket-region'
+            self._bucket_region = response.get("BucketRegion") or response.get(
+                "ResponseMetadata", {}
+            ).get("HTTPHeaders", {}).get("x-amz-bucket-region")
+
+            if self._bucket_region:
+                logger.debug(f"Detected bucket region: {self._bucket_region}")
+            else:
+                logger.warning("Bucket region not found in head_bucket response")
+        except Exception as e:
+            logger.warning(f"Failed to detect bucket region via head_bucket: {e}")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -169,6 +193,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
+            # This is important for correct citation links
+            # NOTE: the client region actually doesn't matter for accessing the bucket
+            self._detect_bucket_region()
+
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
                 credentials.get(key) for key in ["access_key_id", "secret_access_key"]
@@ -257,21 +285,25 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
+        # URL encode the key to handle special characters, spaces, etc.
+        # safe='/' keeps forward slashes unencoded for proper path structure
+        encoded_key = quote(key, safe="/")
+
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{key}"
+            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.S3:
-            region = self.s3_client.meta.region_name
-            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{key}"
+            region = self._bucket_region or self.s3_client.meta.region_name
+            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            return f"https://storage.cloud.google.com/{self.bucket_name}/{key}"
+            return f"https://storage.cloud.google.com/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
             region = self.s3_client.meta.region_name
-            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{key}"
+            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")

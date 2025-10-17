@@ -24,6 +24,7 @@ from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.prompts.prompt_utils import handle_company_awareness
+from onyx.prompts.prompt_utils import handle_memories
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -35,6 +36,7 @@ from onyx.tools.tool import Tool
 def default_build_system_message_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
+    memories_callback: Callable[[], list[str]] | None = None,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
@@ -54,6 +56,9 @@ def default_build_system_message_v2(
         return None
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+
+    if memories_callback:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
 
     return SystemMessage(content=tag_handled_prompt)
 
@@ -61,6 +66,7 @@ def default_build_system_message_v2(
 def default_build_system_message(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
+    memories_callback: Callable[[], list[str]] | None = None,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
@@ -80,6 +86,9 @@ def default_build_system_message(
         return None
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+
+    if memories_callback:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
 
     return SystemMessage(content=tag_handled_prompt)
 

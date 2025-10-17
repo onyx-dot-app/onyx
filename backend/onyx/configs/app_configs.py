@@ -129,6 +129,26 @@ OAUTH_CLIENT_SECRET = (
 # OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
+
+# Applicable for SAML Auth
+SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# JWT Public Key URL for JWT token verification
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
@@ -889,6 +909,11 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Should we force S3 local checksumming
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

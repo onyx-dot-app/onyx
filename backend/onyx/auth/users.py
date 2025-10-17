@@ -54,6 +54,8 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
+from sqlalchemy import nulls_last
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -61,6 +63,7 @@ from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
+from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
@@ -70,6 +73,7 @@ from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
 from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
@@ -103,19 +107,21 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
+from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.saml import get_saml_account
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.secrets import extract_hashed_cookie
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -134,10 +140,9 @@ def is_user_admin(user: User | None) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE not in [AuthType.DISABLED, AuthType.BASIC, AuthType.GOOGLE_OAUTH]:
+    if AUTH_TYPE == AuthType.CLOUD:
         raise ValueError(
-            "User must choose a valid user authentication method: "
-            "disabled, basic, or google_oauth"
+            f"{AUTH_TYPE.value} is not a valid auth type for self-hosted deployments."
         )
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
@@ -324,8 +329,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         user_create.role = UserRole.ADMIN
 
+                user_created = False
                 try:
-                    user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+                    user = await super().create(
+                        user_create, safe=safe, request=request
+                    )  # type: ignore
+                    user_created = True
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -351,10 +360,41 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         role=user_create.role,
                     )
                     user = await self.update(user_update, user)
+                if user_created:
+                    await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
+
+    async def _assign_default_pinned_assistants(
+        self, user: User, db_session: AsyncSession
+    ) -> None:
+        if user.pinned_assistants is not None:
+            return
+
+        result = await db_session.execute(
+            select(Persona.id)
+            .where(
+                Persona.is_default_persona.is_(True),
+                Persona.is_public.is_(True),
+                Persona.is_visible.is_(True),
+                Persona.deleted.is_(False),
+            )
+            .order_by(
+                nulls_last(Persona.display_priority.asc()),
+                Persona.id.asc(),
+            )
+        )
+        default_persona_ids = list(result.scalars().all())
+        if not default_persona_ids:
+            return
+
+        await self.user_db.update(
+            user,
+            {"pinned_assistants": default_persona_ids},
+        )
+        user.pinned_assistants = default_persona_ids
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
@@ -476,6 +516,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
+                    await self._assign_default_pinned_assistants(user, db_session)
                     await self.on_after_register(user, request)
 
             else:
@@ -1018,13 +1059,28 @@ fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
 optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
 
 
-async def optional_user_(
+async def _check_for_saml_and_jwt(
     request: Request,
     user: User | None,
     async_db_session: AsyncSession,
 ) -> User | None:
-    """NOTE: `request` and `db_session` are not used here, but are included
-    for the EE version of this function."""
+    # Check if the user has a session cookie from SAML
+    if AUTH_TYPE == AuthType.SAML:
+        saved_cookie = extract_hashed_cookie(request)
+
+        if saved_cookie:
+            saml_account = await get_saml_account(
+                cookie=saved_cookie, async_db_session=async_db_session
+            )
+            user = saml_account.user if saml_account else None
+
+    # If user is still None, check for JWT in Authorization header
+    if user is None and JWT_PUBLIC_KEY_URL is not None:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[len("Bearer ") :].strip()
+            user = await verify_jwt_token(token, async_db_session)
+
     return user
 
 
@@ -1033,10 +1089,7 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-    versioned_fetch_user = fetch_versioned_implementation(
-        "onyx.auth.users", "optional_user_"
-    )
-    user = await versioned_fetch_user(request, user, async_db_session)
+    user = await _check_for_saml_and_jwt(request, user, async_db_session)
 
     # check if an API key is present
     if user is None:

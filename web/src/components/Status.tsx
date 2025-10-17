@@ -10,12 +10,7 @@ import {
   FiPauseCircle,
 } from "react-icons/fi";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export function IndexAttemptStatus({
   status,
@@ -34,14 +29,9 @@ export function IndexAttemptStatus({
     );
     if (errorMsg) {
       badge = (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="cursor-pointer">{icon}</div>
-            </TooltipTrigger>
-            <TooltipContent>{errorMsg}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <SimpleTooltip tooltip={errorMsg}>
+          <div className="cursor-pointer">{icon}</div>
+        </SimpleTooltip>
       );
     } else {
       badge = icon;
