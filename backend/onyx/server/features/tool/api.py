@@ -50,6 +50,7 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
 
 
 def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User | None):
+    """Fetch a custom tool and ensure the caller has permission to edit it."""
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
@@ -61,6 +62,7 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User | No
             detail="Built-in tools cannot be modified through this endpoint.",
         )
 
+    # Admins can always make changes; non-admins must own the tool.
     if not user or user.role == UserRole.ADMIN:
         return tool
 
