@@ -12,7 +12,7 @@ def setup_langfuse_if_creds_available() -> None:
         logger.info("Langfuse credentials not provided, skipping Langfuse setup")
         return
 
-    import nest_asyncio
+    import nest_asyncio  # type: ignore
     from langfuse import get_client
     from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
