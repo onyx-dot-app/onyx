@@ -388,7 +388,9 @@ def _collect_all_teams(
     # Only use OData filter if team names don't have special characters
     # These chars are known to cause OData/URL encoding issues: &'\"?#%+=/\
     problematic_chars = "&'\"?#%+=/\\"
-    use_filter = requested and not any(c in name for name in requested for c in problematic_chars)
+    use_filter = requested and not any(
+        c in name for name in requested for c in problematic_chars
+    )
     filter = None
     if use_filter:
         escaped_names = [name.replace("'", "''") for name in requested]
