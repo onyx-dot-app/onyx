@@ -150,12 +150,12 @@ def _build_project_llm_docs(
         return project_llm_docs
 
     project_file_id_set = set(project_file_ids)
+
+    def _strip_nuls(s: str) -> str:
+        return s.replace("\x00", "") if s else s
+
     for f in in_memory_user_files:
         if project_file_id_set and (f.file_id in project_file_id_set):
-
-            def _strip_nuls(s: str) -> str:
-                return s.replace("\x00", "") if s else s
-
             cleaned_filename = _strip_nuls(f.filename or str(f.file_id))
 
             if f.file_type.is_text_file():

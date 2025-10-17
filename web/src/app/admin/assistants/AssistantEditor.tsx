@@ -122,6 +122,7 @@ import SvgPlusCircle from "@/icons/plus-circle";
 import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -1153,9 +1154,7 @@ export function AssistantEditor({
                               )}
                               <FilePicker
                                 trigger={
-                                  <LineItem icon={SvgPlusCircle}>
-                                    Add User Files
-                                  </LineItem>
+                                  <CreateButton>Add User Files</CreateButton>
                                 }
                                 recentFiles={recentFiles}
                                 onFileClick={(file: ProjectFile) => {
