@@ -37,7 +37,7 @@ export default function SidebarWrapper({
       >
         <div
           className={cn(
-            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0",
+            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0 gap-spacing-paragraph",
             folded ? "justify-center" : "justify-between"
           )}
         >
