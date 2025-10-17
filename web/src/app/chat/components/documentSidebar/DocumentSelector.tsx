@@ -1,18 +1,22 @@
 import { HoverPopup } from "@/components/HoverPopup";
+import SvgPlusCircle from "@/icons/plus-circle";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import { useState } from "react";
 
-export function DocumentSelector({
-  isSelected,
-  handleSelect,
-  isDisabled,
-}: {
+export interface DocumentSelectorProps {
   isSelected: boolean;
   handleSelect: () => void;
   isDisabled?: boolean;
-}) {
+}
+
+export default function DocumentSelector({
+  isSelected,
+  handleSelect,
+  isDisabled,
+}: DocumentSelectorProps) {
   const [popupDisabled, setPopupDisabled] = useState(false);
 
-  function onClick(e: React.MouseEvent<HTMLInputElement>) {
+  function onClick(e: React.MouseEvent) {
     e.stopPropagation();
     if (!isDisabled) {
       setPopupDisabled(true);
@@ -27,21 +31,13 @@ export function DocumentSelector({
 
   function Main() {
     return (
-      <div
-        className={
-          "ml-auto flex select-none " + (!isDisabled ? " cursor-pointer" : "")
-        }
+      <IconButton
+        icon={SvgPlusCircle}
         onClick={onClick}
-      >
-        <input
-          className="cursor-pointer my-auto"
-          type="checkbox"
-          checked={isSelected}
-          // dummy function to prevent warning
-          onChange={() => null}
-          disabled={isDisabled}
-        />
-      </div>
+        active={isSelected}
+        disabled={isDisabled}
+        tertiary
+      />
     );
   }
 
