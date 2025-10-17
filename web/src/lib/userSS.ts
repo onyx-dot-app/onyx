@@ -88,6 +88,25 @@ const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   return data.authorization_url;
 };
 
+const getAuth0OAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
+  const url = UrlBuilder.fromInternalUrl("/auth/oauth/authorize");
+  if (nextUrl) {
+    url.addParam("next", nextUrl);
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      cookie: processCookies(await cookies()),
+    },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch data");
+  }
+
+  const data: { authorization_url: string } = await res.json();
+  return data.authorization_url;
+};
+
 const getSAMLAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   const url = UrlBuilder.fromInternalUrl("/auth/saml/authorize");
   if (nextUrl) {
@@ -116,6 +135,9 @@ export const getAuthUrlSS = async (
       return "";
     case "google_oauth": {
       return await getGoogleOAuthUrlSS(nextUrl);
+    }
+	case "auth0": {
+	  return await getAuth0OAuthUrlSS(nextUrl);
     }
     case "cloud": {
       return await getGoogleOAuthUrlSS(nextUrl);

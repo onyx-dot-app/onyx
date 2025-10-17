@@ -1,10 +1,13 @@
 import logging
 import sys
 import traceback
+import httpx
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
+from typing import Dict, Optional, Tuple
 
 import sentry_sdk
 import uvicorn
@@ -18,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.oauth2 import BaseOAuth2
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -35,6 +39,9 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import AUTH0_CLIENT_ID
+from onyx.configs.app_configs import AUTH0_CLIENT_SECRET
+from onyx.configs.app_configs import AUTH0_DOMAIN
 from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -451,10 +458,42 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
+    if AUTH_TYPE == AuthType.AUTH0:
+        if not all([AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_DOMAIN]):
+            raise ValueError(
+                "In order to use Auth0, it requires AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, and AUTH0_DOMAIN to be set."
+            )
+        
+        oauth_client = Auth0OAuth2(
+            client_id=AUTH0_CLIENT_ID,
+            client_secret=AUTH0_CLIENT_SECRET,
+            auth0_domain=AUTH0_DOMAIN,
+        )
+        
+        include_auth_router_with_prefix(
+            application,
+            create_onyx_oauth_router(
+                oauth_client,
+                auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
+            ),
+            prefix="/auth/oauth",
+        )
+
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_logout_router(auth_backend),
+            prefix="/auth",
+        )
+
     if (
         AUTH_TYPE == AuthType.CLOUD
         or AUTH_TYPE == AuthType.BASIC
         or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+        or AUTH_TYPE == AuthType.AUTH0
     ):
         # Add refresh token endpoint for OAuth as well
         include_auth_router_with_prefix(
