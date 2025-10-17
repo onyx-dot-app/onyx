@@ -1,12 +1,9 @@
-from typing import Any
 from typing import cast
-from typing import Dict
 from uuid import UUID
 
 from agents import Agent
 from agents import RawResponsesStreamEvent
 from agents import StopAtTools
-from agents.agent_output import AgentOutputSchemaBase
 from agents.tracing import trace
 
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -26,7 +23,6 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
-from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -38,34 +34,34 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations_v2.image_generation import image_generation
 
 
-class ReadyToAnswer(AgentOutputSchemaBase):
-    """
-    Useful for doing a code-orchestrated handoff when you only want to save
-    tool calls and intermediate values and you want the agent to generate
-    a concise response.
-    """
+# class ReadyToAnswer(AgentOutputSchemaBase):
+#     """
+#     Useful for doing a code-orchestrated handoff when you only want to save
+#     tool calls and intermediate values and you want the agent to generate
+#     a concise response.
+#     """
 
-    def is_plain_text(self) -> bool:
-        return False
+#     def is_plain_text(self) -> bool:
+#         return False
 
-    def name(self) -> str:
-        return "ReadyToAnswer"
+#     def name(self) -> str:
+#         return "ReadyToAnswer"
 
-    def json_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "ready": {"type": "boolean"},
-            },
-            "required": ["ready"],
-            "additionalProperties": False,
-        }
+#     def json_schema(self) -> Dict[str, Any]:
+#         return {
+#             "type": "object",
+#             "properties": {
+#                 "ready": {"type": "boolean"},
+#             },
+#             "required": ["ready"],
+#             "additionalProperties": False,
+#         }
 
-    def is_strict_json_schema(self) -> bool:
-        return False
+#     def is_strict_json_schema(self) -> bool:
+#         return False
 
-    def validate_json(self, json_str: str) -> dict[str, Any]:
-        return {}
+#     def validate_json(self, json_str: str) -> dict[str, Any]:
+#         return {}
 
 
 # Todo -- this can be refactored out and played with in evals + normal demo
@@ -87,7 +83,7 @@ def _run_agent_loop(
         tools=cast(list[AgentToolType], dependencies.tools),
         model_settings=dependencies.model_settings,
         tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation.name]),
-        output_type=ReadyToAnswer(),
+        # output_type=ReadyToAnswer(),
     )
 
     # By default, the agent can only take 10 turns. For our use case, it should be higher.
@@ -98,46 +94,42 @@ def _run_agent_loop(
         context=ctx,
         max_turns=max_turns,
     )
-    _process_stream(
-        agent_stream, chat_session_id, dependencies, ctx, emit_message_to_user=False
-    )
+    _process_stream(agent_stream, chat_session_id, dependencies, ctx)
 
-    # Early return if image generation or other tool set no_final_message flag
-    if ctx.no_final_message:
-        return
+    # if ctx.no_final_message:
+    #     return
 
-    # Prepare final answer agent with task prompt and conditional citation
-    new_input = agent_stream.streamed.to_input_list()
-    last_message = messages[-1]
+    # # Prepare final answer agent with task prompt and conditional citation
+    # new_input = agent_stream.streamed.to_input_list()
+    # last_message = messages[-1]
 
-    # Build task prompt with conditional citation based on whether documents were fetched
-    task_prompt_with_reminders = build_task_prompt_reminders_v2(
-        prompt=prompt_config,
-        use_language_hint=False,
-        should_cite=ctx.should_cite_documents,
-    )
+    # # Build task prompt with conditional citation based on whether documents were fetched
+    # task_prompt_with_reminders = build_task_prompt_reminders_v2(
+    #     prompt=prompt_config,
+    #     use_language_hint=False,
+    #     should_cite=ctx.should_cite_documents,
+    # )
 
-    new_input[-1] = {
-        "role": "user",
-        "content": f"{task_prompt_with_reminders}\n Query: {last_message['content']}",
-    }
+    # new_input[-1] = {
+    #     "role": "user",
+    #     "content": f"{task_prompt_with_reminders}\n Query: {last_message['content']}",
+    # }
 
-    final_answer_agent = Agent(
-        name="Final Response",
-        model=dependencies.llm_model,
-        tools=[],
-        model_settings=dependencies.model_settings,
-    )
-    final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
-        agent=final_answer_agent,
-        input=new_input,
-        context=ctx,
-        max_turns=max_turns,
-    )
-    _process_stream(final_answer_agent_stream, chat_session_id, dependencies, ctx)
-    # In general, extract final answer from packets for prod but this is useful for experimentation
-    # and evals
-    return final_answer_agent_stream.streamed.final_output
+    # final_answer_agent = Agent(
+    #     name="Final Response",
+    #     model=dependencies.llm_model,
+    #     tools=[],
+    #     model_settings=dependencies.model_settings,
+    # )
+    # final_answer_agent_stream: SyncAgentStream = SyncAgentStream(
+    #     agent=final_answer_agent,
+    #     input=new_input,
+    #     context=ctx,
+    #     max_turns=max_turns,
+    # )
+    # _process_stream(final_answer_agent_stream, chat_session_id, dependencies, ctx)
+    # return final_answer_agent_stream.streamed.final_output
+    return "hi"
 
 
 def _fast_chat_turn_core(
