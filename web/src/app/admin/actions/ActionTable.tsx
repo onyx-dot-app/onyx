@@ -19,6 +19,7 @@ import { deleteCustomTool, deleteMCPServer } from "@/lib/tools/edit";
 import { TableHeader } from "@/components/ui/table";
 import { useUser } from "@/components/user/UserProvider";
 import { UserRole } from "@/lib/types";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 
 export function ActionsTable({
@@ -60,20 +61,15 @@ export function ActionsTable({
               <TableCell>
                 <div className="flex items-center gap-2">
                   {isAdmin || server.owner === user?.email ? (
-                    <button
-                      type="button"
-                      className="rounded p-1 hover:bg-background-neutral-02"
+                    <IconButton
+                      icon={SvgEdit}
+                      tertiary
                       onClick={() => {
                         router.push(
                           `/admin/actions/edit-mcp?server_id=${server.id}`
                         );
                       }}
-                    >
-                      <SvgEdit
-                        stroke="currentColor"
-                        className="size-4 text-text-03"
-                      />
-                    </button>
+                    />
                   ) : null}
                   <Text
                     mainUiBody
@@ -99,9 +95,9 @@ export function ActionsTable({
               <TableCell className="whitespace-nowrap">
                 <div className="flex items-center">
                   {isAdmin || server.owner === user?.email ? (
-                    <button
-                      type="button"
-                      className="rounded p-1 hover:bg-background-neutral-02"
+                    <IconButton
+                      icon={SvgTrash}
+                      tertiary
                       onClick={async () => {
                         const confirmDelete = window.confirm(
                           "Delete this MCP server and all its tools and configs? This cannot be undone."
@@ -117,12 +113,7 @@ export function ActionsTable({
                           });
                         }
                       }}
-                    >
-                      <SvgTrash
-                        stroke="currentColor"
-                        className="size-4 text-text-03"
-                      />
-                    </button>
+                    />
                   ) : (
                     <Text text03>-</Text>
                   )}
@@ -143,20 +134,15 @@ export function ActionsTable({
                 <TableCell>
                   <div className="flex items-center gap-2">
                     {canModifyTool && (
-                      <button
-                        type="button"
-                        className="rounded p-1 hover:bg-background-neutral-02"
+                      <IconButton
+                        icon={SvgEdit}
+                        tertiary
                         onClick={() => {
                           router.push(
                             `/admin/actions/edit/${tool.id}?u=${Date.now()}`
                           );
                         }}
-                      >
-                        <SvgEdit
-                          stroke="currentColor"
-                          className="size-4 text-text-03"
-                        />
-                      </button>
+                      />
                     )}
                     <Text
                       mainUiBody
@@ -193,9 +179,9 @@ export function ActionsTable({
                   <div className="flex items-center">
                     {isCustomTool ? (
                       canModifyTool ? (
-                        <button
-                          type="button"
-                          className="rounded p-1 hover:bg-background-neutral-02"
+                        <IconButton
+                          icon={SvgTrash}
+                          tertiary
                           onClick={async () => {
                             const response = await deleteCustomTool(tool.id);
                             if (response.data) {
@@ -207,12 +193,7 @@ export function ActionsTable({
                               });
                             }
                           }}
-                        >
-                          <SvgTrash
-                            stroke="currentColor"
-                            className="size-4 text-text-03"
-                          />
-                        </button>
+                        />
                       ) : (
                         <Text text03>-</Text>
                       )

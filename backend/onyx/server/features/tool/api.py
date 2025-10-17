@@ -10,6 +10,7 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -49,7 +50,9 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
-def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User | None):
+def _get_editable_custom_tool(
+    tool_id: int, db_session: Session, user: User | None
+) -> Tool:
     """Fetch a custom tool and ensure the caller has permission to edit it."""
     try:
         tool = get_tool_by_id(tool_id, db_session)

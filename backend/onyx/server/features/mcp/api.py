@@ -862,7 +862,7 @@ def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) ->
     if not user_email or server.owner != user_email:
         raise HTTPException(
             status_code=403,
-            detail="You can only modify MCP servers that you created.",
+            detail="Curators can only modify MCP servers that they have created.",
         )
 
 
