@@ -54,7 +54,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=user-file-processing@%n",
               "-Q",
-              "user_file_processing,user_file_project_sync",
+              "user_file_processing,user_file_project_sync,user_file_delete",
             ]
           resources:
             {{- toYaml .Values.celery_worker_user_file_processing.resources | nindent 12 }}

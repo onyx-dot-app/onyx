@@ -79,7 +79,7 @@ import {
   TrashIcon,
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { debounce } from "lodash";
+import { debounce, values } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
@@ -339,7 +339,7 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
-  const { recentFiles, uploadFiles: uploadProjectFiles } = useProjectsContext();
+  const { allRecentFiles, beginUpload } = useProjectsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
@@ -539,6 +539,8 @@ export function AssistantEditor({
       }
     }
   };
+
+  // Removed invalid helper; replacement happens inline in the upload handler using the beginUpload onSuccess callback
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -1106,9 +1108,10 @@ export function AssistantEditor({
                                   {values.user_file_ids
                                     .slice(0, 4)
                                     .map((userFileId: string) => {
-                                      const rf = recentFiles.find(
+                                      const rf = allRecentFiles.find(
                                         (f) => f.id === userFileId
                                       );
+
                                       const fileData = rf || {
                                         id: userFileId,
                                         name: `File ${userFileId.slice(0, 8)}`,
@@ -1118,6 +1121,7 @@ export function AssistantEditor({
                                         <div key={userFileId} className="w-40">
                                           <FileCard
                                             file={fileData as ProjectFile}
+                                            hideProcessingState
                                             removeFile={() => {
                                               setFieldValue(
                                                 "user_file_ids",
@@ -1156,7 +1160,7 @@ export function AssistantEditor({
                                 trigger={
                                   <CreateButton>Add User Files</CreateButton>
                                 }
-                                recentFiles={recentFiles}
+                                recentFiles={allRecentFiles}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
                                     document_id: `project_file__${file.file_id}`,
@@ -1171,30 +1175,89 @@ export function AssistantEditor({
                                     ]);
                                   }
                                 }}
+                                onUnpickRecent={(file: ProjectFile) => {
+                                  if (values.user_file_ids.includes(file.id)) {
+                                    setFieldValue(
+                                      "user_file_ids",
+                                      values.user_file_ids.filter(
+                                        (id: string) => id !== file.id
+                                      )
+                                    );
+                                  }
+                                }}
                                 handleUploadChange={async (
                                   e: React.ChangeEvent<HTMLInputElement>
                                 ) => {
                                   const files = e.target.files;
                                   if (!files || files.length === 0) return;
-
                                   try {
-                                    const uploaded = await uploadProjectFiles(
-                                      Array.from(files)
+                                    // Use a local tracker to avoid stale closures inside onSuccess
+                                    let selectedIds = [
+                                      ...(values.user_file_ids || []),
+                                    ];
+                                    const optimistic = await beginUpload(
+                                      Array.from(files),
+                                      null,
+                                      setPopup,
+                                      (result) => {
+                                        const uploadedFiles =
+                                          result.user_files || [];
+                                        if (uploadedFiles.length === 0) return;
+                                        const tempToFinal = new Map(
+                                          uploadedFiles
+                                            .filter((f) => f.temp_id)
+                                            .map((f) => [
+                                              f.temp_id as string,
+                                              f.id,
+                                            ])
+                                        );
+                                        const replaced = (
+                                          selectedIds || []
+                                        ).map(
+                                          (id: string) =>
+                                            tempToFinal.get(id) ?? id
+                                        );
+                                        const deduped = Array.from(
+                                          new Set(replaced)
+                                        );
+                                        setFieldValue("user_file_ids", deduped);
+                                        selectedIds = deduped;
+                                      },
+                                      (failedTempIds) => {
+                                        if (
+                                          !failedTempIds ||
+                                          failedTempIds.length === 0
+                                        )
+                                          return;
+                                        const filtered = (
+                                          selectedIds || []
+                                        ).filter(
+                                          (id: string) =>
+                                            !failedTempIds.includes(id)
+                                        );
+                                        setFieldValue(
+                                          "user_file_ids",
+                                          filtered
+                                        );
+                                        selectedIds = filtered;
+                                      }
                                     );
-                                    const newIds = uploaded.user_files.map(
+                                    const optimisticIds = optimistic.map(
                                       (f) => f.id
                                     );
                                     const merged = Array.from(
                                       new Set([
-                                        ...(values.user_file_ids || []),
-                                        ...newIds,
+                                        ...(selectedIds || []),
+                                        ...optimisticIds,
                                       ])
                                     );
                                     setFieldValue("user_file_ids", merged);
+                                    selectedIds = merged;
                                   } finally {
                                     e.target.value = "";
                                   }
                                 }}
+                                selectedFileIds={values.user_file_ids}
                               />
                             </div>
                           )}
@@ -1825,7 +1888,14 @@ export function AssistantEditor({
                   </div>
                   <div className="flex gap-x-2 items-center">
                     <Button
-                      disabled={isSubmitting || isRequestSuccessful}
+                      disabled={
+                        isSubmitting ||
+                        isRequestSuccessful ||
+                        (values.user_file_ids || []).some(
+                          (id: string) =>
+                            id.startsWith("temp_") || id.includes("temp_")
+                        )
+                      }
                       type="submit"
                     >
                       {isUpdate ? "Update" : "Create"}
@@ -1847,7 +1917,9 @@ export function AssistantEditor({
                     icon={SvgFiles}
                     recentFiles={values.user_file_ids.map(
                       (userFileId: string) => {
-                        const rf = recentFiles.find((f) => f.id === userFileId);
+                        const rf = allRecentFiles.find(
+                          (f) => f.id === userFileId
+                        );
                         return (
                           rf || {
                             id: userFileId,

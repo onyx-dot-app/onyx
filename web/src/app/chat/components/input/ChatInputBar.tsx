@@ -134,8 +134,12 @@ function ChatInputBarInner({
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const { currentMessageFiles, setCurrentMessageFiles, recentFiles } =
-    useProjectsContext();
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    recentFiles,
+    allRecentFiles,
+  } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -508,7 +512,14 @@ function ChatInputBarInner({
                   setCurrentMessageFiles((prev) => [...prev, file]);
                 }
               }}
-              recentFiles={recentFiles}
+              onUnpickRecent={(file: ProjectFile) => {
+                setCurrentMessageFiles((prev) =>
+                  prev.filter(
+                    (existingFile) => existingFile.file_id !== file.file_id
+                  )
+                );
+              }}
+              recentFiles={allRecentFiles}
               handleUploadChange={handleUploadChange}
               trigger={
                 <IconButton
@@ -517,6 +528,7 @@ function ChatInputBarInner({
                   tertiary
                 />
               }
+              selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle
