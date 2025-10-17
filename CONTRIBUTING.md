@@ -95,15 +95,13 @@ If using PowerShell, the command slightly differs:
 Install the required python dependencies:
 
 ```bash
-pip install -r backend/requirements/default.txt
-pip install -r backend/requirements/dev.txt
-pip install -r backend/requirements/ee.txt
-pip install -r backend/requirements/model_server.txt
+pip install uv
+uv pip sync backend/requirements/frozen/default.txt backend/requirements/frozen/dev.txt backend/requirements/frozen/ee.txt backend/requirements/frozen/model_server.txt
 ```
 
 Fix vscode/cursor auto-imports:
 ```bash
-pip install -e .
+pip install -e backend
 ```
 
 Install Playwright for Python (headless browser required by the Web Connector)

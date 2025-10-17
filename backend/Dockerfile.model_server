@@ -39,11 +39,11 @@ RUN set -eux; \
     && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
     && rustc --version && cargo --version
 
-COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt
+# Install uv for faster Python package management
+RUN pip install --no-cache-dir uv
+
+COPY ./requirements/frozen/model_server.txt /tmp/requirements.txt
+RUN uv pip sync --system /tmp/requirements.txt
 
 RUN apt-get remove -y --allow-remove-essential perl-base && \ 
     apt-get autoremove -y

@@ -31,15 +31,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Install uv for faster Python package management
+RUN pip install --no-cache-dir uv
+
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
-COPY ./requirements/default.txt /tmp/requirements.txt
-COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
+COPY ./requirements/frozen/default.txt /tmp/requirements.txt
+COPY ./requirements/frozen/ee.txt /tmp/ee-requirements.txt
+RUN uv pip sync --system /tmp/requirements.txt /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
@@ -83,9 +82,8 @@ COPY ./pytest.ini /app/pytest.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 
 # Integration test stuff
-COPY ./requirements/dev.txt /tmp/dev-requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        -r /tmp/dev-requirements.txt
+COPY ./requirements/frozen/dev.txt /tmp/dev-requirements.txt
+RUN uv pip sync --system /tmp/dev-requirements.txt
 COPY ./tests/integration /app/tests/integration
 # copies all files, but not folders, in the tests directory
 COPY ./tests/* /app/tests/
