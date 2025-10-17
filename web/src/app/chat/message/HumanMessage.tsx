@@ -42,7 +42,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       {textFiles.length > 0 && (
         <div
           id="onyx-file"
-          className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
+          className={cn("mt-2 auto", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
             {textFiles.map((file) => (
@@ -55,7 +55,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       {imageFiles.length > 0 && (
         <div
           id="onyx-image"
-          className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}
+          className={cn("mt-2 auto", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col gap-2">
             {imageFiles.map((file) => (
@@ -66,7 +66,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       )}
 
       {csvFiles.length > 0 && (
-        <div className={cn("mt-2 auto mb-4", alignBubble && "ml-auto")}>
+        <div className={cn("mt-2 auto", alignBubble && "ml-auto")}>
           <div className="flex flex-col gap-2">
             {csvFiles.map((file) => {
               return (
@@ -243,7 +243,7 @@ export default function HumanMessage({
           <div className="flex flex-col desktop:mr-4">
             <FileDisplay alignBubble files={files || []} />
 
-            <div className="flex justify-end">
+            <div className="flex justify-end mt-1">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
                 {isEditing ? (
                   <MessageEditing

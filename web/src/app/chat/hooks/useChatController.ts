@@ -76,6 +76,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 import { useAppParams } from "@/hooks/appNavigation";
+import { projectFilesToFileDescriptors } from "../services/fileUtils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -546,12 +547,11 @@ export function useChatController({
       if (regenerationRequest) {
         // For regeneration: keep the existing user message, only create new assistant
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage(
-          "assistant",
-          initialUserNode.nodeId,
-          undefined,
-          1
-        );
+        initialAssistantNode = buildEmptyMessage({
+          messageType: "assistant",
+          parentNodeId: initialUserNode.nodeId,
+          nodeIdOffset: 1,
+        });
       } else {
         // For new messages or editing: create/update user message and assistant
         const parentNodeIdForMessage = messageToResend
@@ -560,6 +560,7 @@ export function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
+          projectFilesToFileDescriptors(currentMessageFiles),
           messageToResend
         );
         initialUserNode = result.initialUserNode;
@@ -594,7 +595,7 @@ export function useChatController({
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files: FileDescriptor[] = [];
+      let files = projectFilesToFileDescriptors(currentMessageFiles);
       let packets: Packet[] = [];
 
       let newUserMessageId: number | null = null;
