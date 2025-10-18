@@ -109,6 +109,15 @@ jobs:
       # Needed for trivyignore
       - name: Checkout
         uses: actions/checkout@v4
+      
+      - name: Check if stable release version
+        id: check_version
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "${{ github.ref_name }}" != *"cloud"* ]]; then
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+          fi
         
       - name: Download digests
         uses: actions/download-artifact@v4
