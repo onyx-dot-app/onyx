@@ -33,7 +33,8 @@ export default function Tag({
   const visibleIcons = children.slice(0, 3);
 
   return (
-    <button type="button"
+    <button
+      type="button"
       className={cn(
         "p-spacing-interline-mini rounded-08 group w-fit flex items-center gap-spacing-inline transition-all duration-200 ease-in-out",
         getVariantClasses(active),
