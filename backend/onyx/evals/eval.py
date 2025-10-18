@@ -19,6 +19,7 @@ from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.models import EvalProvider
 from onyx.evals.provider import get_default_provider
+from onyx.llm.override_models import LLMOverride
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -61,6 +62,7 @@ def isolated_ephemeral_session_factory(
 def _get_answer(
     eval_input: dict[str, str],
     configuration: EvalConfigurationOptions,
+    llm_override: LLMOverride | None = None,
 ) -> str:
     engine = get_sqlalchemy_engine()
     with isolated_ephemeral_session_factory(engine) as SessionLocal:
@@ -82,7 +84,7 @@ def _get_answer(
                 rerank_settings=None,
                 db_session=db_session,
                 skip_gen_ai_answer_generation=False,
-                llm_override=full_configuration.llm,
+                llm_override=llm_override,
                 use_agentic_search=research_type == ResearchType.DEEP,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
             )
@@ -108,7 +110,9 @@ def run_eval(
         raise ValueError("Must specify either data or remote_dataset_name")
 
     return provider.eval(
-        task=lambda eval_input: _get_answer(eval_input, configuration),
+        task=lambda eval_input, llm_override=None: _get_answer(
+            eval_input, configuration, llm_override
+        ),
         configuration=configuration,
         data=data,
         remote_dataset_name=remote_dataset_name,
