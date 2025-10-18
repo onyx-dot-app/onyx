@@ -7,6 +7,7 @@ global.TextDecoder = TextDecoder as any;
 
 // Only set up browser-specific mocks if we're in a jsdom environment
 if (typeof window !== "undefined") {
+  // Polyfill fetch for jsdom
   // @ts-ignore
   import("whatwg-fetch");
 

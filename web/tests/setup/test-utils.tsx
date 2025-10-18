@@ -78,7 +78,3 @@ export { default as userEvent } from "@testing-library/user-event";
 
 // Override render with our custom render
 export { customRender as render };
-
-// Re-export all test helpers and API mocks for convenience
-export * from "./test-helpers";
-export * from "./api-mocks";

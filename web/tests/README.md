@@ -1,42 +1,6 @@
-# React Testing Framework - Onyx Web
+# React Integration Testing
 
-This document provides comprehensive guidance on writing tests for React components and hooks in the Onyx web application.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Running Tests](#running-tests)
-- [Writing Tests](#writing-tests)
-- [Testing Patterns](#testing-patterns)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
-
-## Overview
-
-The Onyx web application uses a modern testing stack based on 2025 best practices:
-
-- **Jest** - Test runner and framework
-- **React Testing Library** - Component testing utilities
-- **@testing-library/user-event** - User interaction simulation
-- **SWR** - Data fetching (with fetch mocking for tests)
-- **TypeScript** - Type-safe tests
-
-### Testing Philosophy
-
-> "The more your tests resemble the way your software is used, the more confidence they can give you."
-> — Testing Library Guiding Principle
-
-**Focus on:**
-- ✅ User-facing behavior
-- ✅ Accessibility (use `getByRole`, `getByLabelText`)
-- ✅ What users see and do
-- ✅ Integration testing over unit testing
-
-**Avoid:**
-- ❌ Testing implementation details
-- ❌ Testing internal state
-- ❌ Testing private functions
-- ❌ Over-mocking
+Integration tests for Onyx web application using Jest and React Testing Library.
 
 ## Running Tests
 
@@ -44,423 +8,82 @@ The Onyx web application uses a modern testing stack based on 2025 best practice
 # Run all tests
 npm test
 
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-
-# Run tests verbose
-npm run test:verbose
-
 # Run specific test file
-npm test -- Button.test.tsx
+npm test -- EmailPasswordForm.test
 
-# Run tests matching pattern
-npm test -- --testNamePattern="dropdown"
+# Run without coverage
+npm test -- --no-coverage
 ```
 
 ## Writing Tests
 
-### File Structure
+### Test Structure
 
-**Modern Approach (Recommended):** Co-locate tests with source files
+Tests are co-located with source files:
 
 ```
-src/components/
-├── Button.tsx
-└── Button.test.tsx
-
-src/lib/
-├── hooks.ts
-└── hooks.test.tsx
+src/app/auth/login/
+├── EmailPasswordForm.tsx
+└── EmailPasswordForm.test.tsx
 ```
 
-**Why this structure?**
-- ✅ Easier to find tests (right next to the code)
-- ✅ No need for `__tests__` directories
-- ✅ Simpler imports
-- ✅ Follows modern Jest best practices
-- ✅ Works great with VS Code and IDEs
-
-### Basic Test Template
+### Basic Pattern
 
 ```typescript
-/**
- * @jest-environment jsdom
- */
-import { render, screen, userEvent } from "@tests/setup/test-utils";
-import { MyComponent } from "../MyComponent";
+import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import MyComponent from "./MyComponent";
 
-describe("MyComponent", () => {
-  it("allows users to interact with the component", async () => {
-    const handleClick = jest.fn();
-    const user = userEvent.setup();
+test("user can submit the form", async () => {
+  const user = userEvent.setup();
 
-    render(<MyComponent onClick={handleClick} />);
+  // Mock API response
+  const fetchSpy = jest.spyOn(global, "fetch");
+  fetchSpy.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ success: true }),
+  } as Response);
 
-    // Best Practice: Use accessible queries
-    const button = screen.getByRole("button", { name: /submit/i });
-    await user.click(button);
+  render(<MyComponent />);
 
-    expect(handleClick).toHaveBeenCalled();
+  // Fill form
+  await user.type(screen.getByPlaceholderText(/email/i), "user@example.com");
+
+  // Submit
+  await user.click(screen.getByRole("button", { name: /submit/i }));
+
+  // Verify UI behavior after response
+  await waitFor(() => {
+    expect(screen.getByText(/success/i)).toBeInTheDocument();
   });
+
+  fetchSpy.mockRestore();
 });
 ```
 
-## Testing Patterns
-
-### 1. Testing Simple Components
-
-**Example: Button Component**
-
-```typescript
-describe("Button Component", () => {
-  it("allows users to click and triggers onClick handler", async () => {
-    const handleClick = jest.fn();
-    const user = userEvent.setup();
-
-    render(<Button onClick={handleClick}>Submit Form</Button>);
-
-    const button = screen.getByRole("button", { name: /submit form/i });
-    await user.click(button);
-
-    expect(handleClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("prevents interaction when disabled", async () => {
-    const handleClick = jest.fn();
-    const user = userEvent.setup();
-
-    render(<Button onClick={handleClick} disabled>Disabled</Button>);
-
-    const button = screen.getByRole("button", { name: /disabled/i });
-    expect(button).toBeDisabled();
-
-    await user.click(button);
-    expect(handleClick).not.toHaveBeenCalled();
-  });
-});
-```
-
-### 2. Testing Interactive Components
-
-**Example: Dropdown with Search**
-
-```typescript
-describe("Dropdown Component", () => {
-  it("filters options based on search term", async () => {
-    const handleSelect = jest.fn();
-    const user = userEvent.setup();
-    const options = [
-      { name: "Apple", value: "apple" },
-      { name: "Banana", value: "banana" },
-    ];
-
-    render(<Dropdown options={options} onSelect={handleSelect} />);
-
-    const searchInput = screen.getByRole("textbox");
-    await user.type(searchInput, "Apple");
-
-    expect(screen.getByRole("menuitem", { name: /apple/i })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /banana/i })).not.toBeInTheDocument();
-  });
-});
-```
-
-### 3. Testing Async Operations
-
-**Example: Editable Value with async submit**
-
-```typescript
-describe("EditableValue Component", () => {
-  it("calls onSubmit when user presses Enter", async () => {
-    const handleSubmit = jest.fn().mockResolvedValue(true);
-    const user = userEvent.setup();
-
-    render(<EditableValue initialValue="Old" onSubmit={handleSubmit} />);
-
-    await user.click(screen.getByText("Old"));
-    const input = screen.getByRole("textbox");
-
-    await user.clear(input);
-    await user.type(input, "New{Enter}");
-
-    // Wait for async operation
-    await waitFor(() => {
-      expect(handleSubmit).toHaveBeenCalledWith("New");
-    });
-  });
-});
-```
-
-### 4. Testing SWR Hooks
-
-**Example: Data fetching hook**
-
-```typescript
-describe("usePublicCredentials Hook", () => {
-  beforeEach(() => {
-    global.fetch = jest.fn();
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it("fetches and returns credentials data", async () => {
-    const mockData = [{ id: 1, name: "Test" }];
-
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockData,
-    });
-
-    const { result } = renderHook(() => usePublicCredentials());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual(mockData);
-  });
-});
-```
-
-### 5. Testing Formik Forms
-
-**Example: Form with validation**
-
-```typescript
-describe("Login Form", () => {
-  it("shows validation error for invalid email", async () => {
-    const handleSubmit = jest.fn();
-    const user = userEvent.setup();
-
-    render(<LoginForm onSubmit={handleSubmit} />);
-
-    const emailInput = screen.getByLabelText(/email/i);
-    await user.type(emailInput, "invalid-email");
-
-    const submitButton = screen.getByRole("button", { name: /submit/i });
-    await user.click(submitButton);
-
-    // Best Practice: Use findBy for async validation
-    expect(await screen.findByText(/invalid email/i)).toBeInTheDocument();
-    expect(handleSubmit).not.toHaveBeenCalled();
-  });
-});
-```
-
-## Best Practices
-
-### Query Priority
-
-Use queries in this priority order:
-
-1. **`getByRole`** - Best for accessibility
-   ```typescript
-   screen.getByRole("button", { name: /submit/i })
-   screen.getByRole("textbox", { name: /email/i })
-   ```
-
-2. **`getByLabelText`** - For form fields
-   ```typescript
-   screen.getByLabelText(/password/i)
-   ```
-
-3. **`getByPlaceholderText`** - When label is not available
-   ```typescript
-   screen.getByPlaceholderText(/search/i)
-   ```
-
-4. **`getByText`** - For non-interactive elements
-   ```typescript
-   screen.getByText(/welcome back/i)
-   ```
-
-5. **`getByTestId`** - Last resort only
-   ```typescript
-   screen.getByTestId("custom-component")
-   ```
-
-### Async Testing
-
-Always use `async/await` with user events:
-
-```typescript
-const user = userEvent.setup();
-
-// ✅ Correct
-await user.click(button);
-await user.type(input, "text");
-
-// ❌ Wrong
-user.click(button); // Missing await
-```
-
-Use `waitFor` for async state changes:
-
-```typescript
-// ✅ Correct
-await waitFor(() => {
-  expect(screen.getByText(/loading/i)).not.toBeInTheDocument();
-});
-
-// ❌ Wrong
-expect(screen.queryByText(/loading/i)).not.toBeInTheDocument(); // May be flaky
-```
-
-### Accessibility Testing
-
-Test with screen reader-friendly queries:
-
-```typescript
-// ✅ Good - tests accessibility
-const button = screen.getByRole("button", { name: /submit/i });
-
-// ❌ Bad - doesn't test accessibility
-const button = screen.getByTestId("submit-button");
-```
-
-### Mocking Data
-
-Mock at the right level:
-
-```typescript
-// ✅ Good - Mock fetch for SWR hooks
-global.fetch = jest.fn().mockResolvedValue({
-  ok: true,
-  json: async () => mockData,
-});
-
-// ❌ Bad - Don't mock SWR directly
-jest.mock("swr");
-```
-
-### Mocking Dependencies
-
-**When to create a mock:**
-
-Jest mocks are configured in `tests/setup/__mocks__/` and automatically applied via `jest.config.js`. Create mocks for:
-
-1. **ESM compatibility issues** - Libraries that use ES modules (`import/export`) that Jest can't parse
-   - Example: `react-markdown`, `remark-gfm`
-
-2. **Complex setup requirements** - Components/providers that need extensive configuration not relevant to your test
-   - Example: `UserProvider` (requires auth metadata, settings, user objects)
-
-3. **External dependencies** - Libraries that make network calls, access browser APIs, etc.
-
-**When NOT to mock:**
-
-Avoid mocking when:
-- Testing the actual behavior (e.g., don't mock react-markdown if testing markdown rendering)
-- Simple to configure (if easy to provide real props, use the real component)
-- Core business logic (never mock your own application logic)
-
-**Example: Creating a mock**
-
-1. Create the mock file in `tests/setup/__mocks__/`:
-   ```
-   tests/setup/__mocks__/@/components/user/UserProvider.tsx
-   ```
-
-2. Add comprehensive documentation explaining WHY:
-   ```typescript
-   /**
-    * Mock for @/components/user/UserProvider
-    *
-    * Why this mock exists:
-    * The real UserProvider requires complex props (authTypeMetadata, settings, user)
-    * that are not relevant for most component integration tests.
-    *
-    * Limitation:
-    * This mock returns null for user. If you need a logged-in user, you'll need
-    * to either customize this mock or use the real UserProvider.
-    */
-   ```
-
-3. Configure in `jest.config.js`:
-   ```javascript
-   moduleNameMapper: {
-     "^@/components/user/UserProvider$":
-       "<rootDir>/tests/setup/__mocks__/@/components/user/UserProvider.tsx",
-     // ... other mappings
-   }
-   ```
-
-**Important:** Specific mocks must come BEFORE generic path aliases in `moduleNameMapper`, otherwise the path alias matches first.
-
-See `tests/setup/__mocks__/README.md` for detailed documentation on existing mocks.
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue: "Not wrapped in act(...)" warning**
-
-```typescript
-// Use userEvent instead of fireEvent
-const user = userEvent.setup();
-await user.click(button); // ✅ Correct
-
-fireEvent.click(button); // ❌ May cause act warnings
-```
-
-**Issue: "Unable to find element"**
-
-```typescript
-// Use async queries for elements that appear later
-const element = await screen.findByText(/loading/i); // ✅
-
-const element = screen.getByText(/loading/i); // ❌ May fail if not immediate
-```
-
-**Issue: "Test timeout"**
-
-```typescript
-// Increase timeout for slow operations
-await waitFor(() => {
-  expect(result.current.data).toBeDefined();
-}, { timeout: 5000 }); // 5 seconds instead of default 1 second
-```
-
-### Debugging Tests
-
-```typescript
-// Print the DOM
-screen.debug();
-
-// Print a specific element
-screen.debug(screen.getByRole("button"));
-
-// Log available roles
-screen.logTestingPlaygroundURL();
-```
-
-## Resources
-
-- [React Testing Library Docs](https://testing-library.com/docs/react-testing-library/intro/)
-- [Jest Documentation](https://jestjs.io/docs/getting-started)
-- [Common Testing Mistakes](https://kentcdodds.com/blog/common-mistakes-with-react-testing-library)
-- [Testing Playground](https://testing-playground.com/) - Interactive query builder
+## Testing Philosophy
+
+**Test UI behavior, not implementation:**
+- ✅ Verify success/error messages appear
+- ✅ Check redirects happen (window.location.href)
+- ✅ Validate form state changes
+- ✅ Use accessible queries (getByRole, getByLabelText)
+
+**Minimal mocking:**
+- Only mock what's necessary (UserProvider, markdown packages)
+- Use jest.spyOn(fetch) for API calls
+- Avoid mocking application logic
 
 ## Examples
 
-See the following test files for complete examples:
+See existing tests:
+- `src/app/auth/login/EmailPasswordForm.test.tsx` - Login/signup workflows
+- `src/app/chat/input-prompts/InputPrompts.test.tsx` - CRUD operations
+- `src/app/admin/configuration/llm/CustomLLMProviderUpdateForm.test.tsx` - Complex forms
 
-- `src/components/Button.test.tsx` - Simple component testing
-- `src/components/Dropdown.test.tsx` - Interactive component with user input
-- `src/components/EditableValue.test.tsx` - Async operations and state changes
-- `src/lib/hooks.test.tsx` - SWR hook testing with fetch mocking
+## Mocks
 
-## Contributing
+Only essential mocks are configured in `tests/setup/__mocks__/`:
+- `UserProvider` - Removes auth requirement for tests
+- `react-markdown` / `remark-gfm` - ESM compatibility
 
-When adding new tests:
-
-1. Follow the existing patterns in the codebase
-2. Use accessible queries (`getByRole`, `getByLabelText`)
-3. Test user behavior, not implementation
-4. Write clear test descriptions
-5. Keep tests focused and independent
+See `tests/setup/__mocks__/README.md` for details.
