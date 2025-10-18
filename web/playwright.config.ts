@@ -23,6 +23,8 @@ export default defineConfig({
     //   },
     // ],
   ],
+  // Only run Playwright tests from tests/e2e directory (ignore Jest tests in src/)
+  testMatch: /.*\/tests\/e2e\/.*\.spec\.ts/,
   projects: [
     {
       name: "admin",
@@ -31,7 +33,6 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: "admin_auth.json",
       },
-      testIgnore: ["**/codeUtils.test.ts"],
     },
     {
       name: "no-auth",
@@ -39,7 +40,6 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
       },
-      testIgnore: ["**/codeUtils.test.ts"],
     },
   ],
 });
