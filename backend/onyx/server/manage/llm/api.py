@@ -47,6 +47,7 @@ from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
+from onyx.server.manage.llm.models import OpenRouterModelDetails
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
@@ -611,11 +612,6 @@ def get_openrouter_available_models(
 
     Parses id, context_length, and architecture.input_modalities to infer vision support.
     """
-    if not request.api_base or not request.api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="API base and API key are required to fetch OpenRouter models.",
-        )
 
     response_json = _get_openrouter_models_response(
         api_base=request.api_base, api_key=request.api_key
@@ -631,33 +627,17 @@ def get_openrouter_available_models(
     results: list[OpenRouterFinalModelResponse] = []
     for item in data:
         try:
-            model_id = item.get("id")
-            if not model_id or not isinstance(model_id, str):
+            model_details = OpenRouterModelDetails.model_validate(item)
+
+            # NOTE: This should be removed if we ever support dynamically fetching embedding models.
+            if model_details.is_embedding_model:
                 continue
-
-            # Filter out embedding models
-            if "embed" in model_id.lower():
-                continue
-
-            context_len = item.get("context_length")
-            if not isinstance(context_len, int):
-                context_len = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-            architecture = item.get("architecture") or {}
-            input_modalities = architecture.get("input_modalities") or []
-            supports_image_input = False
-            try:
-                supports_image_input = isinstance(input_modalities, list) and any(
-                    str(m).lower() == "image" for m in input_modalities
-                )
-            except Exception:
-                supports_image_input = False
 
             results.append(
                 OpenRouterFinalModelResponse(
-                    name=model_id,
-                    max_input_tokens=context_len,
-                    supports_image_input=supports_image_input,
+                    name=model_details.id,
+                    max_input_tokens=model_details.context_length,
+                    supports_image_input=model_details.supports_image_input,
                 )
             )
         except Exception as e:
@@ -671,4 +651,4 @@ def get_openrouter_available_models(
             status_code=400, detail="No compatible models found from OpenRouter"
         )
 
-    return results
+    return sorted(results, key=lambda m: m.name.lower())

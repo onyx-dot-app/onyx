@@ -209,8 +209,6 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
 def get_bedrock_model_names() -> list[str]:
     import litellm
 
-    litellm._turn_on_debug()
-
     # bedrock_converse_models are just extensions of the bedrock_models, not sure why
     # litellm has split them into two lists :(
     return [
