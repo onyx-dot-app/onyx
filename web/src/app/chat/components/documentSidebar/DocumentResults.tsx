@@ -159,7 +159,7 @@ function DocumentResultsInner({
       id="onyx-chat-sidebar"
       className="bg-background-tint-01 overflow-y-scroll h-full w-full"
     >
-      <div className="flex flex-col p-padding-button gap-padding-content">
+      <div className="h-full flex flex-col p-padding-button gap-padding-content border-l">
         {hasCited && (
           <div>
             <Header onClose={closeSidebar}>Cited Sources</Header>
