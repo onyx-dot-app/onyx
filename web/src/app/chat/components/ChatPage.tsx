@@ -815,7 +815,7 @@ export function ChatPage({
             >
               {({ getRootProps }) => (
                 <div
-                  className="h-full w-full relative flex-auto"
+                  className="h-full w-full relative flex-auto min-w-0"
                   {...getRootProps()}
                 >
                   <div
@@ -970,26 +970,28 @@ export function ChatPage({
 
         <div
           className={cn(
-            "transition-all duration-300 ease-in-out",
+            "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
             documentSidebarVisible && !settings?.isMobile
-              ? "w-[35rem]"
+              ? "w-[25rem]"
               : "w-[0rem]"
           )}
         >
-          {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
-            props are wrapped in useCallback. */}
-          <DocumentResults
-            setPresentingDocument={setPresentingDocument}
-            modal={false}
-            closeSidebar={handleDesktopDocumentSidebarClose}
-            selectedDocuments={selectedDocuments}
-            toggleDocumentSelection={toggleDocumentSelection}
-            clearSelectedDocuments={() => setSelectedDocuments([])}
-            // TODO (chris): fix
-            selectedDocumentTokens={0}
-            maxTokens={maxTokens}
-          />
+          <div className="h-full w-[25rem]">
+            {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function
+              props are wrapped in useCallback. */}
+            <DocumentResults
+              setPresentingDocument={setPresentingDocument}
+              modal={false}
+              closeSidebar={handleDesktopDocumentSidebarClose}
+              selectedDocuments={selectedDocuments}
+              toggleDocumentSelection={toggleDocumentSelection}
+              clearSelectedDocuments={() => setSelectedDocuments([])}
+              // TODO (chris): fix
+              selectedDocumentTokens={0}
+              maxTokens={maxTokens}
+            />
+          </div>
         </div>
       </div>
     </>
