@@ -126,6 +126,31 @@ export const dynamicProviderConfigs: Record<
     successMessage: (count: number) =>
       `Successfully fetched ${count} models from Ollama.`,
   },
+  openrouter: {
+    endpoint: "/api/admin/llm/openrouter/available-models",
+    isDisabled: (values) => !values.api_base || !values.api_key,
+    disabledReason:
+      "API Base and API Key are required to fetch OpenRouter models",
+    buildRequestBody: ({ values }) => ({
+      api_base: values.api_base,
+      api_key: values.api_key,
+    }),
+    processResponse: (data: OllamaModelResponse[], llmProviderDescriptor) =>
+      data.map((modelData) => {
+        const existingConfig = llmProviderDescriptor.model_configurations.find(
+          (config) => config.name === modelData.name
+        );
+        return {
+          name: modelData.name,
+          is_visible: existingConfig?.is_visible ?? true,
+          max_input_tokens: modelData.max_input_tokens,
+          supports_image_input: modelData.supports_image_input,
+        };
+      }),
+    getModelNames: (data: OllamaModelResponse[]) => data.map((m) => m.name),
+    successMessage: (count: number) =>
+      `Successfully fetched ${count} models from OpenRouter.`,
+  },
 };
 
 export const fetchModels = async (
