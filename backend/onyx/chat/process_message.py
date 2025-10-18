@@ -794,6 +794,16 @@ def stream_chat_message_objects(
             prompt_builder.context_llm_docs = project_llm_docs
 
         # LLM prompt building, response capturing, etc.
+        # Check if this is the Document/URL Fetcher persona and disable native tool calling
+        skip_explicit_tool_calling = (
+            persona.name == "Document/URL Fetcher" if persona else False
+        )
+
+        if skip_explicit_tool_calling:
+            logger.info(
+                "Disabling native tool calling for Document/URL Fetcher persona"
+            )
+
         answer = Answer(
             prompt_builder=prompt_builder,
             is_connected=is_connected,
@@ -822,6 +832,7 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
+            skip_explicit_tool_calling=skip_explicit_tool_calling,
         )
         if simple_agent_framework_enabled:
             yield from _fast_message_stream(
