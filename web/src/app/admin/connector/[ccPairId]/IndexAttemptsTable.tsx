@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FaBarsProgress } from "react-icons/fa6";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -78,22 +79,15 @@ export function IndexAttemptsTable({
             <TableHead>Status</TableHead>
             <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
-              <div className="w-fit whitespace-nowrap">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center">
-                        Total Docs
-                        <InfoIcon className="ml-1 w-4 h-4" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Total number of documents replaced in the index during
-                      this indexing attempt
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              <SimpleTooltip
+                tooltip="Total number of documents replaced in the index during this indexing attempt"
+                side="top"
+              >
+                <span className="flex items-center">
+                  Total Docs
+                  <InfoIcon className="ml-1 w-4 h-4" />
+                </span>
+              </SimpleTooltip>
             </TableHead>
             <TableHead>Error Message</TableHead>
           </TableRow>

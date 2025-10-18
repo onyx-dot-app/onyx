@@ -15,15 +15,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import SAML_CONF_DIR
-from ee.onyx.db.saml import expire_saml_account
-from ee.onyx.db.saml import get_saml_account
-from ee.onyx.db.saml import upsert_saml_account
-from ee.onyx.utils.secrets import encrypt_string
-from ee.onyx.utils.secrets import extract_hashed_cookie
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import get_user_manager
+from onyx.configs.app_configs import SAML_CONF_DIR
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
@@ -31,7 +26,12 @@ from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.db.saml import expire_saml_account
+from onyx.db.saml import get_saml_account
+from onyx.db.saml import upsert_saml_account
 from onyx.utils.logger import setup_logger
+from onyx.utils.secrets import encrypt_string
+from onyx.utils.secrets import extract_hashed_cookie
 
 
 logger = setup_logger()

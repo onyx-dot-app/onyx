@@ -290,7 +290,10 @@ class CloudEmbedding:
 
         # Dispatch all embedding calls asynchronously at once
         tasks = [
-            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
+            client.get_embeddings_async(
+                cast(list[str | TextEmbeddingInput], batch), auto_truncate=True
+            )
+            for batch in batches
         ]
 
         # Wait for all tasks to complete in parallel

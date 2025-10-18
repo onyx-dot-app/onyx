@@ -24,6 +24,13 @@ interface UserPreferences {
   temperature_override_enabled: boolean;
 }
 
+export interface UserPersonalization {
+  name: string;
+  role: string;
+  memories: string[];
+  use_memories: boolean;
+}
+
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -75,6 +82,7 @@ export interface User {
   // functionality
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
+  personalization?: UserPersonalization;
 }
 
 export interface TenantInfo {

@@ -76,6 +76,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 import { useAppParams } from "@/hooks/appNavigation";
+import { projectFilesToFileDescriptors } from "../services/fileUtils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -142,7 +143,7 @@ export function useChatController({
   const { refreshChatSessions, llmProviders } = useChatContext();
   const { agentPreferences: assistantPreferences, forcedToolIds } =
     useAgentsContext();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles } =
+  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
 
@@ -546,12 +547,11 @@ export function useChatController({
       if (regenerationRequest) {
         // For regeneration: keep the existing user message, only create new assistant
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage(
-          "assistant",
-          initialUserNode.nodeId,
-          undefined,
-          1
-        );
+        initialAssistantNode = buildEmptyMessage({
+          messageType: "assistant",
+          parentNodeId: initialUserNode.nodeId,
+          nodeIdOffset: 1,
+        });
       } else {
         // For new messages or editing: create/update user message and assistant
         const parentNodeIdForMessage = messageToResend
@@ -560,6 +560,7 @@ export function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
+          projectFilesToFileDescriptors(currentMessageFiles),
           messageToResend
         );
         initialUserNode = result.initialUserNode;
@@ -594,7 +595,7 @@ export function useChatController({
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files: FileDescriptor[] = [];
+      let files = projectFilesToFileDescriptors(currentMessageFiles);
       let packets: Packet[] = [];
 
       let newUserMessageId: number | null = null;
@@ -922,70 +923,9 @@ export function useChatController({
         });
         return;
       }
-
       updateChatStateAction(getCurrentSessionId(), "uploading");
-
-      try {
-        //this is to show files in the INPUT BAR immediately
-        const tempProjectFiles: ProjectFile[] = Array.from(acceptedFiles).map(
-          (file) => ({
-            id: file.name,
-            file_id: file.name,
-            name: file.name,
-            project_id: null,
-            user_id: null,
-            created_at: new Date().toISOString(),
-            status: UserFileStatus.UPLOADING,
-            file_type: file.type,
-            last_accessed_at: new Date().toISOString(),
-            chat_file_type: ChatFileType.DOCUMENT,
-            token_count: null,
-            chunk_count: null,
-          })
-        );
-        setCurrentMessageFiles((prev) => [...prev, ...tempProjectFiles]);
-
-        const uploadedMessageFiles: CategorizedFiles = await uploadFiles(
-          Array.from(acceptedFiles)
-        );
-        //remove the temp files
-        setCurrentMessageFiles((prev) =>
-          prev.filter(
-            (file) =>
-              !tempProjectFiles.some((tempFile) => tempFile.id === file.id)
-          )
-        );
-        setCurrentMessageFiles((prev) => [
-          ...prev,
-          ...uploadedMessageFiles.user_files,
-        ]);
-
-        // Show toast if any files were rejected or unsupported
-        const unsupported = uploadedMessageFiles.unsupported_files || [];
-        const nonAccepted = uploadedMessageFiles.non_accepted_files || [];
-        if (unsupported.length > 0 || nonAccepted.length > 0) {
-          const detailsParts: string[] = [];
-          if (unsupported.length > 0) {
-            detailsParts.push(`Unsupported: ${unsupported.join(", ")}`);
-          }
-          if (nonAccepted.length > 0) {
-            detailsParts.push(`Not accepted: ${nonAccepted.join(", ")}`);
-          }
-
-          setPopup({
-            type: "warning",
-            message: `Some files were not uploaded. ${detailsParts.join(
-              " | "
-            )}`,
-          });
-        }
-      } catch {
-        setPopup({
-          type: "error",
-          message: "Failed to upload file",
-        });
-      }
-
+      const uploadedMessageFiles = await beginUpload(Array.from(acceptedFiles));
+      setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
     [llmProviders, liveAssistant, llmManager, forcedToolIds]

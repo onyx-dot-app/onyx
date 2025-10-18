@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.clients.openid import BASE_SCOPES
+from httpx_oauth.clients.openid import OpenID
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -35,11 +37,12 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
+from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
+from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
@@ -52,7 +55,6 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.evals.tracing import setup_braintrust
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -109,6 +111,7 @@ from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
 )
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
+from onyx.server.saml import router as saml_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import (
@@ -117,6 +120,8 @@ from onyx.server.token_rate_limits.api import (
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
+from onyx.tracing.langfuse_tracing import setup_langfuse_if_creds_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
@@ -253,9 +258,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if DISABLE_GENERATIVE_AI:
         logger.notice("Generative AI Q&A disabled")
 
-    if BRAINTRUST_ENABLED:
-        setup_braintrust()
-        logger.notice("Braintrust tracing initialized")
+    # Initialize tracing if credentials are provided
+    setup_braintrust_if_creds_available()
+    setup_langfuse_if_creds_available()
 
     # fill up Postgres connection pools
     await warm_up_connections()
@@ -451,10 +456,54 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
+    if AUTH_TYPE == AuthType.OIDC:
+        # Ensure we request offline_access for refresh tokens
+        try:
+            oidc_scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+            if "offline_access" not in oidc_scopes:
+                oidc_scopes.append("offline_access")
+        except Exception as e:
+            logger.warning(f"Error configuring OIDC scopes: {e}")
+            # Fall back to default scopes if there's an error
+            oidc_scopes = BASE_SCOPES
+
+        include_auth_router_with_prefix(
+            application,
+            create_onyx_oauth_router(
+                OpenID(
+                    OAUTH_CLIENT_ID,
+                    OAUTH_CLIENT_SECRET,
+                    OPENID_CONFIG_URL,
+                    # Use the configured scopes
+                    base_scopes=oidc_scopes,
+                ),
+                auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+            ),
+            prefix="/auth/oidc",
+        )
+
+        # need basic auth router for `logout` endpoint
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_auth_router(auth_backend),
+            prefix="/auth",
+        )
+
+    elif AUTH_TYPE == AuthType.SAML:
+        include_auth_router_with_prefix(
+            application,
+            saml_router,
+        )
+
     if (
         AUTH_TYPE == AuthType.CLOUD
         or AUTH_TYPE == AuthType.BASIC
         or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+        or AUTH_TYPE == AuthType.OIDC
     ):
         # Add refresh token endpoint for OAuth as well
         include_auth_router_with_prefix(

@@ -9,7 +9,7 @@ def confluence_connector_config() -> dict[str, Any]:
     url_base = os.environ.get("CONFLUENCE_TEST_SPACE_URL")
     space_key = os.environ.get("CONFLUENCE_SPACE_KEY")
     page_id = os.environ.get("CONFLUENCE_PAGE_ID")
-    is_cloud = os.environ.get("CONFLUENCE_IS_CLOUD", "").lower() == "true"
+    is_cloud = os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true"
 
     assert url_base, "CONFLUENCE_URL environment variable is required"
 

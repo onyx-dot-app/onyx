@@ -9,6 +9,9 @@ from braintrust_langchain.callbacks import BraintrustCallbackHandler
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 MASKING_LENGTH = int(os.environ.get("BRAINTRUST_MASKING_LENGTH", "20000"))
 
@@ -26,14 +29,19 @@ def _mask(data: Any) -> Any:
     return _truncate_str(str(data))
 
 
-def setup_braintrust() -> None:
+def setup_braintrust_if_creds_available() -> None:
     """Initialize Braintrust logger and set up global callback handler."""
+    # Check if Braintrust API key is available
+    if not BRAINTRUST_API_KEY:
+        logger.info("Braintrust API key not provided, skipping Braintrust setup")
+        return
 
-    logger = braintrust.init_logger(
+    braintrust_logger = braintrust.init_logger(
         project=BRAINTRUST_PROJECT,
         api_key=BRAINTRUST_API_KEY,
     )
     braintrust.set_masking_function(_mask)
     handler = BraintrustCallbackHandler()
     set_global_handler(handler)
-    set_trace_processors([BraintrustTracingProcessor(logger)])
+    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
+    logger.notice("Braintrust tracing initialized")
