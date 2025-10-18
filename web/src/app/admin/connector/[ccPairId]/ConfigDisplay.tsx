@@ -28,14 +28,9 @@ export function buildConfigEntries(
   sourceType: ValidSources
 ): { [key: string]: string } {
   if (sourceType === ValidSources.File) {
-    return obj.file_names
-      ? {
-          file_names: obj.file_names,
-        }
-      : {
-          // For deployments that don't run file_names migration
-          file_locations: obj.file_locations,
-        };
+    // File connectors show files in the InlineFileManagement component
+    // Don't show file_names or file_locations in the config display
+    return {};
   } else if (sourceType === ValidSources.GoogleSites) {
     return {
       base_url: obj.base_url,
