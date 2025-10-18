@@ -27,8 +27,21 @@ spec:
       securityContext:
         {{- toYaml .Values.inferenceCapability.podSecurityContext | nindent 8 }}
       {{- end }}
-      {{- with .Values.inferenceCapability.nodeSelector }}
+      {{- $component    := .Values.inferenceCapability | default (dict) -}}
+      {{- $global       := .Values.global              | default (dict) -}}
+      {{- $nodeSelector := ternary $component.nodeSelector $global.nodeSelector (hasKey $component "nodeSelector") -}}
+      {{- $tolerations  := ternary $component.tolerations  $global.tolerations  (hasKey $component "tolerations") -}}
+      {{- $affinity     := ternary $component.affinity     $global.affinity     (hasKey $component "affinity") -}}
+      {{- with $nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $affinity }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
