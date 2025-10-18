@@ -35,8 +35,19 @@ spec:
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
-      {{- with .Values.api.nodeSelector }}
+      {{- $ns := .Values.api.nodeSelector | default .Values.global.nodeSelector -}}
+      {{- $tol := .Values.api.tolerations | default .Values.global.tolerations -}}
+      {{- $aff := .Values.api.affinity | default .Values.global.affinity -}}
+      {{- with $ns }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tol }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $aff }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
