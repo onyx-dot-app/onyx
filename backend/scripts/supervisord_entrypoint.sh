@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Entrypoint script for supervisord that sets environment variables
 # for controlling which celery workers to start
 

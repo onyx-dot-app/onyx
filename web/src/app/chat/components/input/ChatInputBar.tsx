@@ -34,6 +34,7 @@ import SvgStop from "@/icons/stop";
 import FilePicker from "@/app/chat/components/files/FilePicker";
 import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
+import SvgPlusCircle from "@/icons/plus-circle";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -133,8 +134,12 @@ function ChatInputBarInner({
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const { currentMessageFiles, setCurrentMessageFiles, recentFiles } =
-    useProjectsContext();
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    recentFiles,
+    allRecentFiles,
+  } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -392,7 +397,7 @@ function ChatInputBarInner({
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="px-4 pt-4">
+          <div className="p-spacing-inline bg-background-neutral-01 rounded-t-16">
             <div className="flex flex-wrap gap-2">
               {currentMessageFiles.map((file) => (
                 <FileCard
@@ -507,8 +512,23 @@ function ChatInputBarInner({
                   setCurrentMessageFiles((prev) => [...prev, file]);
                 }
               }}
-              recentFiles={recentFiles}
+              onUnpickRecent={(file: ProjectFile) => {
+                setCurrentMessageFiles((prev) =>
+                  prev.filter(
+                    (existingFile) => existingFile.file_id !== file.file_id
+                  )
+                );
+              }}
+              recentFiles={allRecentFiles}
               handleUploadChange={handleUploadChange}
+              trigger={
+                <IconButton
+                  icon={SvgPlusCircle}
+                  tooltip="Attach Files"
+                  tertiary
+                />
+              }
+              selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle

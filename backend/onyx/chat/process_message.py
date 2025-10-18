@@ -150,24 +150,35 @@ def _build_project_llm_docs(
         return project_llm_docs
 
     project_file_id_set = set(project_file_ids)
-    for f in in_memory_user_files:
-        # Only include files that belong to the project (not ad-hoc uploads)
-        if project_file_id_set and (f.file_id in project_file_id_set):
-            try:
-                text_content = f.content.decode("utf-8", errors="ignore")
-            except Exception:
-                text_content = ""
 
-            # Build a short blurb from the file content for better UI display
-            blurb = (
-                (text_content[:200] + "...")
-                if len(text_content) > 200
-                else text_content
-            )
+    def _strip_nuls(s: str) -> str:
+        return s.replace("\x00", "") if s else s
+
+    for f in in_memory_user_files:
+        if project_file_id_set and (f.file_id in project_file_id_set):
+            cleaned_filename = _strip_nuls(f.filename or str(f.file_id))
+
+            if f.file_type.is_text_file():
+                try:
+                    text_content = f.content.decode("utf-8", errors="ignore")
+                    text_content = _strip_nuls(text_content)
+                except Exception:
+                    text_content = ""
+
+                # Build a short blurb from the file content for better UI display
+                blurb = (
+                    (text_content[:200] + "...")
+                    if len(text_content) > 200
+                    else text_content
+                )
+            else:
+                # Non-text (e.g., images): do not decode bytes; keep empty content but allow citation
+                text_content = ""
+                blurb = f"[{f.file_type.value}] {cleaned_filename}"
 
             # Provide basic metadata to improve SavedSearchDoc display
             file_metadata: dict[str, str | list[str]] = {
-                "filename": f.filename or str(f.file_id),
+                "filename": cleaned_filename,
                 "file_type": f.file_type.value,
             }
 
@@ -176,7 +187,7 @@ def _build_project_llm_docs(
                     document_id=str(f.file_id),
                     content=text_content,
                     blurb=blurb,
-                    semantic_identifier=f.filename or str(f.file_id),
+                    semantic_identifier=cleaned_filename,
                     source_type=DocumentSource.USER_FILE,
                     metadata=file_metadata,
                     updated_at=None,

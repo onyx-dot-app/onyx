@@ -1,45 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FileDescriptor } from "@/app/chat/interfaces";
-
-import { FiX, FiLoader, FiFileText } from "react-icons/fi";
+import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
 
-function DeleteButton({ onDelete }: { onDelete: () => void }) {
-  return (
-    <button
-      onClick={onDelete}
-      className="
-        absolute
-        -top-1
-        -right-1
-        cursor-pointer
-        border-none
-        bg-accent-background-hovered
-        p-.5
-        rounded-full
-        z-10
-      "
-    >
-      <FiX />
-    </button>
-  );
+export interface InputBarPreviewImageProviderProps {
+  file: FileDescriptor;
+  onDelete: () => void;
+  isUploading: boolean;
 }
 
 export function InputBarPreviewImageProvider({
   file,
   onDelete,
   isUploading,
-}: {
-  file: FileDescriptor;
-  onDelete: () => void;
-  isUploading: boolean;
-}) {
+}: InputBarPreviewImageProviderProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -48,7 +25,7 @@ export function InputBarPreviewImageProvider({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {isHovered && <DeleteButton onDelete={onDelete} />}
+      {isHovered && <IconButton icon={SvgX} onClick={onDelete} internal />}
       {isUploading && (
         <div
           className="
@@ -70,34 +47,21 @@ export function InputBarPreviewImageProvider({
   );
 }
 
+export interface InputBarPreviewProps {
+  file: FileDescriptor;
+  onDelete: () => void;
+  isUploading: boolean;
+}
+
 export function InputBarPreview({
   file,
   onDelete,
   isUploading,
-}: {
-  file: FileDescriptor;
-  onDelete: () => void;
-  isUploading: boolean;
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-
+}: InputBarPreviewProps) {
   const fileNameRef = useRef<HTMLDivElement>(null);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-
-  useEffect(() => {
-    if (fileNameRef.current) {
-      setIsOverflowing(
-        fileNameRef.current.scrollWidth > fileNameRef.current.clientWidth
-      );
-    }
-  }, [file.name]);
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className="relative">
       {isUploading && (
         <div
           className="
@@ -144,33 +108,16 @@ export function InputBarPreview({
           </div>
         </div>
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                ref={fileNameRef}
-                className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
-              >
-                {file.name}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" align="start">
-              {file.name}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <button
-          onClick={onDelete}
-          className="
-            cursor-pointer
-            border-none
-            bg-accent-background-hovered
-            rounded-full
-            z-10
-          "
-        >
-          <FiX />
-        </button>
+        <SimpleTooltip tooltip={file.name ?? undefined}>
+          <div
+            ref={fileNameRef}
+            className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
+          >
+            {file.name}
+          </div>
+        </SimpleTooltip>
+
+        <IconButton onClick={onDelete} icon={SvgX} internal />
       </div>
     </div>
   );

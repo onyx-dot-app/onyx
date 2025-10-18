@@ -80,6 +80,7 @@ import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSe
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
 
+const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
   documentSidebarInitialWidth?: number;
   firstMessage?: string;
@@ -557,8 +558,6 @@ export function ChatPage({
     string | null
   >(null);
 
-  const innerSidebarElementRef = useRef<HTMLDivElement>(null);
-
   const HORIZON_DISTANCE = 800;
   const handleScroll = useCallback(() => {
     const scrollDistance =
@@ -689,8 +688,9 @@ export function ChatPage({
   // Available context tokens source of truth:
   // - If a chat session exists, fetch from session API (dynamic per session/model)
   // - If no session, derive from the default/current persona's max document tokens
-  const [availableContextTokens, setAvailableContextTokens] =
-    useState<number>(128_000);
+  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
+    DEFAULT_CONTEXT_TOKENS * 0.5
+  );
   useEffect(() => {
     let cancelled = false;
     async function run() {
@@ -699,18 +699,22 @@ export function ChatPage({
           const available = await getAvailableContextTokens(
             existingChatSessionId
           );
-          if (!cancelled) setAvailableContextTokens(available ?? 0);
+          const capped_context_tokens =
+            (available ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
+          if (!cancelled) setAvailableContextTokens(capped_context_tokens);
         } else {
           const personaId = (selectedAssistant || liveAssistant)?.id;
           if (personaId !== undefined && personaId !== null) {
             const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-            if (!cancelled) setAvailableContextTokens(maxTokens ?? 128_000);
+            const capped_context_tokens =
+              (maxTokens ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
+            if (!cancelled) setAvailableContextTokens(capped_context_tokens);
           } else if (!cancelled) {
-            setAvailableContextTokens(128_000);
+            setAvailableContextTokens(DEFAULT_CONTEXT_TOKENS * 0.5);
           }
         }
       } catch (e) {
-        if (!cancelled) setAvailableContextTokens(128_000);
+        if (!cancelled) setAvailableContextTokens(DEFAULT_CONTEXT_TOKENS * 0.5);
       }
     }
     run();
@@ -768,7 +772,6 @@ export function ChatPage({
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={true}
-              ref={innerSidebarElementRef}
               closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
@@ -776,8 +779,6 @@ export function ChatPage({
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
-              initialWidth={400}
-              isOpen={true}
             />
           </Modal>
         </div>
@@ -799,35 +800,7 @@ export function ChatPage({
 
       <FederatedOAuthModal />
 
-      <div className="flex flex-col h-full w-full">
-        <div
-          style={{ transition: "width 0.30s ease-out" }}
-          className={cn(
-            "flex-none fixed right-0 z-[1000] h-screen transition-all duration-300 ease-in-out bg-transparent",
-            documentSidebarVisible && !settings?.isMobile
-              ? "w-[400px]"
-              : "w-[0px]"
-          )}
-        >
-          {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
-            props are wrapped in useCallback. */}
-          <DocumentResults
-            setPresentingDocument={setPresentingDocument}
-            modal={false}
-            ref={innerSidebarElementRef}
-            closeSidebar={handleDesktopDocumentSidebarClose}
-            selectedDocuments={selectedDocuments}
-            toggleDocumentSelection={toggleDocumentSelection}
-            clearSelectedDocuments={() => setSelectedDocuments([])}
-            // TODO (chris): fix
-            selectedDocumentTokens={0}
-            maxTokens={maxTokens}
-            initialWidth={400}
-            isOpen={documentSidebarVisible && !settings?.isMobile}
-          />
-        </div>
-
+      <div className="flex flex-row h-full w-full">
         <div
           ref={masterFlexboxRef}
           className="flex h-full w-full overflow-x-hidden"
@@ -842,7 +815,7 @@ export function ChatPage({
             >
               {({ getRootProps }) => (
                 <div
-                  className="h-full w-full relative flex-auto"
+                  className="h-full w-full relative flex-auto min-w-0"
                   {...getRootProps()}
                 >
                   <div
@@ -993,6 +966,32 @@ export function ChatPage({
               )}
             </Dropzone>
           )}
+        </div>
+
+        <div
+          className={cn(
+            "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+            documentSidebarVisible && !settings?.isMobile
+              ? "w-[25rem]"
+              : "w-[0rem]"
+          )}
+        >
+          <div className="h-full w-[25rem]">
+            {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function
+              props are wrapped in useCallback. */}
+            <DocumentResults
+              setPresentingDocument={setPresentingDocument}
+              modal={false}
+              closeSidebar={handleDesktopDocumentSidebarClose}
+              selectedDocuments={selectedDocuments}
+              toggleDocumentSelection={toggleDocumentSelection}
+              clearSelectedDocuments={() => setSelectedDocuments([])}
+              // TODO (chris): fix
+              selectedDocumentTokens={0}
+              maxTokens={maxTokens}
+            />
+          </div>
         </div>
       </div>
     </>

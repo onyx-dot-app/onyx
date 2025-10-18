@@ -18,7 +18,7 @@ interface TagProps {
   label: string;
   className?: string;
   children: React.FunctionComponent<SVGProps<SVGSVGElement>>[];
-  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  onClick?: React.MouseEventHandler;
 }
 
 export default function Tag({
@@ -33,9 +33,9 @@ export default function Tag({
   const visibleIcons = children.slice(0, 3);
 
   return (
-    <div
+    <button type="button"
       className={cn(
-        "p-spacing-interline-mini rounded-08 group w-fit flex items-center gap-spacing-inline transition-all duration-200 ease-in-out cursor-pointer",
+        "p-spacing-interline-mini rounded-08 group w-fit flex items-center gap-spacing-inline transition-all duration-200 ease-in-out",
         getVariantClasses(active),
         className
       )}
@@ -66,6 +66,6 @@ export default function Tag({
       </div>
 
       <Text>{label}</Text>
-    </div>
+    </button>
   );
 }

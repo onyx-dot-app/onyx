@@ -1,6 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400&display=swap");
 
 @import "figma/colors.css";
 
@@ -127,8 +126,6 @@
     "Segoe UI", Roboto, sans-serif;
   --font-dm-mono: "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Consolas, "Courier New", monospace;
-  --font-sf-pro: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
 }
 
 /* HEADING STYLES */
@@ -278,7 +275,7 @@
 }
 
 .font-figure-keystroke {
-  font-family: var(--font-sf-pro);
+  font-family: var(--font-hanken-grotesk);
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;

@@ -868,11 +868,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
-  "claude-3-sonnet-20240229": "Claude 3 Sonnet",
   "claude-3-haiku-20240307": "Claude 3 Haiku",
-  "claude-2.1": "Claude 2.1",
   "claude-2.0": "Claude 2.0",
-  "claude-instant-1.2": "Claude Instant 1.2",
   "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
   "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
   "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
@@ -884,6 +881,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
+  "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
 
   // Google Models
 
@@ -917,7 +915,6 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // 1.5 flash models
   "gemini-1.5-flash": "Gemini 1.5 Flash",
-  "gemini-1.5-flash-latest": "Gemini 1.5 Flash (Latest)",
   "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
   "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
 
@@ -938,9 +935,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
   "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
   "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+  "anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku",
   "anthropic.claude-instant-v1": "Claude Instant",
   "anthropic.claude-v1": "Claude v1",
-  "anthropic.claude-v2": "Claude v2",
   "anthropic.claude-v2:1": "Claude v2.1",
   "cohere.command-light-text-v14": "Command Light Text",
   "cohere.command-r-plus-v1:0": "Command R Plus",
@@ -975,6 +972,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "us.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US)",
   "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
   "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
   "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
   "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
   "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",
