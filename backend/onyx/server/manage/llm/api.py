@@ -46,6 +46,8 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
+from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
+from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
@@ -577,3 +579,96 @@ def get_ollama_available_models(
         )
 
     return all_models_with_context_size_and_vision
+
+
+def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
+    """Perform GET to OpenRouter /models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/models"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        # Optional headers recommended by OpenRouter for attribution
+        "HTTP-Referer": "https://onyx.app",
+        "X-Title": "Onyx",
+    }
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch OpenRouter models: {e}",
+        )
+
+
+@admin_router.post("/openrouter/available-models")
+def get_openrouter_available_models(
+    request: OpenRouterModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[OpenRouterFinalModelResponse]:
+    """Fetch available models from OpenRouter `/models` endpoint.
+
+    Parses id, context_length, and architecture.input_modalities to infer vision support.
+    """
+    if not request.api_base or not request.api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API base and API key are required to fetch OpenRouter models.",
+        )
+
+    response_json = _get_openrouter_models_response(
+        api_base=request.api_base, api_key=request.api_key
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your OpenRouter endpoint",
+        )
+
+    results: list[OpenRouterFinalModelResponse] = []
+    for item in data:
+        try:
+            model_id = item.get("id")
+            if not model_id or not isinstance(model_id, str):
+                continue
+
+            # Filter out embedding models
+            if "embed" in model_id.lower():
+                continue
+
+            context_len = item.get("context_length")
+            if not isinstance(context_len, int):
+                context_len = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
+            architecture = item.get("architecture") or {}
+            input_modalities = architecture.get("input_modalities") or []
+            supports_image_input = False
+            try:
+                supports_image_input = isinstance(input_modalities, list) and any(
+                    str(m).lower() == "image" for m in input_modalities
+                )
+            except Exception:
+                supports_image_input = False
+
+            results.append(
+                OpenRouterFinalModelResponse(
+                    name=model_id,
+                    max_input_tokens=context_len,
+                    supports_image_input=supports_image_input,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse OpenRouter model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise HTTPException(
+            status_code=400, detail="No compatible models found from OpenRouter"
+        )
+
+    return results

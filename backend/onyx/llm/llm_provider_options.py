@@ -202,7 +202,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
         OLLAMA_PROVIDER_NAME: [],
-        OPENROUTER_PROVIDER_NAME: get_openrouter_model_names(),
+        OPENROUTER_PROVIDER_NAME: [],
     }
 
 
@@ -228,22 +228,6 @@ def get_anthropic_model_names() -> list[str]:
         for model in litellm.anthropic_models
         if model not in IGNORABLE_ANTHROPIC_MODELS
     ][::-1]
-
-
-def get_openrouter_model_names() -> list[str]:
-    """Return OpenRouter models, stripped of the leading 'openrouter/' if present,
-    then sorted by provider, then model (assumes both exist)."""
-    import litellm
-
-    # 1) Strip 'openrouter/' if present and filter out embedding models
-    model_list = [
-        (model.split("/", 1)[1] if model.startswith("openrouter/") else model)
-        for model in litellm.openrouter_models
-        if "embed" not in model.lower()
-    ]
-
-    # 2) Sort by provider then model
-    return sorted(model_list, key=lambda s: s.split("/", 1))
 
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
