@@ -37,7 +37,7 @@ const sharedConfig = {
   testPathIgnorePatterns: ["/node_modules/", "/tests/e2e/", "/.next/"],
 
   transformIgnorePatterns: [
-    "/node_modules/(?!(jose|@radix-ui|@headlessui|msw|until-async|react-markdown|remark-gfm|remark-parse|unified|bail|is-plain-obj|trough|vfile|unist-.*|mdast-.*|micromark.*|decode-named-character-reference|character-entities)/)",
+    "/node_modules/(?!(jose|@radix-ui|@headlessui|@phosphor-icons|msw|until-async|react-markdown|remark-gfm|remark-parse|unified|bail|is-plain-obj|trough|vfile|unist-.*|mdast-.*|micromark.*|decode-named-character-reference|character-entities)/)",
   ],
 
   transform: {
