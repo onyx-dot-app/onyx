@@ -338,6 +338,62 @@ global.fetch = jest.fn().mockResolvedValue({
 jest.mock("swr");
 ```
 
+### Mocking Dependencies
+
+**When to create a mock:**
+
+Jest mocks are configured in `tests/setup/__mocks__/` and automatically applied via `jest.config.js`. Create mocks for:
+
+1. **ESM compatibility issues** - Libraries that use ES modules (`import/export`) that Jest can't parse
+   - Example: `react-markdown`, `remark-gfm`
+
+2. **Complex setup requirements** - Components/providers that need extensive configuration not relevant to your test
+   - Example: `UserProvider` (requires auth metadata, settings, user objects)
+
+3. **External dependencies** - Libraries that make network calls, access browser APIs, etc.
+
+**When NOT to mock:**
+
+Avoid mocking when:
+- Testing the actual behavior (e.g., don't mock react-markdown if testing markdown rendering)
+- Simple to configure (if easy to provide real props, use the real component)
+- Core business logic (never mock your own application logic)
+
+**Example: Creating a mock**
+
+1. Create the mock file in `tests/setup/__mocks__/`:
+   ```
+   tests/setup/__mocks__/@/components/user/UserProvider.tsx
+   ```
+
+2. Add comprehensive documentation explaining WHY:
+   ```typescript
+   /**
+    * Mock for @/components/user/UserProvider
+    *
+    * Why this mock exists:
+    * The real UserProvider requires complex props (authTypeMetadata, settings, user)
+    * that are not relevant for most component integration tests.
+    *
+    * Limitation:
+    * This mock returns null for user. If you need a logged-in user, you'll need
+    * to either customize this mock or use the real UserProvider.
+    */
+   ```
+
+3. Configure in `jest.config.js`:
+   ```javascript
+   moduleNameMapper: {
+     "^@/components/user/UserProvider$":
+       "<rootDir>/tests/setup/__mocks__/@/components/user/UserProvider.tsx",
+     // ... other mappings
+   }
+   ```
+
+**Important:** Specific mocks must come BEFORE generic path aliases in `moduleNameMapper`, otherwise the path alias matches first.
+
+See `tests/setup/__mocks__/README.md` for detailed documentation on existing mocks.
+
 ## Troubleshooting
 
 ### Common Issues
