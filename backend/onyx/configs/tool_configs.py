@@ -24,3 +24,8 @@ if _CUSTOM_TOOL_PASS_THROUGH_HEADERS_RAW:
         logger.error(
             "Failed to parse CUSTOM_TOOL_PASS_THROUGH_HEADERS, must be a valid JSON object"
         )
+
+# Whether to use LLM to summarize custom tool responses in DR agent
+DR_CUSTOM_TOOL_USE_LLM_SUMMARY = (
+    os.environ.get("DR_CUSTOM_TOOL_USE_LLM_SUMMARY", "true").lower() == "true"
+)

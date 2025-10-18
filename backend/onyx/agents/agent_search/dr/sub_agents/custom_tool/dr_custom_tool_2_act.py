@@ -121,15 +121,25 @@ def custom_tool_act(
         f"Result: {tool_result_str}"
     )
 
-    tool_summary_prompt = CUSTOM_TOOL_USE_PROMPT.build(
-        query=branch_query, base_question=base_question, tool_response=tool_str
-    )
-    answer_string = str(
-        graph_config.tooling.primary_llm.invoke(
-            tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
-        ).content
-    ).strip()
-
+    # Use LLM summary if configured, otherwise use raw tool result
+    if graph_config.tooling.dr_custom_tool_use_llm_summary:
+        tool_summary_prompt = CUSTOM_TOOL_USE_PROMPT.build(
+            query=branch_query, base_question=base_question, tool_response=tool_str
+        )
+        answer_string = str(
+            graph_config.tooling.primary_llm.invoke(
+                tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
+            ).content
+        ).strip()
+    else:
+        answer_string = tool_result_str
+        # Format JSON response for better readability when not using LLM summary
+        if response_summary.response_type == "json":
+            try:
+                parsed_json = json.loads(tool_result_str)
+                answer_string = json.dumps(parsed_json, indent=2, ensure_ascii=False)
+            except json.JSONDecodeError:
+                answer_string = tool_result_str
     # get file_ids:
     file_ids = None
     if response_summary.response_type in {"image", "csv"} and hasattr(
