@@ -1,0 +1,41 @@
+name: 📚 Documentation Request
+description: Report a documentation bug, missing info, or suggest an improvement
+title: "[DOCS] "
+labels: []
+type: Documentation
+assignees: []
+
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: 📋 Prerequisites
+      description: Please check these boxes before submitting your documentation issue
+      options:
+        - label: I have searched the [existing issues](./issues) to avoid creating a duplicate
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📝 Issue Description
+      description: Clearly describe the documentation problem, gap, or improvement suggestion
+      placeholder: |
+        - What is missing, unclear, or incorrect?
+        - What would you like to see improved or added?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_content
+    attributes:
+      label: ✅ Suggested Content or Change
+      description: What should the improved documentation include? (You can paste sample text, suggestions, diagrams, etc.)
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🙋 Willing to Contribute?
+      description: Let us know if you’d like to submit a pull request with the documentation fix
+      options:
+        - label: I am willing to submit a PR for this documentation update
