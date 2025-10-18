@@ -644,30 +644,29 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-    # TODO: Add support to check model config for any provider
-    # TODO: Circular import means OLLAMA_PROVIDER_NAME is not available here
 
-    if model_provider == "ollama":
-        try:
-            with get_session_with_current_tenant() as db_session:
-                model_config = db_session.scalar(
-                    select(ModelConfiguration)
-                    .join(
-                        LLMProvider,
-                        ModelConfiguration.llm_provider_id == LLMProvider.id,
-                    )
-                    .where(
-                        ModelConfiguration.name == model_name,
-                        LLMProvider.provider == model_provider,
-                    )
+    # First, try to read an explicit configuration from the model_configuration table
+    try:
+        with get_session_with_current_tenant() as db_session:
+            model_config = db_session.scalar(
+                select(ModelConfiguration)
+                .join(
+                    LLMProvider,
+                    ModelConfiguration.llm_provider_id == LLMProvider.id,
                 )
-                if model_config and model_config.supports_image_input is not None:
-                    return model_config.supports_image_input
-        except Exception as e:
-            logger.warning(
-                f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+                .where(
+                    ModelConfiguration.name == model_name,
+                    LLMProvider.provider == model_provider,
+                )
             )
+            if model_config and model_config.supports_image_input is not None:
+                return model_config.supports_image_input
+    except Exception as e:
+        logger.warning(
+            f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+        )
 
+    # Fallback to looking up the model in the litellm model_cost dict
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(

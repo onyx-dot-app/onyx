@@ -224,3 +224,15 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+
+# OpenRouter dynamic models fetch
+class OpenRouterModelsRequest(BaseModel):
+    api_base: str
+    api_key: str
+
+
+class OpenRouterFinalModelResponse(BaseModel):
+    name: str
+    max_input_tokens: int
+    supports_image_input: bool
