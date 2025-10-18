@@ -85,8 +85,6 @@ interface DocumentResultsProps {
   clearSelectedDocuments: () => void;
   selectedDocumentTokens: number;
   maxTokens: number;
-  initialWidth: number;
-  isOpen: boolean;
   isSharedChat?: boolean;
   modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
