@@ -1,5 +1,11 @@
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
+export interface CustomConfigOption {
+  label: string;
+  value: string;
+  description?: string | null;
+}
+
 export interface CustomConfigKey {
   name: string;
   display_name: string;
@@ -8,9 +14,10 @@ export interface CustomConfigKey {
   is_secret: boolean;
   key_type: CustomConfigKeyType;
   default_value?: string;
+  options?: CustomConfigOption[] | null;
 }
 
-export type CustomConfigKeyType = "text_input" | "file_input";
+export type CustomConfigKeyType = "text_input" | "file_input" | "select";
 
 export interface ModelConfiguration {
   name: string;
