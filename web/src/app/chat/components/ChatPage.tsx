@@ -779,8 +779,6 @@ export function ChatPage({
               // TODO (chris): fix
               selectedDocumentTokens={0}
               maxTokens={maxTokens}
-              initialWidth={400}
-              isOpen={true}
             />
           </Modal>
         </div>
@@ -991,8 +989,6 @@ export function ChatPage({
             // TODO (chris): fix
             selectedDocumentTokens={0}
             maxTokens={maxTokens}
-            initialWidth={400}
-            isOpen={documentSidebarVisible && !settings?.isMobile}
           />
         </div>
       </div>
