@@ -385,26 +385,50 @@ def _collect_all_teams(
     teams: list[Team] = []
     next_url: str | None = None
 
+    # Only use OData filter if team names don't have special characters
+    # These chars are known to cause OData/URL encoding issues: &'\"?#%+=/\
+    problematic_chars = "&'\"?#%+=/\\"
+    use_filter = requested and not any(
+        c in name for name in requested for c in problematic_chars
+    )
     filter = None
-    if requested:
-        filter = " or ".join(f"displayName eq '{team_name}'" for team_name in requested)
+    if use_filter and requested:
+        escaped_names = [name.replace("'", "''") for name in requested]
+        filter = " or ".join(
+            f"displayName eq '{team_name}'" for team_name in escaped_names
+        )
 
     while True:
-        if filter:
-            query = graph_client.teams.get().filter(filter)
-        else:
-            query = graph_client.teams.get_all(
-                # explicitly needed because of incorrect type definitions provided by the `office365` library
-                page_loaded=lambda _: None
-            )
+        try:
+            if filter:
+                query = graph_client.teams.get().filter(filter)
+            else:
+                query = graph_client.teams.get_all(
+                    # explicitly needed because of incorrect type definitions provided by the `office365` library
+                    page_loaded=lambda _: None
+                )
 
-        if next_url:
-            url = next_url
-            query.before_execute(
-                lambda req: _update_request_url(request=req, next_url=url)
-            )
+            if next_url:
+                url = next_url
+                query.before_execute(
+                    lambda req: _update_request_url(request=req, next_url=url)
+                )
 
-        team_collection = query.execute_query()
+            team_collection = query.execute_query()
+        except (ClientRequestException, ValueError) as e:
+            # If OData filter fails, fallback to client-side filtering
+            if use_filter:
+                logger.warning(
+                    f"OData filter failed with {type(e).__name__}: {e}. "
+                    f"Falling back to client-side filtering."
+                )
+                use_filter = False
+                filter = None
+                teams = []
+                next_url = None
+                continue
+            raise
+
         filtered_teams = (
             team
             for team in team_collection
