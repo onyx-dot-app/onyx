@@ -4,6 +4,8 @@ import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constan
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
+const FOLDED_SIZE = 24;
+
 export interface LogoProps {
   folded?: boolean;
   className?: string;
@@ -12,8 +14,14 @@ export interface LogoProps {
 export default function Logo({ folded, className }: LogoProps) {
   const settings = useSettingsContext();
 
-  const logo = (
-    <OnyxIcon size={24} className={cn("flex-shrink-0", className)} />
+  const logo = settings.enterpriseSettings?.use_custom_logo ? (
+    <img
+      src="/api/enterprise-settings/logo"
+      alt="Logo"
+      style={{ objectFit: "contain", height: FOLDED_SIZE, width: FOLDED_SIZE }}
+    />
+  ) : (
+    <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
   );
 
   if (folded) return logo;
