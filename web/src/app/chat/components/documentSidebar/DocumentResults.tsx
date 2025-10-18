@@ -1,14 +1,7 @@
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "@/app/chat/components/documentSidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import {
-  Dispatch,
-  ForwardedRef,
-  forwardRef,
-  SetStateAction,
-  useMemo,
-  memo,
-} from "react";
+import { Dispatch, SetStateAction, useMemo, memo } from "react";
 import { getCitations } from "@/app/chat/services/packetUtils";
 import {
   useCurrentMessageTree,

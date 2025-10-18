@@ -558,8 +558,6 @@ export function ChatPage({
     string | null
   >(null);
 
-  const innerSidebarElementRef = useRef<HTMLDivElement>(null);
-
   const HORIZON_DISTANCE = 800;
   const handleScroll = useCallback(() => {
     const scrollDistance =
@@ -774,7 +772,6 @@ export function ChatPage({
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={true}
-              ref={innerSidebarElementRef}
               closeSidebar={handleMobileDocumentSidebarClose}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
@@ -805,35 +802,7 @@ export function ChatPage({
 
       <FederatedOAuthModal />
 
-      <div className="flex flex-col h-full w-full">
-        <div
-          style={{ transition: "width 0.30s ease-out" }}
-          className={cn(
-            "flex-none fixed right-0 z-[1000] h-screen transition-all duration-300 ease-in-out bg-transparent",
-            documentSidebarVisible && !settings?.isMobile
-              ? "w-[400px]"
-              : "w-[0px]"
-          )}
-        >
-          {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
-            props are wrapped in useCallback. */}
-          <DocumentResults
-            setPresentingDocument={setPresentingDocument}
-            modal={false}
-            ref={innerSidebarElementRef}
-            closeSidebar={handleDesktopDocumentSidebarClose}
-            selectedDocuments={selectedDocuments}
-            toggleDocumentSelection={toggleDocumentSelection}
-            clearSelectedDocuments={() => setSelectedDocuments([])}
-            // TODO (chris): fix
-            selectedDocumentTokens={0}
-            maxTokens={maxTokens}
-            initialWidth={400}
-            isOpen={documentSidebarVisible && !settings?.isMobile}
-          />
-        </div>
-
+      <div className="flex flex-row h-full w-full">
         <div
           ref={masterFlexboxRef}
           className="flex h-full w-full overflow-x-hidden"
@@ -999,6 +968,32 @@ export function ChatPage({
               )}
             </Dropzone>
           )}
+        </div>
+
+        <div
+          className={cn(
+            "transition-all duration-300 ease-in-out",
+            documentSidebarVisible && !settings?.isMobile
+              ? "w-[35rem]"
+              : "w-[0rem]"
+          )}
+        >
+          {/* IMPORTANT: this is a memoized component, and it's very important
+            for performance reasons that this stays true. MAKE SURE that all function 
+            props are wrapped in useCallback. */}
+          <DocumentResults
+            setPresentingDocument={setPresentingDocument}
+            modal={false}
+            closeSidebar={handleDesktopDocumentSidebarClose}
+            selectedDocuments={selectedDocuments}
+            toggleDocumentSelection={toggleDocumentSelection}
+            clearSelectedDocuments={() => setSelectedDocuments([])}
+            // TODO (chris): fix
+            selectedDocumentTokens={0}
+            maxTokens={maxTokens}
+            initialWidth={400}
+            isOpen={documentSidebarVisible && !settings?.isMobile}
+          />
         </div>
       </div>
     </>
