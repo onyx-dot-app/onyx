@@ -141,9 +141,8 @@ export function LLMProviderUpdateForm({
         : "",
     default_model_name:
       existingLlmProvider?.default_model_name ??
-      llmProviderDescriptor.default_model ??
-      llmProviderDescriptor.model_configurations[0]?.name ??
-      null,
+      (llmProviderDescriptor.default_model ||
+        llmProviderDescriptor.model_configurations[0]?.name),
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ??
       (llmProviderDescriptor.default_fast_model || null),
@@ -302,11 +301,7 @@ export function LLMProviderUpdateForm({
             (modelConfiguration): ModelConfiguration => ({
               name: modelConfiguration.name,
               is_visible: visibleModels.includes(modelConfiguration.name),
-              max_input_tokens:
-                (modelConfiguration as any).max_input_tokens === undefined ||
-                (modelConfiguration as any).max_input_tokens === ""
-                  ? null
-                  : Number((modelConfiguration as any).max_input_tokens),
+              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
               supports_image_input: modelConfiguration.supports_image_input,
             })
           ),
