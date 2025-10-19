@@ -10,6 +10,7 @@ import {
   GithubIcon,
   GitlabIcon,
   BitbucketIcon,
+  PylonIcon,
   GlobeIcon,
   GmailIcon,
   GongIcon,
@@ -270,6 +271,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Productboard",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: "https://docs.onyx.app/admin/connectors/official/productboard",
+  },
+  pylon: {
+    icon: PylonIcon,
+    displayName: "Pylon",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: "https://docs.onyx.app/admin/connectors/official/pylon",
   },
 
   // Messaging

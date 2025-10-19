@@ -346,6 +346,42 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  pylon: {
+    description: "Configure Pylon connector",
+    subtext:
+      "Pylon connector supports indexing pylon issues and, optionally, related messages and attachments. Issues can only be retrieved by their creation date, consider adjusting the Lookback Days for tracking activity.",
+    values: [
+      {
+        type: "multiselect",
+        label: "Additional data",
+        description: "Select additional data to index.",
+        name: "pylon_entities",
+        optional: false,
+        options: [
+          { name: "Messages", value: "messages" },
+          { name: "Attachments (up to 10 MB)", value: "attachments" },
+        ],
+        default: ["messages", "attachments"],
+      },
+      {
+        type: "text",
+        label: "Start Date",
+        name: "start_date",
+        description: `Pylon API is based on dates. The connector will ingest data starting from this date. Format: YYYY-MM-DD`,
+        default: "2025-01-01",
+        optional: true,
+      },
+      {
+        type: "number",
+        label: "Lookback Days",
+        name: "lookback_days",
+        description: `Number of days to look back for updated issues. Issues are only re-indexed if they have activity within the sync window.`,
+        default: 7,
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   gitbook: {
     description: "Configure GitBook connector",
     values: [

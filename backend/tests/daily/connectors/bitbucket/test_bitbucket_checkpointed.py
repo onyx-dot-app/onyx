@@ -53,7 +53,7 @@ def test_bitbucket_checkpointed_load(
     )
 
     assert isinstance(docs, list)
-
+    assert len(docs) > 0
     for doc in docs:
         assert doc.source == DocumentSource.BITBUCKET
         assert doc.metadata is not None
