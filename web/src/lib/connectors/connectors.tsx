@@ -295,7 +295,7 @@ export const connectorConfigs: Record<
         default: [],
       },
       {
-        type: "text",
+        type: "number",
         name: "clone_depth",
         label: "Clone Depth",
         description: "Git clone depth (e.g., 1 for shallow clone).",
@@ -306,7 +306,7 @@ export const connectorConfigs: Record<
         name: "branch",
         label: "Branch",
         description: "Specific branch to clone (e.g., main).",
-        default: "",
+        default: "main",
       },
     ],
   },

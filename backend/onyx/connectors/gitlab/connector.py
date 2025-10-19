@@ -63,7 +63,7 @@ code_file_extensions = {
     '.rb', '.go', '.rs', '.kt', '.scala', '.swift', '.m', '.mm', '.r', '.R',
     '.sql', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.xml', '.json',
     '.yaml', '.yml', '.toml', '.ini', '.cfg', '.config', '.md', '.rst', '.txt',
-    '.sh', '.bash', '.ps1', '.bat', '.cmd', '.dockerfile', '.makefile'
+    '.sh', '.bash', '.ps1', '.bat', '.cmd', '.dockerfile', '.makefile', '   .bazel'
 }
 
 
@@ -411,7 +411,7 @@ class GitlabConnector(LoadConnector, PollConnector):
             logger.error('Failed to clone repository')
             # Clean up on failure
             shutil.rmtree(repo_path, ignore_errors=True)
-            raise Exception(f"Failed to clone repository: {e}")
+            raise Exception(f"Failed to clone repository")
 
     def _cleanup_repository(self):
         """Clean up cloned repository."""
