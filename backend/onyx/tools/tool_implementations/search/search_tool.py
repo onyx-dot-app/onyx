@@ -225,7 +225,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     llm_doc_to_dict(doc, ind)
                     for ind, doc in enumerate(final_context_docs)
                 ]
-            }
+            },
+            ensure_ascii=False
         )
 
     """For LLMs that don't support tool calling"""
