@@ -48,7 +48,17 @@ def generate_chat_messages_report(
         max_size=MAX_IN_MEMORY_SIZE, mode="w+"
     ) as temp_file:
         csvwriter = csv.writer(temp_file, delimiter=",")
-        csvwriter.writerow(["session_id", "user_id", "flow_type", "time_sent"])
+        csvwriter.writerow(
+            [
+                "session_id",
+                "user_id",
+                "flow_type",
+                "time_sent",
+                "assistant_name",
+                "user_email",
+                "number_of_tokens",
+            ]
+        )
         for chat_message_skeleton_batch in get_all_empty_chat_message_entries(
             db_session, period
         ):
@@ -59,6 +69,9 @@ def generate_chat_messages_report(
                         chat_message_skeleton.user_id,
                         chat_message_skeleton.flow_type,
                         chat_message_skeleton.time_sent.isoformat(),
+                        chat_message_skeleton.assistant_name,
+                        chat_message_skeleton.user_email,
+                        chat_message_skeleton.number_of_tokens,
                     ]
                 )
 
