@@ -446,6 +446,10 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
             )
             print(f"{'=' * 80}\n")
 
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return
+
             # Always ask for confirmation if not gated, even in force mode
             response = input(
                 "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
@@ -457,12 +461,22 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
             print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
         elif tenant_status is None:
             print("⚠️  WARNING: Could not determine tenant status!")
+
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return
+
             response = input("Continue anyway? Type 'yes' to confirm: ")
             if response.lower() != "yes":
                 print("Cleanup aborted - could not verify tenant status")
                 return
     except Exception as e:
         print(f"⚠️  WARNING: Failed to check tenant status: {e}")
+
+        if force:
+            print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+            return
+
         response = input("Continue anyway? Type 'yes' to confirm: ")
         if response.lower() != "yes":
             print("Cleanup aborted - could not verify tenant status")
