@@ -667,17 +667,14 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
-    model_map = get_model_map()
     try:
-        model_obj = find_model_obj(
-            model_map,
-            model_provider,
-            model_name,
-        )
+        model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
-            raise RuntimeError(
-                f"No litellm entry found for {model_provider}/{model_name}"
+            logger.warning(
+                f"No litellm entry found for {model_provider}/{model_name}, "
+                "this model may or may not support image input."
             )
+            return False
         return model_obj.get("supports_vision", False)
     except Exception:
         logger.exception(
