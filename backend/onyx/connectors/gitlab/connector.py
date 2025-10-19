@@ -758,7 +758,7 @@ class GitlabConnector(LoadConnector, PollConnector):
             logger.info("GitLab data fetch process completed successfully")
             
         except Exception as e:
-            logger.error(f"Error during GitLab data fetch: {e}")
+            logger.error('Error during GitLab data fetch')
             raise
         finally:
             # Always cleanup cloned repository
