@@ -22,7 +22,6 @@ Examples:
     python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv --force
 """
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -33,106 +32,19 @@ from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
 
 
-def get_tenant_connectors(pod_name: str, tenant_id: str) -> list[dict]:
-    """Get list of connector credential pairs for the tenant.
-
-    Args:
-        pod_name: The Kubernetes pod name to execute on
-        tenant_id: The tenant ID to query
-
-    Returns:
-        List of connector credential pair dicts with id, connector_id, credential_id, name, status
-    """
-    print(f"Fetching connector credential pairs for tenant: {tenant_id}")
-
-    # Get the path to the script
-    script_dir = Path(__file__).parent
-    get_connectors_script = script_dir / "on_pod_scripts" / "get_tenant_connectors.py"
-
-    if not get_connectors_script.exists():
-        raise FileNotFoundError(
-            f"get_tenant_connectors.py not found at {get_connectors_script}"
-        )
-
-    try:
-        # Copy script to pod
-        print("  Copying script to pod...")
-        subprocess.run(
-            [
-                "kubectl",
-                "cp",
-                str(get_connectors_script),
-                f"{pod_name}:/tmp/get_tenant_connectors.py",
-            ],
-            check=True,
-            capture_output=True,
-        )
-
-        # Execute script on pod
-        print("  Executing script on pod...")
-        result = subprocess.run(
-            [
-                "kubectl",
-                "exec",
-                pod_name,
-                "--",
-                "python",
-                "/tmp/get_tenant_connectors.py",
-                tenant_id,
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        # Show progress messages from stderr
-        if result.stderr:
-            print(f"  {result.stderr}", end="")
-
-        # Parse JSON result from stdout
-        result_data = json.loads(result.stdout)
-        status = result_data.get("status")
-
-        if status == "success":
-            connectors = result_data.get("connectors", [])
-            if connectors:
-                print(f"✓ Found {len(connectors)} connector credential pair(s):")
-                for cc in connectors:
-                    print(
-                        f"    - CC Pair ID: {cc['id']}, Name: {cc['name']}, Status: {cc['status']}"
-                    )
-            else:
-                print("  No connector credential pairs found for tenant")
-            return connectors
-        else:
-            message = result_data.get("message", "Unknown error")
-            print(f"⚠ Could not fetch connectors: {message}")
-            return []
-
-    except subprocess.CalledProcessError as e:
-        print(f"⚠ Failed to get connectors for tenant {tenant_id}: {e}")
-        if e.stderr:
-            print(f"  Error details: {e.stderr}")
-        return []
-    except Exception as e:
-        print(f"⚠ Failed to get connectors for tenant {tenant_id}: {e}")
-        return []
-
-
-def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) -> None:
-    """Mark a connector credential pair for deletion.
+def run_connector_deletion(pod_name: str, tenant_id: str) -> None:
+    """Mark all connector credential pairs for deletion.
 
     Args:
         pod_name: The Kubernetes pod name to execute on
         tenant_id: The tenant ID
-        cc_pair_id: The connector credential pair ID to mark for deletion
     """
-    print(f"  Marking CC pair {cc_pair_id} for deletion...")
+    print("  Marking all connector credential pairs for deletion...")
 
     # Get the path to the script
     script_dir = Path(__file__).parent
     mark_deletion_script = (
-        script_dir / "on_pod_scripts" / "mark_connector_for_deletion.py"
+        script_dir / "on_pod_scripts" / "execute_connector_deletion.py"
     )
 
     if not mark_deletion_script.exists():
@@ -163,31 +75,16 @@ def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) 
                 "python",
                 "/tmp/mark_connector_for_deletion.py",
                 tenant_id,
-                str(cc_pair_id),
+                "--all",
             ],
-            capture_output=True,
-            text=True,
-            check=True,
         )
 
-        # Show progress messages from stderr
-        if result.stderr:
-            print(f"    {result.stderr}", end="")
-
-        # Parse JSON result from stdout
-        result_data = json.loads(result.stdout)
-        status = result_data.get("status")
-        message = result_data.get("message")
-
-        if status == "success":
-            print(f"  ✓ {message}")
-        else:
-            print(f"  ✗ {message}", file=sys.stderr)
-            raise RuntimeError(message)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
 
     except subprocess.CalledProcessError as e:
         print(
-            f"  ✗ Failed to mark CC pair {cc_pair_id} for deletion: {e}",
+            f"  ✗ Failed to mark all connector credential pairs for deletion: {e}",
             file=sys.stderr,
         )
         if e.stderr:
@@ -195,7 +92,7 @@ def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) 
         raise
     except Exception as e:
         print(
-            f"  ✗ Failed to mark CC pair {cc_pair_id} for deletion: {e}",
+            f"  ✗ Failed to mark all connector credential pairs for deletion: {e}",
             file=sys.stderr,
         )
         raise
@@ -257,61 +154,20 @@ def mark_tenant_connectors_for_deletion(tenant_id: str, force: bool = False) -> 
         print("Cannot proceed with marking connectors for deletion")
         return
 
-    # Fetch connectors
-    print(f"\n{'=' * 80}")
-    try:
-        connectors = get_tenant_connectors(pod_name, tenant_id)
-    except Exception as e:
-        print(f"✗ Failed to fetch connectors: {e}", file=sys.stderr)
-        return
-    print(f"{'=' * 80}\n")
-
-    if not connectors:
-        print(f"No connectors found for tenant {tenant_id}, nothing to do.")
-        return
-
     # Confirm before proceeding
     if not confirm_step(
-        f"Mark {len(connectors)} connector credential pair(s) for deletion?",
+        f"Mark all connector credential pairs for deletion for tenant {tenant_id}?",
         force,
     ):
         print("Operation cancelled by user")
         return
 
-    # Mark each connector for deletion
-    failed_connectors = []
-    successful_connectors = []
-
-    for cc in connectors:
-        cc_pair_id = cc["id"]
-        cc_name = cc["name"]
-        cc_status = cc["status"]
-
-        # Skip if already marked for deletion
-        if cc_status == "DELETING":
-            print(
-                f"  Skipping CC pair {cc_pair_id} ({cc_name}) - already marked for deletion"
-            )
-            continue
-
-        try:
-            mark_connector_for_deletion(pod_name, tenant_id, cc_pair_id)
-            successful_connectors.append(cc_pair_id)
-        except Exception as e:
-            print(
-                f"  ✗ Failed to mark CC pair {cc_pair_id} ({cc_name}) for deletion: {e}",
-                file=sys.stderr,
-            )
-            failed_connectors.append((cc_pair_id, cc_name, str(e)))
+    run_connector_deletion(pod_name, tenant_id)
 
     # Print summary
-    print(f"\n{'=' * 80}")
-    print(f"✓ Marked {len(successful_connectors)} connector(s) for deletion")
-    if failed_connectors:
-        print(f"✗ Failed to mark {len(failed_connectors)} connector(s):")
-        for cc_id, cc_name, error in failed_connectors:
-            print(f"  - CC Pair {cc_id} ({cc_name}): {error}")
-    print(f"{'=' * 80}")
+    print(
+        f"✓ Marked all connector credential pairs for deletion for tenant {tenant_id}"
+    )
 
 
 def main() -> None:
