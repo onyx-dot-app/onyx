@@ -150,11 +150,9 @@ def mark_tenant_connectors_for_deletion(
                 )
                 if response.lower() != "yes":
                     safe_print("Operation aborted - tenant is not GATED_ACCESS")
-                    raise ValueError("Tenant is not GATED_ACCESS")
+                    raise RuntimeError(f"Tenant {tenant_id} is not GATED_ACCESS")
             else:
-                safe_print(
-                    f"⚠️  FORCE MODE: Proceeding with non-GATED tenant {tenant_id}"
-                )
+                raise RuntimeError(f"Tenant {tenant_id} is not GATED_ACCESS")
         elif tenant_status == "GATED_ACCESS":
             safe_print("✓ Tenant status is GATED_ACCESS - safe to proceed")
         elif tenant_status is None:
@@ -163,7 +161,11 @@ def mark_tenant_connectors_for_deletion(
                 response = input("Continue anyway? Type 'yes' to confirm: ")
                 if response.lower() != "yes":
                     safe_print("Operation aborted - could not verify tenant status")
-                    raise ValueError("Could not verify tenant status")
+                    raise RuntimeError(
+                        f"Could not verify tenant status for {tenant_id}"
+                    )
+            else:
+                raise RuntimeError(f"Could not verify tenant status for {tenant_id}")
     except Exception as e:
         safe_print(f"⚠️  WARNING: Failed to check tenant status: {e}")
         if not force:
