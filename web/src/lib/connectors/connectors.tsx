@@ -270,7 +270,7 @@ export const connectorConfigs: Record<
         label: "Include MRs",
         name: "include_mrs",
         description: "Index merge requests from repositories",
-        default: true,
+        default: false,
       },
       {
         type: "checkbox",
@@ -278,7 +278,35 @@ export const connectorConfigs: Record<
         label: "Include Issues",
         name: "include_issues",
         description: "Index issues from repositories",
-        default: true,
+        default: false,
+      },
+      {
+        type: "list",
+        name: "include_path_patterns",
+        label: "Include Path Patterns",
+        description: "Regex patterns for paths to include (e.g., ^src/.*\\.py$).",
+        default: [".*"],
+      },
+      {
+        type: "list",
+        name: "exclude_path_patterns",
+        label: "Exclude Path Patterns",
+        description: "Regex patterns for paths to exclude (e.g., .*test.*\\.py$).",
+        default: [],
+      },
+      {
+        type: "text",
+        name: "clone_depth",
+        label: "Clone Depth",
+        description: "Git clone depth (e.g., 1 for shallow clone).",
+        default: "1",
+      },
+      {
+        type: "text",
+        name: "branch",
+        label: "Branch",
+        description: "Specific branch to clone (e.g., main).",
+        default: "",
       },
     ],
   },
@@ -1678,6 +1706,10 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_path_patterns?: string[];     
+  exclude_path_patterns?: string[];    
+  clone_depth?: number;                
+  branch?: string;                     
 }
 
 export interface BitbucketConfig {
