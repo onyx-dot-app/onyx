@@ -408,7 +408,7 @@ class GitlabConnector(LoadConnector, PollConnector):
             return repo_path
             
         except Exception as e:
-            logger.error(f"Failed to clone repository: {e}")
+            logger.error('Failed to clone repository')
             # Clean up on failure
             shutil.rmtree(repo_path, ignore_errors=True)
             raise Exception(f"Failed to clone repository: {e}")
