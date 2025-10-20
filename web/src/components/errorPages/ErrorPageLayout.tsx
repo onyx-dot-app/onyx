@@ -1,5 +1,4 @@
-import React from "react";
-import { LogoType } from "../logo/Logo";
+import { LogoType } from "@/components/logo/Logo";
 
 interface ErrorPageLayoutProps {
   children: React.ReactNode;
@@ -7,12 +6,14 @@ interface ErrorPageLayoutProps {
 
 export default function ErrorPageLayout({ children }: ErrorPageLayoutProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen">
-      <div className="mb-4 flex items-center max-w-[220px]">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-spacing-headline bg-background px-spacing-paragraph py-spacing-block">
+      <div className="flex max-w-[220px] items-center justify-center">
         <LogoType size="large" />
       </div>
-      <div className="max-w-xl border border-border w-full bg-white shadow-md rounded-lg overflow-hidden">
-        <div className="p-6 sm:p-8">{children}</div>
+      <div className="w-full max-w-xl rounded-16 border bg-background-neutral-00 shadow-01">
+        <div className="flex flex-col gap-spacing-paragraph p-padding-content">
+          {children}
+        </div>
       </div>
     </div>
   );

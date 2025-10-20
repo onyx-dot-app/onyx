@@ -1,6 +1,6 @@
 "use client";
 
-import ErrorPageLayout from "./ErrorPageLayout";
+import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { fetchCustomerPortal } from "@/lib/billing/utils";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -86,11 +86,11 @@ export default function AccessRestricted() {
 
   return (
     <ErrorPageLayout>
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-spacing-interline">
         <Text headingH2>Access Restricted</Text>
         <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
       </div>
-      <div className="space-y-4">
+      <div className="flex flex-col gap-spacing-paragraph">
         <Text text03>
           We regret to inform you that your access to Onyx has been temporarily
           suspended due to a lapse in your subscription.
