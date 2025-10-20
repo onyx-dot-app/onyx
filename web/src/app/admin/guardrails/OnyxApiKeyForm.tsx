@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { APIKey } from "./types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -62,7 +63,7 @@ export const OnyxApiKeyForm = ({
 
         <Formik
           enableReinitialize
-          initialValues={{  
+          initialValues={{
             name: apiKey?.name,
             description: apiKey?.description,
             // Dynamic config values are flattened into form values by field name
@@ -77,14 +78,20 @@ export const OnyxApiKeyForm = ({
             let configObject: Record<string, any> | undefined = undefined;
             try {
               const selectedTemplate = Array.isArray(templates)
-                ? templates.find((t) => String(t?.id) === (values.template as unknown as string))
+                ? templates.find(
+                    (t) =>
+                      String(t?.id) === (values.template as unknown as string)
+                  )
                 : undefined;
               const schema: any[] | undefined = selectedTemplate?.config;
               if (Array.isArray(schema)) {
-                configObject = schema.reduce((acc: Record<string, any>, field: any) => {
-                  acc[field.name] = (values as any)[field.name];
-                  return acc;
-                }, {});
+                configObject = schema.reduce(
+                  (acc: Record<string, any>, field: any) => {
+                    acc[field.name] = (values as any)[field.name];
+                    return acc;
+                  },
+                  {}
+                );
               } else {
                 // If no template selected, try to infer config keys from values present in apiKey.config
                 if (apiKey?.config) {
@@ -105,7 +112,7 @@ export const OnyxApiKeyForm = ({
               name: values.name,
               description: values.description,
               config: configObject,
-              validator_type: values.validator_type
+              validator_type: values.validator_type,
             };
 
             let response;
@@ -128,7 +135,11 @@ export const OnyxApiKeyForm = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: `${isUpdate ? t(k.VALIDATOR_UPDATE_ERROR) : t(k.VALIDATOR_CREATE_ERROR)}: ${errorMsg}`,
+                message: `${
+                  isUpdate
+                    ? t(k.VALIDATOR_UPDATE_ERROR)
+                    : t(k.VALIDATOR_CREATE_ERROR)
+                }: ${errorMsg}`,
                 type: "error",
               });
             }
@@ -136,16 +147,17 @@ export const OnyxApiKeyForm = ({
         >
           {({ isSubmitting, values, setFieldValue }) => (
             <Form className="w-full overflow-visible">
-
               <SelectorFormField
                 name="template"
                 label={t(k.VALIDATOR_TEMPLATE_LABEL)}
-                options={Array.isArray(templates)
-                  ? templates.map((tpl, idx) => ({
-                      value: String(tpl?.id),
-                      name: tpl?.name || tpl?.id || `Шаблон ${idx + 1}`,
-                    }))
-                  : []}
+                options={
+                  Array.isArray(templates)
+                    ? templates.map((tpl, idx) => ({
+                        value: String(tpl?.id),
+                        name: tpl?.name || tpl?.id || `Шаблон ${idx + 1}`,
+                      }))
+                    : []
+                }
                 defaultValue=""
                 disabled={!Array.isArray(templates) || templates.length === 0}
                 onSelect={(selected) => {
@@ -160,13 +172,28 @@ export const OnyxApiKeyForm = ({
                       tpl.config.forEach((field: any) => {
                         switch (field.type) {
                           case "multiselect":
-                            setFieldValue(field.name, (values as any)[field.name] || []);
+                            setFieldValue(
+                              field.name,
+                              (values as any)[field.name] || []
+                            );
+                            break;
+                          case "tags":
+                            setFieldValue(
+                              field.name,
+                              (values as any)[field.name] || []
+                            );
                             break;
                           case "checkbox":
-                            setFieldValue(field.name, (values as any)[field.name] ?? false);
+                            setFieldValue(
+                              field.name,
+                              (values as any)[field.name] ?? false
+                            );
                             break;
                           default:
-                            setFieldValue(field.name, (values as any)[field.name] ?? "");
+                            setFieldValue(
+                              field.name,
+                              (values as any)[field.name] ?? ""
+                            );
                         }
                       });
                       setFieldValue("validator_type", tpl.validator_type);
@@ -194,7 +221,10 @@ export const OnyxApiKeyForm = ({
               {/* Dynamic fields rendered from selected template schema */}
               {(() => {
                 const selectedTemplate = Array.isArray(templates)
-                  ? templates.find((t) => String(t?.id) === (values.template as unknown as string))
+                  ? templates.find(
+                      (t) =>
+                        String(t?.id) === (values.template as unknown as string)
+                    )
                   : undefined;
                 const schema: any[] | undefined = selectedTemplate?.config;
                 if (!Array.isArray(schema)) {
@@ -207,27 +237,65 @@ export const OnyxApiKeyForm = ({
                       if (!field || !field.type || !field.name) return null;
                       switch (field.type) {
                         case "select": {
-                          const options = (field.values || []).map((v: string) => ({ value: v, name: v }));
+                          const options = (field.values || []).map(
+                            (v: string) => ({ value: v, name: v })
+                          );
                           return (
                             <SelectorFormField
                               key={field.name}
                               name={field.name}
                               label={field.label}
                               options={options}
-                              onSelect={(selected) => setFieldValue(field.name, selected)}
+                              onSelect={(selected) =>
+                                setFieldValue(field.name, selected)
+                              }
                             />
                           );
                         }
                         case "multiselect": {
-                          const options = (field.values || []).map((v: string) => ({ value: v, label: v }));
+                          const options = (field.values || []).map(
+                            (v: string) => ({ value: v, label: v })
+                          );
                           return (
                             <MultiSelectField
                               key={field.name}
                               name={field.name}
                               label={field.label}
                               options={options}
-                              selectedInitially={(values as any)[field.name] || []}
-                              onChange={(selected) => setFieldValue(field.name, selected)}
+                              selectedInitially={
+                                (values as any)[field.name] || []
+                              }
+                              onChange={(selected) =>
+                                setFieldValue(field.name, selected)
+                              }
+                            />
+                          );
+                        }
+                        case "tags": {
+                          const options = (field.values || []).map(
+                            (v: string) => ({ value: v, label: v })
+                          );
+                          const selected = Array.isArray(
+                            (values as any)[field.name]
+                          )
+                            ? ((values as any)[field.name] as string[]).map(
+                                (s) => ({ value: s, label: s })
+                              )
+                            : [];
+                          return (
+                            <MultiSelectDropdown
+                              key={field.name}
+                              name={field.name}
+                              label={field.label}
+                              options={options}
+                              creatable={true}
+                              initialSelectedOptions={selected}
+                              onChange={(selectedOptions) =>
+                                setFieldValue(
+                                  field.name,
+                                  selectedOptions.map((opt) => opt.value)
+                                )
+                              }
                             />
                           );
                         }
