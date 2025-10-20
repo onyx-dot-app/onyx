@@ -420,12 +420,13 @@ def cleanup_control_plane(tenant_id: str, force: bool = False) -> None:
         raise
 
 
-def cleanup_tenant(tenant_id: str, force: bool = False) -> None:
+def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
     """
     Main cleanup function that orchestrates all cleanup steps.
 
     Args:
         tenant_id: The tenant ID to clean up
+        pod_name: The Kubernetes pod name to execute operations on
         force: If True, skip all confirmation prompts
     """
     print(f"Starting cleanup for tenant: {tenant_id}")
@@ -445,6 +446,10 @@ def cleanup_tenant(tenant_id: str, force: bool = False) -> None:
             )
             print(f"{'=' * 80}\n")
 
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return
+
             # Always ask for confirmation if not gated, even in force mode
             response = input(
                 "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
@@ -456,33 +461,37 @@ def cleanup_tenant(tenant_id: str, force: bool = False) -> None:
             print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
         elif tenant_status is None:
             print("⚠️  WARNING: Could not determine tenant status!")
+
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return
+
             response = input("Continue anyway? Type 'yes' to confirm: ")
             if response.lower() != "yes":
                 print("Cleanup aborted - could not verify tenant status")
                 return
     except Exception as e:
         print(f"⚠️  WARNING: Failed to check tenant status: {e}")
+
+        if force:
+            print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+            return
+
         response = input("Continue anyway? Type 'yes' to confirm: ")
         if response.lower() != "yes":
             print("Cleanup aborted - could not verify tenant status")
             return
     print(f"{'=' * 80}\n")
 
-    # Find heavy worker pod for Vespa and schema operations
-    try:
-        pod_name = find_worker_pod()
-    except Exception as e:
-        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
-        print("Cannot proceed with Vespa and schema cleanup")
-        return
-
     # Fetch tenant users for informational purposes (non-blocking)
-    print(f"\n{'=' * 80}")
-    try:
-        get_tenant_users(pod_name, tenant_id)
-    except Exception as e:
-        print(f"⚠ Could not fetch tenant users: {e}")
-    print(f"{'=' * 80}\n")
+    # Skip in force mode as it's only informational
+    if not force:
+        print(f"\n{'=' * 80}")
+        try:
+            get_tenant_users(pod_name, tenant_id)
+        except Exception as e:
+            print(f"⚠ Could not fetch tenant users: {e}")
+        print(f"{'=' * 80}\n")
 
     # Step 1: Make sure all documents are deleted
     print(f"\n{'=' * 80}")
@@ -643,6 +652,15 @@ def main() -> None:
                 f"⚠ FORCE MODE: Running cleanup for {len(tenant_ids)} tenants without confirmations"
             )
 
+    # Find heavy worker pod once for all tenants
+    try:
+        pod_name = find_worker_pod()
+        print(f"✓ Found worker pod: {pod_name}\n")
+    except Exception as e:
+        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
+        print("Cannot proceed with cleanup")
+        sys.exit(1)
+
     # Run cleanup for each tenant
     failed_tenants = []
     successful_tenants = []
@@ -654,7 +672,7 @@ def main() -> None:
             print(f"{'=' * 80}")
 
         try:
-            cleanup_tenant(tenant_id, force)
+            cleanup_tenant(tenant_id, pod_name, force)
             successful_tenants.append(tenant_id)
         except Exception as e:
             print(f"✗ Cleanup failed for tenant {tenant_id}: {e}", file=sys.stderr)
