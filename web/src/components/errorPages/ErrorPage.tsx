@@ -18,7 +18,7 @@ export default function Error() {
       <Text text03>
         If you&apos;re an admin, please review our{" "}
         <a
-          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+          className="text-action-link-05"
           href="https://docs.onyx.app/?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
           target="_blank"
           rel="noopener noreferrer"
@@ -32,7 +32,7 @@ export default function Error() {
       <Text text03>
         Need help? Join our{" "}
         <a
-          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+          className="text-action-link-05"
           href="https://discord.gg/4NA5SbzrWb"
           target="_blank"
           rel="noopener noreferrer"
