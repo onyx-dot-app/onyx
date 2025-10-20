@@ -412,7 +412,14 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
     ]
     for fmt in formats:
         try:
-            return datetime.strptime(last_modified, fmt).replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(last_modified, fmt)
+            if dt.tzinfo is None:
+                # Assume UTC if no timezone info
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                # Convert to UTC
+                dt = dt.astimezone(timezone.utc)
+            return dt
         except (ValueError, TypeError):
             pass
     return None
@@ -555,10 +562,12 @@ class WebConnector(LoadConnector):
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
+            self.lastmod = [None]  # No timestamp for recursive crawling
             return
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value:
             self.to_visit_list = [_ensure_valid_url(base_url)]
+            self.lastmod = [None]  # No timestamp for single page
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
             urls_data = extract_urls_from_sitemap(_ensure_valid_url(base_url))
@@ -583,6 +592,7 @@ class WebConnector(LoadConnector):
                 "are you sure you want to do this?"
             )
             self.to_visit_list = _read_urls_file(base_url)
+            self.lastmod = [None] * len(self.to_visit_list)  # No timestamps for uploaded URLs
 
         else:
             raise ValueError(
@@ -695,6 +705,7 @@ class WebConnector(LoadConnector):
                 for link in internal_links:
                     if link not in session_ctx.visited_links:
                         session_ctx.to_visit.append(link)
+                        session_ctx.lastmod.append(None) # Keep lists in sync
 
             if page_response and str(page_response.status)[0] in ("4", "5"):
                 session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
