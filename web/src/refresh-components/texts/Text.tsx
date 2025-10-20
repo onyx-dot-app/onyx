@@ -1,3 +1,5 @@
+import type { HTMLAttributes } from "react";
+
 import { cn } from "@/lib/utils";
 
 const fonts = {
@@ -46,7 +48,7 @@ const colors = {
   },
 };
 
-export interface TextProps extends React.HTMLAttributes<HTMLElement> {
+export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
   nowrap?: boolean;
 
   // Fonts
@@ -106,6 +108,7 @@ export default function Text({
   inverted,
   children,
   className,
+  ...rest
 }: TextProps) {
   const font = headingH1
     ? "headingH1"
@@ -159,6 +162,7 @@ export default function Text({
 
   return (
     <p
+      {...rest}
       className={cn(
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
