@@ -20,7 +20,7 @@ import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import SvgServer from "@/icons/server";
+import SvgClock from "@/icons/clock";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -140,7 +140,7 @@ export function IndexAttemptsTable({
                     {indexAttempt.from_beginning && (
                       <SimpleTooltip side="top" tooltip={reindexTooltip}>
                         <span className="cursor-help flex items-center">
-                          <SvgServer className="ml-2 h-3.5 w-3.5 stroke-current" />
+                          <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
                         </span>
                       </SimpleTooltip>
                     )}
