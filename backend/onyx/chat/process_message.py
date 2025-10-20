@@ -1101,21 +1101,24 @@ def stream_chat_message_objects(
             else:
                 other_packets.append(packet)
 
+        validated_llm_answer = answer.llm_answer
+
         if onyx_answer_piece_packets:
-            # 1. Собираем текст из пакетов OnyxAnswerPiece
-            merged_text = merge_packets(packets=onyx_answer_piece_packets)
-            logger.info("\nСобранный текст из пакетов OnyxAnswerPiece: %s", merged_text)
+            # 1. Собираем ответ LLM из пакетов OnyxAnswerPiece
+            llm_answer = merge_packets(packets=onyx_answer_piece_packets)
+            logger.info("\nСобранный ответ LLM из пакетов OnyxAnswerPiece: %s", llm_answer)
 
-            if merged_text and merged_text.strip():
+            if llm_answer and llm_answer.strip():
 
-                # 2. Отправляем текст на валидацию
-                validated_message = validator_manager.validate_message(
-                    message=merged_text, direction="output"
+                # 2. Отправляем ответ LLM на валидацию
+                validated_text = validator_manager.validate_message(
+                    message=llm_answer, direction="output"
                 )
+                validated_llm_answer = validated_text or llm_answer
 
-                # 3. Разбиваем валидированный текст обратно на пакеты OnyxAnswerPiece
-                splitted_onyx_answer_piece_packets = split_packets(text=validated_message)
-                logger.info("\nРазбитый текст на пакеты OnyxAnswerPiece: %s", splitted_onyx_answer_piece_packets)
+                # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
+                splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
+                logger.info("\nРазбитый ответ LLM на пакеты OnyxAnswerPiece: %s", splitted_onyx_answer_piece_packets)
 
                 # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
                 other_packets.extend(splitted_onyx_answer_piece_packets)
@@ -1123,7 +1126,7 @@ def stream_chat_message_objects(
             logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
 
         other_packets.extend(stream_stop_info_packets)
-        logger.info("\nОбщий список пакетов после валидации: %s", other_packets)
+        logger.info("\nОбщий список пакетов после валидации ответа LLM: %s", other_packets)
 
         # reference_db_search_docs = None
         # qa_docs_response = None
@@ -1442,13 +1445,13 @@ def stream_chat_message_objects(
             ]
         )
         gen_ai_response_message = partial_response(
-            message=answer.llm_answer,
+            message=validated_llm_answer,
             rephrased_query=(
                 info.qa_docs_response.rephrased_query if info.qa_docs_response else None
             ),
             reference_docs=info.reference_db_search_docs,
             files=info.ai_message_files,
-            token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
+            token_count=len(llm_tokenizer_encode_func(validated_llm_answer)),
             citations=(
                 info.message_specific_citations.citation_map
                 if info.message_specific_citations
