@@ -9,7 +9,7 @@ export default function ErrorPageLayout({ children }: ErrorPageLayoutProps) {
   return (
     <div className="flex flex-col items-center justify-center w-full h-screen gap-spacing-paragraph">
       <OnyxLogoTypeIcon size={120} className="" />
-      <div className="w-[40rem] border bg-background-neutral-00 shadow-lg rounded-16 p-padding-content flex flex-col gap-spacing-paragraph">
+      <div className="w-[40rem] border bg-background-neutral-00 shadow-02 rounded-16 p-padding-content flex flex-col gap-spacing-paragraph">
         {children}
       </div>
     </div>
