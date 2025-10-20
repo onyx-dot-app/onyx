@@ -63,30 +63,10 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> dict:
                             "detail": "auto",
                         }
                     )
-                elif "type" not in item and "text" in item:
-                    # Add type if missing
-                    item_copy = item.copy()
-                    item_copy["type"] = "input_text"
-                    structured_content.append(item_copy)
-                else:
-                    # Use as-is if it already has proper structure
-                    structured_content.append(item)
             else:
-                # For other types, convert to string
-                structured_content.append(
-                    {
-                        "type": "input_text",
-                        "text": str(item),
-                    }
-                )
+                raise ValueError(f"Unexpected item type: {type(item)}")
     else:
-        # Fallback for unexpected types
-        structured_content = [
-            {
-                "type": "input_text",
-                "text": str(content),
-            }
-        ]
+        raise ValueError(f"Unexpected content type: {type(content)}")
 
     return {
         "role": role,
