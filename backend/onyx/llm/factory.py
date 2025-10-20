@@ -467,6 +467,8 @@ def get_llm_model_and_settings(
     # Create LitellmModel instance
     litellm_model = LitellmModel(
         model=model_name,
+        # NOTE: have to pass in None instead of empty string for these
+        # otherwise litellm can have some issues with bedrock
         base_url=api_base or None,
         api_key=api_key or None,
     )
