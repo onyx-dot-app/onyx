@@ -27,6 +27,8 @@ from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_documents_updated_at_batch
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -47,9 +49,10 @@ logger = setup_logger()
 class ScrapeSessionContext:
     """Session level context for scraping"""
 
-    def __init__(self, base_url: str, to_visit: list[str]):
+    def __init__(self, base_url: str, to_visit: list[str], lastmod: list[str]):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.lastmod = lastmod
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
 
@@ -348,27 +351,30 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, str | None]:
     try:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
+        urls_data: dict[str, str | None] = {}
         soup = BeautifulSoup(response.content, "html.parser")
-        urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
-            for loc_tag in soup.find_all("loc")
-        ]
+        for url_tag in soup.find_all("url"):
+            loc_tag = url_tag.find("loc")
+            url = _ensure_absolute_url(sitemap_url, loc_tag.text)
+            lastmod_tag = url_tag.find("lastmod")
+            if loc_tag and loc_tag.text:
+                urls_data[url] = lastmod_tag.text if lastmod_tag else None
 
-        if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+        if len(urls_data.keys()) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
-            urls = list_pages_for_site(sitemap_url)
+            urls_data = list_pages_for_site(sitemap_url)
 
-        if len(urls) == 0:
+        if len(urls_data.keys()) == 0:
             raise ValueError(
                 f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
             )
 
-        return urls
+        return urls_data
     except requests.RequestException as e:
         raise RuntimeError(f"Failed to fetch sitemap from {sitemap_url}: {e}")
     except ValueError as e:
@@ -398,13 +404,91 @@ def _read_urls_file(location: str) -> list[str]:
 
 
 def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
-    try:
-        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(
-            tzinfo=timezone.utc
-        )
-    except (ValueError, TypeError):
-        return None
+    formats = [
+        "%a, %d %b %Y %H:%M:%S %Z",   # HTTP Last-Modified header
+        "%Y-%m-%dT%H:%M:%S%z",        # ISO 8601 with timezone (sitemap)
+        "%Y-%m-%dT%H:%M:%S",          # ISO 8601 without timezone
+        "%Y-%m-%d"                    # Date only (sitemap variant)
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(last_modified, fmt).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return None
 
+def _filter_urls_by_timestamp(
+    urls_data: dict[str, str | None]
+) -> tuple[dict[str, str | None], int, int]:
+    """Filter URLs based on doc_updated_at timestamps to skip unchanged documents.
+    
+    This optimization compares sitemap lastmod timestamps with existing document timestamps.
+    URLs are included if they're new, have no timestamp, or have a changed timestamp.
+    This is safe to run in both incremental and full reindex modes since:
+    - During full reindex: skip_unchanged_documents is False (all URLs are included)
+    - During incremental reindex: skip_unchanged_documents is True (unchanged URLs are filtered out for efficiency)
+    """
+    if not urls_data:
+        return urls_data, 0, 0
+    
+    try:
+        # Query existing timestamps for all URLs
+        url_list = list(urls_data.keys())
+        with get_session_with_current_tenant() as db_session:
+            existing_timestamps = get_documents_updated_at_batch(url_list, db_session)
+        
+        # Filter URLs based on timestamp comparison
+        filtered_urls: dict[str, str | None] = {}
+        for url, lastmod_str in urls_data.items():
+            existing_timestamp = existing_timestamps.get(url)
+            
+            # Include URL if:
+            # 1. It doesn't exist in the index yet (new document), OR
+            # 2. It has no lastmod information (can't determine if changed), OR
+            # 3. The lastmod has changed since last indexing
+            if existing_timestamp is None:
+                # New document - not in index yet
+                filtered_urls[url] = lastmod_str
+            elif lastmod_str is None:
+                # No timestamp in sitemap - can't compare, include it
+                filtered_urls[url] = lastmod_str
+            else:
+                # Parse the lastmod string and compare with existing timestamp
+                sitemap_timestamp = _get_datetime_from_last_modified_header(lastmod_str)
+                if sitemap_timestamp is None:
+                    # Couldn't parse timestamp - include URL to be safe
+                    filtered_urls[url] = lastmod_str
+                elif sitemap_timestamp != existing_timestamp:
+                    # Timestamp has changed - document was modified
+                    filtered_urls[url] = lastmod_str
+                # else: timestamp unchanged - skip this URL
+        
+        original_count = len(urls_data)
+        filtered_count = len(filtered_urls)
+        skipped_count = original_count - filtered_count
+        
+        if skipped_count > 0:
+            logger.info(
+                f"Sitemap optimization: Filtered out {skipped_count} unchanged URLs "
+                f"out of {original_count} total (will scrape {filtered_count} URLs)"
+            )
+        else:
+            logger.info(
+                f"Sitemap optimization: All {original_count} URLs are new or modified, "
+                f"no URLs filtered"
+            )
+        
+        return filtered_urls, original_count, filtered_count
+        
+    except Exception as e:
+        # If filtering fails for any reason, log the error and return all URLs
+        # This ensures the connector continues to work even if optimization fails
+        original_count = len(urls_data)
+        logger.warning(
+            f"Failed to filter URLs by timestamp: {e}. "
+            f"Proceeding with all {original_count} URLs."
+        )
+        return urls_data, original_count, original_count
 
 def _handle_cookies(context: BrowserContext, url: str) -> None:
     """Handle cookies for the given URL to help with bot detection"""
@@ -457,12 +541,16 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        skip_unchanged_documents: bool = False,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
+        self.skip_unchanged_documents = skip_unchanged_documents
+        self.original_url_count = 0
+        self.filtered_url_count = 0
         self.web_connector_type = web_connector_type
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -473,7 +561,15 @@ class WebConnector(LoadConnector):
             self.to_visit_list = [_ensure_valid_url(base_url)]
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
-            self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
+            urls_data = extract_urls_from_sitemap(_ensure_valid_url(base_url))
+            # Apply timestamp-based filtering to skip unchanged documents
+            if self.skip_unchanged_documents:
+                urls_data, self.original_url_count, self.filtered_url_count = _filter_urls_by_timestamp(urls_data)
+            else:
+                self.original_url_count = len(urls_data)
+                self.filtered_url_count = len(urls_data)
+            self.to_visit_list = list(urls_data.keys())
+            self.lastmod = list(urls_data.values())
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
             # Explicitly check if running in multi-tenant mode to prevent potential security risks
@@ -502,6 +598,7 @@ class WebConnector(LoadConnector):
         self,
         index: int,
         initial_url: str,
+        lastmod: str,
         session_ctx: ScrapeSessionContext,
     ) -> ScrapeResult:
         """Returns a ScrapeResult object with a doc and retry flag."""
@@ -529,7 +626,7 @@ class WebConnector(LoadConnector):
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content)
             )
-            last_modified = response.headers.get("Last-Modified")
+            last_modified = response.headers.get("Last-Modified") or lastmod
 
             result.doc = Document(
                 id=initial_url,
@@ -557,7 +654,7 @@ class WebConnector(LoadConnector):
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
-            )
+            ) or lastmod
             final_url = page.url
             if final_url != initial_url:
                 protected_url_check(final_url)
@@ -659,6 +756,14 @@ class WebConnector(LoadConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Traverses through all pages found on the website
         and converts them into documents"""
+        
+        # Check if URLs were filtered vs never existed
+        if self.original_url_count > 0 and self.filtered_url_count == 0:
+            logger.info(
+                f"No URLs to visit after filtering. All {self.original_url_count} "
+                f"documents are up-to-date. Skipping connector execution."
+            )
+            return
 
         if not self.to_visit_list:
             raise ValueError("No URLs to visit")
@@ -666,11 +771,12 @@ class WebConnector(LoadConnector):
         base_url = self.to_visit_list[0]  # For the recursive case
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
-        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
+        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list, self.lastmod)
         session_ctx.initialize()
 
         while session_ctx.to_visit:
             initial_url = session_ctx.to_visit.pop()
+            lastmod = session_ctx.lastmod.pop()
             if initial_url in session_ctx.visited_links:
                 continue
             session_ctx.visited_links.add(initial_url)
@@ -698,7 +804,7 @@ class WebConnector(LoadConnector):
                     time.sleep(delay)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx)
+                    result = self._do_scrape(index, initial_url, lastmod, session_ctx)
                     if result.retry:
                         continue
 
@@ -733,6 +839,13 @@ class WebConnector(LoadConnector):
         session_ctx.stop()
 
     def validate_connector_settings(self) -> None:
+        # For sitemap mode, check if URLs were filtered vs never existed
+        if self.original_url_count > 0 and self.filtered_url_count == 0:
+            logger.info(
+                f"Sitemap connector has no URLs to visit after filtering. "
+                f"All {self.original_url_count} documents are up-to-date."
+            )
+            return None
         # Make sure we have at least one valid URL to check
         if not self.to_visit_list:
             raise ConnectorValidationError(

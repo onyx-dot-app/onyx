@@ -104,13 +104,16 @@ def _get_connector_runner(
     """
 
     task = attempt.connector_credential_pair.connector.input_type
+    
+    connector_config = attempt.connector_credential_pair.connector.connector_specific_config
+    connector_config["skip_unchanged_documents"] = not attempt.from_beginning
 
     try:
         runnable_connector = instantiate_connector(
             db_session=db_session,
             source=attempt.connector_credential_pair.connector.source,
             input_type=task,
-            connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+            connector_specific_config=connector_config,
             credential=attempt.connector_credential_pair.credential,
         )
 
