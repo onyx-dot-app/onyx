@@ -6,6 +6,7 @@ Full tenant analysis script that:
 3. Analyzes the collected data
 """
 
+import argparse
 import csv
 import json
 import os
@@ -361,17 +362,35 @@ def find_recent_tenant_data() -> tuple[list[dict[str, Any]] | None, str | None]:
 
 
 def main() -> None:
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Analyze tenant data and identify gated tenants with no recent queries"
+    )
+    parser.add_argument(
+        "--skip-cache",
+        action="store_true",
+        help="Skip cached tenant data and collect fresh data from pod",
+    )
+    args = parser.parse_args()
+
     try:
         # Step 0: Collect control plane data
         control_plane_data = collect_control_plane_data()
 
-        # Step 1: Check for recent tenant data (< 7 days old)
-        tenant_data, cached_file = find_recent_tenant_data()
+        # Step 1: Check for recent tenant data (< 7 days old) unless --skip-cache is set
+        tenant_data = None
+        cached_file = None
+
+        if not args.skip_cache:
+            tenant_data, cached_file = find_recent_tenant_data()
 
         if tenant_data:
             print(f"Using cached tenant data from: {cached_file}")
             print(f"Total tenants in cache: {len(tenant_data)}")
         else:
+            if args.skip_cache:
+                print("\n⚠ Skipping cache (--skip-cache flag set)")
+
             # Step 2a: Find the heavy worker pod
             pod_name = find_worker_pod()
 

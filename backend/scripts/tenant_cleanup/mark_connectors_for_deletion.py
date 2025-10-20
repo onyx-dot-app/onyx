@@ -7,137 +7,65 @@ Mark connectors for deletion script that:
 4. Triggers the cleanup task
 
 Usage:
-    python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force]
-    python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force]
+    python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] [--concurrency N]
+    python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force] [--concurrency N]
 
 Arguments:
     tenant_id        The tenant ID to process (required if not using --csv)
     --csv PATH       Path to CSV file containing tenant IDs to process
     --force          Skip all confirmation prompts (optional)
+    --concurrency N  Process N tenants concurrently (default: 1)
 
 Examples:
     python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789
     python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789 --force
     python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv
     python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv --force
+    python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py \
+        --csv gated_tenants_no_query_3mo.csv --force --concurrency 16
 """
 
-import json
 import subprocess
 import sys
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 from scripts.tenant_cleanup.cleanup_utils import confirm_step
 from scripts.tenant_cleanup.cleanup_utils import find_worker_pod
 from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
 
-
-def get_tenant_connectors(pod_name: str, tenant_id: str) -> list[dict]:
-    """Get list of connector credential pairs for the tenant.
-
-    Args:
-        pod_name: The Kubernetes pod name to execute on
-        tenant_id: The tenant ID to query
-
-    Returns:
-        List of connector credential pair dicts with id, connector_id, credential_id, name, status
-    """
-    print(f"Fetching connector credential pairs for tenant: {tenant_id}")
-
-    # Get the path to the script
-    script_dir = Path(__file__).parent
-    get_connectors_script = script_dir / "on_pod_scripts" / "get_tenant_connectors.py"
-
-    if not get_connectors_script.exists():
-        raise FileNotFoundError(
-            f"get_tenant_connectors.py not found at {get_connectors_script}"
-        )
-
-    try:
-        # Copy script to pod
-        print("  Copying script to pod...")
-        subprocess.run(
-            [
-                "kubectl",
-                "cp",
-                str(get_connectors_script),
-                f"{pod_name}:/tmp/get_tenant_connectors.py",
-            ],
-            check=True,
-            capture_output=True,
-        )
-
-        # Execute script on pod
-        print("  Executing script on pod...")
-        result = subprocess.run(
-            [
-                "kubectl",
-                "exec",
-                pod_name,
-                "--",
-                "python",
-                "/tmp/get_tenant_connectors.py",
-                tenant_id,
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        # Show progress messages from stderr
-        if result.stderr:
-            print(f"  {result.stderr}", end="")
-
-        # Parse JSON result from stdout
-        result_data = json.loads(result.stdout)
-        status = result_data.get("status")
-
-        if status == "success":
-            connectors = result_data.get("connectors", [])
-            if connectors:
-                print(f"✓ Found {len(connectors)} connector credential pair(s):")
-                for cc in connectors:
-                    print(
-                        f"    - CC Pair ID: {cc['id']}, Name: {cc['name']}, Status: {cc['status']}"
-                    )
-            else:
-                print("  No connector credential pairs found for tenant")
-            return connectors
-        else:
-            message = result_data.get("message", "Unknown error")
-            print(f"⚠ Could not fetch connectors: {message}")
-            return []
-
-    except subprocess.CalledProcessError as e:
-        print(f"⚠ Failed to get connectors for tenant {tenant_id}: {e}")
-        if e.stderr:
-            print(f"  Error details: {e.stderr}")
-        return []
-    except Exception as e:
-        print(f"⚠ Failed to get connectors for tenant {tenant_id}: {e}")
-        return []
+# Global lock for thread-safe printing
+_print_lock: Lock = Lock()
 
 
-def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) -> None:
-    """Mark a connector credential pair for deletion.
+def safe_print(*args: Any, **kwargs: Any) -> None:
+    """Thread-safe print function."""
+    with _print_lock:
+        print(*args, **kwargs)
+
+
+def run_connector_deletion(pod_name: str, tenant_id: str) -> None:
+    """Mark all connector credential pairs for deletion.
 
     Args:
         pod_name: The Kubernetes pod name to execute on
         tenant_id: The tenant ID
-        cc_pair_id: The connector credential pair ID to mark for deletion
     """
-    print(f"  Marking CC pair {cc_pair_id} for deletion...")
+    safe_print("  Marking all connector credential pairs for deletion...")
 
     # Get the path to the script
     script_dir = Path(__file__).parent
     mark_deletion_script = (
-        script_dir / "on_pod_scripts" / "mark_connector_for_deletion.py"
+        script_dir / "on_pod_scripts" / "execute_connector_deletion.py"
     )
 
     if not mark_deletion_script.exists():
         raise FileNotFoundError(
-            f"mark_connector_for_deletion.py not found at {mark_deletion_script}"
+            f"execute_connector_deletion.py not found at {mark_deletion_script}"
         )
 
     try:
@@ -147,7 +75,7 @@ def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) 
                 "kubectl",
                 "cp",
                 str(mark_deletion_script),
-                f"{pod_name}:/tmp/mark_connector_for_deletion.py",
+                f"{pod_name}:/tmp/execute_connector_deletion.py",
             ],
             check=True,
             capture_output=True,
@@ -163,164 +91,115 @@ def mark_connector_for_deletion(pod_name: str, tenant_id: str, cc_pair_id: int) 
                 "python",
                 "/tmp/mark_connector_for_deletion.py",
                 tenant_id,
-                str(cc_pair_id),
+                "--all",
             ],
-            capture_output=True,
-            text=True,
-            check=True,
         )
 
-        # Show progress messages from stderr
-        if result.stderr:
-            print(f"    {result.stderr}", end="")
-
-        # Parse JSON result from stdout
-        result_data = json.loads(result.stdout)
-        status = result_data.get("status")
-        message = result_data.get("message")
-
-        if status == "success":
-            print(f"  ✓ {message}")
-        else:
-            print(f"  ✗ {message}", file=sys.stderr)
-            raise RuntimeError(message)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
 
     except subprocess.CalledProcessError as e:
-        print(
-            f"  ✗ Failed to mark CC pair {cc_pair_id} for deletion: {e}",
+        safe_print(
+            f"  ✗ Failed to mark all connector credential pairs for deletion: {e}",
             file=sys.stderr,
         )
         if e.stderr:
-            print(f"    Error details: {e.stderr}", file=sys.stderr)
+            safe_print(f"    Error details: {e.stderr}", file=sys.stderr)
         raise
     except Exception as e:
-        print(
-            f"  ✗ Failed to mark CC pair {cc_pair_id} for deletion: {e}",
+        safe_print(
+            f"  ✗ Failed to mark all connector credential pairs for deletion: {e}",
             file=sys.stderr,
         )
         raise
 
 
-def mark_tenant_connectors_for_deletion(tenant_id: str, force: bool = False) -> None:
+def mark_tenant_connectors_for_deletion(
+    tenant_id: str, pod_name: str, force: bool = False
+) -> None:
     """
     Main function to mark all connectors for a tenant for deletion.
 
     Args:
         tenant_id: The tenant ID to process
+        pod_name: The Kubernetes pod name to execute on
         force: If True, skip all confirmation prompts
     """
-    print(f"Processing connectors for tenant: {tenant_id}")
+    safe_print(f"Processing connectors for tenant: {tenant_id}")
 
     # Check tenant status first
-    print(f"\n{'=' * 80}")
+    safe_print(f"\n{'=' * 80}")
     try:
         tenant_status = get_tenant_status(tenant_id)
 
         # If tenant is not GATED_ACCESS, require explicit confirmation even in force mode
         if tenant_status and tenant_status != "GATED_ACCESS":
-            print(
+            safe_print(
                 f"\n⚠️  WARNING: Tenant status is '{tenant_status}', not 'GATED_ACCESS'!"
             )
-            print(
+            safe_print(
                 "This tenant may be active and should not have connectors deleted without careful review."
             )
-            print(f"{'=' * 80}\n")
+            safe_print(f"{'=' * 80}\n")
 
             # Always ask for confirmation if not gated, even in force mode
-            response = input(
-                "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
-            )
-            if response.lower() != "yes":
-                print("Operation aborted - tenant is not GATED_ACCESS")
-                return
+            # Note: In parallel mode with force, this will still block
+            if not force:
+                response = input(
+                    "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
+                )
+                if response.lower() != "yes":
+                    safe_print("Operation aborted - tenant is not GATED_ACCESS")
+                    raise RuntimeError(f"Tenant {tenant_id} is not GATED_ACCESS")
+            else:
+                raise RuntimeError(f"Tenant {tenant_id} is not GATED_ACCESS")
         elif tenant_status == "GATED_ACCESS":
-            print("✓ Tenant status is GATED_ACCESS - safe to proceed")
+            safe_print("✓ Tenant status is GATED_ACCESS - safe to proceed")
         elif tenant_status is None:
-            print("⚠️  WARNING: Could not determine tenant status!")
+            safe_print("⚠️  WARNING: Could not determine tenant status!")
+            if not force:
+                response = input("Continue anyway? Type 'yes' to confirm: ")
+                if response.lower() != "yes":
+                    safe_print("Operation aborted - could not verify tenant status")
+                    raise RuntimeError(
+                        f"Could not verify tenant status for {tenant_id}"
+                    )
+            else:
+                raise RuntimeError(f"Could not verify tenant status for {tenant_id}")
+    except Exception as e:
+        safe_print(f"⚠️  WARNING: Failed to check tenant status: {e}")
+        if not force:
             response = input("Continue anyway? Type 'yes' to confirm: ")
             if response.lower() != "yes":
-                print("Operation aborted - could not verify tenant status")
-                return
-    except Exception as e:
-        print(f"⚠️  WARNING: Failed to check tenant status: {e}")
-        response = input("Continue anyway? Type 'yes' to confirm: ")
-        if response.lower() != "yes":
-            print("Operation aborted - could not verify tenant status")
-            return
-    print(f"{'=' * 80}\n")
+                safe_print("Operation aborted - could not verify tenant status")
+                raise
+    safe_print(f"{'=' * 80}\n")
 
-    # Find heavy worker pod for operations
-    try:
-        pod_name = find_worker_pod()
-    except Exception as e:
-        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
-        print("Cannot proceed with marking connectors for deletion")
-        return
-
-    # Fetch connectors
-    print(f"\n{'=' * 80}")
-    try:
-        connectors = get_tenant_connectors(pod_name, tenant_id)
-    except Exception as e:
-        print(f"✗ Failed to fetch connectors: {e}", file=sys.stderr)
-        return
-    print(f"{'=' * 80}\n")
-
-    if not connectors:
-        print(f"No connectors found for tenant {tenant_id}, nothing to do.")
-        return
-
-    # Confirm before proceeding
+    # Confirm before proceeding (only in non-force mode)
     if not confirm_step(
-        f"Mark {len(connectors)} connector credential pair(s) for deletion?",
+        f"Mark all connector credential pairs for deletion for tenant {tenant_id}?",
         force,
     ):
-        print("Operation cancelled by user")
-        return
+        safe_print("Operation cancelled by user")
+        raise ValueError("Operation cancelled by user")
 
-    # Mark each connector for deletion
-    failed_connectors = []
-    successful_connectors = []
-
-    for cc in connectors:
-        cc_pair_id = cc["id"]
-        cc_name = cc["name"]
-        cc_status = cc["status"]
-
-        # Skip if already marked for deletion
-        if cc_status == "DELETING":
-            print(
-                f"  Skipping CC pair {cc_pair_id} ({cc_name}) - already marked for deletion"
-            )
-            continue
-
-        try:
-            mark_connector_for_deletion(pod_name, tenant_id, cc_pair_id)
-            successful_connectors.append(cc_pair_id)
-        except Exception as e:
-            print(
-                f"  ✗ Failed to mark CC pair {cc_pair_id} ({cc_name}) for deletion: {e}",
-                file=sys.stderr,
-            )
-            failed_connectors.append((cc_pair_id, cc_name, str(e)))
+    run_connector_deletion(pod_name, tenant_id)
 
     # Print summary
-    print(f"\n{'=' * 80}")
-    print(f"✓ Marked {len(successful_connectors)} connector(s) for deletion")
-    if failed_connectors:
-        print(f"✗ Failed to mark {len(failed_connectors)} connector(s):")
-        for cc_id, cc_name, error in failed_connectors:
-            print(f"  - CC Pair {cc_id} ({cc_name}): {error}")
-    print(f"{'=' * 80}")
+    safe_print(
+        f"✓ Marked all connector credential pairs for deletion for tenant {tenant_id}"
+    )
 
 
 def main() -> None:
     if len(sys.argv) < 2:
         print(
-            "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force]"
+            "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] "
+            "[--concurrency N]"
         )
         print(
             "       python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force]"
+            " [--concurrency N]"
         )
         print("\nArguments:")
         print(
@@ -328,6 +207,7 @@ def main() -> None:
         )
         print("  --csv PATH       Path to CSV file containing tenant IDs to process")
         print("  --force          Skip all confirmation prompts (optional)")
+        print("  --concurrency N  Process N tenants concurrently (default: 1)")
         print("\nExamples:")
         print(
             "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789"
@@ -339,23 +219,48 @@ def main() -> None:
             "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv"
         )
         print(
-            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv --force"
+            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv "
+            "--force --concurrency 16"
         )
         sys.exit(1)
 
     # Parse arguments
     force = "--force" in sys.argv
-    tenant_ids = []
+    tenant_ids: list[str] = []
+
+    # Parse concurrency
+    concurrency: int = 1
+    if "--concurrency" in sys.argv:
+        try:
+            concurrency_index = sys.argv.index("--concurrency")
+            if concurrency_index + 1 >= len(sys.argv):
+                print("Error: --concurrency flag requires a number", file=sys.stderr)
+                sys.exit(1)
+            concurrency = int(sys.argv[concurrency_index + 1])
+            if concurrency < 1:
+                print("Error: concurrency must be at least 1", file=sys.stderr)
+                sys.exit(1)
+        except ValueError:
+            print("Error: --concurrency value must be an integer", file=sys.stderr)
+            sys.exit(1)
+
+    # Validate: concurrency > 1 requires --force
+    if concurrency > 1 and not force:
+        print(
+            "Error: --concurrency > 1 requires --force flag (interactive mode not supported with parallel processing)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Check for CSV mode
     if "--csv" in sys.argv:
         try:
-            csv_index = sys.argv.index("--csv")
+            csv_index: int = sys.argv.index("--csv")
             if csv_index + 1 >= len(sys.argv):
                 print("Error: --csv flag requires a file path", file=sys.stderr)
                 sys.exit(1)
 
-            csv_path = sys.argv[csv_index + 1]
+            csv_path: str = sys.argv[csv_index + 1]
             tenant_ids = read_tenant_ids_from_csv(csv_path)
 
             if not tenant_ids:
@@ -370,6 +275,16 @@ def main() -> None:
     else:
         # Single tenant mode
         tenant_ids = [sys.argv[1]]
+
+    # Find heavy worker pod once before processing
+    try:
+        print("Finding worker pod...")
+        pod_name: str = find_worker_pod()
+        print(f"✓ Using worker pod: {pod_name}")
+    except Exception as e:
+        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
+        print("Cannot proceed with marking connectors for deletion")
+        sys.exit(1)
 
     # Initial confirmation (unless --force is used)
     if not force:
@@ -387,6 +302,7 @@ def main() -> None:
         print(
             f"Mode: {'FORCE (no confirmations)' if force else 'Interactive (will ask for confirmation at each step)'}"
         )
+        print(f"Concurrency: {concurrency} tenant(s) at a time")
         print("\nThis will:")
         print("  1. Fetch all connector credential pairs for each tenant")
         print("  2. Cancel any scheduled indexing attempts for each connector")
@@ -409,37 +325,78 @@ def main() -> None:
             )
         else:
             print(
-                f"⚠ FORCE MODE: Marking connectors for deletion for {len(tenant_ids)} tenants without confirmations"
+                f"⚠ FORCE MODE: Marking connectors for deletion for {len(tenant_ids)} tenants "
+                f"(concurrency: {concurrency}) without confirmations"
             )
 
-    # Process each tenant
-    failed_tenants = []
-    successful_tenants = []
+    # Process tenants (in parallel if concurrency > 1)
+    failed_tenants: list[tuple[str, str]] = []
+    successful_tenants: list[str] = []
 
-    for idx, tenant_id in enumerate(tenant_ids, 1):
-        if len(tenant_ids) > 1:
-            print(f"\n{'=' * 80}")
-            print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
-            print(f"{'=' * 80}")
+    if concurrency == 1:
+        # Sequential processing
+        for idx, tenant_id in enumerate(tenant_ids, 1):
+            if len(tenant_ids) > 1:
+                print(f"\n{'=' * 80}")
+                print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
+                print(f"{'=' * 80}")
 
-        try:
-            mark_tenant_connectors_for_deletion(tenant_id, force)
-            successful_tenants.append(tenant_id)
-        except Exception as e:
-            print(
-                f"✗ Failed to process tenant {tenant_id}: {e}",
-                file=sys.stderr,
-            )
-            failed_tenants.append((tenant_id, str(e)))
-
-            # If not in force mode and there are more tenants, ask if we should continue
-            if not force and idx < len(tenant_ids):
-                response = input(
-                    f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
+            try:
+                mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
+                successful_tenants.append(tenant_id)
+            except Exception as e:
+                print(
+                    f"✗ Failed to process tenant {tenant_id}: {e}",
+                    file=sys.stderr,
                 )
-                if response.lower() != "y":
-                    print("Operation aborted by user")
-                    break
+                failed_tenants.append((tenant_id, str(e)))
+
+                # If not in force mode and there are more tenants, ask if we should continue
+                if not force and idx < len(tenant_ids):
+                    response = input(
+                        f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
+                    )
+                    if response.lower() != "y":
+                        print("Operation aborted by user")
+                        break
+    else:
+        # Parallel processing
+        print(
+            f"\nProcessing {len(tenant_ids)} tenant(s) with concurrency={concurrency}"
+        )
+
+        def process_tenant(tenant_id: str) -> tuple[str, bool, str | None]:
+            """Process a single tenant. Returns (tenant_id, success, error_message)."""
+            try:
+                mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
+                return (tenant_id, True, None)
+            except Exception as e:
+                return (tenant_id, False, str(e))
+
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            # Submit all tasks
+            future_to_tenant = {
+                executor.submit(process_tenant, tenant_id): tenant_id
+                for tenant_id in tenant_ids
+            }
+
+            # Process results as they complete
+            completed: int = 0
+            for future in as_completed(future_to_tenant):
+                completed += 1
+                tenant_id, success, error = future.result()
+
+                if success:
+                    successful_tenants.append(tenant_id)
+                    safe_print(
+                        f"[{completed}/{len(tenant_ids)}] ✓ Successfully processed {tenant_id}"
+                    )
+                else:
+                    failed_tenants.append((tenant_id, error or "Unknown error"))
+                    safe_print(
+                        f"[{completed}/{len(tenant_ids)}] ✗ Failed to process {tenant_id}: {error}",
+                        file=sys.stderr,
+                    )
 
     # Print summary if multiple tenants
     if len(tenant_ids) > 1:

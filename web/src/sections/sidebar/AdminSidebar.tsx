@@ -168,12 +168,16 @@ const collections = (
               icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
             },
-            {
-              error: settings?.settings.needs_reindexing,
-              name: "Search Settings",
-              icon: SearchIcon,
-              link: "/admin/configuration/search",
-            },
+            ...(!enableCloud
+              ? [
+                  {
+                    error: settings?.settings.needs_reindexing,
+                    name: "Search Settings",
+                    icon: SearchIcon,
+                    link: "/admin/configuration/search",
+                  },
+                ]
+              : []),
             {
               name: "Document Processing",
               icon: DocumentIcon2,

@@ -16,6 +16,9 @@ class ChatMessageSkeleton(BaseModel):
     user_id: str | None
     flow_type: FlowType
     time_sent: datetime
+    assistant_name: str | None
+    user_email: str | None
+    number_of_tokens: int
 
 
 class UserSkeleton(BaseModel):

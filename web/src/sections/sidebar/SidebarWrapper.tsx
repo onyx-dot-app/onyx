@@ -1,13 +1,13 @@
-import React, { Dispatch, SetStateAction } from "react";
+import React, { Dispatch, SetStateAction, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSidebar from "@/icons/sidebar";
+import Logo from "@/refresh-components/Logo";
 
-interface SidebarWrapperProps {
+export interface SidebarWrapperProps {
   folded?: boolean;
   setFolded?: Dispatch<SetStateAction<boolean>>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export default function SidebarWrapper({
@@ -15,6 +15,16 @@ export default function SidebarWrapper({
   setFolded,
   children,
 }: SidebarWrapperProps) {
+  const logo = useMemo(
+    () => (
+      <Logo
+        folded={folded}
+        className={cn(folded && "visible group-hover/SidebarWrapper:hidden")}
+      />
+    ),
+    [folded]
+  );
+
   return (
     // This extra `div` wrapping needs to be present (for some reason).
     // Without, the widths of the sidebars don't properly get set to the explicitly declared widths (i.e., `4rem` folded and `15rem` unfolded).
@@ -27,13 +37,14 @@ export default function SidebarWrapper({
       >
         <div
           className={cn(
-            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0",
+            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0 gap-spacing-paragraph",
             folded ? "justify-center" : "justify-between"
           )}
         >
           {folded ? (
             <div className="h-[2rem] flex flex-col justify-center items-center">
               <>
+                {logo}
                 <IconButton
                   icon={SvgSidebar}
                   tertiary
@@ -41,15 +52,11 @@ export default function SidebarWrapper({
                   className="hidden group-hover/SidebarWrapper:flex"
                   tooltip="Close Sidebar"
                 />
-                <OnyxIcon
-                  size={24}
-                  className="visible group-hover/SidebarWrapper:hidden"
-                />
               </>
             </div>
           ) : (
             <>
-              <OnyxLogoTypeIcon size={88} />
+              {logo}
               <IconButton
                 icon={SvgSidebar}
                 tertiary

@@ -197,20 +197,24 @@ export function SettingsForm() {
   }
 
   function handleCompanyNameBlur() {
-    updateSettingField([
-      { fieldName: "company_name", newValue: companyName || null },
-    ]);
+    const originalValue = settings?.company_name || "";
+    if (companyName !== originalValue) {
+      updateSettingField([
+        { fieldName: "company_name", newValue: companyName || null },
+      ]);
+    }
   }
 
-  // NOTE: at the moment there's a small bug where if you click another admin panel page after typing
-  // the field doesn't update correctly
   function handleCompanyDescriptionBlur() {
-    updateSettingField([
-      {
-        fieldName: "company_description",
-        newValue: companyDescription || null,
-      },
-    ]);
+    const originalValue = settings?.company_description || "";
+    if (companyDescription !== originalValue) {
+      updateSettingField([
+        {
+          fieldName: "company_description",
+          newValue: companyDescription || null,
+        },
+      ]);
+    }
   }
 
   return (
