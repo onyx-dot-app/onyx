@@ -28,13 +28,15 @@ export default function ButtonRenaming({
       return;
     }
 
+    // Close immediately for instant feedback
+    onClose();
+
+    // Fire and forget the rename operation
     try {
       await onRename(newName);
     } catch (error) {
       console.error("Failed to rename:", error);
     }
-
-    onClose();
   }
 
   return (

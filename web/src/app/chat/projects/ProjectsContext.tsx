@@ -223,14 +223,31 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   const renameProject = useCallback(
     async (projectId: number, name: string): Promise<Project> => {
+      // Optimistically update the UI immediately
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, name } : p))
+      );
+
+      if (currentProjectId === projectId) {
+        setCurrentProjectDetails((prev) =>
+          prev ? { ...prev, project: { ...prev.project, name } } : prev
+        );
+      }
+
       try {
         const updated = await svcRenameProject(projectId, name);
+        // Refresh to get canonical state from server
         await fetchProjects();
         if (currentProjectId === projectId) {
           await refreshCurrentProjectDetails();
         }
         return updated;
       } catch (err) {
+        // Rollback optimistic update on failure
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
         const message =
           err instanceof Error ? err.message : "Failed to rename project";
         throw err;
