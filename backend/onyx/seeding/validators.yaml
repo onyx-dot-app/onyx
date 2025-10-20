@@ -20,7 +20,7 @@ validators:
     description: "Обнаружение и маскирование запретных слов"
     validator_type: "BAN_LIST"
     config:
-      - type: "multiselect"
+      - type: "tags"
         name: "banned_words"
         label: "Список запретных слов для маскирования"
         values:
