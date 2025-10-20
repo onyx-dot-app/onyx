@@ -39,7 +39,7 @@ export const getProviderIcon = (
     claude: AnthropicIcon,
     anthropic: AnthropicIcon,
     openai: OpenAISVG,
-    // Azure OpenAI should display the OpenAI logo
+    // Azure OpenAI should display the Azure logo
     azure: AzureIcon,
     microsoft: MicrosoftIconSVG,
     meta: MetaIcon,
