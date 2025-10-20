@@ -25,7 +25,12 @@ _EXPECTED_CONFLUENCE_GROUPS = [
     ),
     ExternalUserGroupSet(
         id="org-admins",
-        user_emails={"founders@onyx.app", "chris@onyx.app", "yuhong@onyx.app"},
+        user_emails={
+            "founders@onyx.app",
+            "chris@onyx.app",
+            "yuhong@onyx.app",
+            "oauth@onyx.app",
+        },
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
@@ -36,6 +41,7 @@ _EXPECTED_CONFLUENCE_GROUPS = [
             "founders@onyx.app",
             "pablo@onyx.app",
             "yuhong@onyx.app",
+            "oauth@onyx.app",
         },
         gives_anyone_access=False,
     ),
@@ -46,6 +52,7 @@ _EXPECTED_CONFLUENCE_GROUPS = [
             "founders@onyx.app",
             "pablo@onyx.app",
             "chris@onyx.app",
+            "oauth@onyx.app",
         },
         gives_anyone_access=False,
     ),
@@ -73,11 +80,27 @@ _EXPECTED_CONFLUENCE_GROUPS = [
         id="All_Confluence_Users_Found_By_Onyx",
         user_emails={
             "chris@onyx.app",
-            "hagen@danswer.ai",
             "founders@onyx.app",
+            "hagen@danswer.ai",
             "pablo@onyx.app",
             "yuhong@onyx.app",
+            "oauth@onyx.app",
         },
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="bitbucket-users-onyxai",
+        user_emails={"oauth@onyx.app"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="bitbucket-admins-onyxai",
+        user_emails={"oauth@onyx.app"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="jira-servicemanagement-users-danswerai",
+        user_emails={"oauth@onyx.app"},
         gives_anyone_access=False,
     ),
 ]

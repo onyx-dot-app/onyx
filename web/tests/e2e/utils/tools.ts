@@ -6,22 +6,18 @@ export const TOOL_IDS = {
   actionToggle: '[data-testid="action-management-toggle"]',
   options: '[data-testid="tool-options"]',
   // These IDs are derived from tool.name in the app
-  searchOption: '[data-testid="tool-option-search"]',
-  webSearchOption: '[data-testid="tool-option-websearch"]',
-  imageGenerationOption: '[data-testid="tool-option-imagegeneration"]',
+  searchOption: '[data-testid="tool-option-SearchTool"]',
+  webSearchOption: '[data-testid="tool-option-WebSearchTool"]',
+  imageGenerationOption: '[data-testid="tool-option-ImageGenerationTool"]',
   // Generic toggle selector used inside tool options
   toggleInput: 'input[type="checkbox"], input[type="radio"], [role="switch"]',
-  // Admin config selectors (may not be present everywhere)
-  adminSearchConfig: '[data-testid="config-tool-search"]',
-  adminWebSearchConfig: '[data-testid="config-tool-web-search"]',
-  adminImageGenConfig: '[data-testid="config-tool-image-generation"]',
 } as const;
 
 export { GREETING_MESSAGES } from "../../../src/lib/chat/greetingMessages";
 
 // Wait for the unified assistant greeting and return its text
 export async function waitForUnifiedGreeting(page: Page): Promise<string> {
-  const el = await page.waitForSelector('[data-testid="greeting-message"]', {
+  const el = await page.waitForSelector('[data-testid="onyx-logo"]', {
     timeout: 5000,
   });
   const text = (await el.textContent())?.trim() || "";

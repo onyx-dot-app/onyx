@@ -1,0 +1,32 @@
+{{- if and (.Values.webserver.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "onyx.fullname" . }}-webserver
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx.fullname" . }}
+  minReplicas: {{ .Values.webserver.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.webserver.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.webserver.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.webserver.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.webserver.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.webserver.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}

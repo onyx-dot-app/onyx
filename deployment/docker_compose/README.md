@@ -1,44 +1,47 @@
-<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/docker_compose/README.md"} -->
+# Welcome to Onyx
 
-# Deploying Onyx using Docker Compose
+To set up Onyx there are several options, Onyx supports the following for deployment:
+1. Quick guided install via the install.sh script
+2. Pulling the repo and running `docker compose up -d` from the deployment/docker_compose directory
+  - Note, it is recommended to copy over the env.template file to .env and edit the necessary values
+3. For large scale deployments leveraging Kubernetes, there are two options, Helm or Terraform.
 
-For general information, please read the instructions in this [README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md).
+This README focuses on the easiest guided deployment which is via install.sh.
 
-## Deploy in a system without GPU support
+**For more detailed guides, please refer to the documentation: https://docs.onyx.app/deployment/overview**
 
-This part is elaborated precisely in this [README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md) in section _Docker Compose_. If you have any questions, please feel free to open an issue or get in touch in slack for support.
+## install.sh script
 
-## Deploy in a system with GPU support
+```
+curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
+```
 
-Running Model servers with GPU support while indexing and querying can result in significant improvements in performance. This is highly recommended if you have access to resources. Currently, Onyx offloads embedding model and tokenizers to the GPU VRAM and the size needed depends on chosen embedding model. For example, the embedding model `nomic-ai/nomic-embed-text-v1` takes up about 1GB of VRAM. That means running this model for inference and embedding pipeline would require roughly 2GB of VRAM.
+This provides a guided installation of Onyx via Docker Compose. It will deploy the latest version of Onyx
+and set up the volumes to ensure data is persisted across deployments or upgrades.
 
-### Setup
+The script will create an onyx_data directory, all necessary files for the deployment will be stored in
+there. Note that no application critical data is stored in that directory so even if you delete it, the
+data needed to restore the app will not be destroyed.
 
-To be able to use NVIDIA runtime, following is mandatory:
+The data about chats, users, etc. are instead stored as named Docker Volumes. This is managed by Docker
+and where it is stored will depend on your Docker setup. You can always delete these as well by running
+the install.sh script with --delete-data.
 
-- proper setup of NVIDIA driver in host system.
-- installation of `nvidia-container-toolkit` for passing GPU runtime to containers
+To shut down the deployment without deleting, use install.sh --shutdown.
 
-You will find elaborate steps here:
+### Upgrading the deployment
+Onyx maintains backwards compatibility across all minor versions following SemVer. If following the install.sh script (or through Docker Compose), you can
+upgrade it by first bringing down the containers. To do this, use `install.sh --shutdown`
+(or `docker compose down` from the directory with the docker-compose.yml file).
 
-#### Installation of NVIDIA Drivers
+After the containers are stopped, you can safely upgrade by either re-running the `install.sh` script (if you left the values as default which is latest,
+then it will automatically update to latest each time the script is run). If you are more comfortable running docker compose commands, you can also run
+commands directly from the directory with the docker-compose.yml file. First verify the version you want in the environment file (see below),
+(if using `latest` tag, be sure to run `docker compose pull`) and run `docker compose up` to restart the services on the latest version
 
-Visit the official [NVIDIA drivers page](https://www.nvidia.com/Download/index.aspx) to download and install the proper drivers. Reboot your system once you have done so.
+### Environment variables
+The Docker Compose files try to look for a .env file in the same directory. The `install.sh` script sets it up from a file called env.template which is
+downloaded during the initial setup. Feel free to edit the .env file to customize your deployment. The most important / common changed values are
+located near the top of the file.
 
-Alternatively, you can choose to install the driver versions via package managers of your choice in UNIX based systems.
-
-#### Installation of `nvidia-container-toolkit`
-
-For GPUs to be accessible to containers, you will need the container toolkit. Please follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) to install the necessary runtime based on your requirement.
-
-### Launching with GPU
-
-1. To run Onyx with GPU, navigate to `docker_compose` directory and run the following:
-
-   - `docker compose -f docker-compose.gpu-dev.yml -p onyx-stack up -d --pull always --force-recreate` - or run: `docker compose -f docker-compose.gpu-dev.yml -p onyx-stack up -d --build --force-recreate`
-     to build from source
-   - Downloading images or packages/requirements may take 15+ minutes depending on your internet connection.
-
-2. To shut down the deployment, run:
-   - To stop the containers: `docker compose -f docker-compose.gpu-dev.yml -p onyx-stack stop`
-   - To delete the containers: `docker compose -f docker-compose.gpu-dev.yml -p onyx-stack down`
+IMAGE_TAG is the version of Onyx to run. It is recommended to leave it as latest to get all updates with each redeployment.

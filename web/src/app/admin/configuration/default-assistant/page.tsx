@@ -5,16 +5,16 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { useRouter } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { OnyxSparkleIcon } from "@/components/icons/icons";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -46,7 +46,7 @@ interface AvailableTool {
 function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { refreshAssistants } = useAssistantsContext();
+  const { refreshAgents } = useAgentsContext();
   const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
@@ -104,7 +104,7 @@ function DefaultAssistantConfig() {
       await persistConfiguration({ tool_ids: Array.from(next) });
       await mutate("/api/admin/default-assistant/configuration");
       router.refresh();
-      await refreshAssistants();
+      await refreshAgents();
     } catch (e) {
       const rollback = new Set(enabledTools);
       if (rollback.has(toolId)) {
@@ -137,7 +137,7 @@ function DefaultAssistantConfig() {
       await persistConfiguration({ system_prompt: currentPrompt });
       await mutate("/api/admin/default-assistant/configuration");
       router.refresh();
-      await refreshAssistants();
+      await refreshAgents();
       setOriginalPrompt(currentPrompt);
       setPopup({
         message: "Instructions updated successfully!",
@@ -280,18 +280,16 @@ function ToolToggle({
         <div className="text-sm font-medium flex items-center gap-2">
           <span>{tool.display_name}</span>
           {!tool.is_available && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
-                    Not enabled
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                  {notEnabledReason}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
+                  Not enabled
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <Text inverted>{notEnabledReason}</Text>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <Text className="text-sm text-text-600 mt-1">{tool.description}</Text>

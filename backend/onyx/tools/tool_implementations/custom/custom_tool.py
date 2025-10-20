@@ -12,9 +12,6 @@ from typing import List
 import requests
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-from openai.types.chat.chat_completion_message_function_tool_call import (
-    ChatCompletionMessageFunctionToolCall,
-)
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
@@ -206,7 +203,7 @@ class CustomTool(BaseTool):
 
         # pretend like nothing happened if not parse-able
         logger.error(
-            f"Failed to parse args for '{self.name}' tool. Recieved: {args_result_str}"
+            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
         )
         return None
 
@@ -407,6 +404,9 @@ def build_custom_tools_from_openapi_schema_and_headers(
 
 if __name__ == "__main__":
     import openai
+    from openai.types.chat.chat_completion_message_function_tool_call import (
+        ChatCompletionMessageFunctionToolCall,
+    )
 
     openapi_schema = {
         "openapi": "3.0.0",

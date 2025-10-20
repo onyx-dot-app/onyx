@@ -535,6 +535,14 @@ export const connectorConfigs: Record<
           "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
       },
       {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
         type: "tab",
         name: "indexing_scope",
         label: "How Should We Index Your Confluence?",
@@ -624,6 +632,14 @@ export const connectorConfigs: Record<
         optional: false,
         description:
           "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
       },
       {
         type: "tab",
@@ -1146,6 +1162,15 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Prefix",
         name: "prefix",
         optional: true,
+      },
+      {
+        type: "checkbox",
+        label: "EU Data Residency",
+        name: "european_residency",
+        description:
+          "Check this box if your bucket has EU data residency enabled.",
+        optional: true,
+        default: false,
       },
       {
         type: "text",
@@ -1805,6 +1830,7 @@ export interface R2Config {
   bucket_type: "r2";
   bucket_name: string;
   prefix: string;
+  european_residency?: boolean;
 }
 
 export interface GCSConfig {

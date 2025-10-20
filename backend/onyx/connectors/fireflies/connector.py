@@ -168,8 +168,8 @@ class FirefliesConnector(PollConnector, LoadConnector):
             if response.status_code == 204:
                 break
 
-            recieved_transcripts = response.json()
-            parsed_transcripts = recieved_transcripts.get("data", {}).get(
+            received_transcripts = response.json()
+            parsed_transcripts = received_transcripts.get("data", {}).get(
                 "transcripts", []
             )
 

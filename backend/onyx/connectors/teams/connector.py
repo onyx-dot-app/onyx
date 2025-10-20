@@ -22,7 +22,7 @@ from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -51,7 +51,7 @@ class TeamsCheckpoint(ConnectorCheckpoint):
 
 class TeamsConnector(
     CheckpointedConnector[TeamsCheckpoint],
-    SlimConnector,
+    SlimConnectorWithPermSync,
 ):
     MAX_WORKERS = 10
     AUTHORITY_URL_PREFIX = "https://login.microsoftonline.com/"
@@ -228,9 +228,9 @@ class TeamsConnector(
             has_more=bool(todos),
         )
 
-    # impls for SlimConnector
+    # impls for SlimConnectorWithPermSync
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -572,7 +572,7 @@ if __name__ == "__main__":
     )
     teams_connector.validate_connector_settings()
 
-    for slim_doc in teams_connector.retrieve_all_slim_documents():
+    for slim_doc in teams_connector.retrieve_all_slim_docs_perm_sync():
         ...
 
     for doc in load_everything_from_checkpoint_connector(

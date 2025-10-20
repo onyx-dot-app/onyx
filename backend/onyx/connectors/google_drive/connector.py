@@ -64,7 +64,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
@@ -153,7 +153,7 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
-    SlimConnector, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
 ):
     def __init__(
         self,
@@ -344,6 +344,9 @@ class GoogleDriveConnector(
     def _get_all_drives_for_user(self, user_email: str) -> set[str]:
         drive_service = get_drive_service(self.creds, user_email)
         is_service_account = isinstance(self.creds, ServiceAccountCredentials)
+        logger.info(
+            f"Getting all drives for user {user_email} with service account: {is_service_account}"
+        )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
             retrieval_function=drive_service.drives().list,
@@ -1137,7 +1140,9 @@ class GoogleDriveConnector(
                         convert_func,
                         (
                             [file.user_email, self.primary_admin_email]
-                            + get_file_owners(file.drive_file),
+                            + get_file_owners(
+                                file.drive_file, self.primary_admin_email
+                            ),
                             file.drive_file,
                         ),
                     )
@@ -1294,7 +1299,7 @@ class GoogleDriveConnector(
                     callback.progress("_extract_slim_docs_from_google_drive", 1)
         yield slim_batch
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

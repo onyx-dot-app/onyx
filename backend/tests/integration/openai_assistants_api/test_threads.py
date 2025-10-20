@@ -120,7 +120,6 @@ def test_list_threads(admin_user: DATestUser | None) -> None:
         assert "persona_id" in session
         assert "time_created" in session
         assert "shared_status" in session
-        assert "folder_id" in session
         assert "current_alternate_model" in session
 
         # Validate UUID

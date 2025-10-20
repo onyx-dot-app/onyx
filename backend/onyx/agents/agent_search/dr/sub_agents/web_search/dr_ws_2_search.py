@@ -7,7 +7,7 @@ from langsmith import traceable
 
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    InternetSearchResult,
+    WebSearchResult,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
@@ -75,15 +75,15 @@ def web_search(
         raise ValueError("No internet search provider found")
 
     @traceable(name="Search Provider API Call")
-    def _search(search_query: str) -> list[InternetSearchResult]:
-        search_results: list[InternetSearchResult] = []
+    def _search(search_query: str) -> list[WebSearchResult]:
+        search_results: list[WebSearchResult] = []
         try:
             search_results = provider.search(search_query)
         except Exception as e:
             logger.error(f"Error performing search: {e}")
         return search_results
 
-    search_results: list[InternetSearchResult] = _search(search_query)
+    search_results: list[WebSearchResult] = _search(search_query)
     search_results_text = "\n\n".join(
         [
             f"{i}. {result.title}\n   URL: {result.link}\n"

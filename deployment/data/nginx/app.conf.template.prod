@@ -1,0 +1,136 @@
+# Log format to include request latency
+log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
+                '$status $body_bytes_sent "$http_referer" '
+                '"$http_user_agent" "$http_x_forwarded_for" '
+                'rt=$request_time';
+
+# Map X-Forwarded-Proto or fallback to $scheme
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+# Map X-Forwarded-Host or fallback to $host
+map $http_x_forwarded_host $forwarded_host {
+    default $http_x_forwarded_host;
+    ""      $host;
+}
+
+# Map X-Forwarded-Port or fallback to server port
+map $http_x_forwarded_port $forwarded_port {
+    default $http_x_forwarded_port;
+    ""      $server_port;
+}
+
+upstream api_server {
+    # fail_timeout=0 means we always retry an upstream even if it failed
+    # to return a good HTTP response
+
+    # for UNIX domain socket setups
+    #server unix:/tmp/gunicorn.sock fail_timeout=0;
+
+    # for a TCP configuration
+    # TODO: use gunicorn to manage multiple processes
+    server ${ONYX_BACKEND_API_HOST}:8080 fail_timeout=0;
+}
+
+upstream web_server {
+    server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
+}
+
+server {
+    listen 80 default_server;
+
+    client_max_body_size 5G;    # Maximum upload size
+
+    access_log /var/log/nginx/access.log custom_main;
+
+    # Match both /api/* and /openapi.json in a single rule
+    location ~ ^/(api|openapi.json)(/.*)?$ {
+        # Rewrite /api prefixed matched paths
+        rewrite ^/api(/.*)$ $1 break;
+
+        # misc headers
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
+        proxy_set_header X-Forwarded-Port $forwarded_port;
+        proxy_set_header Host $host;
+
+        # need to use 1.1 to support chunked transfers
+        proxy_http_version 1.1;
+        proxy_buffering off;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
+
+        # we don't want nginx trying to do something clever with
+        # redirects, we set the Host: header above already.
+        proxy_redirect off;
+        proxy_pass http://api_server;
+    }
+
+    location / {
+        # misc headers
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
+        proxy_set_header X-Forwarded-Port $forwarded_port;
+        proxy_set_header Host $host;
+
+        proxy_http_version 1.1;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
+
+        # we don't want nginx trying to do something clever with
+        # redirects, we set the Host: header above already.
+        proxy_redirect off;
+        proxy_pass http://web_server;
+    }
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+
+    client_max_body_size 5G;    # Maximum upload size
+
+    location / {
+        # misc headers
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # don't use forwarded schema, host, or port here - this is the entry point
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header Host $host;
+
+        proxy_http_version 1.1;
+        proxy_buffering off;
+
+        # timeout settings
+        proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
+        proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
+
+        # we don't want nginx trying to do something clever with
+        # redirects, we set the Host: header above already.
+        proxy_redirect off;
+        proxy_pass http://localhost:80;
+    }
+
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}

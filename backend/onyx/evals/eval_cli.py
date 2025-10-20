@@ -18,7 +18,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
-from onyx.evals.tracing import setup_braintrust
+from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
 
 
 def setup_session_factory() -> None:
@@ -42,6 +42,7 @@ def run_local(
     local_data_path: str | None,
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
+    no_send_logs: bool = False,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -55,7 +56,7 @@ def run_local(
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-    setup_braintrust()
+    setup_braintrust_if_creds_available()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")
@@ -63,6 +64,7 @@ def run_local(
     configuration = EvalConfigurationOptions(
         search_permissions_email=search_permissions_email,
         dataset_name=remote_dataset_name or "blank",
+        no_send_logs=no_send_logs,
     )
 
     if remote_dataset_name:
@@ -172,6 +174,13 @@ def main() -> None:
         help="Email address to impersonate for the evaluation",
     )
 
+    parser.add_argument(
+        "--no-send-logs",
+        action="store_true",
+        help="Do not send logs to the remote server",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
@@ -215,6 +224,7 @@ def main() -> None:
             local_data_path=args.local_data_path,
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
+            no_send_logs=args.no_send_logs,
         )
 
 

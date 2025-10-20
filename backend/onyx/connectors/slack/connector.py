@@ -42,7 +42,7 @@ from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -581,7 +581,7 @@ def _process_message(
 
 
 class SlackConnector(
-    SlimConnector,
+    SlimConnectorWithPermSync,
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
@@ -732,7 +732,7 @@ class SlackConnector(
         self.text_cleaner = SlackTextCleaner(client=self.client)
         self.credentials_provider = credentials_provider
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

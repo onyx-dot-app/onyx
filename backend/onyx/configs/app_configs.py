@@ -24,8 +24,6 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
-SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
-
 #####
 # User Facing Features Configs
 #####
@@ -65,19 +63,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_LOWERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_DIGIT = (
-    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_SPECIAL_CHAR = (
-    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "false").lower() == "true"
 )
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
@@ -130,6 +128,26 @@ OAUTH_CLIENT_SECRET = (
 )
 # OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
+
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
+
+# Applicable for SAML Auth
+SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# JWT Public Key URL for JWT token verification
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -351,16 +369,36 @@ except ValueError:
         CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
-CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
-)
-
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
 
 CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
+)
+
+# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
+# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
+CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
+)
+
+# Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
+CELERY_WORKER_HEAVY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
+)
+
+CELERY_WORKER_MONITORING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_MONITORING_CONCURRENCY") or 1
+)
+
+CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
@@ -497,6 +535,10 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
 # Default size threshold for SharePoint files (20MB)
 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+BLOB_STORAGE_SIZE_THRESHOLD = int(
+    os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -666,8 +708,8 @@ LOG_ALL_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ALL_MODEL_INTERACTIONS", "").lower() == "true"
 )
 # Logs Onyx only model interactions like prompts, responses, messages etc.
-LOG_DANSWER_MODEL_INTERACTIONS = (
-    os.environ.get("LOG_DANSWER_MODEL_INTERACTIONS", "").lower() == "true"
+LOG_ONYX_MODEL_INTERACTIONS = (
+    os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 LOG_INDIVIDUAL_MODEL_TOKENS = (
     os.environ.get("LOG_INDIVIDUAL_MODEL_TOKENS", "").lower() == "true"
@@ -688,13 +730,21 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 #####
 # Braintrust Configuration
 #####
-# Enable Braintrust tracing for LangGraph/LangChain applications
-BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
 # Braintrust project name
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+# Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
 BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+
+#####
+# Langfuse Configuration
+#####
+# Langfuse API credentials - if provided, Langfuse tracing will be enabled
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+# Langfuse host URL (defaults to cloud instance)
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -744,7 +794,7 @@ MAX_FEDERATED_CHUNKS = int(
 # NOTE: this should only be enabled if you have purchased an enterprise license.
 # if you're interested in an enterprise license, please reach out to us at
 # founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
-# Slack community (https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ)
+# Discord community https://discord.gg/4NA5SbzrWb
 ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
@@ -867,6 +917,11 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Should we force S3 local checksumming
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

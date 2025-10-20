@@ -67,7 +67,7 @@ export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
         <p className="text-xs">
           Need help?{" "}
           <a
-            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+            href="https://discord.gg/4NA5SbzrWb"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-red-100 dark:hover:text-red-200"

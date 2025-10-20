@@ -8,8 +8,6 @@ from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
-import litellm  # type: ignore
-import tiktoken
 from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import ChatPromptValue
 from langchain.schema import PromptValue
@@ -18,18 +16,7 @@ from langchain.schema.messages import AIMessage
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
-from litellm.exceptions import APIConnectionError  # type: ignore
-from litellm.exceptions import APIError  # type: ignore
-from litellm.exceptions import AuthenticationError  # type: ignore
-from litellm.exceptions import BadRequestError  # type: ignore
-from litellm.exceptions import BudgetExceededError  # type: ignore
-from litellm.exceptions import ContentPolicyViolationError  # type: ignore
-from litellm.exceptions import ContextWindowExceededError  # type: ignore
-from litellm.exceptions import NotFoundError  # type: ignore
-from litellm.exceptions import PermissionDeniedError  # type: ignore
-from litellm.exceptions import RateLimitError  # type: ignore
-from litellm.exceptions import Timeout  # type: ignore
-from litellm.exceptions import UnprocessableEntityError  # type: ignore
+from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
@@ -40,7 +27,9 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import LLMProvider
+from onyx.db.models import ModelConfiguration
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -72,6 +61,19 @@ def litellm_exception_to_error_msg(
         dict[str, str] | None
     ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> str:
+    from litellm.exceptions import BadRequestError
+    from litellm.exceptions import AuthenticationError
+    from litellm.exceptions import PermissionDeniedError
+    from litellm.exceptions import NotFoundError
+    from litellm.exceptions import UnprocessableEntityError
+    from litellm.exceptions import RateLimitError
+    from litellm.exceptions import ContextWindowExceededError
+    from litellm.exceptions import APIConnectionError
+    from litellm.exceptions import APIError
+    from litellm.exceptions import Timeout
+    from litellm.exceptions import ContentPolicyViolationError
+    from litellm.exceptions import BudgetExceededError
+
     error_msg = str(e)
 
     if custom_error_msg_mappings:
@@ -133,6 +135,8 @@ def _build_content(
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
+    from onyx.file_processing.extract_file_text import read_pdf_file
+
     if not files:
         return message
 
@@ -355,6 +359,7 @@ def check_number_of_tokens(
     function. If none is provided, default to the tiktoken encoder used by GPT-3.5
     and GPT-4.
     """
+    import tiktoken
 
     if encode_fn is None:
         encode_fn = tiktoken.get_encoding("cl100k_base").encode
@@ -378,6 +383,8 @@ def test_llm(llm: LLM) -> str | None:
 
 @lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
+    import litellm
+
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
 
     # NOTE: we could add additional models here in the future,
@@ -457,6 +464,8 @@ def get_llm_contextual_cost(
     this does not account for the cost of documents that fit within a single chunk
     which do not get contextualized.
     """
+
+    import litellm
 
     # calculate input costs
     num_tokens = ONE_MILLION
@@ -635,6 +644,30 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
+    # TODO: Add support to check model config for any provider
+    # TODO: Circular import means OLLAMA_PROVIDER_NAME is not available here
+
+    if model_provider == "ollama":
+        try:
+            with get_session_with_current_tenant() as db_session:
+                model_config = db_session.scalar(
+                    select(ModelConfiguration)
+                    .join(
+                        LLMProvider,
+                        ModelConfiguration.llm_provider_id == LLMProvider.id,
+                    )
+                    .where(
+                        ModelConfiguration.name == model_name,
+                        LLMProvider.provider == model_provider,
+                    )
+                )
+                if model_config and model_config.supports_image_input is not None:
+                    return model_config.supports_image_input
+        except Exception as e:
+            logger.warning(
+                f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+            )
+
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(
@@ -655,6 +688,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
 
 
 def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
+    import litellm
+
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(

@@ -18,7 +18,7 @@ export function useReIndexModal(
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
 
   const showReIndexModal = () => {
-    if (!connectorId || !credentialId || !ccPairId) {
+    if (connectorId == null || credentialId == null || ccPairId == null) {
       return;
     }
     setReIndexPopupVisible(true);
@@ -29,7 +29,7 @@ export function useReIndexModal(
   };
 
   const triggerReIndex = async (fromBeginning: boolean) => {
-    if (!connectorId || !credentialId || !ccPairId) {
+    if (connectorId == null || credentialId == null || ccPairId == null) {
       return;
     }
 
@@ -45,7 +45,9 @@ export function useReIndexModal(
       // Show appropriate notification based on result
       if (result.success) {
         setPopup({
-          message: `${fromBeginning ? "Complete re-indexing" : "Indexing update"} started successfully`,
+          message: `${
+            fromBeginning ? "Complete re-indexing" : "Indexing update"
+          } started successfully`,
           type: "success",
         });
       } else {
@@ -64,7 +66,10 @@ export function useReIndexModal(
   };
 
   const FinalReIndexModal =
-    reIndexPopupVisible && connectorId && credentialId && ccPairId ? (
+    reIndexPopupVisible &&
+    connectorId != null &&
+    credentialId != null &&
+    ccPairId != null ? (
       <ReIndexModal
         setPopup={setPopup}
         hide={hideReIndexModal}
@@ -98,7 +103,9 @@ export default function ReIndexModal({
     try {
       // First show immediate feedback with a popup
       setPopup({
-        message: `Starting ${fromBeginning ? "complete re-indexing" : "indexing update"}...`,
+        message: `Starting ${
+          fromBeginning ? "complete re-indexing" : "indexing update"
+        }...`,
         type: "info",
       });
 

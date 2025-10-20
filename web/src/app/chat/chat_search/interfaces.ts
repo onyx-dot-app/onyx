@@ -6,7 +6,6 @@ export interface ChatSessionSummary {
   persona_id: number | null;
   time_created: string;
   shared_status: ChatSessionSharedStatus;
-  folder_id: number | null;
   current_alternate_model: string | null;
   current_temperature_override: number | null;
   highlights?: string[];

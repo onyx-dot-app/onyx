@@ -31,9 +31,9 @@ from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.onyxbot_configs import DANSWER_BOT_REPHRASE_MESSAGE
-from onyx.configs.onyxbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from onyx.configs.onyxbot_configs import ONYX_BOT_REPHRASE_MESSAGE
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPOND_EVERY_CHANNEL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
@@ -82,10 +82,12 @@ from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
+from onyx.onyxbot.slack.utils import get_channel_type_from_id
 from onyx.onyxbot.slack.utils import get_onyx_bot_auth_ids
 from onyx.onyxbot.slack.utils import read_slack_thread
 from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
@@ -658,10 +660,9 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
         # Ensure that the message is a new message of expected type
         event_type = event.get("type")
+        event.get("channel_type")
+
         if event_type not in ["app_mention", "message"]:
-            channel_specific_logger.info(
-                f"Ignoring non-message event of type '{event_type}' for channel '{channel}'"
-            )
             return False
 
         bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
@@ -842,7 +843,7 @@ def build_request_details(
 
         msg = remove_onyx_bot_tag(tenant_id, msg, client=client.web_client)
 
-        if DANSWER_BOT_REPHRASE_MESSAGE:
+        if ONYX_BOT_REPHRASE_MESSAGE:
             logger.info(f"Rephrasing Slack message. Original message: {msg}")
             try:
                 msg = rephrase_slack_message(msg)
@@ -863,6 +864,17 @@ def build_request_details(
 
         if tagged:
             logger.debug("User tagged OnyxBot")
+
+        # Build Slack context for federated search
+        # Get proper channel type from Slack API instead of relying on event.channel_type
+        channel_type = get_channel_type_from_id(client.web_client, channel)
+
+        slack_context = SlackContext(
+            channel_type=channel_type,
+            channel_id=channel,
+            user_id=sender_id or "unknown",
+        )
+        logger.info(f"build_request_details: Capturing Slack context: {slack_context}")
 
         if thread_ts != message_ts and thread_ts is not None:
             thread_messages = read_slack_thread(
@@ -899,6 +911,7 @@ def build_request_details(
             bypass_filters=tagged,
             is_slash_command=False,
             is_bot_dm=event.get("channel_type") == "im",
+            slack_context=slack_context,  # Add Slack context for federated search
         )
 
     elif req.type == "slash_commands":
@@ -910,6 +923,18 @@ def build_request_details(
             sender, client.web_client, user_cache={}
         )
         email = expert_info.email if expert_info else None
+
+        # Get proper channel type for slash commands too
+        channel_type = get_channel_type_from_id(client.web_client, channel)
+
+        slack_context = SlackContext(
+            channel_type=channel_type,
+            channel_id=channel,
+            user_id=sender,
+        )
+        logger.info(
+            f"build_request_details: Capturing Slack context for slash command: {slack_context}"
+        )
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
@@ -923,6 +948,7 @@ def build_request_details(
             bypass_filters=True,
             is_slash_command=True,
             is_bot_dm=channel_name == "directmessage",
+            slack_context=slack_context,  # Add Slack context for federated search
         )
 
     raise RuntimeError("Programming fault, this should never happen.")
@@ -943,7 +969,7 @@ def apologize_for_fail(
 def process_message(
     req: SocketModeRequest,
     client: TenantSocketModeClient,
-    respond_every_channel: bool = DANSWER_BOT_RESPOND_EVERY_CHANNEL,
+    respond_every_channel: bool = ONYX_BOT_RESPOND_EVERY_CHANNEL,
     notify_no_answer: bool = NOTIFY_SLACKBOT_NO_ANSWER,
 ) -> None:
     tenant_id = get_current_tenant_id()

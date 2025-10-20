@@ -3,8 +3,8 @@ import datetime
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
+from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
@@ -39,7 +39,7 @@ def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
         return
 
     update_emote_react(
-        emoji=DANSWER_REACT_EMOJI,
+        emoji=ONYX_BOT_REACT_EMOJI,
         channel=details.channel_to_respond,
         message_ts=details.msg_to_respond,
         remove=False,
@@ -52,7 +52,7 @@ def schedule_feedback_reminder(
 ) -> str | None:
     logger = setup_logger(extra={SLACK_CHANNEL_ID: details.channel_to_respond})
 
-    if not DANSWER_BOT_FEEDBACK_REMINDER:
+    if not ONYX_BOT_FEEDBACK_REMINDER:
         logger.info("Scheduled feedback reminder disabled...")
         return None
 
@@ -66,7 +66,7 @@ def schedule_feedback_reminder(
         return None
 
     now = datetime.datetime.now()
-    future = now + datetime.timedelta(minutes=DANSWER_BOT_FEEDBACK_REMINDER)
+    future = now + datetime.timedelta(minutes=ONYX_BOT_FEEDBACK_REMINDER)
 
     try:
         response = client.chat_scheduleMessage(

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { DocumentIcon2 } from "@/components/icons/icons";
 import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -99,7 +99,7 @@ function Main() {
           <div className="flex space-x-4 mt-6">
             {isApiKeySet ? (
               <>
-                <Button onClick={handleDelete} variant="destructive">
+                <Button onClick={handleDelete} danger>
                   Delete API Key
                 </Button>
                 <p className="text-text-600 my-auto">
@@ -107,10 +107,7 @@ function Main() {
                 </p>
               </>
             ) : (
-              <Button
-                onClick={handleSave}
-                className="bg-blue-500 text-white hover:bg-blue-600 transition duration-200"
-              >
+              <Button onClick={handleSave} action>
                 Save API Key
               </Button>
             )}

@@ -32,6 +32,7 @@ def _create_image_section(
     image_data: bytes,
     parent_file_name: str,
     display_name: str,
+    media_type: str | None = None,
     link: str | None = None,
     idx: int = 0,
 ) -> tuple[ImageSection, str | None]:
@@ -58,6 +59,9 @@ def _create_image_section(
             image_data=image_data,
             file_id=file_id,
             display_name=display_name,
+            media_type=(
+                media_type if media_type is not None else "application/octet-stream"
+            ),
             link=link,
             file_origin=FileOrigin.CONNECTOR,
         )
@@ -123,6 +127,7 @@ def _process_file(
                 image_data=image_data,
                 parent_file_name=file_id,
                 display_name=title,
+                media_type=file_type,
             )
 
             return [
@@ -194,6 +199,7 @@ def _process_file(
                 image_data=img_data,
                 parent_file_name=file_id,
                 display_name=f"{title} - image {idx}",
+                media_type="application/octet-stream",  # Default media type for embedded images
                 idx=idx,
             )
             sections.append(image_section)

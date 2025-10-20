@@ -4,8 +4,10 @@ from uuid import UUID
 from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
@@ -89,6 +91,8 @@ def create_mcp_server__no_commit(
     description: str | None,
     server_url: str,
     auth_type: MCPAuthenticationType,
+    transport: MCPTransport,
+    auth_performer: MCPAuthenticationPerformer,
     db_session: Session,
     admin_connection_config_id: int | None = None,
 ) -> MCPServer:
@@ -98,7 +102,9 @@ def create_mcp_server__no_commit(
         name=name,
         description=description,
         server_url=server_url,
+        transport=transport,
         auth_type=auth_type,
+        auth_performer=auth_performer,
         admin_connection_config_id=admin_connection_config_id,
     )
     db_session.add(new_server)
@@ -114,6 +120,8 @@ def update_mcp_server__no_commit(
     server_url: str | None = None,
     auth_type: MCPAuthenticationType | None = None,
     admin_connection_config_id: int | None = None,
+    auth_performer: MCPAuthenticationPerformer | None = None,
+    transport: MCPTransport | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -128,6 +136,10 @@ def update_mcp_server__no_commit(
         server.auth_type = auth_type
     if admin_connection_config_id is not None:
         server.admin_connection_config_id = admin_connection_config_id
+    if auth_performer is not None:
+        server.auth_performer = auth_performer
+    if transport is not None:
+        server.transport = transport
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -145,18 +157,6 @@ def delete_mcp_server(server_id: int, db_session: Session) -> None:
     db_session.commit()
 
     logger.info(f"Successfully deleted MCP server {server_id} and its tools")
-
-
-# TODO: this is pretty hacky
-def get_mcp_server_auth_performer(mcp_server: MCPServer) -> MCPAuthenticationPerformer:
-    """Get the authentication performer for an MCP server"""
-    if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
-        return MCPAuthenticationPerformer.PER_USER
-    if not mcp_server.admin_connection_config:
-        return MCPAuthenticationPerformer.ADMIN
-    if not mcp_server.admin_connection_config.config.get("header_substitutions"):
-        return MCPAuthenticationPerformer.ADMIN
-    return MCPAuthenticationPerformer.PER_USER
 
 
 def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[Tool]:
@@ -259,6 +259,8 @@ def update_connection_config(
 
     if config_data is not None:
         config.config = config_data
+        # Force SQLAlchemy to detect the change by marking the field as modified
+        flag_modified(config, "config")
 
     db_session.commit()
     return config
@@ -295,7 +297,7 @@ def get_server_auth_template(
     if not server.admin_connection_config_id:
         return None
 
-    if get_mcp_server_auth_performer(server) == MCPAuthenticationPerformer.ADMIN:
+    if server.auth_performer == MCPAuthenticationPerformer.ADMIN:
         return None  # admin server implies no template
     return server.admin_connection_config
 

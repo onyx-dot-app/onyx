@@ -12,7 +12,7 @@ from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import remove_answer_citations
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
+from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_message
@@ -459,7 +459,7 @@ def handle_followup_button(
     thread_ts = req.payload["container"].get("thread_ts", None)
 
     update_emote_react(
-        emoji=DANSWER_FOLLOWUP_EMOJI,
+        emoji=ONYX_BOT_FOLLOWUP_EMOJI,
         channel=channel_id,
         message_ts=thread_ts,
         remove=False,
@@ -544,7 +544,7 @@ def handle_followup_resolved_button(
     clicker_name = get_clicker_name(req, client)
 
     update_emote_react(
-        emoji=DANSWER_FOLLOWUP_EMOJI,
+        emoji=ONYX_BOT_FOLLOWUP_EMOJI,
         channel=channel_id,
         message_ts=thread_ts,
         remove=True,

@@ -2,12 +2,12 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/tools/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   MCPFormValues,
@@ -34,14 +34,22 @@ export function ToolList({
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showToolList, setShowToolList] = useState(
-    searchParams.get("listing_tools") === "true"
-  );
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
 
-  console.log(tools);
+  // Auto-trigger tool listing when page loads with listing_tools=true query param
+  useEffect(() => {
+    if (
+      searchParams.get("listing_tools") === "true" &&
+      serverId &&
+      values.name.trim() &&
+      values.server_url.trim()
+    ) {
+      // Only auto-trigger for servers that have required form values and a serverId
+      handleListActions(values);
+    }
+  }, [searchParams, serverId, values.name, values.server_url]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -56,55 +64,68 @@ export function ToolList({
     setListingTools(true);
 
     try {
-      // Step 1: Create/update the MCP server with credentials
-      const serverData = {
-        name: values.name,
-        description: values.description,
-        server_url: values.server_url,
-        auth_type: values.auth_type,
-        auth_performer:
-          values.auth_type !== MCPAuthenticationType.NONE
-            ? values.auth_performer
-            : undefined,
-        api_token:
-          values.auth_type === MCPAuthenticationType.API_TOKEN &&
-          values.auth_performer === MCPAuthenticationPerformer.ADMIN
-            ? values.api_token
-            : undefined,
-        auth_template:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER
-            ? values.auth_template
-            : undefined,
-        admin_credentials:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER
-            ? values.user_credentials || {}
-            : undefined,
-        oauth_client_id:
-          values.auth_type === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_id
-            : undefined,
-        oauth_client_secret:
-          values.auth_type === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_secret
-            : undefined,
-        existing_server_id: serverId,
-      };
+      let newServerId = serverId;
 
-      const { data: serverResult, error: serverError } =
-        await createMCPServer(serverData);
+      // For OAuth servers, skip server creation since it's already handled by the OAuth connection
+      if (values.auth_type !== MCPAuthenticationType.OAUTH) {
+        // Step 1: Create/update the MCP server with credentials
+        const serverData = {
+          name: values.name,
+          description: values.description,
+          server_url: values.server_url,
+          auth_type: values.auth_type,
+          auth_performer: values.auth_performer,
+          api_token:
+            values.auth_type === MCPAuthenticationType.API_TOKEN &&
+            values.auth_performer === MCPAuthenticationPerformer.ADMIN
+              ? values.api_token
+              : undefined,
+          auth_template:
+            values.auth_performer === MCPAuthenticationPerformer.PER_USER
+              ? values.auth_template
+              : undefined,
+          admin_credentials:
+            values.auth_performer === MCPAuthenticationPerformer.PER_USER
+              ? values.user_credentials || {}
+              : undefined,
+          oauth_client_id: undefined,
+          oauth_client_secret: undefined,
+          transport: values.transport,
+          existing_server_id: serverId,
+        };
 
-      if (serverError || !serverResult) {
-        setPopup({
-          message: serverError || "Failed to create server",
-          type: "error",
-        });
-        setListingTools(false);
-        return;
+        const { data: serverResult, error: serverError } =
+          await createMCPServer(serverData);
+
+        if (serverError || !serverResult) {
+          setPopup({
+            message: serverError || "Failed to create server",
+            type: "error",
+          });
+          setListingTools(false);
+          return;
+        }
+
+        // Update serverId for subsequent operations
+        newServerId = serverResult.server_id;
+        setCurrentServerId(newServerId);
+      } else {
+        // For OAuth servers, use the existing serverId
+        if (!serverId) {
+          setPopup({
+            message: "Please reconnect to the OAuth server",
+            type: "error",
+          });
+          setListingTools(false);
+          return;
+        }
+        newServerId = serverId;
       }
-
-      // Update serverId for subsequent operations
-      const newServerId = serverResult.server_id;
-      setCurrentServerId(newServerId);
+      // Ensure URL reflects the created server and listing state to avoid duplicate creation
+      // and set listing_tools=true so the tool list is shown
+      router.replace(
+        `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
+      );
 
       // List available tools from the saved server
       const promises: Promise<Response>[] = [
@@ -123,24 +144,38 @@ export function ToolList({
       ];
 
       const responses = await Promise.all(promises);
-      const toolResponse = await responses[0]?.json();
-      console.log(toolResponse);
+      const toolsResp = responses[0];
 
       // Check if list-tools request failed
-      if (!responses[0]?.ok) {
-        const errorData = await toolResponse;
+      if (!toolsResp?.ok) {
+        let errorMessage = "Unknown error";
+        if (toolsResp) {
+          try {
+            const errorJson = await toolsResp.clone().json();
+            if (errorJson && typeof errorJson === "object") {
+              errorMessage =
+                errorJson.detail || errorJson.message || errorMessage;
+            }
+          } catch (_) {}
+          if (errorMessage === "Unknown error") {
+            try {
+              const text = await toolsResp.text();
+              if (text) errorMessage = text;
+            } catch (_) {}
+          }
+        }
         setPopup({
-          message: `Failed to list tools: ${errorData?.detail || "Unknown error"}`,
+          message: `Failed to list tools: ${errorMessage}`,
           type: "error",
         });
         setListingTools(false);
         return;
       }
 
-      setShowToolList(true);
       setCurrentPage(1);
+
       // Process available tools
-      const toolsData: ToolListResponse = toolResponse;
+      const toolsData: ToolListResponse = await toolsResp.json();
       setTools(toolsData.tools);
 
       // Pre-populate selected tools from existing database tools
@@ -199,7 +234,9 @@ export function ToolList({
       const toolCount = data.updated_tools;
       const action = serverId ? "updated" : "created";
       setPopup({
-        message: `Successfully ${action} ${toolCount} MCP tool${toolCount !== 1 ? "s" : ""}!`,
+        message: `Successfully ${action} ${toolCount} MCP tool${
+          toolCount !== 1 ? "s" : ""
+        }!`,
         type: "success",
       });
       // Clear query params and navigate to actions page
@@ -275,12 +312,10 @@ export function ToolList({
       handleSelectAllFiltered();
     }
   };
-  console.log(filteredTools);
 
-  return !showToolList ? (
+  return listingTools || searchParams.get("listing_tools") !== "true" ? (
     <div className="flex gap-2">
       <Button
-        type="button"
         onClick={() => handleListActions(values)}
         disabled={
           listingTools ||
@@ -288,15 +323,10 @@ export function ToolList({
           !values.server_url.trim() ||
           (values.auth_type === MCPAuthenticationType.OAUTH && !oauthConnected)
         }
-        className="flex-1"
       >
         {listingTools ? "Listing Actions..." : "List Actions"}
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => router.push("/admin/actions")}
-      >
+      <Button secondary onClick={() => router.push("/admin/actions")}>
         Cancel
       </Button>
     </div>
@@ -387,18 +417,14 @@ export function ToolList({
           </Text>
           <div className="flex gap-2 ml-4">
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              secondary
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
               Previous
             </Button>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              secondary
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
@@ -438,16 +464,19 @@ export function ToolList({
       {/* Action buttons */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button
-          type="button"
           onClick={() => handleCreateActions(values)}
           disabled={selectedTools.size === 0 || isSubmitting}
         >
           {verbRoot + (isSubmitting ? "ing..." : "e MCP Server Actions")}
         </Button>
         <Button
-          type="button"
-          variant="outline"
-          onClick={() => setShowToolList(false)}
+          secondary
+          onClick={() => {
+            // Remove listing_tools query parameter when going back to form
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete("listing_tools");
+            router.replace(currentUrl.toString());
+          }}
         >
           Back
         </Button>

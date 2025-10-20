@@ -7,8 +7,8 @@ import {
   getAuthUrlSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { EmailPasswordForm } from "../login/EmailPasswordForm";
-import { SignInButton } from "../login/SignInButton";
+import EmailPasswordForm from "../login/EmailPasswordForm";
+import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 

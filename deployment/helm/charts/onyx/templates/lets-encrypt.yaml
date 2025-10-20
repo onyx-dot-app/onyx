@@ -2,7 +2,7 @@
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-letsencrypt
+  name: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
   acme:
     # The ACME server URL
@@ -11,7 +11,7 @@ spec:
     email: {{ .Values.letsencrypt.email }}
     # Name of a secret used to store the ACME account private key
     privateKeySecretRef:
-      name: {{ include "onyx-stack.fullname" . }}-letsencrypt
+      name: {{ include "onyx.fullname" . }}-letsencrypt
     # Enable the HTTP-01 challenge provider
     solvers:
       - http01:

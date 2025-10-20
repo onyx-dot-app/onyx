@@ -126,10 +126,6 @@ Resources:
               HostPort: 3000
               Protocol: tcp
           Environment:
-            - Name: NEXT_PUBLIC_DISABLE_STREAMING
-              Value: "false"
-            - Name: NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA
-              Value: "false"
             - Name: INTERNAL_URL
               Value: !Sub
                 - "http://${Environment}-onyx-backend-api-server-service.${ImportedNamespace}:8080"

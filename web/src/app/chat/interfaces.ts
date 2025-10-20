@@ -24,6 +24,13 @@ export enum RetrievalType {
   SelectedDocs = "selectedDocs",
 }
 
+export enum ResearchType {
+  LegacyAgentic = "LEGACY_AGENTIC",
+  Thoughtful = "THOUGHTFUL",
+  Deep = "DEEP",
+  Fast = "FAST",
+}
+
 export enum ChatSessionSharedStatus {
   Private = "private",
   Public = "public",
@@ -63,6 +70,7 @@ export interface FileDescriptor {
   type: ChatFileType;
   name?: string | null;
 
+  user_file_id?: string | null;
   // FE only
   isUploading?: boolean;
 }
@@ -94,7 +102,7 @@ export interface ChatSession {
   time_created: string;
   time_updated: string;
   shared_status: ChatSessionSharedStatus;
-  folder_id: number | null;
+  project_id: number | null;
   current_alternate_model: string;
   current_temperature_override: number | null;
 }
@@ -113,6 +121,7 @@ export interface Message {
   message: string;
   type: "user" | "assistant" | "system" | "error";
   retrievalType?: RetrievalType;
+  researchType?: ResearchType;
   query?: string | null;
   files: FileDescriptor[];
   toolCall: ToolCallMetadata | null;
@@ -153,6 +162,7 @@ export interface BackendChatSession {
 export interface BackendMessage {
   message_id: number;
   message_type: string;
+  research_type: string | null;
   parent_message: number | null;
   latest_child_message: number | null;
   message: string;

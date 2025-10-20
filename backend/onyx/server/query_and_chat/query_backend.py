@@ -14,7 +14,6 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
@@ -74,7 +73,7 @@ def admin_search(
         )
     matching_chunks = document_index.admin_retrieval(query=query, filters=final_filters)
 
-    documents = chunks_or_sections_to_search_docs(matching_chunks)
+    documents = SearchDoc.from_chunks_or_sections(matching_chunks)
 
     # Deduplicate documents by id
     deduplicated_documents: list[SearchDoc] = []
@@ -161,7 +160,6 @@ def get_user_search_sessions(
                 time_created=search.time_created.isoformat(),
                 time_updated=search.time_updated.isoformat(),
                 shared_status=search.shared_status,
-                folder_id=search.folder_id,
                 current_alternate_model=search.current_alternate_model,
             )
             for search in search_sessions

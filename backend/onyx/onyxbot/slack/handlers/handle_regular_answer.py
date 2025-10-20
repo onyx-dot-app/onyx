@@ -14,11 +14,11 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
+from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
@@ -70,10 +70,10 @@ def handle_regular_answer(
     channel: str,
     logger: OnyxLoggingAdapter,
     feedback_reminder_id: str | None,
-    num_retries: int = DANSWER_BOT_NUM_RETRIES,
+    num_retries: int = ONYX_BOT_NUM_RETRIES,
     thread_context_percent: float = MAX_THREAD_CONTEXT_PERCENTAGE,
-    should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
-    disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
+    should_respond_with_error_msgs: bool = ONYX_BOT_DISPLAY_ERROR_MSGS,
+    disable_docs_only_answer: bool = ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
 ) -> bool:
     channel_conf = slack_channel_config.channel_config
 
@@ -227,6 +227,7 @@ def handle_regular_answer(
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
+                slack_context=message_info.slack_context,  # Pass Slack context from message_info
             )
 
         # if it's a DM or ephemeral message, answer based on private documents.
@@ -256,7 +257,7 @@ def handle_regular_answer(
 
         # In case of failures, don't keep the reaction there permanently
         update_emote_react(
-            emoji=DANSWER_REACT_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
             remove=True,
@@ -312,7 +313,7 @@ def handle_regular_answer(
     # Got an answer at this point, can remove reaction and give results
     if not is_slash_command:  # Slash commands don't have reactions
         update_emote_react(
-            emoji=DANSWER_REACT_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
             remove=True,
@@ -340,7 +341,7 @@ def handle_regular_answer(
     if not answer.answer and disable_docs_only_answer:
         logger.notice(
             "Unable to find answer - not responding since the "
-            "`DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
+            "`ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
         return True
 

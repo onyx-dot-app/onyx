@@ -1,10 +1,13 @@
 import os
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from datetime import timezone
 from io import BytesIO
+from numbers import Integral
 from typing import Any
 from typing import Optional
+from urllib.parse import quote
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
@@ -15,6 +18,7 @@ from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
 from mypy_boto3_s3 import S3Client  # type: ignore
 
+from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
@@ -44,6 +48,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+SIZE_THRESHOLD_BUFFER = 64
+
+
 class BlobStorageConnector(LoadConnector, PollConnector):
     def __init__(
         self,
@@ -51,18 +59,44 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_name: str,
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
+        european_residency: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
-        self.bucket_name = bucket_name
+        self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
+        self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
+        self.bucket_region: Optional[str] = None
+        self.european_residency: bool = european_residency
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
         logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
+
+    def _detect_bucket_region(self) -> None:
+        """Detect and cache the actual region of the S3 bucket using head_bucket."""
+        if self.s3_client is None:
+            logger.warning(
+                "S3 client not initialized. Skipping bucket region detection."
+            )
+            return
+
+        try:
+            response = self.s3_client.head_bucket(Bucket=self.bucket_name)
+            # The region is in the response headers as 'x-amz-bucket-region'
+            self.bucket_region = response.get("BucketRegion") or response.get(
+                "ResponseMetadata", {}
+            ).get("HTTPHeaders", {}).get("x-amz-bucket-region")
+
+            if self.bucket_region:
+                logger.debug(f"Detected bucket region: {self.bucket_region}")
+            else:
+                logger.warning("Bucket region not found in head_bucket response")
+        except Exception as e:
+            logger.warning(f"Failed to detect bucket region via head_bucket: {e}")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -91,9 +125,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 for key in ["r2_access_key_id", "r2_secret_access_key", "account_id"]
             ):
                 raise ConnectorMissingCredentialError("Cloudflare R2")
+
+            # Use EU endpoint if european_residency is enabled
+            subdomain = "eu." if self.european_residency else ""
+            endpoint_url = f"https://{credentials['account_id']}.{subdomain}r2.cloudflarestorage.com"
+
             self.s3_client = boto3.client(
                 "s3",
-                endpoint_url=f"https://{credentials['account_id']}.r2.cloudflarestorage.com",
+                endpoint_url=endpoint_url,
                 aws_access_key_id=credentials["r2_access_key_id"],
                 aws_secret_access_key=credentials["r2_secret_access_key"],
                 region_name="auto",
@@ -161,6 +200,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
+            # This is important for correct citation links
+            # NOTE: the client region actually doesn't matter for accessing the bucket
+            self._detect_bucket_region()
+
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
                 credentials.get(key) for key in ["access_key_id", "secret_access_key"]
@@ -195,11 +238,43 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         return None
 
-    def _download_object(self, key: str) -> bytes:
+    def _download_object(self, key: str) -> bytes | None:
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
-        object = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
-        return object["Body"].read()
+        response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+        body = response["Body"]
+
+        try:
+            if self.size_threshold is None:
+                return body.read()
+
+            return self._read_stream_with_limit(body, key)
+        finally:
+            body.close()
+
+    def _read_stream_with_limit(self, body: Any, key: str) -> bytes | None:
+        if self.size_threshold is None:
+            return body.read()
+
+        bytes_read = 0
+        chunks: list[bytes] = []
+        chunk_size = min(
+            DOWNLOAD_CHUNK_SIZE, self.size_threshold + SIZE_THRESHOLD_BUFFER
+        )
+
+        for chunk in body.iter_chunks(chunk_size=chunk_size):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            bytes_read += len(chunk)
+
+            if bytes_read > self.size_threshold + SIZE_THRESHOLD_BUFFER:
+                logger.warning(
+                    f"{key} exceeds size threshold of {self.size_threshold}. Skipping."
+                )
+                return None
+
+        return b"".join(chunks)
 
     # NOTE: Left in as may be useful for one-off access to documents and sharing across orgs.
     # def _get_presigned_url(self, key: str) -> str:
@@ -214,27 +289,83 @@ class BlobStorageConnector(LoadConnector, PollConnector):
     #     return url
 
     def _get_blob_link(self, key: str) -> str:
+        # NOTE: We store the object dashboard URL instead of the actual object URL
+        # This is because the actual object URL requires S3 client authentication
+        # Accessing through the browser will always return an unauthorized error
+
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
+        # URL encode the key to handle special characters, spaces, etc.
+        # safe='/' keeps forward slashes unencoded for proper path structure
+        encoded_key = quote(key, safe="/")
+
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{key}"
+            subdomain = "eu/" if self.european_residency else "default/"
+
+            return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
-            region = self.s3_client.meta.region_name
-            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{key}"
+            region = self.bucket_region or self.s3_client.meta.region_name
+            return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            return f"https://storage.cloud.google.com/{self.bucket_name}/{key}"
+            return f"https://console.cloud.google.com/storage/browser/_details/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
             region = self.s3_client.meta.region_name
-            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{key}"
+            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
+            # This should never happen!
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
+
+    @staticmethod
+    def _extract_size_bytes(obj: Mapping[str, Any]) -> int | None:
+        """Return the first numeric size field found on the object metadata."""
+
+        candidate_keys = (
+            "Size",
+            "size",
+            "ContentLength",
+            "content_length",
+            "Content-Length",
+            "contentLength",
+            "bytes",
+            "Bytes",
+        )
+
+        def _normalize(value: Any) -> int | None:
+            if value is None or isinstance(value, bool):
+                return None
+            if isinstance(value, Integral):
+                return int(value)
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return None
+            if numeric >= 0 and numeric.is_integer():
+                return int(numeric)
+            return None
+
+        for key in candidate_keys:
+            if key in obj:
+                normalized = _normalize(obj.get(key))
+                if normalized is not None:
+                    return normalized
+
+        for key, value in obj.items():
+            if not isinstance(key, str):
+                continue
+            lowered_key = key.lower()
+            if "size" in lowered_key or "length" in lowered_key:
+                normalized = _normalize(value)
+                if normalized is not None:
+                    return normalized
+
+        return None
 
     def _yield_blob_objects(
         self,
@@ -266,6 +397,18 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 key = obj["Key"]
                 link = self._get_blob_link(key)
 
+                size_bytes = self._extract_size_bytes(obj)
+                if (
+                    self.size_threshold is not None
+                    and isinstance(size_bytes, int)
+                    and self.size_threshold is not None
+                    and size_bytes > self.size_threshold
+                ):
+                    logger.warning(
+                        f"{file_name} exceeds size threshold of {self.size_threshold}. Skipping."
+                    )
+                    continue
+
                 # Handle image files
                 if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
                     if not self._allow_images:
@@ -277,6 +420,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     # Process the image file
                     try:
                         downloaded_file = self._download_object(key)
+                        if downloaded_file is None:
+                            continue
 
                         # TODO: Refactor to avoid direct DB access in connector
                         # This will require broader refactoring across the codebase
@@ -309,6 +454,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 # Handle text and document files
                 try:
                     downloaded_file = self._download_object(key)
+                    if downloaded_file is None:
+                        continue
                     extraction_result = extract_text_and_images(
                         BytesIO(downloaded_file), file_name=file_name
                     )

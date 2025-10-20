@@ -1,6 +1,6 @@
 "use client";
+
 import {
-  ConnectorIndexingStatus,
   DocumentBoostStatus,
   Tag,
   UserGroup,
@@ -34,7 +34,7 @@ import {
 } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
-import { getSourceMetadata } from "./sources";
+import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
@@ -703,11 +703,16 @@ export function useLlmManager(
     } else {
       setTemperature(0.5);
     }
-  }, [liveAssistant, currentChatSession]);
+  }, [
+    liveAssistant,
+    currentChatSession,
+    llmProviders,
+    user?.preferences?.default_model,
+  ]);
 
   const updateTemperature = (temperature: number) => {
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      setTemperature((prevTemp) => Math.min(temperature, 1.0));
+      setTemperature(Math.min(temperature, 1.0));
     } else {
       setTemperature(temperature);
     }
@@ -863,11 +868,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
-  "claude-3-sonnet-20240229": "Claude 3 Sonnet",
   "claude-3-haiku-20240307": "Claude 3 Haiku",
-  "claude-2.1": "Claude 2.1",
   "claude-2.0": "Claude 2.0",
-  "claude-instant-1.2": "Claude Instant 1.2",
   "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
   "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
   "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
@@ -878,6 +880,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
+  "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
+  "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
 
   // Google Models
 
@@ -911,7 +915,6 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 
   // 1.5 flash models
   "gemini-1.5-flash": "Gemini 1.5 Flash",
-  "gemini-1.5-flash-latest": "Gemini 1.5 Flash (Latest)",
   "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
   "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
 
@@ -921,39 +924,101 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "ministral-3b": "Ministral 3B",
 
   // Bedrock models
-  "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",
-  "meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B",
-  "meta.llama3-70b-instruct-v1:0": "Llama 3 70B",
-  "meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B",
-  "meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B",
-  "meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B",
-  "meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B",
-  "meta.llama3-8b-instruct-v1:0": "Llama 3 8B",
-  "meta.llama2-70b-chat-v1": "Llama 2 70B",
-  "meta.llama2-13b-chat-v1": "Llama 2 13B",
-  "cohere.command-r-v1:0": "Command R",
-  "cohere.command-r-plus-v1:0": "Command R Plus",
-  "cohere.command-light-text-v14": "Command Light Text",
-  "cohere.command-text-v14": "Command Text",
-  "anthropic.claude-instant-v1": "Claude Instant",
-  "anthropic.claude-v2:1": "Claude v2.1",
-  "anthropic.claude-v2": "Claude v2",
-  "anthropic.claude-v1": "Claude v1",
-  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
-  "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
-  "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
-  "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
-  "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
-  "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet (New)",
-  "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
-  "mistral.mistral-large-2402-v1:0": "Mistral Large",
-  "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct",
-  "mistral.mistral-7b-instruct-v0:2": "Mistral 7B Instruct",
+  "ai21.j2-mid-v1": "J2 Mid",
+  "ai21.j2-ultra-v1": "J2 Ultra",
+  "ai21.jamba-instruct-v1:0": "Jamba Instruct",
   "amazon.titan-text-express-v1": "Titan Text Express",
   "amazon.titan-text-lite-v1": "Titan Text Lite",
-  "ai21.jamba-instruct-v1:0": "Jamba Instruct",
-  "ai21.j2-ultra-v1": "J2 Ultra",
-  "ai21.j2-mid-v1": "J2 Mid",
+  "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet v1",
+  "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet v2",
+  "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
+  "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
+  "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
+  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+  "anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku",
+  "anthropic.claude-instant-v1": "Claude Instant",
+  "anthropic.claude-v1": "Claude v1",
+  "anthropic.claude-v2:1": "Claude v2.1",
+  "cohere.command-light-text-v14": "Command Light Text",
+  "cohere.command-r-plus-v1:0": "Command R Plus",
+  "cohere.command-r-v1:0": "Command R",
+  "cohere.command-text-v14": "Command Text",
+  "global.anthropic.claude-sonnet-4-5-20250929-v1:0":
+    "Claude 4.5 Sonnet (Global)",
+  "global.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (Global)",
+  "meta.llama2-13b-chat-v1": "Llama 2 13B",
+  "meta.llama2-70b-chat-v1": "Llama 2 70B",
+  "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",
+  "meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B",
+  "meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B",
+  "meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B",
+  "meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B",
+  "meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B",
+  "meta.llama3-70b-instruct-v1:0": "Llama 3 70B",
+  "meta.llama3-8b-instruct-v1:0": "Llama 3 8B",
+  "mistral.mistral-7b-instruct-v0:2": "Mistral 7B Instruct",
+  "mistral.mistral-large-2402-v1:0": "Mistral Large",
+  "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct",
+  "us.amazon.nova-lite-v1:0": "Nova Lite (US)",
+  "us.amazon.nova-micro-v1:0": "Nova Micro (US)",
+  "us.amazon.nova-premier-v1:0": "Nova Premier (US)",
+  "us.amazon.nova-pro-v1:0": "Nova Pro (US)",
+  "us.anthropic.claude-3-5-haiku-20241022-v1:0": "Claude 3.5 Haiku (US)",
+  "us.anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet v1 (US)",
+  "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet v2 (US)",
+  "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet (US)",
+  "us.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US)",
+  "us.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US)",
+  "us.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US)",
+  "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
+  "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
+  "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
+  "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
+  "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",
+  "us.meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B (US)",
+  "us.meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B (US)",
+  "us.meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B (US)",
+  "us.meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B (US)",
+  "us.meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B (US)",
+  "us.meta.llama3-3-70b-instruct-v1:0": "Llama 3.3 70B (US)",
+  "us.meta.llama4-maverick-17b-instruct-v1:0": "Llama 4 Maverick 17B (US)",
+  "us.meta.llama4-scout-17b-instruct-v1:0": "Llama 4 Scout 17B (US)",
+  "us.mistral.pixtral-large-2502-v1:0": "Pixtral Large (US)",
+
+  // Ollama cloud models
+  "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
+  "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
+  "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
+  "kimi-k2:1t": "Kimi K2 1T Cloud",
+  "qwen3-coder:480b-cloud": "Qwen3-Coder 480B Cloud",
+
+  // Ollama models in litellm map (disjoint from ollama's supported model list)
+  // https://models.litellm.ai --> provider ollama
+  codegeex4: "CodeGeeX 4",
+  codegemma: "CodeGemma",
+  codellama: "CodeLLama",
+  "deepseek-coder-v2-base": "DeepSeek-Coder-v2 Base",
+  "deepseek-coder-v2-instruct": "DeepSeek-Coder-v2 Instruct",
+  "deepseek-coder-v2-lite-base": "DeepSeek-Coder-v2 Lite Base",
+  "deepseek-coder-v2-lite-instruct": "DeepSeek-Coder-v2 Lite Instruct",
+  "internlm2_5-20b-chat": "InternLM 2.5 20B Chat",
+  llama2: "Llama 2",
+  "llama2-uncensored": "Llama 2 Uncensored",
+  "llama2:13b": "Llama 2 13B",
+  "llama2:70b": "Llama 2 70B",
+  "llama2:7b": "Llama 2 7B",
+  llama3: "Llama 3",
+  "llama3:70b": "Llama 3 70B",
+  "llama3:8b": "Llama 3 8B",
+  mistral: "Mistral", // Mistral 7b
+  "mistral-7B-Instruct-v0.1": "Mistral 7B Instruct v0.1",
+  "mistral-7B-Instruct-v0.2": "Mistral 7B Instruct v0.2",
+  "mistral-large-instruct-2407": "Mistral Large Instruct 24.07",
+  "mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B Instruct v0.1",
+  "mixtral8x7B-Instruct-v0.1": "Mixtral 8x7B Instruct v0.1",
+  "orca-mini": "Orca Mini",
+  vicuna: "Vicuna",
 };
 
 export function getDisplayNameForModel(modelName: string): string {
@@ -971,25 +1036,161 @@ export function getDisplayNameForModel(modelName: string): string {
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
-export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: [
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4.1",
-    "o3-mini",
-    "o1-mini",
-    "o1",
-    "o4-mini",
-    "o3",
-  ],
-  bedrock: [
-    "meta.llama3-1-70b-instruct-v1:0",
-    "meta.llama3-1-8b-instruct-v1:0",
-    "anthropic.claude-3-opus-20240229-v1:0",
-    "mistral.mistral-large-2402-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "anthropic.claude-3-7-sonnet-20250219-v1:0",
-  ],
-  anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
-};
+// Get source metadata for configured sources - deduplicated by source type
+function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const allSources = getSourceMetadataForSources(availableSources);
+
+  const seenSources = new Set<string>();
+  const configuredSources: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
+
+  availableSources.forEach((sourceName) => {
+    // Handle federated connectors by removing the federated_ prefix
+    const cleanName = sourceName.replace("federated_", "");
+    // Skip if we've already seen this source type
+    if (seenSources.has(cleanName)) return;
+    seenSources.add(cleanName);
+    const source = allSources.find(
+      (source) => source.internalName === cleanName
+    );
+    if (source) {
+      configuredSources.push({
+        ...source,
+        originalName: sourceName,
+        uniqueKey: cleanName,
+      });
+    }
+  });
+  return configuredSources;
+}
+
+interface UseSourcePreferencesProps {
+  availableSources: ValidSources[];
+  selectedSources: SourceMetadata[];
+  setSelectedSources: (sources: SourceMetadata[]) => void;
+}
+
+const LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY = "selectedInternalSearchSources";
+
+export function useSourcePreferences({
+  availableSources,
+  selectedSources,
+  setSelectedSources,
+}: UseSourcePreferencesProps) {
+  const [sourcesInitialized, setSourcesInitialized] = useState(false);
+
+  // Load saved source preferences from localStorage
+  const loadSavedSourcePreferences = () => {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem(LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY);
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  };
+
+  const persistSourcePreferencesState = (sources: SourceMetadata[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY,
+      JSON.stringify(sources)
+    );
+  };
+
+  // Initialize sources - load from localStorage or enable all by default
+  useEffect(() => {
+    if (!sourcesInitialized && availableSources.length > 0) {
+      const savedSources = loadSavedSourcePreferences();
+      const availableSourceMetadata = getConfiguredSources(availableSources);
+
+      if (savedSources !== null) {
+        // Filter out saved sources that no longer exist
+        const validSavedSources = savedSources.filter(
+          (savedSource: SourceMetadata) =>
+            availableSourceMetadata.some(
+              (availableSource) =>
+                availableSource.uniqueKey === savedSource.uniqueKey
+            )
+        );
+
+        // Find new sources that weren't in the saved preferences
+        const savedSourceKeys = new Set(
+          validSavedSources.map((s: SourceMetadata) => s.uniqueKey)
+        );
+        const newSources = availableSourceMetadata.filter(
+          (availableSource) => !savedSourceKeys.has(availableSource.uniqueKey)
+        );
+
+        // Merge valid saved sources with new sources (enable new sources by default)
+        const mergedSources = [...validSavedSources, ...newSources];
+        setSelectedSources(mergedSources);
+
+        // Persist the merged state if there were any new sources
+        if (newSources.length > 0) {
+          persistSourcePreferencesState(mergedSources);
+        }
+      } else {
+        // First time user - enable all sources by default
+        setSelectedSources(availableSourceMetadata);
+      }
+      setSourcesInitialized(true);
+    }
+  }, [availableSources, sourcesInitialized, setSelectedSources]);
+
+  const enableAllSources = () => {
+    const allSourceMetadata = getConfiguredSources(availableSources);
+    setSelectedSources(allSourceMetadata);
+    persistSourcePreferencesState(allSourceMetadata);
+  };
+
+  const disableAllSources = () => {
+    setSelectedSources([]);
+    persistSourcePreferencesState([]);
+  };
+
+  const toggleSource = (sourceUniqueKey: string) => {
+    const configuredSource = getConfiguredSources(availableSources).find(
+      (s) => s.uniqueKey === sourceUniqueKey
+    );
+    if (!configuredSource) return;
+
+    const isCurrentlySelected = selectedSources.some(
+      (s) => s.uniqueKey === configuredSource.uniqueKey
+    );
+
+    let newSources: SourceMetadata[];
+    if (isCurrentlySelected) {
+      newSources = selectedSources.filter(
+        (s) => s.uniqueKey !== configuredSource.uniqueKey
+      );
+    } else {
+      newSources = [...selectedSources, configuredSource];
+    }
+
+    setSelectedSources(newSources);
+    persistSourcePreferencesState(newSources);
+  };
+
+  const isSourceEnabled = (sourceUniqueKey: string) => {
+    const configuredSource = getConfiguredSources(availableSources).find(
+      (s) => s.uniqueKey === sourceUniqueKey
+    );
+    if (!configuredSource) return false;
+    return selectedSources.some(
+      (s: SourceMetadata) => s.uniqueKey === configuredSource.uniqueKey
+    );
+  };
+
+  return {
+    sourcesInitialized,
+    enableAllSources,
+    disableAllSources,
+    toggleSource,
+    isSourceEnabled,
+  };
+}

@@ -10,8 +10,10 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { FileResponse } from "../my-documents/DocumentsContext";
+import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
+import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
   ({
@@ -26,7 +28,7 @@ export const MemoizedAnchor = memo(
     subQuestions?: SubQuestionDetail[];
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
-    userFiles?: FileResponse[] | null;
+    userFiles?: ProjectFile[] | null;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
@@ -202,15 +204,11 @@ export const MemoizedLink = memo(
 );
 
 export const MemoizedParagraph = memo(
-  function MemoizedParagraph({ children, fontSize }: any) {
+  function MemoizedParagraph({ className, children }: any) {
     return (
-      <p
-        className={`text-neutral-900 dark:text-neutral-200 my-2.5 last:mb-0 first:mt-0 ${
-          fontSize === "sm" ? "leading-tight text-sm" : ""
-        }`}
-      >
+      <Text mainContentBody className={className}>
         {children}
-      </p>
+      </Text>
     );
   },
   (prevProps, nextProps) => {

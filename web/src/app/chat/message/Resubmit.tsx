@@ -1,7 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import Button from "@/refresh-components/buttons/Button";
 
 interface ResubmitProps {
   resubmit: () => void;
@@ -13,15 +12,7 @@ export const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
       <p className="text-sm text-neutral-700 dark:text-neutral-300">
         There was an error with the response.
       </p>
-      <Button
-        onClick={resubmit}
-        variant="agent"
-        size="sm"
-        className="flex items-center gap-2 text-white font-medium py-2 px-4 rounded"
-      >
-        <RefreshCw className="w-4 h-4" />
-        Regenerate
-      </Button>
+      <Button onClick={resubmit}>Regenerate</Button>
     </div>
   );
 };

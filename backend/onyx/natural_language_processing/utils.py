@@ -113,7 +113,7 @@ def _check_tokenizer_cache(
             logger.info(
                 f"Falling back to default embedding model tokenizer: {DOCUMENT_ENCODER_MODEL}"
             )
-            tokenizer = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
+            tokenizer = _get_default_tokenizer()
 
         _TOKENIZER_CACHE[id_tuple] = tokenizer
 
@@ -150,7 +150,15 @@ def _try_initialize_tokenizer(
     return None
 
 
-_DEFAULT_TOKENIZER: BaseTokenizer = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
+_DEFAULT_TOKENIZER: BaseTokenizer | None = None
+
+
+def _get_default_tokenizer() -> BaseTokenizer:
+    """Lazy-load the default tokenizer to avoid loading it at module import time."""
+    global _DEFAULT_TOKENIZER
+    if _DEFAULT_TOKENIZER is None:
+        _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
+    return _DEFAULT_TOKENIZER
 
 
 def get_tokenizer(
@@ -163,7 +171,7 @@ def get_tokenizer(
             logger.debug(
                 f"Invalid provider_type '{provider_type}'. Falling back to default tokenizer."
             )
-            return _DEFAULT_TOKENIZER
+            return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)
 
 

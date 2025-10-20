@@ -153,7 +153,6 @@ def enable_or_disable_kg(
         is_default_persona=False,
         display_priority=0,
         user_file_ids=[],
-        user_folder_ids=[],
     )
 
     persona_snapshot = create_update_persona(

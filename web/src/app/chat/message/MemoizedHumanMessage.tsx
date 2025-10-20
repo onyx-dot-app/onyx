@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
-import { HumanMessage } from "./HumanMessage";
+import HumanMessage from "./HumanMessage";
 
 interface BaseMemoizedHumanMessageProps {
   content: string;
@@ -12,7 +12,6 @@ interface BaseMemoizedHumanMessageProps {
   shared?: boolean;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 interface InternalMemoizedHumanMessageProps
@@ -21,10 +20,7 @@ interface InternalMemoizedHumanMessageProps
 }
 
 interface MemoizedHumanMessageProps extends BaseMemoizedHumanMessageProps {
-  handleEditWithMessageId: (
-    editedContent: string,
-    messageId: number | null | undefined
-  ) => void;
+  handleEditWithMessageId: (editedContent: string, messageId: number) => void;
 }
 
 const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
@@ -36,7 +32,6 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
-  setPresentingDocument,
   onEdit,
 }: InternalMemoizedHumanMessageProps) {
   return (
@@ -49,7 +44,6 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
-      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );
@@ -64,12 +58,18 @@ export const MemoizedHumanMessage = ({
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
-  setPresentingDocument,
   handleEditWithMessageId,
 }: MemoizedHumanMessageProps) => {
   const onEdit = useCallback(
     (editedContent: string) => {
-      handleEditWithMessageId(editedContent, messageId ?? undefined);
+      if (messageId === null || messageId === undefined) {
+        console.warn(
+          "No message id specified; cannot edit an undefined message"
+        );
+        return;
+      }
+
+      handleEditWithMessageId(editedContent, messageId);
     },
     [handleEditWithMessageId, messageId]
   );
@@ -84,7 +84,6 @@ export const MemoizedHumanMessage = ({
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
-      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );

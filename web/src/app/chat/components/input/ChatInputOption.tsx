@@ -38,19 +38,23 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
           <div
             ref={componentRef}
             className={`
-            relative 
-            cursor-pointer 
-            flex 
-            items-center 
+            relative
+            cursor-pointer
+            flex
+            items-center
             ${name ? "space-x-1" : ""}
             group
             rounded-lg
             text-input-text
+            hover:text-neutral-900
             hover:bg-background-chat-hover
-            hover:text-neutral-900  
             dark:hover:text-neutral-50
+            transition-all
+            duration-300
+            ease-in-out
             py-1.5
             px-2
+            h-8
             ${
               flexPriority === "shrink" &&
               "flex-shrink-100 flex-grow-0 flex-basis-auto min-w-[30px] whitespace-nowrap overflow-hidden"

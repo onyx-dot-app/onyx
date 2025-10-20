@@ -5,12 +5,12 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentMainState
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentUpdate
-from onyx.agents.agent_search.dr.utils import chunks_or_sections_to_search_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
 
@@ -47,7 +47,7 @@ def is_reducer(
             doc_list.append(x)
 
     # Convert InferenceSections to SavedSearchDocs
-    search_docs = chunks_or_sections_to_search_docs(doc_list)
+    search_docs = SearchDoc.from_chunks_or_sections(doc_list)
     retrieved_saved_search_docs = [
         SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
         for search_doc in search_docs

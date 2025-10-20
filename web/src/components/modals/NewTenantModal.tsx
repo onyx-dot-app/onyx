@@ -142,10 +142,9 @@ export default function NewTenantModal({
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
-                You have been invited to join {tenantInfo.number_of_users}
-                other teammate{tenantInfo.number_of_users === 1
-                  ? ""
-                  : "s"} of {APP_DOMAIN}.
+                You have been invited to join {tenantInfo.number_of_users} other
+                teammate{tenantInfo.number_of_users === 1 ? "" : "s"} of{" "}
+                {APP_DOMAIN}.
               </>
             ) : (
               <>
@@ -199,7 +198,7 @@ export default function NewTenantModal({
               )}
 
               <Button
-                variant="agent"
+                variant={isInvite ? "default" : "agent"}
                 onClick={handleJoinTenant}
                 className={`flex items-center justify-center ${
                   isInvite ? "flex-1" : "w-full"

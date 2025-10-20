@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 from typing import cast
 
+from braintrust import traced
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import merge_content
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +23,9 @@ from onyx.agents.agent_search.dr.models import DecisionResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestratorTool
+from onyx.agents.agent_search.dr.process_llm_stream import (
+    BasicSearchProcessedStreamResults,
+)
 from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
@@ -35,14 +39,25 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import run_with_timeout
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.chat.chat_utils import build_citation_map_from_numbers
+from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.memories import make_memories_callback
+from onyx.chat.models import PromptConfig
+from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
+from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
+from onyx.chat.stream_processing.citation_processing import (
+    normalize_square_bracket_citations_to_double_with_links,
+)
 from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
 from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.db.chat import create_search_doc_from_saved_search_doc
 from onyx.db.chat import update_db_session_with_messages
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.models import SearchDoc
 from onyx.db.models import Tool
 from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
@@ -52,6 +67,7 @@ from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
 from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
@@ -59,6 +75,8 @@ from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
+from onyx.prompts.prompt_utils import handle_company_awareness
+from onyx.prompts.prompt_utils import handle_memories
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -105,7 +123,9 @@ def _get_available_tools(
     else:
         include_kg = False
 
-    tool_dict: dict[int, Tool] = {tool.id: tool for tool in get_tools(db_session)}
+    tool_dict: dict[int, Tool] = {
+        tool.id: tool for tool in get_tools(db_session, only_enabled=True)
+    }
 
     for tool in graph_config.tooling.tools:
 
@@ -310,6 +330,52 @@ def _get_existing_clarification_request(
     return clarification, original_question, chat_history_string
 
 
+def _persist_final_docs_and_citations(
+    db_session: Session,
+    context_llm_docs: list[Any] | None,
+    full_answer: str | None,
+) -> tuple[list[SearchDoc], dict[int, int] | None]:
+    """Persist final documents from in-context docs and derive citation mapping.
+
+    Returns the list of persisted `SearchDoc` records and an optional
+    citation map translating inline [[n]] references to DB doc indices.
+    """
+    final_documents_db: list[SearchDoc] = []
+    citations_map: dict[int, int] | None = None
+
+    if not context_llm_docs:
+        return final_documents_db, citations_map
+
+    saved_search_docs = saved_search_docs_from_llm_docs(context_llm_docs)
+    for saved_doc in saved_search_docs:
+        db_doc = create_search_doc_from_saved_search_doc(saved_doc)
+        db_session.add(db_doc)
+        final_documents_db.append(db_doc)
+    db_session.flush()
+
+    cited_numbers: set[int] = set()
+    try:
+        # Match [[1]] or [[1, 2]] optionally followed by a link like ([[1]](http...))
+        matches = re.findall(
+            r"\[\[(\d+(?:,\s*\d+)*)\]\](?:\([^)]*\))?", full_answer or ""
+        )
+        for match in matches:
+            for num_str in match.split(","):
+                num = int(num_str.strip())
+                cited_numbers.add(num)
+    except Exception:
+        cited_numbers = set()
+
+    if cited_numbers and final_documents_db:
+        translations = build_citation_map_from_numbers(
+            cited_numbers=cited_numbers,
+            db_docs=final_documents_db,
+        )
+        citations_map = translations or None
+
+    return final_documents_db, citations_map
+
+
 _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
     "type": "function",
     "function": {
@@ -421,6 +487,23 @@ def clarifier(
         assistant_system_prompt = PromptTemplate(DEFAULT_DR_SYSTEM_PROMPT).build()
         assistant_task_prompt = ""
 
+    if graph_config.inputs.project_instructions:
+        assistant_system_prompt = (
+            assistant_system_prompt
+            + PROJECT_INSTRUCTIONS_SEPARATOR
+            + graph_config.inputs.project_instructions
+        )
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+    memories_callback = make_memories_callback(user, db_session)
+    assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
+    assistant_system_prompt = handle_memories(
+        assistant_system_prompt, memories_callback
+    )
+
     chat_history_string = (
         get_chat_history_string(
             graph_config.inputs.prompt_builder.message_history,
@@ -447,6 +530,11 @@ def clarifier(
 
     uploaded_image_context = _construct_uploaded_image_context(
         graph_config.inputs.files
+    )
+
+    # Use project/search context docs if available to enable citation mapping
+    context_llm_docs = getattr(
+        graph_config.inputs.prompt_builder, "context_llm_docs", None
     )
 
     if not (force_use_tool and force_use_tool.force_use):
@@ -563,32 +651,81 @@ def clarifier(
                 active_source_type_descriptions_str=active_source_type_descriptions_str,
             )
 
-            stream = graph_config.tooling.primary_llm.stream(
-                prompt=create_question_prompt(
-                    assistant_system_prompt,
-                    decision_prompt + assistant_task_prompt,
-                    uploaded_image_context=uploaded_image_context,
-                ),
-                tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
-                tool_choice=(None),
-                structured_response_format=graph_config.inputs.structured_response_format,
-            )
+            if context_llm_docs:
+                persona = graph_config.inputs.persona
+                if persona is not None:
+                    prompt_config = PromptConfig.from_model(persona)
+                else:
+                    prompt_config = PromptConfig(
+                        system_prompt=assistant_system_prompt,
+                        task_prompt="",
+                        datetime_aware=True,
+                    )
 
-            full_response = process_llm_stream(
-                messages=stream,
-                should_stream_answer=True,
-                writer=writer,
-                ind=0,
-                generate_final_answer=True,
-                chat_message_id=str(graph_config.persistence.chat_session_id),
-            )
+                system_prompt_to_use_content = build_citations_system_message(
+                    prompt_config
+                ).content
+                system_prompt_to_use: str = cast(str, system_prompt_to_use_content)
+                if graph_config.inputs.project_instructions:
+                    system_prompt_to_use = (
+                        system_prompt_to_use
+                        + PROJECT_INSTRUCTIONS_SEPARATOR
+                        + graph_config.inputs.project_instructions
+                    )
+                user_prompt_to_use = build_citations_user_message(
+                    user_query=original_question,
+                    files=[],
+                    prompt_config=prompt_config,
+                    context_docs=context_llm_docs,
+                    all_doc_useful=False,
+                    history_message=chat_history_string,
+                    context_type="user files",
+                ).content
+            else:
+                system_prompt_to_use = assistant_system_prompt
+                user_prompt_to_use = decision_prompt + assistant_task_prompt
 
+            @traced(name="clarifier stream and process", type="llm")
+            def stream_and_process() -> BasicSearchProcessedStreamResults:
+                stream = graph_config.tooling.primary_llm.stream(
+                    prompt=create_question_prompt(
+                        cast(str, system_prompt_to_use),
+                        cast(str, user_prompt_to_use),
+                        uploaded_image_context=uploaded_image_context,
+                    ),
+                    tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
+                    tool_choice=(None),
+                    structured_response_format=graph_config.inputs.structured_response_format,
+                )
+                return process_llm_stream(
+                    messages=stream,
+                    should_stream_answer=True,
+                    writer=writer,
+                    ind=0,
+                    final_search_results=context_llm_docs,
+                    displayed_search_results=context_llm_docs,
+                    generate_final_answer=True,
+                    chat_message_id=str(graph_config.persistence.chat_session_id),
+                )
+
+            full_response = stream_and_process()
             if len(full_response.ai_message_chunk.tool_calls) == 0:
 
                 if isinstance(full_response.full_answer, str):
-                    full_answer = full_response.full_answer
+                    full_answer = (
+                        normalize_square_bracket_citations_to_double_with_links(
+                            full_response.full_answer
+                        )
+                    )
                 else:
                     full_answer = None
+
+                # Persist final documents and derive citations when using in-context docs
+                final_documents_db, citations_map = _persist_final_docs_and_citations(
+                    db_session=db_session,
+                    context_llm_docs=context_llm_docs,
+                    full_answer=full_answer,
+                )
 
                 update_db_session_with_messages(
                     db_session=db_session,
@@ -596,9 +733,11 @@ def clarifier(
                     chat_session_id=graph_config.persistence.chat_session_id,
                     is_agentic=graph_config.behavior.use_agentic_search,
                     message=full_answer,
+                    token_count=len(llm_tokenizer.encode(full_answer or "")),
+                    citations=citations_map,
+                    final_documents=final_documents_db or None,
                     update_parent_message=True,
                     research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                    token_count=len(llm_tokenizer.encode(full_answer or "")),
                 )
 
                 db_session.commit()

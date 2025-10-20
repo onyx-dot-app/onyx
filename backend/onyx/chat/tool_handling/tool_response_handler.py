@@ -7,7 +7,7 @@ from langchain_core.messages import ToolCall
 from onyx.chat.models import ResponsePart
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
-from onyx.chat.prompt_builder.answer_prompt_builder import PromptSnapshot
+from onyx.chat.prompt_builder.schemas import PromptSnapshot
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.message import build_tool_message

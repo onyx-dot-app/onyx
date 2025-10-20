@@ -69,3 +69,44 @@ export async function pinAssistantByName(
     await page.waitForTimeout(300);
   }
 }
+
+/**
+ * Ensures the Image Generation tool is enabled in the default assistant configuration.
+ * If it's not enabled, it will toggle it on.
+ */
+export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
+  // Navigate to the default assistant configuration page
+  await page.goto(
+    "http://localhost:3000/admin/configuration/default-assistant"
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Find the Image Generation tool toggle
+  // The tool display name is "Image Generation" based on the description in the code
+  const imageGenSection = page
+    .locator("div")
+    .filter({ hasText: /^Image Generation/ })
+    .first();
+
+  // Find the switch within this section
+  const switchElement = imageGenSection.locator('button[role="switch"]');
+
+  // Check if it's already enabled
+  const isEnabled = await switchElement.getAttribute("data-state");
+
+  if (isEnabled !== "checked") {
+    // If not enabled, click to enable it
+    await switchElement.click();
+
+    // Wait for the toggle to complete
+    await page.waitForTimeout(1000);
+
+    // Verify it's now enabled
+    const newState = await switchElement.getAttribute("data-state");
+    if (newState !== "checked") {
+      throw new Error("Failed to enable Image Generation tool");
+    }
+  }
+}

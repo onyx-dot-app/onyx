@@ -1,14 +1,17 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
-import { DocumentSelector } from "./DocumentSelector";
+import DocumentSelector from "./DocumentSelector";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { Dispatch, SetStateAction } from "react";
+import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import Truncated from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
@@ -21,13 +24,15 @@ interface DocumentDisplayProps {
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
-export function DocumentMetadataBlock({
-  modal,
-  document,
-}: {
+interface DocumentMetadataBlockProps {
   modal?: boolean;
   document: OnyxDocument;
-}) {
+}
+
+function DocumentMetadataBlock({
+  modal,
+  document,
+}: DocumentMetadataBlockProps) {
   const MAX_METADATA_ITEMS = 3;
   const metadataEntries = Object.entries(document.metadata);
 
@@ -60,7 +65,6 @@ export function DocumentMetadataBlock({
 }
 
 export function ChatDocumentDisplay({
-  closeSidebar,
   document,
   modal,
   hideSelection,
@@ -70,6 +74,10 @@ export function ChatDocumentDisplay({
   setPresentingDocument,
 }: DocumentDisplayProps) {
   const isInternet = document.is_internet;
+  const title = useMemo(
+    () => document.semantic_identifier || document.document_id,
+    [document.semantic_identifier, document.document_id]
+  );
 
   if (document.score === null) {
     return null;
@@ -79,58 +87,38 @@ export function ChatDocumentDisplay({
     document.updated_at || Object.keys(document.metadata).length > 0;
 
   return (
-    <div className="desktop:max-w-[400px] opacity-100 w-full">
-      <div
-        className={`flex relative  flex-col px-3 py-2.5 gap-0.5  rounded-xl my-1 ${
-          isSelected
-            ? "bg-accent-background-hovered"
-            : " hover:bg-accent-background"
-        }`}
-      >
-        <button
-          onClick={() => openDocument(document, setPresentingDocument)}
-          className="cursor-pointer text-left flex flex-col"
-        >
-          <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
-            {document.is_internet ||
-            document.source_type === ValidSources.Web ? (
-              <WebResultIcon url={document.link} />
-            ) : (
-              <SourceIcon sourceType={document.source_type} iconSize={18} />
-            )}
-            <div className="line-clamp-1 text-neutral-900 dark:text-neutral-300 text-sm font-semibold">
-              {(document.semantic_identifier || document.document_id).length >
-              (modal ? 30 : 40)
-                ? `${(document.semantic_identifier || document.document_id)
-                    .slice(0, modal ? 30 : 40)
-                    .trim()}...`
-                : document.semantic_identifier || document.document_id}
-            </div>
-          </div>
-          {hasMetadata && (
-            <DocumentMetadataBlock modal={modal} document={document} />
-          )}
-          <div
-            className={`line-clamp-3 text-sm font-normal leading-snug text-neutral-900 dark:text-neutral-300 ${
-              hasMetadata ? "mt-2" : ""
-            }`}
-          >
-            {buildDocumentSummaryDisplay(
-              document.match_highlights,
-              document.blurb
-            )}
-          </div>
-          <div className="absolute top-2 right-2">
-            {!isInternet && !hideSelection && (
-              <DocumentSelector
-                isSelected={isSelected}
-                handleSelect={() => handleSelect(document.document_id)}
-                isDisabled={tokenLimitReached && !isSelected}
-              />
-            )}
-          </div>
-        </button>
+    <button
+      onClick={() => openDocument(document, setPresentingDocument)}
+      className={cn(
+        "flex w-full flex-col p-padding-button gap-spacing-interline rounded-12 hover:bg-background-tint-00",
+        isSelected && "bg-action-link-02"
+      )}
+    >
+      <div className="flex items-center gap-spacing-interline">
+        {document.is_internet || document.source_type === ValidSources.Web ? (
+          <WebResultIcon url={document.link} />
+        ) : (
+          <SourceIcon sourceType={document.source_type} iconSize={18} />
+        )}
+        <Truncated className="line-clamp-2" side="left">
+          {title}
+        </Truncated>
+        {!isInternet && !hideSelection && (
+          <DocumentSelector
+            isSelected={isSelected}
+            handleSelect={() => handleSelect(document.document_id)}
+            isDisabled={tokenLimitReached && !isSelected}
+          />
+        )}
       </div>
-    </div>
+
+      {hasMetadata && (
+        <DocumentMetadataBlock modal={modal} document={document} />
+      )}
+
+      <Text className="line-clamp-2 text-left" secondaryBody text03>
+        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
+      </Text>
+    </button>
   );
 }

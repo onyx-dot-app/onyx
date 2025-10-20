@@ -3,20 +3,21 @@ kind: ConfigMap
 metadata:
   name: onyx-nginx-conf
 data:
-  nginx.conf: |
+  upstreams.conf: |
     upstream api_server {
-        server {{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
+        server {{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
     }
 
     upstream web_server {
-        server {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
+        server {{ include "onyx.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
     }
 
+  server.conf: |
     server {
         listen 1024;
         server_name $$DOMAIN;
 
-        client_max_body_size 5G;    # Maximum upload size
+        client_max_body_size 5G;
 
         location ~ ^/api(.*)$ {
             rewrite ^/api(/.*)$ $1 break;
@@ -28,6 +29,10 @@ data:
             proxy_http_version 1.1;
             proxy_buffering off;
             proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
             proxy_pass http://api_server;
         }
 
@@ -39,6 +44,10 @@ data:
             proxy_set_header Host $host;
             proxy_http_version 1.1;
             proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
             proxy_pass http://web_server;
         }
     }

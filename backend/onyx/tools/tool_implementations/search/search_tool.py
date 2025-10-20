@@ -37,6 +37,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
@@ -106,6 +107,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         full_doc: bool = False,
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
+        slack_context: SlackContext | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -120,6 +122,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.full_doc = full_doc
         self.bypass_acl = bypass_acl
         self.db_session = db_session
+        self.slack_context = slack_context
+
+        # Log Slack context in SearchTool constructor
+        if slack_context:
+            logger.info(f"SearchTool: Slack context captured: {slack_context}")
+        else:
+            logger.info("SearchTool: No Slack context provided")
 
         # Only used via API
         self.rerank_settings = rerank_settings
@@ -302,7 +311,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         retrieved_sections_callback = None
         skip_query_analysis = False
         user_file_ids = None
-        user_folder_ids = None
+        project_id = None
         document_sources = None
         time_cutoff = None
         expanded_queries = None
@@ -323,7 +332,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 override_kwargs.skip_query_analysis, False
             )
             user_file_ids = override_kwargs.user_file_ids
-            user_folder_ids = override_kwargs.user_folder_ids
+            project_id = override_kwargs.project_id
             document_sources = override_kwargs.document_sources
             time_cutoff = override_kwargs.time_cutoff
             expanded_queries = override_kwargs.expanded_queries
@@ -378,7 +387,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     retrieval_options.filters if retrieval_options else None
                 ),
                 user_file_filters=UserFileFilters(
-                    user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
+                    user_file_ids=user_file_ids,
+                    project_id=project_id,
                 ),
                 persona=self.persona,
                 offset=(retrieval_options.offset if retrieval_options else None),
@@ -419,6 +429,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             prompt_config=self.prompt_config,
             retrieved_sections_callback=retrieved_sections_callback,
             contextual_pruning_config=self.contextual_pruning_config,
+            slack_context=self.slack_context,  # Pass Slack context
         )
 
         search_query_info = SearchQueryInfo(

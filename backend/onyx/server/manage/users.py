@@ -1,10 +1,11 @@
+import csv
+import io
 import re
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
-import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -14,6 +15,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
+from onyx.auth.noauth_user import set_no_auth_user_personalization
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
@@ -42,7 +45,9 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.user_preferences import activate_user
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.user_preferences import get_all_user_assistant_specific_configs
@@ -51,6 +56,7 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
@@ -64,8 +70,10 @@ from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import UserByEmail
@@ -294,6 +302,43 @@ def list_all_users(
     )
 
 
+@router.get("/manage/users/download")
+def download_users_csv(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Download all users as a CSV file."""
+    # Get all users from the database
+    users = get_all_users(db_session)
+
+    # Create CSV content in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write CSV header
+    writer.writerow(["Email", "Role", "Status"])
+
+    # Write user data
+    for user in users:
+        writer.writerow(
+            [
+                user.email,
+                user.role.value if user.role else "",
+                "Active" if user.is_active else "Inactive",
+            ]
+        )
+
+    # Prepare the CSV content for download
+    csv_content = output.getvalue()
+    output.close()
+
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment;"},
+    )
+
+
 @router.put("/manage/admin/users")
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
@@ -502,35 +547,6 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     if user is None:
         raise ValueError("Invalid or missing user.")
     return UserRoleResponse(role=user.role)
-
-
-def get_current_auth_token_expiration_jwt(
-    user: User | None, request: Request
-) -> datetime | None:
-    if user is None:
-        return None
-
-    try:
-        # Get the JWT from the cookie
-        jwt_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-        if not jwt_token:
-            logger.error("No JWT token found in cookies")
-            return None
-
-        # Decode the JWT
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-
-        # Get the 'exp' (expiration) claim from the token
-        exp = decoded_token.get("exp")
-        if exp:
-            return datetime.fromtimestamp(exp)
-        else:
-            logger.error("No 'exp' claim found in JWT")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error decoding JWT: {e}")
-        return None
 
 
 def get_current_auth_token_creation_redis(
@@ -750,6 +766,55 @@ def update_user_default_model_api(
     update_user_default_model(user.id, request.default_model, db_session)
 
 
+@router.patch("/user/personalization")
+def update_user_personalization_api(
+    request: PersonalizationUpdateRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            personalization = no_auth_user.personalization
+
+            if request.name is not None:
+                personalization.name = request.name
+            if request.role is not None:
+                personalization.role = request.role
+            if request.use_memories is not None:
+                personalization.use_memories = request.use_memories
+            if request.memories is not None:
+                personalization.memories = request.memories
+
+            set_no_auth_user_personalization(store, personalization)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    new_name = request.name if request.name is not None else user.personal_name
+    new_role = request.role if request.role is not None else user.personal_role
+    current_use_memories = user.use_memories
+    new_use_memories = (
+        request.use_memories
+        if request.use_memories is not None
+        else current_use_memories
+    )
+    existing_memories = [memory.memory_text for memory in user.memories]
+    new_memories = (
+        request.memories if request.memories is not None else existing_memories
+    )
+
+    update_user_personalization(
+        user.id,
+        personal_name=new_name,
+        personal_role=new_role,
+        use_memories=new_use_memories,
+        memories=new_memories,
+        db_session=db_session,
+    )
+
+
 class ReorderPinnedAssistantsRequest(BaseModel):
     ordered_assistant_ids: list[int]
 
@@ -889,3 +954,22 @@ def update_assistant_preferences_for_user_api(
     update_assistant_preferences(
         assistant_id, user.id, new_assistant_preference, db_session
     )
+    db_session.commit()
+
+
+@router.get("/user/files/recent")
+def get_recent_files(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    user_id = user.id if user is not None else None
+    user_files = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
+        .order_by(UserFile.last_accessed_at.desc())
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

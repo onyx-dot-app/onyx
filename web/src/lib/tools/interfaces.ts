@@ -10,8 +10,9 @@ export enum MCPAuthenticationPerformer {
 }
 
 export enum MCPTransportType {
-  STDIO = "stdio",
-  STREAMABLE_HTTP = "streamable-http",
+  STDIO = "STDIO",
+  STREAMABLE_HTTP = "STREAMABLE_HTTP",
+  SSE = "SSE",
 }
 export interface ToolSnapshot {
   id: number;
@@ -34,12 +35,16 @@ export interface ToolSnapshot {
 
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
+  user_id?: string | null;
 }
 
 export interface MCPServer {
   id: number;
   name: string;
+  description?: string | null;
   server_url: string;
+  owner: string;
+  transport: MCPTransportType;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
   is_authenticated: boolean;

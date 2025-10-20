@@ -9,12 +9,13 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ValidSources } from "@/lib/types";
 
-export const NewSlackBotForm = ({}: {}) => {
+export const NewSlackBotForm = () => {
   const [formValues] = useState({
     name: "",
     enabled: true,
     bot_token: "",
     app_token: "",
+    user_token: "",
   });
   const { popup, setPopup } = usePopup();
   const router = useRouter();

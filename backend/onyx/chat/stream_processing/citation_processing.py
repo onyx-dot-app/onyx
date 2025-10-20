@@ -12,6 +12,35 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def normalize_square_bracket_citations_to_double_with_links(text: str) -> str:
+    """
+    Normalize citation markers in the text:
+    - Convert bare double-bracket citations without links `[[n]]` to `[[n]]()`
+    - Convert single-bracket citations `[n]` to `[[n]]()`
+    Leaves existing linked citations like `[[n]](http...)` unchanged.
+    """
+    if not text:
+        return ""
+
+    # Add empty parens to bare double-bracket citations without a link: [[n]] -> [[n]]()
+    pattern_double_no_link = re.compile(r"\[\[(\d+)\]\](?!\()")
+
+    def _repl_double(match: re.Match[str]) -> str:
+        num = match.group(1)
+        return f"[[{num}]]()"
+
+    text = pattern_double_no_link.sub(_repl_double, text)
+
+    # Convert single [n] not already [[n]] to [[n]]()
+    pattern_single = re.compile(r"(?<!\[)\[(\d+)\](?!\])")
+
+    def _repl_single(match: re.Match[str]) -> str:
+        num = match.group(1)
+        return f"[[{num}]]()"
+
+    return pattern_single.sub(_repl_single, text)
+
+
 def in_code_block(llm_text: str) -> bool:
     count = llm_text.count(TRIPLE_BACKTICK)
     return count % 2 != 0

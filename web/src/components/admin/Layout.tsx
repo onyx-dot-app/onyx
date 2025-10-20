@@ -12,7 +12,7 @@ import {
 } from "@/lib/constants";
 import { AnnouncementBanner } from "../header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "../context/ChatContext";
+import { ChatProvider } from "../../refresh-components/contexts/ChatContext";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
   const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
@@ -55,8 +55,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     documentSets,
     tags,
     llmProviders,
-    folders,
-    openedFolders,
     sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
@@ -64,28 +62,25 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     inputPrompts,
     proSearchToggled,
     availableTools,
+    projects,
   } = data;
 
   return (
     <ChatProvider
-      value={{
-        inputPrompts,
-        chatSessions,
-        proSearchToggled,
-        sidebarInitiallyVisible,
-        availableSources,
-        ccPairs,
-        documentSets,
-        availableTools,
-        tags,
-        availableDocumentSets: documentSets,
-        availableTags: tags,
-        llmProviders,
-        folders,
-        openedFolders,
-        shouldShowWelcomeModal,
-        defaultAssistantId,
-      }}
+      inputPrompts={inputPrompts}
+      chatSessions={chatSessions}
+      proSearchToggled={proSearchToggled}
+      sidebarInitiallyVisible={sidebarInitiallyVisible}
+      availableSources={availableSources}
+      ccPairs={ccPairs}
+      documentSets={documentSets}
+      availableTools={availableTools}
+      tags={tags}
+      availableDocumentSets={documentSets}
+      availableTags={tags}
+      llmProviders={llmProviders}
+      shouldShowWelcomeModal={shouldShowWelcomeModal}
+      defaultAssistantId={defaultAssistantId}
     >
       <ClientLayout
         enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}

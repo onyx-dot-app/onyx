@@ -2,39 +2,48 @@ import re
 import time
 import traceback
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import cast
 from typing import Protocol
+from uuid import UUID
 
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
+from onyx.chat.memories import make_memories_callback
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
+from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.models import UserKnowledgeFilePacket
-from onyx.chat.packet_proccessing.process_streamed_packets import (
-    process_streamed_packets,
-)
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    default_build_system_message_v2,
+)
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message_v2
+from onyx.chat.turn import fast_chat_turn
+from onyx.chat.turn.infra.emitter import get_default_emitter
+from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.user_files.parse_user_files import parse_user_files
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
@@ -63,9 +72,15 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.projects import get_project_instructions
+from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
@@ -75,6 +90,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -82,6 +98,7 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
+from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
@@ -105,6 +122,10 @@ logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
 
+class ToolCallException(Exception):
+    """Exception raised for errors during tool calls."""
+
+
 class PartialResponse(Protocol):
     def __call__(
         self,
@@ -117,6 +138,66 @@ class PartialResponse(Protocol):
         error: str | None,
         tool_call: ToolCall | None,
     ) -> ChatMessage: ...
+
+
+def _build_project_llm_docs(
+    project_file_ids: list[str] | None,
+    in_memory_user_files: list[InMemoryChatFile] | None,
+) -> list[LlmDoc]:
+    """Construct `LlmDoc` objects for project-scoped user files for citation flow."""
+    project_llm_docs: list[LlmDoc] = []
+    if not project_file_ids or not in_memory_user_files:
+        return project_llm_docs
+
+    project_file_id_set = set(project_file_ids)
+
+    def _strip_nuls(s: str) -> str:
+        return s.replace("\x00", "") if s else s
+
+    for f in in_memory_user_files:
+        if project_file_id_set and (f.file_id in project_file_id_set):
+            cleaned_filename = _strip_nuls(f.filename or str(f.file_id))
+
+            if f.file_type.is_text_file():
+                try:
+                    text_content = f.content.decode("utf-8", errors="ignore")
+                    text_content = _strip_nuls(text_content)
+                except Exception:
+                    text_content = ""
+
+                # Build a short blurb from the file content for better UI display
+                blurb = (
+                    (text_content[:200] + "...")
+                    if len(text_content) > 200
+                    else text_content
+                )
+            else:
+                # Non-text (e.g., images): do not decode bytes; keep empty content but allow citation
+                text_content = ""
+                blurb = f"[{f.file_type.value}] {cleaned_filename}"
+
+            # Provide basic metadata to improve SavedSearchDoc display
+            file_metadata: dict[str, str | list[str]] = {
+                "filename": cleaned_filename,
+                "file_type": f.file_type.value,
+            }
+
+            project_llm_docs.append(
+                LlmDoc(
+                    document_id=str(f.file_id),
+                    content=text_content,
+                    blurb=blurb,
+                    semantic_identifier=cleaned_filename,
+                    source_type=DocumentSource.USER_FILE,
+                    metadata=file_metadata,
+                    updated_at=None,
+                    link=build_frontend_file_url(str(f.file_id)),
+                    source_links=None,
+                    match_highlights=None,
+                )
+            )
+
+    return project_llm_docs
 
 
 def _translate_citations(
@@ -295,14 +376,12 @@ def stream_chat_message_objects(
         long_term_logger = LongTermLogger(
             metadata={"user_id": str(user_id), "chat_session_id": str(chat_session_id)}
         )
-
         persona = _get_persona_for_chat_session(
             new_msg_req=new_msg_req,
             user=user,
             db_session=db_session,
             default_persona=chat_session.persona,
         )
-
         # TODO: remove once we have an endpoint for this stuff
         process_kg_commands(new_msg_req.message, persona.name, tenant_id, db_session)
 
@@ -436,26 +515,29 @@ def stream_chat_message_objects(
         files = load_all_chat_files(history_msgs, new_msg_req.file_descriptors)
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
-        user_file_ids = new_msg_req.user_file_ids or []
-        user_folder_ids = new_msg_req.user_folder_ids or []
+        user_file_ids: list[UUID] = []
 
         if persona.user_files:
-            for file in persona.user_files:
-                user_file_ids.append(file.id)
-        if persona.user_folders:
-            for folder in persona.user_folders:
-                user_folder_ids.append(folder.id)
+            for uf in persona.user_files:
+                user_file_ids.append(uf.id)
+
+        if new_msg_req.current_message_files:
+            for fd in new_msg_req.current_message_files:
+                uid = fd.get("user_file_id")
+                if uid is not None:
+                    user_file_id = UUID(uid)
+                    user_file_ids.append(user_file_id)
 
         # Load in user files into memory and create search tool override kwargs if needed
-        # if we have enough tokens and no folders, we don't need to use search
+        # if we have enough tokens, we don't need to use search
         # we can just pass them into the prompt directly
         (
             in_memory_user_files,
             user_file_models,
             search_tool_override_kwargs_for_user_files,
         ) = parse_user_files(
-            user_file_ids=user_file_ids,
-            user_folder_ids=user_folder_ids,
+            user_file_ids=user_file_ids or [],
+            project_id=chat_session.project_id,
             db_session=db_session,
             persona=persona,
             actual_user_input=message_text,
@@ -464,15 +546,36 @@ def stream_chat_message_objects(
         if not search_tool_override_kwargs_for_user_files:
             latest_query_files.extend(in_memory_user_files)
 
+        project_file_ids = []
+        if chat_session.project_id:
+            project_file_ids.extend(
+                [
+                    file.file_id
+                    for file in get_user_files_from_project(
+                        chat_session.project_id, user_id, db_session
+                    )
+                ]
+            )
+
+        # we don't want to attach project files to the user message
         if user_message:
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[
-                    new_file.to_file_descriptor() for new_file in latest_query_files
+                    new_file.to_file_descriptor()
+                    for new_file in latest_query_files
+                    if project_file_ids is not None
+                    and (new_file.file_id not in project_file_ids)
                 ],
                 db_session=db_session,
                 commit=False,
             )
+
+        # Build project context docs for citation flow if project files are present
+        project_llm_docs: list[LlmDoc] = _build_project_llm_docs(
+            project_file_ids=project_file_ids,
+            in_memory_user_files=in_memory_user_files,
+        )
 
         selected_db_search_docs = None
         selected_sections: list[InferenceSection] | None = None
@@ -559,12 +662,22 @@ def stream_chat_message_objects(
         else:
             prompt_config = PromptConfig.from_model(persona)
 
+        # Retrieve project-specific instructions if this chat session is associated with a project.
+        project_instructions: str | None = (
+            get_project_instructions(
+                db_session=db_session, project_id=chat_session.project_id
+            )
+            if persona.is_default_persona
+            else None
+        )  # if the persona is not default, we don't want to use the project instructions
+
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
             ),
             structured_response_format=new_msg_req.structured_response_format,
         )
+        has_project_files = project_file_ids is not None and len(project_file_ids) > 0
 
         tool_dict = construct_tools(
             persona=persona,
@@ -574,9 +687,17 @@ def stream_chat_message_objects(
             llm=llm,
             fast_llm=fast_llm,
             run_search_setting=(
-                retrieval_options.run_search
-                if retrieval_options
-                else OptionalSearchSetting.AUTO
+                OptionalSearchSetting.NEVER
+                if (
+                    chat_session.project_id
+                    and not has_project_files
+                    and persona.is_default_persona
+                )
+                else (
+                    retrieval_options.run_search
+                    if retrieval_options
+                    else OptionalSearchSetting.AUTO
+                )
             ),
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
@@ -603,6 +724,7 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
+            slack_context=new_msg_req.slack_context,  # Pass Slack context from request
         )
 
         tools: list[Tool] = []
@@ -617,6 +739,7 @@ def stream_chat_message_objects(
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
+
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             yield UserKnowledgeFilePacket(
                 user_files=[
@@ -624,23 +747,51 @@ def stream_chat_message_objects(
                         id=str(file.file_id), type=file.file_type, name=file.filename
                     )
                     for file in in_memory_user_files
+                    if project_file_ids is not None
+                    and (file.file_id not in project_file_ids)
                 ]
             )
-
-        prompt_builder = AnswerPromptBuilder(
-            user_message=default_build_user_message(
+        feature_flag_provider = get_default_feature_flag_provider()
+        simple_agent_framework_enabled = (
+            feature_flag_provider.feature_enabled_for_user_tenant(
+                flag_key=SIMPLE_AGENT_FRAMEWORK,
+                user=user,
+                tenant_id=tenant_id,
+            )
+            and not new_msg_req.use_agentic_search
+        )
+        prompt_user_message = (
+            default_build_user_message_v2(
                 user_query=final_msg.message,
                 prompt_config=prompt_config,
                 files=latest_query_files,
-                single_message_history=single_message_history,
-            ),
-            system_message=default_build_system_message(prompt_config, llm.config),
+            )
+            if simple_agent_framework_enabled
+            else default_build_user_message(
+                user_query=final_msg.message,
+                prompt_config=prompt_config,
+                files=latest_query_files,
+            )
+        )
+        mem_callback = make_memories_callback(user, db_session)
+        system_message = (
+            default_build_system_message_v2(prompt_config, llm.config, mem_callback)
+            if simple_agent_framework_enabled
+            else default_build_system_message(prompt_config, llm.config, mem_callback)
+        )
+        prompt_builder = AnswerPromptBuilder(
+            user_message=prompt_user_message,
+            system_message=system_message,
             message_history=message_history,
             llm_config=llm.config,
             raw_user_query=final_msg.message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
+
+        if project_llm_docs and not search_tool_override_kwargs_for_user_files:
+            # Store for downstream streaming to wire citations and final_documents
+            prompt_builder.context_llm_docs = project_llm_docs
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(
@@ -670,12 +821,23 @@ def stream_chat_message_objects(
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
+            project_instructions=project_instructions,
         )
+        if simple_agent_framework_enabled:
+            yield from _fast_message_stream(
+                answer,
+                tools,
+                db_session,
+                get_redis_client(),
+                chat_session_id,
+                reserved_message_id,
+            )
+        else:
+            from onyx.chat.packet_proccessing import process_streamed_packets
 
-        # Process streamed packets using the new packet processing module
-        yield from process_streamed_packets(
-            answer_processed_output=answer.processed_streamed_output,
-        )
+            yield from process_streamed_packets.process_streamed_packets(
+                answer_processed_output=answer.processed_streamed_output,
+            )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -710,6 +872,59 @@ def stream_chat_message_objects(
 
         db_session.rollback()
         return
+
+
+# TODO: Refactor this to live somewhere else
+def _fast_message_stream(
+    answer: Answer,
+    tools: list[Tool],
+    db_session: Session,
+    redis_client: Redis,
+    chat_session_id: UUID,
+    reserved_message_id: int,
+) -> Generator[Packet, None, None]:
+    from onyx.tools.tool_implementations.images.image_generation_tool import (
+        ImageGenerationTool,
+    )
+    from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+        OktaProfileTool,
+    )
+    from onyx.llm.litellm_singleton import LitellmModel
+
+    image_generation_tool_instance = None
+    okta_profile_tool_instance = None
+    for tool in tools:
+        if isinstance(tool, ImageGenerationTool):
+            image_generation_tool_instance = tool
+        elif isinstance(tool, OktaProfileTool):
+            okta_profile_tool_instance = tool
+    converted_message_history = [
+        PreviousMessage.from_langchain_msg(message, 0).to_agent_sdk_msg()
+        for message in answer.graph_inputs.prompt_builder.build()
+    ]
+    emitter = get_default_emitter()
+    return fast_chat_turn.fast_chat_turn(
+        messages=converted_message_history,
+        # TODO: Maybe we can use some DI framework here?
+        dependencies=ChatTurnDependencies(
+            llm_model=LitellmModel(
+                model=answer.graph_tooling.primary_llm.config.model_name,
+                base_url=answer.graph_tooling.primary_llm.config.api_base,
+                api_key=answer.graph_tooling.primary_llm.config.api_key,
+            ),
+            llm=answer.graph_tooling.primary_llm,
+            tools=tools_to_function_tools(tools),
+            search_pipeline=answer.graph_tooling.search_tool,
+            image_generation_tool=image_generation_tool_instance,
+            okta_profile_tool=okta_profile_tool_instance,
+            db_session=db_session,
+            redis_client=redis_client,
+            emitter=emitter,
+        ),
+        chat_session_id=chat_session_id,
+        message_id=reserved_message_id,
+        research_type=answer.graph_config.behavior.research_type,
+    )
 
 
 @log_generator_function_time()

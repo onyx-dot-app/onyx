@@ -16,12 +16,14 @@ env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
-  CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
+  CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
+  CONFLUENCE_USER_NAME: ${{ vars.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+  CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
   JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
   JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
   JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+  JIRA_API_TOKEN_SCOPED: ${{ secrets.JIRA_API_TOKEN_SCOPED }}
   PERM_SYNC_SHAREPOINT_CLIENT_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_CLIENT_ID }}
   PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
@@ -127,6 +129,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
+          no-cache: true
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -154,6 +158,7 @@ jobs:
           push: true
           outputs: type=registry
           provenance: false
+          no-cache: true
 
   build-integration-image:
     needs: prepare-build
@@ -186,6 +191,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
           push: true
+          outputs: type=registry
+          no-cache: true
 
   integration-tests-mit:
     needs:
@@ -228,9 +235,9 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
@@ -253,7 +260,7 @@ jobs:
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
           INTEGRATION_TESTS_MODE=true \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
             cache \
@@ -269,7 +276,7 @@ jobs:
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -314,7 +321,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running integration tests for ${{ matrix.test-dir.path }}..."
-            docker run --rm --network onyx-stack_default \
+            docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
@@ -332,9 +339,11 @@ jobs:
               -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
               -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
               -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+              -e CONFLUENCE_ACCESS_TOKEN_SCOPED=${CONFLUENCE_ACCESS_TOKEN_SCOPED} \
               -e JIRA_BASE_URL=${JIRA_BASE_URL} \
               -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
               -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
+              -e JIRA_API_TOKEN_SCOPED=${JIRA_API_TOKEN_SCOPED} \
               -e PERM_SYNC_SHAREPOINT_CLIENT_ID=${PERM_SYNC_SHAREPOINT_CLIENT_ID} \
               -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
               -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
@@ -351,13 +360,13 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
 
       - name: Dump all-container logs (optional)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+          docker compose logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
         if: always()
@@ -371,7 +380,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+          docker compose down -v
 
   
   required: 

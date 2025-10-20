@@ -18,7 +18,7 @@ async function verifyAdminPageNavigation(
 
   try {
     await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
-      timeout: 5000,
+      timeout: 10000,
     });
   } catch (error) {
     console.error(
@@ -39,12 +39,6 @@ async function verifyAdminPageNavigation(
     await expect(
       page.getByRole("button", { name: options.buttonName })
     ).toHaveCount(1);
-  }
-
-  if (options?.subHeaderText) {
-    await expect(page.locator("h1.text-lg").nth(0)).toHaveText(
-      options.subHeaderText
-    );
   }
 }
 

@@ -39,7 +39,7 @@ Parameters:
     Default: 1
   GitHubConfigUrl:
     Type: String
-    Default: "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx/app.conf.template.dev"
+    Default: "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx/app.conf.template"
     Description: "URL to the nginx configuration file on GitHub"
   GitHubRunScriptUrl:
     Type: String
@@ -120,7 +120,7 @@ Resources:
           Command:
             - /bin/sh
             - -c
-            - dos2unix /etc/nginx/conf.d/run-nginx.sh && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev
+            - dos2unix /etc/nginx/conf.d/run-nginx.sh && /etc/nginx/conf.d/run-nginx.sh app.conf.template
           Environment:
             - Name: EMAIL
               Value: ""
@@ -157,9 +157,9 @@ Resources:
             - sh
             - -c
             - !Sub |
-              curl -L ${GitHubConfigUrl} -o /etc/nginx/conf.d/app.conf.template.dev && 
+              curl -L ${GitHubConfigUrl} -o /etc/nginx/conf.d/app.conf.template && 
               curl -L ${GitHubRunScriptUrl} -o /etc/nginx/conf.d/run-nginx.sh && 
-              chmod 644 /etc/nginx/conf.d/app.conf.template.dev && 
+              chmod 644 /etc/nginx/conf.d/app.conf.template && 
               chmod 755 /etc/nginx/conf.d/run-nginx.sh && 
               exit 0 || exit 1
           MountPoints:

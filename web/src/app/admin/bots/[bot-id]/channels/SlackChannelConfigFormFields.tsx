@@ -10,7 +10,7 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
@@ -580,7 +580,7 @@ export function SlackChannelConfigFormFields({
                   <AlertCircle className="h-5 w-5 text-alert" />
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top" className="bg-white p-4 w-80">
+              <TooltipContent side="top" className="bg-background p-4 w-80">
                 <Label className="text-text mb-2 font-semibold">
                   Privacy Alert
                 </Label>
@@ -625,7 +625,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button type="button" secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

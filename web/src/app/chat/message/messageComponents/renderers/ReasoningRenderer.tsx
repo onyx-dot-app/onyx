@@ -91,7 +91,11 @@ export const ReasoningRenderer: MessageRenderer<
     };
   }, []);
 
-  const { renderedContent } = useMarkdownRenderer(content, state, "text-sm");
+  const { renderedContent } = useMarkdownRenderer(
+    content,
+    state,
+    "text-text-03 font-main-ui-body"
+  );
 
   if (!hasStart && !hasEnd && content.length === 0) {
     return children({ icon: null, status: null, content: <></> });

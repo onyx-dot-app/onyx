@@ -78,7 +78,7 @@ def test_slim_docs_retrieval(
     print("\n\nRunning test_slim_docs_retrieval")
     connector = google_gmail_service_acct_connector_factory()
     retrieved_slim_docs: list[SlimDocument] = []
-    for doc_batch in connector.retrieve_all_slim_documents(
+    for doc_batch in connector.retrieve_all_slim_docs_perm_sync(
         _THREAD_1_START_TIME, _THREAD_1_END_TIME
     ):
         retrieved_slim_docs.extend(doc_batch)

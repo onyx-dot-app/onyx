@@ -6,7 +6,6 @@ from typing import Any
 from typing import cast
 
 import requests
-from litellm import image_generation  # type: ignore
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
@@ -244,6 +243,8 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape, format: ImageFormat
     ) -> ImageGenerationResponse:
+        from litellm import image_generation  # type: ignore
+
         if shape == ImageShape.LANDSCAPE:
             if self.model == "gpt-image-1":
                 size = "1536x1024"
@@ -367,7 +368,10 @@ class ImageGenerationTool(Tool[None]):
             # Yield a heartbeat packet to prevent timeout
             yield ToolResponse(
                 id=IMAGE_GENERATION_HEARTBEAT_ID,
-                response=None,
+                response={
+                    "status": "generating",
+                    "heartbeat": heartbeat_count,
+                },
             )
             heartbeat_count += 1
 

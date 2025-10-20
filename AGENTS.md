@@ -4,14 +4,14 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## KEY NOTES
 
-- If you run into any missing python dependency errors, try running your command with `workon onyx &&` in front
+- If you run into any missing python dependency errors, try running your command with `source backend/.venv/bin/activate` \
 to assume the python venv.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
 - If using `playwright` to explore the frontend, you can usually log in with username `a@test.com` and password
 `a`. The app can be accessed at `http://localhost:3000`.
 - You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to
 make sure we see logs coming out from the relevant service.
-- To connect to the Postgres database, use: `docker exec -it onyx-stack-relational_db-1 psql -U postgres -c "<SQL>"`
+- To connect to the Postgres database, use: `docker exec -it onyx-relational_db-1 psql -U postgres -c "<SQL>"`
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run queries
 outside of those directories.
@@ -70,7 +70,12 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Single thread (monitoring doesn't need parallelism)
    - Cloud-specific monitoring tasks
 
-8. **Beat Worker** (`beat`)
+8. **User File Processing Worker** (`user_file_processing`)
+   - Processes user-uploaded files
+   - Handles user file indexing and project synchronization
+   - Configurable concurrency
+
+9. **Beat Worker** (`beat`)
    - Celery's scheduler for periodic tasks
    - Uses DynamicTenantScheduler for multi-tenant support
    - Schedules tasks like:
@@ -81,6 +86,31 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - KG processing (every 60 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
+
+#### Worker Deployment Modes
+
+Onyx supports two deployment modes for background workers, controlled by the `USE_LIGHTWEIGHT_BACKGROUND_WORKER` environment variable:
+
+**Lightweight Mode** (default, `USE_LIGHTWEIGHT_BACKGROUND_WORKER=true`):
+- Runs a single consolidated `background` worker that handles all background tasks:
+  - Pruning operations (from `heavy` worker)
+  - Knowledge graph processing (from `kg_processing` worker)
+  - Monitoring tasks (from `monitoring` worker)
+  - User file processing (from `user_file_processing` worker)
+- Lower resource footprint (single worker process)
+- Suitable for smaller deployments or development environments
+- Default concurrency: 6 threads
+
+**Standard Mode** (`USE_LIGHTWEIGHT_BACKGROUND_WORKER=false`):
+- Runs separate specialized workers as documented above (heavy, kg_processing, monitoring, user_file_processing)
+- Better isolation and scalability
+- Can scale individual workers independently based on workload
+- Suitable for production deployments with higher load
+
+The deployment mode affects:
+- **Backend**: Worker processes spawned by supervisord or dev scripts
+- **Helm**: Which Kubernetes deployments are created
+- **Dev Environment**: Which workers `dev_run_background_jobs.py` spawns
 
 #### Key Features
 

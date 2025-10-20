@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.standard_answer import fetch_standard_answer_categories_by_names
 from ee.onyx.db.standard_answer import find_matching_standard_answers
 from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_messages_by_sessions
@@ -193,7 +193,7 @@ def _handle_standard_answers(
         db_session.commit()
 
         update_emote_react(
-            emoji=DANSWER_REACT_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
             remove=True,

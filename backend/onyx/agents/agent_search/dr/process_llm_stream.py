@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
@@ -18,6 +19,8 @@ from onyx.chat.stream_processing.answer_response_handler import (
 )
 from onyx.chat.stream_processing.utils import map_document_id_order
 from onyx.context.search.models import InferenceSection
+from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -56,6 +59,9 @@ def process_llm_stream(
 
     full_answer = ""
     start_final_answer_streaming_set = False
+    # Accumulate citation infos if handler emits them
+    collected_citation_infos: list[CitationInfo] = []
+
     # This stream will be the llm answer if no tool is chosen. When a tool is chosen,
     # the stream will contain AIMessageChunks with tool call information.
     for message in messages:
@@ -102,6 +108,9 @@ def process_llm_stream(
                         MessageDelta(content=response_part.answer_piece),
                         writer,
                     )
+                # collect citation info objects
+                elif isinstance(response_part, CitationInfo):
+                    collected_citation_infos.append(response_part)
 
     if generate_final_answer and start_final_answer_streaming_set:
         # start_final_answer_streaming_set is only set if the answer is verbal and not a tool call
@@ -110,6 +119,14 @@ def process_llm_stream(
             SectionEnd(),
             writer,
         )
+
+        # Emit citations section if any were collected
+        if collected_citation_infos:
+            write_custom_event(ind, CitationStart(), writer)
+            write_custom_event(
+                ind, CitationDelta(citations=collected_citation_infos), writer
+            )
+            write_custom_event(ind, SectionEnd(), writer)
 
     logger.debug(f"Full answer: {full_answer}")
     return BasicSearchProcessedStreamResults(

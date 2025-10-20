@@ -62,6 +62,9 @@ from onyx.db.enums import (
     SyncType,
     SyncStatus,
     MCPAuthenticationType,
+    UserFileStatus,
+    MCPAuthenticationPerformer,
+    MCPTransport,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -71,6 +74,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.kg.models import KGEntityTypeAttributes
@@ -179,6 +183,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # personalization fields are exposed via the chat user settings "Personalization" tab
+    personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -209,9 +217,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
     )
-    chat_folders: Mapped[list["ChatFolder"]] = relationship(
-        "ChatFolder", back_populates="user"
-    )
 
     input_prompts: Mapped[list["InputPrompt"]] = relationship(
         "InputPrompt", back_populates="user"
@@ -229,13 +234,19 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
-    folders: Mapped[list["UserFolder"]] = relationship(
-        "UserFolder", back_populates="user"
+    projects: Mapped[list["UserProject"]] = relationship(
+        "UserProject", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
     # MCP servers accessible to this user
     accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
         "MCPServer", secondary="mcp_server__user", back_populates="users"
+    )
+    memories: Mapped[list["Memory"]] = relationship(
+        "Memory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     @validates("email")
@@ -252,6 +263,31 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
+
+
+class Memory(Base):
+    __tablename__ = "memory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    memory_text: Mapped[str] = mapped_column(Text, nullable=False)
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="memories")
 
 
 class ApiKey(Base):
@@ -537,10 +573,6 @@ class ConnectorCredentialPair(Base):
         "User",
         back_populates="cc_pairs",
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
-    )
-
-    user_file: Mapped["UserFile"] = relationship(
-        "UserFile", back_populates="cc_pair", uselist=False
     )
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
@@ -1459,9 +1491,6 @@ class FederatedConnector(Base):
 
 
 class FederatedConnectorOAuthToken(Base):
-    """NOTE: in the future, can be made more general to support OAuth tokens
-    for actions."""
-
     __tablename__ = "federated_connector_oauth_token"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -2037,14 +2066,19 @@ class ChatSession(Base):
         Enum(ChatSessionSharedStatus, native_enum=False),
         default=ChatSessionSharedStatus.PRIVATE,
     )
-    folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_folder.id"), nullable=True
-    )
 
     current_alternate_model: Mapped[str | None] = mapped_column(String, default=None)
 
     slack_thread_id: Mapped[str | None] = mapped_column(
         String, nullable=True, default=None
+    )
+
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_project.id"), nullable=True
+    )
+
+    project: Mapped["UserProject"] = relationship(
+        "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
     )
 
     # the latest "overrides" specified by the user. These take precedence over
@@ -2072,9 +2106,6 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
-    folder: Mapped["ChatFolder"] = relationship(
-        "ChatFolder", back_populates="chat_sessions"
-    )
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
     )
@@ -2176,33 +2207,6 @@ class ChatMessage(Base):
     research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
         Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
-
-
-class ChatFolder(Base):
-    """For organizing chat sessions"""
-
-    __tablename__ = "chat_folder"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Only null if auth is off
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    name: Mapped[str | None] = mapped_column(String, nullable=True)
-    display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
-
-    user: Mapped[User] = relationship("User", back_populates="chat_folders")
-    chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        "ChatSession", back_populates="folder"
-    )
-
-    def __lt__(self, other: Any) -> bool:
-        if not isinstance(other, ChatFolder):
-            return NotImplemented
-        if self.display_priority == other.display_priority:
-            # Bigger ID (created later) show earlier
-            return self.id > other.id
-        return self.display_priority < other.display_priority
 
 
 class AgentSubQuestion(Base):
@@ -2385,6 +2389,8 @@ class ModelConfiguration(Base):
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -2503,6 +2509,7 @@ class Tool(Base):
     mcp_server_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
     )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
@@ -2636,11 +2643,6 @@ class Persona(Base):
         secondary="persona__user_file",
         back_populates="assistants",
     )
-    user_folders: Mapped[list["UserFolder"]] = relationship(
-        "UserFolder",
-        secondary="persona__user_folder",
-        back_populates="assistants",
-    )
     labels: Mapped[list["PersonaLabel"]] = relationship(
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
@@ -2658,20 +2660,11 @@ class Persona(Base):
     )
 
 
-class Persona__UserFolder(Base):
-    __tablename__ = "persona__user_folder"
-
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    user_folder_id: Mapped[int] = mapped_column(
-        ForeignKey("user_folder.id"), primary_key=True
-    )
-
-
 class Persona__UserFile(Base):
     __tablename__ = "persona__user_file"
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
-    user_file_id: Mapped[int] = mapped_column(
+    user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
 
@@ -2783,6 +2776,7 @@ class SlackBot(Base):
 
     bot_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
     app_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
+    user_token: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
         "SlackChannelConfig",
@@ -3276,23 +3270,37 @@ class InputPrompt__User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
-class UserFolder(Base):
-    __tablename__ = "user_folder"
+class Project__UserFile(Base):
+    __tablename__ = "project__user_file"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("user_project.id"), primary_key=True
+    )
+    user_file_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user_file.id"), primary_key=True
+    )
+
+
+class UserProject(Base):
+    __tablename__ = "user_project"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
-    description: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    user: Mapped["User"] = relationship(back_populates="folders")
-    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
-    assistants: Mapped[list["Persona"]] = relationship(
-        "Persona",
-        secondary=Persona__UserFolder.__table__,
-        back_populates="user_folders",
+    user: Mapped["User"] = relationship(back_populates="projects")
+    user_files: Mapped[list["UserFile"]] = relationship(
+        "UserFile",
+        secondary=Project__UserFile.__table__,
+        back_populates="projects",
     )
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession", back_populates="project", lazy="selectin"
+    )
+    instructions: Mapped[str] = mapped_column(String)
 
 
 class UserDocument(str, Enum):
@@ -3304,35 +3312,54 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
         secondary=Persona__UserFile.__table__,
         back_populates="user_files",
     )
-    folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_folder.id"), nullable=True
-    )
-
     file_id: Mapped[str] = mapped_column(nullable=False)
-    document_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        nullable=False
+    )  # TODO(subash): legacy document_id, will be removed in a future migration
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow
     )
     user: Mapped["User"] = relationship(back_populates="files")
-    folder: Mapped["UserFolder"] = relationship(back_populates="files")
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+    file_type: Mapped[str] = mapped_column(String, nullable=False)
+
+    status: Mapped[UserFileStatus] = mapped_column(
+        Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
+        nullable=False,
+        default=UserFileStatus.PROCESSING,
     )
-    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
-        "ConnectorCredentialPair", back_populates="user_file"
+    needs_project_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
+    last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_accessed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_id_migrated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
+    projects: Mapped[list["UserProject"]] = relationship(
+        "UserProject",
+        secondary=Project__UserFile.__table__,
+        back_populates="user_files",
+        lazy="selectin",
+    )
 
 
 """
@@ -3445,6 +3472,8 @@ class ResearchAgentIterationSubStep(Base):
     # for search-based step-types
     cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
     claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    is_web_fetch: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    queries: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
 
     # for image generation step-types
     generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(
@@ -3484,9 +3513,17 @@ class MCPServer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
+    # Transport type for connecting to the MCP server
+    transport: Mapped[MCPTransport] = mapped_column(
+        Enum(MCPTransport, native_enum=False), nullable=False
+    )
     # Auth type: "none", "api_token", or "oauth"
     auth_type: Mapped[MCPAuthenticationType] = mapped_column(
         Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    )
+    # Who performs authentication for this server (ADMIN or PER_USER)
+    auth_performer: Mapped[MCPAuthenticationPerformer] = mapped_column(
+        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=False
     )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth
@@ -3601,3 +3638,145 @@ class MCPConnectionConfig(Base):
         Index("ix_mcp_connection_config_user_email", "user_email"),
         Index("ix_mcp_connection_config_server_user", "mcp_server_id", "user_email"),
     )
+
+
+"""
+Permission Sync Tables
+"""
+
+
+class DocPermissionSyncAttempt(Base):
+    """
+    Represents an attempt to sync document permissions for a connector credential pair.
+    Similar to IndexAttempt but specifically for document permission syncing operations.
+    """
+
+    __tablename__ = "doc_permission_sync_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id"),
+        nullable=False,
+    )
+
+    # Status of the sync attempt
+    status: Mapped[PermissionSyncStatus] = mapped_column(
+        Enum(PermissionSyncStatus, native_enum=False, index=True)
+    )
+
+    # Counts for tracking progress
+    total_docs_synced: Mapped[int | None] = mapped_column(Integer, default=0)
+    docs_with_permission_errors: Mapped[int | None] = mapped_column(Integer, default=0)
+
+    # Error message if sync fails
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Timestamps
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # Relationships
+    connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
+        "ConnectorCredentialPair"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_permission_sync_attempt_latest_for_cc_pair",
+            "connector_credential_pair_id",
+            "time_created",
+        ),
+        Index(
+            "ix_permission_sync_attempt_status_time",
+            "status",
+            desc("time_finished"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DocPermissionSyncAttempt(id={self.id!r}, " f"status={self.status!r})>"
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
+
+
+class ExternalGroupPermissionSyncAttempt(Base):
+    """
+    Represents an attempt to sync external group memberships for users.
+    This tracks the syncing of user-to-external-group mappings across connectors.
+    """
+
+    __tablename__ = "external_group_permission_sync_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Can be tied to a specific connector or be a global group sync
+    connector_credential_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"),
+        nullable=True,  # Nullable for global group syncs across all connectors
+    )
+
+    # Status of the group sync attempt
+    status: Mapped[PermissionSyncStatus] = mapped_column(
+        Enum(PermissionSyncStatus, native_enum=False, index=True)
+    )
+
+    # Counts for tracking progress
+    total_users_processed: Mapped[int | None] = mapped_column(Integer, default=0)
+    total_groups_processed: Mapped[int | None] = mapped_column(Integer, default=0)
+    total_group_memberships_synced: Mapped[int | None] = mapped_column(
+        Integer, default=0
+    )
+
+    # Error message if sync fails
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Timestamps
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # Relationships
+    connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
+        "ConnectorCredentialPair"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_group_sync_attempt_cc_pair_time",
+            "connector_credential_pair_id",
+            "time_created",
+        ),
+        Index(
+            "ix_group_sync_attempt_status_time",
+            "status",
+            desc("time_finished"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, "
+            f"status={self.status!r})>"
+        )
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()

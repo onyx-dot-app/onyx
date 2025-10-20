@@ -15,17 +15,13 @@ from pathlib import Path
 from typing import Any
 from typing import IO
 from typing import NamedTuple
+from typing import Optional
+from typing import TYPE_CHECKING
 from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-from markitdown import FileConversionException
-from markitdown import MarkItDown
-from markitdown import StreamInfo
-from markitdown import UnsupportedFormatException
 from PIL import Image
-from pypdf import PdfReader
-from pypdf.errors import PdfStreamError
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -37,6 +33,8 @@ from onyx.utils.file_types import PRESENTATION_MIME_TYPE
 from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
 
+if TYPE_CHECKING:
+    from markitdown import MarkItDown
 logger = setup_logger()
 
 # NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
@@ -54,6 +52,7 @@ ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".xml",
     ".yml",
     ".yaml",
+    ".sql",
 ]
 
 ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [
@@ -85,7 +84,7 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
-_MARKITDOWN_CONVERTER: MarkItDown | None = None
+_MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
 KNOWN_OPENPYXL_BUGS = [
     "Value must be either numerical or a string containing a wildcard",
@@ -93,8 +92,10 @@ KNOWN_OPENPYXL_BUGS = [
 ]
 
 
-def get_markitdown_converter() -> MarkItDown:
+def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
+    from markitdown import MarkItDown
+
     if _MARKITDOWN_CONVERTER is None:
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
@@ -269,6 +270,9 @@ def read_pdf_file(
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
     """
+    from pypdf import PdfReader
+    from pypdf.errors import PdfStreamError
+
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
@@ -310,10 +314,8 @@ def read_pdf_file(
                     image.save(img_byte_arr, format=image.format)
                     img_bytes = img_byte_arr.getvalue()
 
-                    image_name = (
-                        f"page_{page_num + 1}_image_{image_file_object.name}."
-                        f"{image.format.lower() if image.format else 'png'}"
-                    )
+                    image_format = image.format.lower() if image.format else "png"
+                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
                     if image_callback is not None:
                         # Stream image out immediately
                         image_callback(img_bytes, image_name)
@@ -358,6 +360,12 @@ def docx_to_text_and_images(
     The images list returned is empty in this case.
     """
     md = get_markitdown_converter()
+    from markitdown import (
+        StreamInfo,
+        FileConversionException,
+        UnsupportedFormatException,
+    )
+
     try:
         doc = md.convert(
             to_bytesio(file), stream_info=StreamInfo(mimetype=WORD_PROCESSING_MIME_TYPE)
@@ -394,6 +402,12 @@ def docx_to_text_and_images(
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     md = get_markitdown_converter()
+    from markitdown import (
+        StreamInfo,
+        FileConversionException,
+        UnsupportedFormatException,
+    )
+
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
     )
@@ -468,8 +482,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             if num_empty_consecutive_rows > 100:
                 # handle massive excel sheets with mostly empty cells
                 logger.warning(
-                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
-                    " skipping rest of file"
+                    f"Found {num_empty_consecutive_rows} empty rows in {file_name}, skipping rest of file"
                 )
                 break
         sheet_str = "\n".join(rows)
@@ -481,7 +494,21 @@ def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
     parser = EmailParser()
-    message = parser.parse(text_file)
+    try:
+        message = parser.parse(text_file)
+    finally:
+        try:
+            # Keep underlying upload handle open for downstream consumers.
+            raw_file = text_file.detach()
+        except Exception as detach_error:
+            logger.warning(
+                f"Failed to detach TextIOWrapper for EML upload, using original file: {detach_error}"
+            )
+            raw_file = file
+        try:
+            raw_file.seek(0)
+        except Exception:
+            pass
 
     text_content = []
     for part in message.walk():
@@ -541,8 +568,7 @@ def extract_file_text(
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. "
-                    "Falling back to normal processing."
+                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
                 )
         if extension is None:
             extension = get_file_ext(file_name)
@@ -628,8 +654,7 @@ def _extract_text_and_images(
             )
         except Exception as e:
             logger.error(
-                f"Failed to process with Unstructured: {str(e)}. "
-                "Falling back to normal processing."
+                f"Failed to process with Unstructured: {str(e)}. Falling back to normal processing."
             )
             file.seek(0)  # Reset file pointer just in case
 

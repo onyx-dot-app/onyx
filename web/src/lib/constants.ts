@@ -11,8 +11,6 @@ export const HEADER_HEIGHT = "h-16";
 export const SUB_HEADER = "h-12";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
-export const NEXT_PUBLIC_DISABLE_STREAMING =
-  process.env.NEXT_PUBLIC_DISABLE_STREAMING?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
@@ -116,3 +114,13 @@ export const CREDENTIAL_UPLOADED_FILE = "uploaded_file";
 export const CREDENTIAL_FIELD_KEY = "field_key";
 export const CREDENTIAL_TYPE_DEFINITION_KEY = "type_definition_key";
 export const CREDENTIAL_JSON = "credential_json";
+
+export const MODAL_ROOT_ID = "modal-root";
+
+export const ANONYMOUS_USER_NAME = "Anonymous";
+export const UNNAMED_CHAT = "Unnamed Chat";
+
+export const DEFAULT_ASSISTANT_ID = 0;
+export const GENERAL_ASSISTANT_ID = -1;
+export const IMAGE_ASSISTANT_ID = -2;
+export const ART_ASSISTANT_ID = -3;

@@ -15,6 +15,9 @@ jobs:
       # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes
       # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
       # implement here which needs an actual user's deploy key
+
+      # Additional NOTE: even though this is named "rkuo", the actual key is tied to the onyx repo
+      # and not rkuo's personal account. It is fine to leave this key as is!
       - name: Checkout code
         uses: actions/checkout@v4
         with:

@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import os
-import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
@@ -14,9 +13,9 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
-from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
@@ -27,13 +26,12 @@ from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
+from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
-from onyx.connectors.models import InputType
 from onyx.db.chat import add_chats_to_session_from_slack_thread
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
@@ -49,30 +47,24 @@ from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.connector import create_connector
-from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.user_documents import create_user_files
+from onyx.db.projects import check_project_ownership
+from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import FileDescriptor
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -96,13 +88,10 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
-
-RECENT_DOCS_FOLDER_ID = -1
 
 logger = setup_logger()
 
@@ -113,12 +102,18 @@ router = APIRouter(prefix="/chat")
 def get_user_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
+    project_id: int | None = None,
+    only_non_project_chats: bool = True,
 ) -> ChatSessionsResponse:
     user_id = user.id if user is not None else None
 
     try:
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            project_id=project_id,
+            only_non_project_chats=only_non_project_chats,
         )
 
     except ValueError:
@@ -133,7 +128,6 @@ def get_user_chat_sessions(
                 time_created=chat.time_created.isoformat(),
                 time_updated=chat.time_updated.isoformat(),
                 shared_status=chat.shared_status,
-                folder_id=chat.folder_id,
                 current_alternate_model=chat.current_alternate_model,
                 current_temperature_override=chat.temperature_override,
             )
@@ -282,7 +276,17 @@ def create_new_chat_session(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
+    logger.info(
+        f"Creating chat session with request: {chat_session_creation_request.persona_id}"
+    )
     user_id = user.id if user is not None else None
+    project_id = chat_session_creation_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user_id, db_session):
+            raise HTTPException(
+                status_code=403, detail="User does not have access to project"
+            )
+
     try:
         new_chat_session = create_chat_session(
             db_session=db_session,
@@ -290,6 +294,7 @@ def create_new_chat_session(
             or "",  # Leave the naming till later to prevent delay
             user_id=user_id,
             persona_id=chat_session_creation_request.persona_id,
+            project_id=chat_session_creation_request.project_id,
         )
     except Exception as e:
         logger.exception(e)
@@ -570,6 +575,38 @@ def get_max_document_tokens(
     )
 
 
+class AvailableContextTokensResponse(BaseModel):
+    available_tokens: int
+
+
+@router.get("/available-context-tokens/{session_id}")
+def get_available_context_tokens_for_session(
+    session_id: UUID,
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> AvailableContextTokensResponse:
+    """Return available context tokens for a chat session based on its persona."""
+    try:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=session_id,
+            user_id=user.id if user is not None else None,
+            db_session=db_session,
+            is_shared=False,
+            include_deleted=False,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    if not chat_session.persona:
+        raise HTTPException(status_code=400, detail="Chat session has no persona")
+
+    available = compute_max_document_tokens_for_persona(
+        persona=chat_session.persona,
+    )
+
+    return AvailableContextTokensResponse(available_tokens=available)
+
+
 """Endpoints for chat seeding"""
 
 
@@ -669,127 +706,18 @@ def seed_chat_from_slack(
     )
 
 
-"""File upload"""
-
-
-@router.post("/file")
-def upload_files_for_chat(
-    files: list[UploadFile],
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
-) -> dict[str, list[FileDescriptor]]:
-
-    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
-    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    # csv_content_types = {"text/csv"}
-    # text_content_types = {
-    #     "text/plain",
-    #     "text/markdown",
-    #     "text/x-markdown",
-    #     "text/x-config",
-    #     "text/tab-separated-values",
-    #     "application/json",
-    #     "application/xml",
-    #     "text/xml",
-    #     "application/x-yaml",
-    # }
-    # document_content_types = {
-    #     "application/pdf",
-    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    #     "message/rfc822",
-    #     "application/epub+zip",
-    # }
-
-    # allowed_content_types = (
-    #     image_content_types.union(text_content_types)
-    #     .union(document_content_types)
-    #     .union(csv_content_types)
-    # )
-
-    for file in files:
-        if not file.content_type:
-            raise HTTPException(status_code=400, detail="File content type is required")
-
-        if file.content_type not in UploadMimeTypes.ALLOWED_MIME_TYPES:
-            raise HTTPException(status_code=400, detail="Unsupported file type.")
-
-        if (
-            file.content_type in UploadMimeTypes.IMAGE_MIME_TYPES
-            and file.size
-            and file.size > 20 * 1024 * 1024
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Images must be less than 20MB",
-            )
-
-    # 5) Create a user file for each uploaded file
-    user_files = create_user_files(files, RECENT_DOCS_FOLDER_ID, user, db_session)
-    for user_file in user_files:
-        # 6) Create connector
-        connector_base = ConnectorBase(
-            name=f"UserFile-{int(time.time())}",
-            source=DocumentSource.FILE,
-            input_type=InputType.LOAD_STATE,
-            connector_specific_config={
-                "file_locations": [user_file.file_id],
-                "file_names": [user_file.name],
-                "zip_metadata": {},
-            },
-            refresh_freq=None,
-            prune_freq=None,
-            indexing_start=None,
-        )
-        connector = create_connector(
-            db_session=db_session,
-            connector_data=connector_base,
-        )
-
-        # 7) Create credential
-        credential_info = CredentialBase(
-            credential_json={},
-            admin_public=True,
-            source=DocumentSource.FILE,
-            curator_public=True,
-            groups=[],
-            name=f"UserFileCredential-{int(time.time())}",
-            is_user_file=True,
-        )
-        credential = create_credential(credential_info, user, db_session)
-
-        # 8) Create connector credential pair
-        cc_pair = add_credential_to_connector(
-            db_session=db_session,
-            user=user,
-            connector_id=connector.id,
-            credential_id=credential.id,
-            cc_pair_name=f"UserFileCCPair-{int(time.time())}",
-            access_type=AccessType.PRIVATE,
-            auto_sync_options=None,
-            groups=[],
-        )
-        user_file.cc_pair_id = cc_pair.data
-        db_session.commit()
-
-    return {
-        "files": [
-            {
-                "id": user_file.file_id,
-                "type": mime_type_to_chat_file_type(user_file.content_type),
-                "name": user_file.name,
-            }
-            for user_file in user_files
-        ]
-    }
-
-
 @router.get("/file/{file_id:path}")
 def fetch_chat_file(
     file_id: str,
     _: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> Response:
+
+    # For user files, we need to get the file id from the user file id
+    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
+    if file_id_from_user_file:
+        file_id = file_id_from_user_file
+
     file_store = get_default_file_store()
     file_record = file_store.read_file_record(file_id)
     if not file_record:
@@ -858,7 +786,6 @@ async def search_chats(
             persona_id=session.persona_id,
             time_created=session.time_created,
             shared_status=session.shared_status,
-            folder_id=session.folder_id,
             current_alternate_model=session.current_alternate_model,
             current_temperature_override=session.temperature_override,
         )
@@ -892,3 +819,17 @@ async def search_chats(
         has_more=has_more,
         next_page=page + 1 if has_more else None,
     )
+
+
+@router.post("/stop-chat-session/{chat_session_id}")
+def stop_chat_session(
+    chat_session_id: UUID,
+    user: User | None = Depends(current_user),
+    redis_client: Redis = Depends(get_redis_client),
+) -> dict[str, str]:
+    """
+    Stop a chat session by setting a stop signal in Redis.
+    This endpoint is called by the frontend when the user clicks the stop button.
+    """
+    set_fence(chat_session_id, redis_client, True)
+    return {"message": "Chat session stopped"}

@@ -267,7 +267,7 @@ export function OAuthConfig({
 
       <div className="space-y-4">
         <div>
-          <Label htmlFor="oauth_client_id">Client ID</Label>
+          <Label htmlFor="oauth_client_id">Client ID (Optional)</Label>
           <Input
             id="oauth_client_id"
             type="text"
@@ -284,7 +284,7 @@ export function OAuthConfig({
         </div>
 
         <div>
-          <Label htmlFor="oauth_client_secret">Client Secret</Label>
+          <Label htmlFor="oauth_client_secret">Client Secret (Optional)</Label>
           <Input
             id="oauth_client_secret"
             type="password"
@@ -304,8 +304,10 @@ export function OAuthConfig({
 
         <div className="text-xs text-text-600 space-y-1">
           <p>
-            <strong>Note:</strong> You&apos;ll need to register your application
-            with the MCP server provider to obtain these credentials.
+            <strong>Note:</strong> Client ID and secret are optional if the MCP
+            server supports Dynamic Client Registration (DCR). If DCR is not
+            supported, you&apos;ll need to register your application with the
+            MCP server provider to obtain these credentials.
           </p>
           <p>
             • The redirect URI should be set to:{" "}

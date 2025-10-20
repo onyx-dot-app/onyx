@@ -25,6 +25,32 @@ class IndexingStatus(str, PyEnum):
         )
 
 
+class PermissionSyncStatus(str, PyEnum):
+    """Status enum for permission sync attempts"""
+
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    SUCCESS = "success"
+    CANCELED = "canceled"
+    FAILED = "failed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+    def is_terminal(self) -> bool:
+        terminal_states = {
+            PermissionSyncStatus.SUCCESS,
+            PermissionSyncStatus.COMPLETED_WITH_ERRORS,
+            PermissionSyncStatus.CANCELED,
+            PermissionSyncStatus.FAILED,
+        }
+        return self in terminal_states
+
+    def is_successful(self) -> bool:
+        return (
+            self == PermissionSyncStatus.SUCCESS
+            or self == PermissionSyncStatus.COMPLETED_WITH_ERRORS
+        )
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"
@@ -60,6 +86,14 @@ class MCPAuthenticationType(str, PyEnum):
     NONE = "NONE"
     API_TOKEN = "API_TOKEN"
     OAUTH = "OAUTH"
+
+
+class MCPTransport(str, PyEnum):
+    """MCP transport types"""
+
+    STDIO = "STDIO"  # TODO: currently unsupported, need to add a user guide for setup
+    SSE = "SSE"  # Server-Sent Events (deprecated but still used)
+    STREAMABLE_HTTP = "STREAMABLE_HTTP"  # Modern HTTP streaming
 
 
 class MCPAuthenticationPerformer(str, PyEnum):
@@ -131,3 +165,11 @@ class EmbeddingPrecision(str, PyEnum):
     # good reason to specify anything else
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
+
+
+class UserFileStatus(str, PyEnum):
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+    DELETING = "DELETING"

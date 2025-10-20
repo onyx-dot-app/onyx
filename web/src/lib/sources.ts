@@ -386,6 +386,14 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: "https://docs.onyx.app/admin/connectors/official/file",
     isPopular: true,
   },
+  user_file: {
+    // TODO: write docs for projects and link them here
+    icon: FileIcon2,
+    displayName: "File",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/admin/connectors/official/file",
+    isPopular: false, // Needs to be false to hide from the Add Connector page
+  },
 
   // Other
   ingestion_api: {
@@ -437,7 +445,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         source !== "ingestion_api" &&
         source !== "mock_connector" &&
         // use the "regular" slack connector when listing
-        source !== "federated_slack"
+        source !== "federated_slack" &&
+        // user_file is for internal use (projects), not the Add Connector page
+        source !== "user_file"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

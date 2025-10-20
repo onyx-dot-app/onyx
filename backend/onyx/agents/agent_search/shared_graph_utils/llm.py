@@ -5,11 +5,10 @@ from typing import Literal
 from typing import Type
 from typing import TypeVar
 
+from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
-from litellm import get_supported_openai_params
-from litellm import supports_response_schema
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
@@ -29,6 +28,7 @@ SchemaType = TypeVar("SchemaType", bound=BaseModel)
 JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
+@traced(name="stream llm", type="llm")
 def stream_llm_answer(
     llm: LLM,
     prompt: LanguageModelInput,
@@ -147,6 +147,7 @@ def invoke_llm_json(
     Invoke an LLM, forcing it to respond in a specified JSON format if possible,
     and return an object of that schema.
     """
+    from litellm.utils import get_supported_openai_params, supports_response_schema
 
     # check if the model supports response_format: json_schema
     supports_json = "response_format" in (

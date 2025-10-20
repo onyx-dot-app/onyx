@@ -4,9 +4,10 @@ import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
-import { CCPairStatus } from "@/components/Status";
+import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CredentialSection from "@/components/credentials/CredentialSection";
+import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,
   updateConnectorCredentialPairProperty,
@@ -57,11 +58,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { FiSettings } from "react-icons/fi";
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
+import SvgSettings from "@/icons/settings";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
@@ -121,8 +122,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
-    ccPair?.connector?.id || null,
-    ccPair?.credential?.id || null,
+    ccPair?.connector?.id ?? null,
+    ccPair?.credential?.id ?? null,
     ccPairId,
     setPopup
   );
@@ -446,12 +447,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  leftIcon={SvgSettings}
                   className="flex items-center gap-x-1"
+                  secondary
                 >
-                  <FiSettings className="h-4 w-4" />
-                  <span className="text-sm ml-1">Manage</span>
+                  Manage
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -633,14 +633,33 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </div>
 
           {ccPair.access_type === "sync" && (
-            <div className="w-[200px]">
-              <div className="text-sm font-medium mb-1">
-                Last Permission Synced
+            <>
+              <div className="w-[200px]">
+                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
+                <Text className="text-sm font-medium mb-1">
+                  Permission Syncing
+                </Text>
+                {ccPair.permission_syncing ||
+                ccPair.last_permission_sync_attempt_status ? (
+                  <PermissionSyncStatus
+                    status={ccPair.last_permission_sync_attempt_status}
+                    errorMsg={ccPair.last_permission_sync_attempt_error_message}
+                  />
+                ) : (
+                  <PermissionSyncStatus status={null} />
+                )}
               </div>
-              <div className="text-sm text-text-default">
-                {timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+
+              <div className="w-[200px]">
+                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
+                <Text className="text-sm font-medium mb-1">Last Synced</Text>
+                <Text className="text-sm text-text-default">
+                  {ccPair.last_permission_sync_attempt_finished
+                    ? timeAgo(ccPair.last_permission_sync_attempt_finished)
+                    : timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+                </Text>
               </div>
-            </div>
+            </>
           )}
         </div>
       </Card>

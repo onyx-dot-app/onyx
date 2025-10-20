@@ -15,15 +15,16 @@ import {
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalPersonaSnapshot } from "../../admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { Settings } from "../../admin/settings/interfaces";
+import { Settings } from "@/app/admin/settings/interfaces";
 import {
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
@@ -105,7 +106,8 @@ export async function updateTemperatureOverrideForChatSession(
 
 export async function createChatSession(
   personaId: number,
-  description: string | null
+  description: string | null,
+  projectId: number | null
 ): Promise<string> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
@@ -117,6 +119,7 @@ export async function createChatSession(
       body: JSON.stringify({
         persona_id: personaId,
         description,
+        project_id: projectId,
       }),
     }
   );
@@ -159,7 +162,7 @@ export type PacketType =
 export interface SendMessageParams {
   regenerate: boolean;
   message: string;
-  fileDescriptors: FileDescriptor[];
+  fileDescriptors?: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: Filters | null;
@@ -173,8 +176,7 @@ export interface SendMessageParams {
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
-  userFileIds?: number[];
-  userFolderIds?: number[];
+  currentMessageFiles?: FileDescriptor[];
   useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
@@ -184,8 +186,7 @@ export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
-  userFileIds,
-  userFolderIds,
+  currentMessageFiles,
   parentMessageId,
   chatSessionId,
   filters,
@@ -216,8 +217,7 @@ export async function* sendMessage({
     prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
-    user_file_ids: userFileIds,
-    user_folder_ids: userFolderIds,
+    current_message_files: currentMessageFiles,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
@@ -311,6 +311,7 @@ export async function handleChatFeedback(
   });
   return response;
 }
+
 export async function renameChatSession(
   chatSessionId: string,
   newName: string
@@ -346,6 +347,19 @@ export async function deleteAllChatSessions() {
     },
   });
   return response;
+}
+
+export async function getAvailableContextTokens(
+  chatSessionId: string
+): Promise<number> {
+  const response = await fetch(
+    `/api/chat/available-context-tokens/${chatSessionId}`
+  );
+  if (!response.ok) {
+    return 0;
+  }
+  const data = (await response.json()) as { available_tokens: number };
+  return data?.available_tokens ?? 0;
 }
 
 export async function* simulateLLMResponse(input: string, delay: number = 30) {
@@ -472,7 +486,7 @@ export function processRawChatHistory(
 
   let assistantMessageInd = 0;
 
-  rawMessages.forEach((messageInfo, ind) => {
+  rawMessages.forEach((messageInfo, _ind) => {
     const packetsForMessage = packets[assistantMessageInd];
     if (messageInfo.message_type === "assistant") {
       assistantMessageInd++;
@@ -508,6 +522,7 @@ export function processRawChatHistory(
       ...(messageInfo.message_type === "assistant"
         ? {
             retrievalType: retrievalType,
+            researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
             documents: messageInfo?.context_docs?.top_documents || [],
             citations: messageInfo?.citations || {},
@@ -593,6 +608,9 @@ const PARAMS_TO_SKIP = [
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
   SEARCH_PARAM_NAMES.PERSONA_ID,
+  SEARCH_PARAM_NAMES.PROJECT_ID,
+  // do not persist project context in the URL after navigation
+  "projectid",
 ];
 
 export function buildChatUrl(

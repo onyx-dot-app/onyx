@@ -1,18 +1,20 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "../interfaces";
-import { useAssistantsContext } from "@/components/context/AssistantsContext";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 
 export function useAssistantController({
   selectedChatSession,
+  onAssistantSelect,
 }: {
   selectedChatSession: ChatSession | null | undefined;
+  onAssistantSelect?: () => void;
 }) {
   const searchParams = useSearchParams();
-  const { assistants: availableAssistants, pinnedAssistants } =
-    useAssistantsContext();
+  const { agents: availableAssistants, pinnedAgents: pinnedAssistants } =
+    useAgentsContext();
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -77,8 +79,9 @@ export function useAssistantController({
       }
 
       setSelectedAssistant(newAssistant);
+      onAssistantSelect?.();
     },
-    [availableAssistants, defaultAssistantId]
+    [availableAssistants, defaultAssistantId, onAssistantSelect]
   );
 
   return {

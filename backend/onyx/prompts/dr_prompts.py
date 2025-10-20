@@ -172,6 +172,14 @@ written as a list of one question.
     DRPath.CLOSER.value: f"""if the tool is {CLOSER}, the list of questions should simply be \
 ['Answer the original question with the information you have.'].
 """,
+    DRPath.IMAGE_GENERATION.value: """
+if the tool is Image Generation, respond with a list that contains exactly one JSON object
+string describing the tool call. The JSON must include a "prompt" field with the text to
+render. When the user specifies or implies an orientation, also include a "shape" field whose
+value is one of "square", "landscape", or "portrait" (use "landscape" for wide/horizontal
+requests and "portrait" for tall/vertical ones). Example: {"prompt": "Create a poster of a
+coral reef", "shape": "landscape"}. Do not surround the JSON with backticks or narration.
+""",
 }
 
 
@@ -714,13 +722,15 @@ information that will be necessary to provide a succinct answer to the specific 
 the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
 mentioned in the documents. (Example: 'I was not able to find information about yellow curry specifically, \
 but I found information about curry...'). But this should be be precise and concise, and specifically \
-answer the question. Please cite the document sources inline in format [[1]][[7]], etc.>",
+answer the question. Please cite the document sources inline in format [[1]][[7]], etc., where it \
+is essential that the document NUMBERS are in the brackets, not any titles.>",
    "claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
 the original question. These will later be used for follow-up questions and verifications. Note that \
 these may not actually be in the succinct answer above. Note also that each claim \
 should include ONE fact that contains enough context to be verified/questioned by a different system \
 without the need for going back to these documents for additional context. Also here, please cite the \
-document sources inline in format [[1]][[7]], etc.. So this should have format like \
+document sources inline in format [[1]][[7]], etc., where it is essential that the document NUMBERS are \
+in the brackets, not any titles. So this should have format like \
 [<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>"
 }
 """
@@ -1043,8 +1053,9 @@ find information about yellow curry specifically, but here is what I found about
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- Please cite your sources INLINE in format [[2]][[4]], etc! The numbers of the documents \
-are provided above. So the appropriate citation number should be close to the corresponding /
+- Please cite your sources INLINE in format [[2]][[4]], etc! The NUMBERS of the documents \
+are provided above, and the NUMBERS need to be in the brackets. And the appropriate citation \
+ should be close to the corresponding /
 information it supports!
 - If you are not that certain that the information does relate to the question topic, \
 point out the ambiguity in your answer. But DO NOT say something like 'I was not able to find \
@@ -1098,14 +1109,16 @@ find information about yellow curry specifically, but here is what I found about
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above. So the appropriate citation number should be close to the corresponding /
+- Please cite your sources inline in format [[2]][[4]], etc! The NUMBERS of the documents \
+are provided above, and the NUMBERS need to be in the brackets. And the appropriate citation \
+should be close to the corresponding /
 information it supports!
 - If you are not that certain that the information does relate to the question topic, \
 point out the ambiguity in your answer. But DO NOT say something like 'I was not able to find \
 information on <X> specifically, but here is what I found about <X> generally....'. Rather say, \
 'Here is what I found about <X> and I hope this is the <X> you were looking for...', or similar.
-- Again... CITE YOUR SOURCES INLINE IN FORMAT [[2]][[4]], etc! This is CRITICAL!
+- Again... CITE YOUR SOURCES INLINE IN FORMAT [[2]][[4]], etc! This is CRITICAL! Note that \
+the DOCUMENT NUMBERS need to be in the brackets.
 
 ANSWER:
 """
@@ -1150,8 +1163,9 @@ find information about yellow curry specifically, but here is what I found about
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- THIS IS VERY IMPORTANT: Please cite your sources inline in format [[2]][[4]], etc! The numbers of the documents \
-are provided above. Also, if you refer to sub-answers, the provided reference numbers \
+- THIS IS VERY IMPORTANT: Please cite your sources inline in format [[2]][[4]], etc! \
+The NUMBERS of the documents - provided above -need to be in the brackets. \
+Also, if you refer to sub-answers, the provided reference numbers \
 in the sub-answers are the same as the ones provided for the documents!
 
 ANSWER:

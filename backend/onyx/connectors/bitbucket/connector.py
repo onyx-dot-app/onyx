@@ -25,7 +25,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -56,7 +56,7 @@ class BitbucketConnectorCheckpoint(ConnectorCheckpoint):
 
 class BitbucketConnector(
     CheckpointedConnector[BitbucketConnectorCheckpoint],
-    SlimConnector,
+    SlimConnectorWithPermSync,
 ):
     """Connector for indexing Bitbucket Cloud pull requests.
 
@@ -266,7 +266,7 @@ class BitbucketConnector(
         """Validate and deserialize a checkpoint instance from JSON."""
         return BitbucketConnectorCheckpoint.model_validate_json(checkpoint_json)
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

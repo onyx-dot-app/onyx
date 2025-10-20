@@ -166,9 +166,6 @@ def retrieval_preprocessing(
     )
     user_file_filters = search_request.user_file_filters
     user_file_ids = (user_file_filters.user_file_ids or []) if user_file_filters else []
-    user_folder_ids = (
-        (user_file_filters.user_folder_ids or []) if user_file_filters else []
-    )
     if persona and persona.user_files:
         user_file_ids = list(
             set(user_file_ids) | set([file.id for file in persona.user_files])
@@ -176,7 +173,7 @@ def retrieval_preprocessing(
 
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
-        user_folder_ids=user_folder_ids,
+        project_id=user_file_filters.project_id if user_file_filters else None,
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
         time_cutoff=time_filter or predicted_time_cutoff,
