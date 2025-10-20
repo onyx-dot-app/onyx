@@ -30,6 +30,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("fetches and displays existing prompts on load", async () => {
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -68,11 +69,13 @@ describe("Input Prompts CRUD Workflow", () => {
   test("creates a new prompt successfully", async () => {
     const user = setupUser();
 
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
     } as Response);
 
+    // Mock POST /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -141,6 +144,7 @@ describe("Input Prompts CRUD Workflow", () => {
   test("edits an existing user-created prompt", async () => {
     const user = setupUser();
 
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -153,6 +157,7 @@ describe("Input Prompts CRUD Workflow", () => {
       ],
     } as Response);
 
+    // Mock PATCH /api/input_prompt/1
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -218,6 +223,7 @@ describe("Input Prompts CRUD Workflow", () => {
   test("deletes a user-created prompt", async () => {
     const user = setupUser();
 
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -230,6 +236,7 @@ describe("Input Prompts CRUD Workflow", () => {
       ],
     } as Response);
 
+    // Mock DELETE /api/input_prompt/1
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -272,6 +279,7 @@ describe("Input Prompts CRUD Workflow", () => {
   test("hides a public prompt instead of deleting it", async () => {
     const user = setupUser();
 
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -284,6 +292,7 @@ describe("Input Prompts CRUD Workflow", () => {
       ],
     } as Response);
 
+    // Mock POST /api/input_prompt/2/hide
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -330,6 +339,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("shows error when fetch fails", async () => {
+    // Mock GET /api/input_prompt (failure)
     fetchSpy.mockRejectedValueOnce(new Error("Network error"));
 
     render(<InputPrompts />);
@@ -344,11 +354,13 @@ describe("Input Prompts CRUD Workflow", () => {
   test("shows error when create fails", async () => {
     const user = setupUser();
 
+    // Mock GET /api/input_prompt
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
     } as Response);
 
+    // Mock POST /api/input_prompt (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 500,

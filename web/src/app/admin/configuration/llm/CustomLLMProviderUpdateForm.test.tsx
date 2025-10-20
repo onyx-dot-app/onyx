@@ -5,7 +5,7 @@
  * This tests the full workflow: form fill → test config → save → set as default
  */
 import React from "react";
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
 
 // Mock SWR's mutate function
@@ -35,15 +35,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("creates a new custom LLM provider successfully", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    // Mock successful test response
+    // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock successful create response
+    // Mock PUT /api/admin/llm/provider?is_creation=true
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -124,9 +124,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("shows error when test configuration fails", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    // Mock failed test response
+    // Mock POST /api/admin/llm/test (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -187,7 +187,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("updates an existing LLM provider", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     const existingProvider = {
       id: 1,
@@ -207,13 +207,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       deployment_name: null,
     };
 
-    // Mock successful test
+    // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock successful update
+    // Mock PUT /api/admin/llm/provider (update, no is_creation param)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ...existingProvider, api_key: "new-key" }),
@@ -264,15 +264,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("sets provider as default when shouldMarkAsDefault is true", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    // Mock successful test
+    // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock successful create
+    // Mock PUT /api/admin/llm/provider?is_creation=true
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -282,7 +282,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    // Mock successful set as default
+    // Mock POST /api/admin/llm/provider/5/default
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -329,15 +329,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("shows error when provider creation fails", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    // Mock successful test
+    // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock failed create
+    // Mock PUT /api/admin/llm/provider?is_creation=true (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -385,15 +385,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("adds custom configuration key-value pairs", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
-    // Mock successful test
+    // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock successful create
+    // Mock PUT /api/admin/llm/provider?is_creation=true
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),

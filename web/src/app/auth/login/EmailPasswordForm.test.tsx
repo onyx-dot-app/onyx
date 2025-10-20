@@ -34,7 +34,7 @@ describe("Email/Password Login Workflow", () => {
   test("allows user to login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock successful login response
+    // Mock POST /api/auth/login
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -79,7 +79,7 @@ describe("Email/Password Login Workflow", () => {
   test("shows error message when login fails", async () => {
     const user = setupUser();
 
-    // Mock failed login response with the error detail that the component expects
+    // Mock POST /api/auth/login (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -126,13 +126,13 @@ describe("Email/Password Signup Workflow", () => {
   test("allows user to sign up and login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock successful signup response
+    // Mock POST /api/auth/register
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock successful login response after signup
+    // Mock POST /api/auth/login (after successful signup)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -195,7 +195,7 @@ describe("Email/Password Signup Workflow", () => {
   test("shows error when email already exists", async () => {
     const user = setupUser();
 
-    // Mock signup failure with user already exists error
+    // Mock POST /api/auth/register (failure - user exists)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -226,7 +226,7 @@ describe("Email/Password Signup Workflow", () => {
   test("shows rate limit error when too many requests", async () => {
     const user = setupUser();
 
-    // Mock rate limit error
+    // Mock POST /api/auth/register (failure - rate limit)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 429,
