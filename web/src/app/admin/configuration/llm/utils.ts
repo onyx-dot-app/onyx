@@ -1,6 +1,7 @@
 import {
   AnthropicIcon,
   AmazonIcon,
+  AzureIcon,
   CPUIcon,
   MicrosoftIconSVG,
   MistralIcon,
@@ -38,6 +39,8 @@ export const getProviderIcon = (
     claude: AnthropicIcon,
     anthropic: AnthropicIcon,
     openai: OpenAISVG,
+    // Azure OpenAI should display the OpenAI logo
+    azure: AzureIcon,
     microsoft: MicrosoftIconSVG,
     meta: MetaIcon,
     google: GeminiIcon,
