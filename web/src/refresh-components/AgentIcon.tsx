@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import crypto from "crypto";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 function md5ToBits(str: string): number[] {
   const md5hex = crypto.createHash("md5").update(str).digest("hex");
@@ -94,6 +95,12 @@ export interface AgentIconProps {
 }
 
 export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
+  const settings = useContext(SettingsContext);
+
+  // Check if whitelabeling is enabled for the default assistant
+  const shouldUseWhitelabelLogo =
+    agent.id === 0 && settings?.enterpriseSettings?.use_custom_logo === true;
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -102,7 +109,21 @@ export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
             {agent.id == -3 ? (
               <ArtAsistantIcon size={size} />
             ) : agent.id == 0 ? (
-              <OnyxIcon size={size} />
+              shouldUseWhitelabelLogo ? (
+                <img
+                  alt="Logo"
+                  src="/api/enterprise-settings/logo"
+                  loading="lazy"
+                  className={cn(
+                    "rounded-full object-cover object-center transition-opacity duration-300"
+                  )}
+                  width={size}
+                  height={size}
+                  style={{ objectFit: "contain" }}
+                />
+              ) : (
+                <OnyxIcon size={size} />
+              )
             ) : agent.id == -1 ? (
               <GeneralAssistantIcon size={size} />
             ) : agent.uploaded_image_id ? (
