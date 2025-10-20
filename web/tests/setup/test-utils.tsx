@@ -1,5 +1,6 @@
 import React, { ReactElement } from "react";
 import { render, RenderOptions } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 /**
@@ -74,7 +75,45 @@ const customRender = (
 
 // Re-export everything from @testing-library/react
 export * from "@testing-library/react";
-export { default as userEvent } from "@testing-library/user-event";
+export { userEvent };
 
 // Override render with our custom render
 export { customRender as render };
+
+/**
+ * Setup userEvent with optimized configuration for testing.
+ * All user interactions are automatically wrapped in act() to prevent warnings.
+ * Use this helper instead of userEvent.setup() directly.
+ *
+ * @example
+ * const user = setupUser();
+ * await user.click(button); // Automatically wrapped in act()
+ * await user.type(input, "text"); // Automatically wrapped in act()
+ */
+export function setupUser(options = {}) {
+  const baseUser = userEvent.setup({
+    // Configure for React 18 to reduce act warnings
+    delay: null, // Instant typing - batches state updates better
+    ...options,
+  });
+
+  // Wrap all user-event methods in act() to prevent act warnings. We add this here
+  // to prevent all callsites from needing to import and wrap user events in act()
+  return new Proxy(baseUser, {
+    get(target, prop) {
+      const value = target[prop as keyof typeof target];
+
+      // Only wrap methods (functions), not properties
+      if (typeof value === "function") {
+        return async (...args: any[]) => {
+          const { act } = await import("@testing-library/react");
+          return act(async () => {
+            return (value as Function).apply(target, args);
+          });
+        };
+      }
+
+      return value;
+    },
+  });
+}

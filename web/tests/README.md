@@ -30,11 +30,11 @@ src/app/auth/login/
 ### Basic Pattern
 
 ```typescript
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import MyComponent from "./MyComponent";
 
 test("user can submit the form", async () => {
-  const user = userEvent.setup();
+  const user = setupUser(); // Use setupUser() - it auto-wraps in act()
 
   // Mock API response
   const fetchSpy = jest.spyOn(global, "fetch");
@@ -45,10 +45,10 @@ test("user can submit the form", async () => {
 
   render(<MyComponent />);
 
-  // Fill form
+  // Fill form (automatically wrapped in act())
   await user.type(screen.getByPlaceholderText(/email/i), "user@example.com");
 
-  // Submit
+  // Submit (automatically wrapped in act())
   await user.click(screen.getByRole("button", { name: /submit/i }));
 
   // Verify UI behavior after response
@@ -58,6 +58,33 @@ test("user can submit the form", async () => {
 
   fetchSpy.mockRestore();
 });
+```
+
+**Important**: Always use `setupUser()` instead of `userEvent.setup()` - it automatically wraps all interactions in `act()` to prevent React warnings.
+
+### Handling Async State Updates
+
+When components update state asynchronously, use the correct query methods:
+
+**✅ Good - Use `findBy` for elements that appear after async updates:**
+```typescript
+await user.click(createButton);
+// Element appears after state update
+expect(await screen.findByRole("textbox")).toBeInTheDocument();
+```
+
+**✅ Good - Use `waitFor` for complex assertions:**
+```typescript
+await waitFor(() => {
+  expect(screen.getByText("Updated")).toBeInTheDocument();
+  expect(screen.getByText("Count: 5")).toBeInTheDocument();
+});
+```
+
+**❌ Bad - Don't use `getBy` immediately after state changes:**
+```typescript
+await user.click(button);
+expect(screen.getByText("Updated")).toBeInTheDocument(); // May fail!
 ```
 
 ## Testing Philosophy

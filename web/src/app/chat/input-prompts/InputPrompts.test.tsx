@@ -5,7 +5,7 @@
  * This tests the full workflow: fetch → create → edit → delete
  */
 import React from "react";
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import InputPrompts from "./InputPrompts";
 
 // Mock next/navigation for BackButton
@@ -69,7 +69,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("creates a new prompt successfully", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock GET to return empty prompts initially
     fetchSpy.mockResolvedValueOnce({
@@ -101,8 +101,10 @@ describe("Input Prompts CRUD Workflow", () => {
     });
     await user.click(createButton);
 
-    // Verify create form is displayed
-    expect(screen.getByPlaceholderText(/prompt shortcut/i)).toBeInTheDocument();
+    // Verify create form is displayed (use findBy to wait for state update)
+    expect(
+      await screen.findByPlaceholderText(/prompt shortcut/i)
+    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/actual prompt/i)).toBeInTheDocument();
 
     // User fills out the form
@@ -146,12 +148,12 @@ describe("Input Prompts CRUD Workflow", () => {
       ).toBeInTheDocument();
     });
 
-    // Verify new prompt is displayed
-    expect(screen.getByText("Review")).toBeInTheDocument();
+    // Verify new prompt is displayed (use findBy to wait for state update)
+    expect(await screen.findByText("Review")).toBeInTheDocument();
   });
 
   test("edits an existing user-created prompt", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock GET to return a user-created prompt
     fetchSpy.mockResolvedValueOnce({
@@ -191,15 +193,18 @@ describe("Input Prompts CRUD Workflow", () => {
     const editOption = await screen.findByRole("menuitem", { name: /edit/i });
     await user.click(editOption);
 
-    // Verify edit form is displayed with current values
-    const textareas = screen.getAllByRole("textbox");
-    expect(textareas[0]).toHaveValue("Summarize");
-    expect(textareas[1]).toHaveValue("Summarize the document.");
+    // Verify edit form is displayed with current values (wait for state update)
+    let textareas: HTMLElement[];
+    await waitFor(() => {
+      textareas = screen.getAllByRole("textbox");
+      expect(textareas[0]).toHaveValue("Summarize");
+      expect(textareas[1]).toHaveValue("Summarize the document.");
+    });
 
     // User modifies the content
-    await user.clear(textareas[1]);
+    await user.clear(textareas![1]);
     await user.type(
-      textareas[1],
+      textareas![1],
       "Summarize the document and provide key insights."
     );
 
@@ -236,7 +241,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("deletes a user-created prompt", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock GET to return a user-created prompt
     fetchSpy.mockResolvedValueOnce({
@@ -298,7 +303,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("hides a public prompt instead of deleting it", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock GET to return a public prompt
     fetchSpy.mockResolvedValueOnce({
@@ -324,10 +329,9 @@ describe("Input Prompts CRUD Workflow", () => {
     // Wait for prompts to load
     await waitFor(() => {
       expect(screen.getByText("Explain")).toBeInTheDocument();
+      // Verify "Built-in" chip is shown
+      expect(screen.getByText("Built-in")).toBeInTheDocument();
     });
-
-    // Verify "Built-in" chip is shown
-    expect(screen.getByText("Built-in")).toBeInTheDocument();
 
     // Click the dropdown menu
     const dropdownButtons = screen.getAllByRole("button");
@@ -380,7 +384,7 @@ describe("Input Prompts CRUD Workflow", () => {
   });
 
   test("shows error when create fails", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock GET to return empty prompts
     fetchSpy.mockResolvedValueOnce({
@@ -406,8 +410,9 @@ describe("Input Prompts CRUD Workflow", () => {
     });
     await user.click(createButton);
 
-    // Fill form
-    const shortcutInput = screen.getByPlaceholderText(/prompt shortcut/i);
+    // Fill form (wait for form to appear after state update)
+    const shortcutInput =
+      await screen.findByPlaceholderText(/prompt shortcut/i);
     const promptInput = screen.getByPlaceholderText(/actual prompt/i);
     await user.type(shortcutInput, "Test");
     await user.type(promptInput, "Test content");

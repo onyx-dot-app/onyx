@@ -5,7 +5,7 @@
  * This tests the full workflow: form → validation → API call → redirect
  */
 import React from "react";
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
 import EmailPasswordForm from "./EmailPasswordForm";
 
 // Mock next/navigation (not used by this component, but required by dependencies)
@@ -32,7 +32,7 @@ describe("Email/Password Login Workflow", () => {
   });
 
   test("allows user to login with valid credentials", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock successful login response
     fetchSpy.mockResolvedValueOnce({
@@ -77,7 +77,7 @@ describe("Email/Password Login Workflow", () => {
   });
 
   test("shows error message when login fails", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock failed login response with the error detail that the component expects
     fetchSpy.mockResolvedValueOnce({
@@ -124,7 +124,7 @@ describe("Email/Password Signup Workflow", () => {
   });
 
   test("allows user to sign up and login with valid credentials", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock successful signup response
     fetchSpy.mockResolvedValueOnce({
@@ -193,7 +193,7 @@ describe("Email/Password Signup Workflow", () => {
   });
 
   test("shows error when email already exists", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock signup failure with user already exists error
     fetchSpy.mockResolvedValueOnce({
@@ -224,7 +224,7 @@ describe("Email/Password Signup Workflow", () => {
   });
 
   test("shows rate limit error when too many requests", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
 
     // Mock rate limit error
     fetchSpy.mockResolvedValueOnce({
