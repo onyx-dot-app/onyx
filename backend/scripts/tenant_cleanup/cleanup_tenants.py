@@ -21,10 +21,12 @@ Examples:
     python backend/scripts/cleanup_tenant.py --csv gated_tenants_no_query_3mo.csv --force
 """
 
+import csv
 import json
 import signal
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from scripts.tenant_cleanup.cleanup_utils import confirm_step
@@ -420,7 +422,7 @@ def cleanup_control_plane(tenant_id: str, force: bool = False) -> None:
         raise
 
 
-def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
+def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
     """
     Main cleanup function that orchestrates all cleanup steps.
 
@@ -428,6 +430,9 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
         tenant_id: The tenant ID to clean up
         pod_name: The Kubernetes pod name to execute operations on
         force: If True, skip all confirmation prompts
+
+    Returns:
+        True if cleanup was performed, False if skipped
     """
     print(f"Starting cleanup for tenant: {tenant_id}")
 
@@ -448,7 +453,7 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
 
             if force:
                 print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-                return
+                return False
 
             # Always ask for confirmation if not gated, even in force mode
             response = input(
@@ -456,7 +461,7 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
             )
             if response.lower() != "yes":
                 print("Cleanup aborted - tenant is not GATED_ACCESS")
-                return
+                return False
         elif tenant_status == "GATED_ACCESS":
             print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
         elif tenant_status is None:
@@ -464,23 +469,23 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
 
             if force:
                 print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-                return
+                return False
 
             response = input("Continue anyway? Type 'yes' to confirm: ")
             if response.lower() != "yes":
                 print("Cleanup aborted - could not verify tenant status")
-                return
+                return False
     except Exception as e:
         print(f"⚠️  WARNING: Failed to check tenant status: {e}")
 
         if force:
             print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-            return
+            return False
 
         response = input("Continue anyway? Type 'yes' to confirm: ")
         if response.lower() != "yes":
             print("Cleanup aborted - could not verify tenant status")
-            return
+            return False
     print(f"{'=' * 80}\n")
 
     # Fetch tenant users for informational purposes (non-blocking)
@@ -507,7 +512,7 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
         print(
             "You may need to mark connectors for deletion and wait for cleanup to complete."
         )
-        return
+        return False
     print(f"{'=' * 80}\n")
 
     # Step 2: Drop data plane schema
@@ -544,11 +549,12 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> None:
                 print("[FORCE MODE] Control plane cleanup failed but continuing")
     else:
         print("Step 3 skipped by user")
-        return
+        return False
 
     print(f"\n{'=' * 80}")
     print(f"✓ Cleanup completed for tenant: {tenant_id}")
     print(f"{'=' * 80}")
+    return True
 
 
 def main() -> None:
@@ -664,40 +670,75 @@ def main() -> None:
     # Run cleanup for each tenant
     failed_tenants = []
     successful_tenants = []
+    skipped_tenants = []
 
-    for idx, tenant_id in enumerate(tenant_ids, 1):
-        if len(tenant_ids) > 1:
-            print(f"\n{'=' * 80}")
-            print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
-            print(f"{'=' * 80}")
+    # Open CSV file for writing successful cleanups in real-time
+    csv_output_path = "cleaned_tenants.csv"
+    with open(csv_output_path, "w", newline="") as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["tenant_id", "cleaned_at"])
+        csv_file.flush()  # Ensure header is written immediately
 
-        try:
-            cleanup_tenant(tenant_id, pod_name, force)
-            successful_tenants.append(tenant_id)
-        except Exception as e:
-            print(f"✗ Cleanup failed for tenant {tenant_id}: {e}", file=sys.stderr)
-            failed_tenants.append((tenant_id, str(e)))
+        print(f"Writing successful cleanups to: {csv_output_path}\n")
 
-            # If not in force mode and there are more tenants, ask if we should continue
-            if not force and idx < len(tenant_ids):
-                response = input(
-                    f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
-                )
-                if response.lower() != "y":
-                    print("Cleanup aborted by user")
-                    break
+        for idx, tenant_id in enumerate(tenant_ids, 1):
+            if len(tenant_ids) > 1:
+                print(f"\n{'=' * 80}")
+                print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
+                print(f"{'=' * 80}")
 
-    # Print summary if multiple tenants
-    if len(tenant_ids) > 1:
+            try:
+                was_cleaned = cleanup_tenant(tenant_id, pod_name, force)
+
+                if was_cleaned:
+                    # Only record if actually cleaned up (not skipped)
+                    successful_tenants.append(tenant_id)
+
+                    # Write to CSV immediately after successful cleanup
+                    timestamp = datetime.utcnow().isoformat()
+                    csv_writer.writerow([tenant_id, timestamp])
+                    csv_file.flush()  # Ensure real-time write
+                    print(f"✓ Recorded cleanup in {csv_output_path}")
+                else:
+                    skipped_tenants.append(tenant_id)
+                    print(f"⚠ Tenant {tenant_id} was skipped (not recorded in CSV)")
+
+            except Exception as e:
+                print(f"✗ Cleanup failed for tenant {tenant_id}: {e}", file=sys.stderr)
+                failed_tenants.append((tenant_id, str(e)))
+
+                # If not in force mode and there are more tenants, ask if we should continue
+                if not force and idx < len(tenant_ids):
+                    response = input(
+                        f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
+                    )
+                    if response.lower() != "y":
+                        print("Cleanup aborted by user")
+                        break
+
+    # Print summary
+    if len(tenant_ids) == 1:
+        if successful_tenants:
+            print(f"\n✓ Successfully cleaned tenant written to: {csv_output_path}")
+        elif skipped_tenants:
+            print("\n⚠ Tenant was skipped")
+    elif len(tenant_ids) > 1:
         print(f"\n{'=' * 80}")
         print("CLEANUP SUMMARY")
         print(f"{'=' * 80}")
         print(f"Total tenants: {len(tenant_ids)}")
         print(f"Successful: {len(successful_tenants)}")
+        print(f"Skipped: {len(skipped_tenants)}")
         print(f"Failed: {len(failed_tenants)}")
+        print(f"\nSuccessfully cleaned tenants written to: {csv_output_path}")
+
+        if skipped_tenants:
+            print(f"\nSkipped tenants ({len(skipped_tenants)}):")
+            for tenant_id in skipped_tenants:
+                print(f"  - {tenant_id}")
 
         if failed_tenants:
-            print("\nFailed tenants:")
+            print(f"\nFailed tenants ({len(failed_tenants)}):")
             for tenant_id, error in failed_tenants:
                 print(f"  - {tenant_id}: {error}")
 

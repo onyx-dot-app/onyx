@@ -89,7 +89,7 @@ def run_connector_deletion(pod_name: str, tenant_id: str) -> None:
                 pod_name,
                 "--",
                 "python",
-                "/tmp/mark_connector_for_deletion.py",
+                "/tmp/execute_connector_deletion.py",
                 tenant_id,
                 "--all",
             ],
@@ -173,6 +173,8 @@ def mark_tenant_connectors_for_deletion(
             if response.lower() != "yes":
                 safe_print("Operation aborted - could not verify tenant status")
                 raise
+        else:
+            raise RuntimeError(f"Failed to check tenant status for {tenant_id}")
     safe_print(f"{'=' * 80}\n")
 
     # Confirm before proceeding (only in non-force mode)
