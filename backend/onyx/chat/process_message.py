@@ -11,6 +11,7 @@ from uuid import UUID
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -898,13 +899,12 @@ def _fast_message_stream(
             image_generation_tool_instance = tool
         elif isinstance(tool, OktaProfileTool):
             okta_profile_tool_instance = tool
-    converted_message_history = [
-        PreviousMessage.from_langchain_msg(message, 0).to_agent_sdk_msg()
-        for message in answer.graph_inputs.prompt_builder.build()
-    ]
+    messages = base_messages_to_agent_sdk_msgs(
+        answer.graph_inputs.prompt_builder.build()
+    )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
-        messages=converted_message_history,
+        messages=messages,
         # TODO: Maybe we can use some DI framework here?
         dependencies=ChatTurnDependencies(
             llm_model=LitellmModel(
