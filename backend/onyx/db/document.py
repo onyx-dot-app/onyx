@@ -1065,14 +1065,6 @@ def get_documents_updated_at_batch(
     """Retrieves the doc_updated_at timestamps for multiple document IDs in batch.
     
     This is more efficient than calling get_document_updated_at for each document individually.
-    
-    Args:
-        document_ids (list[str]): List of document IDs to query
-        db_session (Session): The database session to use
-    
-    Returns:
-        dict[str, datetime | None]: Dictionary mapping document ID to its doc_updated_at timestamp.
-                                     Documents not found in the database will not be in the result.
     """
     if not document_ids:
         return {}
