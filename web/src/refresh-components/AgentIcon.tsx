@@ -1,12 +1,8 @@
-import React, { useContext } from "react";
+import React from "react";
 import crypto from "crypto";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import {
-  ArtAsistantIcon,
-  GeneralAssistantIcon,
-  OnyxIcon,
-} from "@/components/icons/icons";
+import { ArtAsistantIcon, OnyxIcon } from "@/components/icons/icons";
 import {
   Tooltip,
   TooltipContent,
@@ -15,7 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 function md5ToBits(str: string): number[] {
   const md5hex = crypto.createHash("md5").update(str).digest("hex");
@@ -95,7 +91,7 @@ export interface AgentIconProps {
 }
 
 export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
 
   // Check if whitelabeling is enabled for the default assistant
   const shouldUseWhitelabelLogo =
@@ -106,9 +102,9 @@ export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="text-text-04">
-            {agent.id == -3 ? (
+            {agent.id === -3 ? (
               <ArtAsistantIcon size={size} />
-            ) : agent.id == 0 ? (
+            ) : agent.id === 0 ? (
               shouldUseWhitelabelLogo ? (
                 <img
                   alt="Logo"
@@ -124,8 +120,6 @@ export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
               ) : (
                 <OnyxIcon size={size} />
               )
-            ) : agent.id == -1 ? (
-              <GeneralAssistantIcon size={size} />
             ) : agent.uploaded_image_id ? (
               <img
                 alt={agent.name}
