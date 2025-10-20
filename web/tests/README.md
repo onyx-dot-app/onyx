@@ -34,10 +34,9 @@ import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import MyComponent from "./MyComponent";
 
 test("user can submit the form", async () => {
-  const user = setupUser(); // Use setupUser() - it auto-wraps in act()
-
-  // Mock API response
+  const user = setupUser();
   const fetchSpy = jest.spyOn(global, "fetch");
+
   fetchSpy.mockResolvedValueOnce({
     ok: true,
     json: async () => ({ success: true }),
@@ -45,13 +44,9 @@ test("user can submit the form", async () => {
 
   render(<MyComponent />);
 
-  // Fill form (automatically wrapped in act())
   await user.type(screen.getByPlaceholderText(/email/i), "user@example.com");
-
-  // Submit (automatically wrapped in act())
   await user.click(screen.getByRole("button", { name: /submit/i }));
 
-  // Verify UI behavior after response
   await waitFor(() => {
     expect(screen.getByText(/success/i)).toBeInTheDocument();
   });
@@ -69,7 +64,6 @@ When components update state asynchronously, use the correct query methods:
 **✅ Good - Use `findBy` for elements that appear after async updates:**
 ```typescript
 await user.click(createButton);
-// Element appears after state update
 expect(await screen.findByRole("textbox")).toBeInTheDocument();
 ```
 

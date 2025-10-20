@@ -87,8 +87,8 @@ export { customRender as render };
  *
  * @example
  * const user = setupUser();
- * await user.click(button); // Automatically wrapped in act()
- * await user.type(input, "text"); // Automatically wrapped in act()
+ * await user.click(button);
+ * await user.type(input, "text");
  */
 export function setupUser(options = {}) {
   const baseUser = userEvent.setup({
