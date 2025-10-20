@@ -467,8 +467,8 @@ def get_llm_model_and_settings(
     # Create LitellmModel instance
     litellm_model = LitellmModel(
         model=model_name,
-        base_url=api_base,
-        api_key=api_key,
+        base_url=api_base or None,
+        api_key=api_key or None,
     )
 
     # Create ModelSettings with the provided configuration
