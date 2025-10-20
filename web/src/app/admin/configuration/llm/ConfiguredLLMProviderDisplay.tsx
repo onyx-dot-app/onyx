@@ -118,10 +118,10 @@ function LLMProviderDisplay({
                 "focus-visible:underline",
                 "focus-visible:text-action-link-06"
               )}
-              onClick={() => {
+              onClick={(): void => {
                 void handleSetAsDefault();
               }}
-              onKeyDown={(event) => {
+              onKeyDown={(event): void => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   void handleSetAsDefault();
