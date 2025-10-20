@@ -2,8 +2,6 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -156,6 +154,8 @@ AZURE_PROVIDER_NAME = "azure"
 
 
 VERTEXAI_PROVIDER_NAME = "vertex_ai"
+VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
+VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.0-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.0-flash-lite"
 VERTEXAI_MODEL_NAMES = [
