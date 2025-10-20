@@ -505,12 +505,9 @@ def stream_chat_message_objects(
 
         # Валидация сообщения пользователя
         validator_manager = ValidatorManager(persona=persona)
-        validated_message = validator_manager.validate_message(
+        validated_user_message = validator_manager.validate_message(
             message=new_msg_req.message, direction="input"
         )
-
-        if validated_message:
-            new_msg_req.message = validated_message
 
         message_text = new_msg_req.message
 
@@ -948,7 +945,7 @@ def stream_chat_message_objects(
 
                 # Set query argument if not already set
                 if not force_use_tool.args:
-                    force_use_tool.args = {"query": final_msg.message}
+                    force_use_tool.args = {"query": validated_user_message}
 
                 # Pass the user file IDs to the search tool
                 if user_file_ids or user_folder_ids:
@@ -1018,7 +1015,7 @@ def stream_chat_message_objects(
             )
 
         search_request = SearchRequest(
-            query=final_msg.message,
+            query=validated_user_message,
             evaluation_type=(
                 LLMEvaluationType.SKIP
                 if search_for_ordering_only
@@ -1047,7 +1044,7 @@ def stream_chat_message_objects(
 
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
-                user_query=final_msg.message,
+                user_query=validated_user_message,
                 prompt_config=prompt_config,
                 files=latest_query_files,
                 single_message_history=single_message_history,
@@ -1055,7 +1052,7 @@ def stream_chat_message_objects(
             system_message=default_build_system_message(prompt_config, llm.config),
             message_history=message_history,
             llm_config=llm.config,
-            raw_user_query=final_msg.message,
+            raw_user_query=validated_user_message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
@@ -1111,10 +1108,9 @@ def stream_chat_message_objects(
             if llm_answer and llm_answer.strip():
 
                 # 2. Отправляем ответ LLM на валидацию
-                validated_text = validator_manager.validate_message(
+                validated_llm_answer = validator_manager.validate_message(
                     message=llm_answer, direction="output"
                 )
-                validated_llm_answer = validated_text or llm_answer
 
                 # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
                 splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
