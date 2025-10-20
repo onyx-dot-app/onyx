@@ -3,7 +3,7 @@ import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { Modal } from "@/components/Modal";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +70,7 @@ function LLMProviderDisplay({
   const [formIsVisible, setFormIsVisible] = useState(false);
   const { popup, setPopup } = usePopup();
 
-  const handleSetAsDefault = useCallback(async () => {
+  async function handleSetAsDefault(): Promise<void> {
     const response = await fetch(
       `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
       {
@@ -86,12 +86,12 @@ function LLMProviderDisplay({
       return;
     }
 
-    mutate(LLM_PROVIDERS_ADMIN_URL);
+    await mutate(LLM_PROVIDERS_ADMIN_URL);
     setPopup({
       type: "success",
       message: "Provider set as default successfully!",
     });
-  }, [existingLlmProvider.id, setPopup]);
+  }
 
   const providerName =
     existingLlmProvider?.name ||
@@ -110,23 +110,8 @@ function LLMProviderDisplay({
           </Text>
           {!existingLlmProvider.is_default_provider && (
             <Text
-              role="button"
-              tabIndex={0}
-              className={cn(
-                "text-action-link-05",
-                "cursor-pointer",
-                "focus-visible:underline",
-                "focus-visible:text-action-link-06"
-              )}
-              onClick={(): void => {
-                void handleSetAsDefault();
-              }}
-              onKeyDown={(event): void => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  void handleSetAsDefault();
-                }
-              }}
+              className={cn("text-action-link-05", "cursor-pointer")}
+              onClick={handleSetAsDefault}
             >
               Set as default
             </Text>
