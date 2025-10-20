@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Label, ManualErrorMessage } from "./admin/connectors/Field";
 import CreatableSelect from "react-select/creatable";
