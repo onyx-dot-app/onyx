@@ -350,7 +350,8 @@ def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, str | None]:
             loc_tag = url_tag.find("loc")
             lastmod_tag = url_tag.find("lastmod")
             if loc_tag and loc_tag.text:
-                urls_data[loc_tag.text] = lastmod_tag.text if lastmod_tag else None
+                url = _ensure_absolute_url(sitemap_url, loc_tag.text)
+                urls_data[url] = lastmod_tag.text if lastmod_tag else None
 
         if "protected=true" in sitemap_url:
             eea_auth = soer_login()
@@ -799,7 +800,6 @@ class WebConnector(LoadConnector):
                 f"documents are up-to-date. Skipping connector execution."
             )
             return
-        # If we never had URLs to begin with, that's an error
 
         if not self.to_visit_list:
             raise ValueError("No URLs to visit")
@@ -881,7 +881,6 @@ class WebConnector(LoadConnector):
         session_ctx.stop()
 
     def validate_connector_settings(self) -> None:
-        # Make sure we have at least one valid URL to check
         # For sitemap mode, check if URLs were filtered vs never existed
         if self.original_url_count > 0 and self.filtered_url_count == 0:
             logger.info(
@@ -889,7 +888,7 @@ class WebConnector(LoadConnector):
                 f"All {self.original_url_count} documents are up-to-date."
             )
             return None
-        # For non-sitemap modes or if sitemap had no URLs to begin with, we need at least one URL
+        # Make sure we have at least one valid URL to check
         if not self.to_visit_list:
             raise ConnectorValidationError(
                 "No URL configured. Please provide at least one valid URL.")
