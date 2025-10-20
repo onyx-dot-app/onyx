@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
@@ -33,6 +34,12 @@ class TestLLMRequest(BaseModel):
 
     # if try and use the existing API key
     api_key_changed: bool
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def normalize_provider(cls, value: str) -> str:
+        """Normalize provider name by stripping whitespace and lowercasing."""
+        return value.strip().lower()
 
 
 class LLMProviderDescriptor(BaseModel):
@@ -90,6 +97,12 @@ class LLMProviderUpsertRequest(LLMProvider):
     # for default providers, the built-in model names are used
     api_key_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def normalize_provider(cls, value: str) -> str:
+        """Normalize provider name by stripping whitespace and lowercasing."""
+        return value.strip().lower()
 
 
 class LLMProviderView(LLMProvider):
