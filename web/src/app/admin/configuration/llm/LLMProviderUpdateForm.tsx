@@ -208,8 +208,9 @@ export function LLMProviderUpdateForm({
                 if (!value) return false;
                 try {
                   const url = new URL(value);
-                  const hasApiVersion =
-                    !!url.searchParams.get("api-version")?.trim();
+                  const hasApiVersion = !!url.searchParams
+                    .get("api-version")
+                    ?.trim();
 
                   // Check if the path contains a deployment name
                   const pathMatch = url.pathname.match(
