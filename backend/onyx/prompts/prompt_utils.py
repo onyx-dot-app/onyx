@@ -14,7 +14,6 @@ from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
-from onyx.prompts.chat_prompts import STRESS_USER_QUERY_IMPORTANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
@@ -154,10 +153,16 @@ def build_task_prompt_reminders_v2(
     base_task = prompt.task_prompt or ""
     citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    user_message = f"{STRESS_USER_QUERY_IMPORTANCE} {chat_turn_user_message}"
-    return "\n".join(
-        [base_task, citation_or_nothing, language_hint_or_nothing, user_message]
-    )
+    return f"""
+    <TASK_PROMPT>
+    {base_task}
+    {citation_or_nothing}
+    {language_hint_or_nothing}
+    </TASK_PROMPT>
+    <USER_PROMPT>
+    {chat_turn_user_message}
+    </USER_PROMPT>
+    """.strip()
 
 
 # Maps connector enum string to a more natural language representation for the LLM

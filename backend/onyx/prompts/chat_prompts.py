@@ -17,8 +17,8 @@ the brackets. To cite multiple documents, use [[1]](https://example.com), [[2]](
 Try to cite inline as opposed to leaving all citations until the very end of the response.
 """.rstrip()
 
-STRESS_USER_QUERY_IMPORTANCE = """
-Please provide a final answer to the user's question:
+STRESS_USER_PROMPT_IMPORTANCE = """
+Here is the user's prompt:
 """
 
 NO_CITATION_STATEMENT = """
