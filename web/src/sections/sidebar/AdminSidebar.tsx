@@ -341,41 +341,40 @@ export default function AdminSidebar({
       </div>
 
       {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
-      <VerticalShadowScroller className="flex px-spacing-interline gap-padding-content">
-        {items.map((collection, index) => (
-          <SidebarSection key={index} title={collection.name}>
-            <div className="flex flex-col w-full">
-              {collection.items.map(({ link, icon: Icon, name }, index) => (
-                <SidebarTab
-                  key={index}
-                  href={link}
-                  active={pathname.startsWith(link)}
-                  leftIcon={({ className }) => (
-                    <Icon className={className} size={16} />
-                  )}
-                >
-                  {name}
-                </SidebarTab>
-              ))}
-            </div>
-          </SidebarSection>
-        ))}
-      </VerticalShadowScroller>
+      <div className="flex flex-col min-h-0 gap-spacing-interline">
+        <VerticalShadowScroller className="flex px-spacing-interline gap-padding-content">
+          {items.map((collection, index) => (
+            <SidebarSection key={index} title={collection.name}>
+              <div className="flex flex-col w-full">
+                {collection.items.map(({ link, icon: Icon, name }, index) => (
+                  <SidebarTab
+                    key={index}
+                    href={link}
+                    active={pathname.startsWith(link)}
+                    leftIcon={({ className }) => (
+                      <Icon className={className} size={16} />
+                    )}
+                  >
+                    {name}
+                  </SidebarTab>
+                ))}
+              </div>
+            </SidebarSection>
+          ))}
+        </VerticalShadowScroller>
 
-      <div
-        className={cn(
-          "flex flex-col",
-          "px-spacing-interline",
-          "pt-spacing-interline",
-          "gap-spacing-interline"
-        )}
-      >
-        {combinedSettings.webVersion && (
-          <Text text02 secondaryBody className="px-spacing-interline">
-            {`Onyx version: ${combinedSettings.webVersion}`}
-          </Text>
-        )}
-        <Settings removeAdminPanelLink />
+        <div className="flex flex-col px-spacing-interline gap-spacing-interline">
+          {combinedSettings.webVersion && (
+            <Text
+              text02
+              secondaryBody
+              className="px-spacing-interline pt-spacing-inline"
+            >
+              {`Onyx version: ${combinedSettings.webVersion}`}
+            </Text>
+          )}
+          <Settings removeAdminPanelLink />
+        </div>
       </div>
     </SidebarWrapper>
   );

@@ -384,86 +384,91 @@ function AppSidebarInner() {
         </div>
 
         {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
-        <VerticalShadowScroller className="gap-padding-content px-spacing-interline">
-          {!folded && (
-            <>
-              {/* Agents */}
-              <SidebarSection title="Agents">
+        <div className="flex flex-col min-h-0 gap-spacing-interline">
+          <VerticalShadowScroller className="gap-padding-content px-spacing-interline ">
+            {!folded && (
+              <>
+                {/* Agents */}
+                <SidebarSection title="Agents">
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleAgentDragEnd}
+                  >
+                    <SortableContext
+                      items={visibleAgentIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {visibleAgents.map((visibleAgent) => (
+                        <AgentButton
+                          key={visibleAgent.id}
+                          agent={visibleAgent}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                  <div data-testid="AppSidebar/more-agents">
+                    <SidebarTab
+                      leftIcon={SvgMoreHorizontal}
+                      onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                      lowlight
+                    >
+                      More Agents
+                    </SidebarTab>
+                  </div>
+                </SidebarSection>
+
+                {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
                 <DndContext
                   sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleAgentDragEnd}
+                  collisionDetection={pointerWithin}
+                  modifiers={[
+                    restrictToFirstScrollableAncestor,
+                    restrictToVerticalAxis,
+                  ]}
+                  onDragEnd={handleChatProjectDragEnd}
                 >
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
+                  <SidebarSection
+                    title="Projects"
+                    action={
+                      <IconButton
+                        icon={SvgFolderPlus}
+                        internal
+                        tooltip="New Project"
+                        onClick={() =>
+                          toggleModal(ModalIds.CreateProjectModal, true)
+                        }
+                      />
+                    }
                   >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    {projects.map((project) => (
+                      <ProjectFolderButton key={project.id} project={project} />
                     ))}
-                  </SortableContext>
-                </DndContext>
-                <div data-testid="AppSidebar/more-agents">
-                  <SidebarTab
-                    leftIcon={SvgMoreHorizontal}
-                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                    lowlight
-                  >
-                    More Agents
-                  </SidebarTab>
-                </div>
-              </SidebarSection>
 
-              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={pointerWithin}
-                modifiers={[
-                  restrictToFirstScrollableAncestor,
-                  restrictToVerticalAxis,
-                ]}
-                onDragEnd={handleChatProjectDragEnd}
-              >
-                <SidebarSection
-                  title="Projects"
-                  action={
-                    <IconButton
-                      icon={SvgFolderPlus}
-                      internal
-                      tooltip="New Project"
+                    <SidebarTab
+                      leftIcon={SvgFolderPlus}
                       onClick={() =>
                         toggleModal(ModalIds.CreateProjectModal, true)
                       }
-                    />
-                  }
-                >
-                  {projects.map((project) => (
-                    <ProjectFolderButton key={project.id} project={project} />
-                  ))}
+                      lowlight
+                    >
+                      New Project
+                    </SidebarTab>
+                  </SidebarSection>
 
-                  <SidebarTab
-                    leftIcon={SvgFolderPlus}
-                    onClick={() =>
-                      toggleModal(ModalIds.CreateProjectModal, true)
-                    }
-                    lowlight
-                  >
-                    New Project
-                  </SidebarTab>
-                </SidebarSection>
+                  {/* Recents */}
+                  <RecentsSection
+                    isHistoryEmpty={isHistoryEmpty}
+                    chatSessions={chatSessions}
+                  />
+                </DndContext>
+              </>
+            )}
+          </VerticalShadowScroller>
 
-                {/* Recents */}
-                <RecentsSection
-                  isHistoryEmpty={isHistoryEmpty}
-                  chatSessions={chatSessions}
-                />
-              </DndContext>
-            </>
-          )}
-        </VerticalShadowScroller>
-
-        <div className="px-spacing-interline">
-          <Settings folded={folded} />
+          <div className="px-spacing-interline">
+            <Settings folded={folded} />
+          </div>
         </div>
       </SidebarWrapper>
     </>
