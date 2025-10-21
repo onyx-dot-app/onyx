@@ -100,6 +100,8 @@ def _image_generation_core(
                 for img, file_id in zip(image_generation_responses, file_ids)
             ]
             break
+    if not generated_images:
+        raise RuntimeError("No images were generated")
 
     run_context.context.iteration_instructions.append(
         IterationInstructions(
@@ -127,16 +129,14 @@ def _image_generation_core(
             cited_documents={},
         )
     )
-    # Emit final result
-    if generated_images:
-        emitter.emit(
-            Packet(
-                ind=index,
-                obj=ImageGenerationToolDelta(
-                    type="image_generation_tool_delta", images=generated_images
-                ),
-            )
+    emitter.emit(
+        Packet(
+            ind=index,
+            obj=ImageGenerationToolDelta(
+                type="image_generation_tool_delta", images=generated_images
+            ),
         )
+    )
 
     return generated_images
 
