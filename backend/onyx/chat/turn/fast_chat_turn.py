@@ -25,6 +25,7 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
+from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -35,6 +36,27 @@ from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 
 
+def _remove_last_task_prompt_and_insert_new_one(
+    chat_turn_user_message: str,
+    current_messages: list[dict],
+    prompt_config: PromptConfig,
+    ctx: ChatTurnContext,
+) -> list[dict]:
+    # Remove previous task prompt
+    new_task_prompt = build_task_prompt_reminders_v2(
+        chat_turn_user_message,
+        prompt_config,
+        use_language_hint=False,
+        should_cite=ctx.should_cite_documents,
+    )
+    for i in range(len(current_messages) - 1, -1, -1):
+        if current_messages[i].get("role") == "user":
+            current_messages.pop(i)
+            break
+    current_messages = current_messages + [{"role": "user", "content": new_task_prompt}]
+    return current_messages
+
+
 # Todo -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[dict],
@@ -42,7 +64,7 @@ def _run_agent_loop(
     chat_session_id: UUID,
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
-) -> str | None:
+) -> None:
     """Run the agent loop for tool calling and final answer generation.
 
     This function can return early if ctx.no_final_message is set to True
@@ -67,9 +89,11 @@ def _run_agent_loop(
             agent_stream, chat_session_id, dependencies, ctx
         )
         current_messages = streamed.to_input_list()
+        current_messages = _remove_last_task_prompt_and_insert_new_one(
+            messages[-1]["content"], current_messages, prompt_config, ctx
+        )
         if len(tool_call_events) == 0:
             last_call_is_final = True
-    return "hi"
 
 
 def _fast_chat_turn_core(

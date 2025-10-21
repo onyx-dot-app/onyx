@@ -133,6 +133,7 @@ def build_task_prompt_reminders(
 
 
 def build_task_prompt_reminders_v2(
+    chat_turn_user_message: str,
     prompt: Persona | PromptConfig,
     use_language_hint: bool,
     should_cite: bool,

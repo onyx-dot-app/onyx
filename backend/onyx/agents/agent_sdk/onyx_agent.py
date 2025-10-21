@@ -1,8 +1,11 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
+from agents import Agent
 from agents import Model
 from agents import ModelSettings
+from agents import RunContextWrapper
 from agents import StopAtTools
 from agents import TContext
 from agents.tracing.create import trace
@@ -28,7 +31,7 @@ class OnyxAgent:
         and gets to respond.
     """
 
-    task_prompt: str | None = None
+    task_prompt: str | Callable[[RunContextWrapper[TContext], Agent[TContext]], str]
     """
     This prompt is inserted as a user message to the LLM after every tool call, but it is
     not saved in the conversation history.
