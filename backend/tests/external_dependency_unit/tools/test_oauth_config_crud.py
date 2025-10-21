@@ -162,6 +162,123 @@ class TestOAuthConfigCRUD:
         ):
             update_oauth_config(99999, db_session, name="New Name")
 
+    def test_update_oauth_config_clear_client_id(self, db_session: Session) -> None:
+        """Test clearing client_id while preserving client_secret"""
+        oauth_config = _create_test_oauth_config(db_session)
+        original_client_secret = oauth_config.client_secret
+
+        # Clear client_id
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            clear_client_id=True,
+        )
+
+        # client_id should be cleared (empty string)
+        assert updated_config.client_id == ""
+        # client_secret should be preserved
+        assert updated_config.client_secret == original_client_secret
+
+    def test_update_oauth_config_clear_client_secret(self, db_session: Session) -> None:
+        """Test clearing client_secret while preserving client_id"""
+        oauth_config = _create_test_oauth_config(db_session)
+        original_client_id = oauth_config.client_id
+
+        # Clear client_secret
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            clear_client_secret=True,
+        )
+
+        # client_secret should be cleared (empty string)
+        assert updated_config.client_secret == ""
+        # client_id should be preserved
+        assert updated_config.client_id == original_client_id
+
+    def test_update_oauth_config_clear_both_secrets(self, db_session: Session) -> None:
+        """Test clearing both client_id and client_secret"""
+        oauth_config = _create_test_oauth_config(db_session)
+
+        # Clear both secrets
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            clear_client_id=True,
+            clear_client_secret=True,
+        )
+
+        # Both should be cleared (empty strings)
+        assert updated_config.client_id == ""
+        assert updated_config.client_secret == ""
+
+    def test_update_oauth_config_authorization_url(self, db_session: Session) -> None:
+        """Test updating authorization_url"""
+        oauth_config = _create_test_oauth_config(db_session)
+        new_auth_url = "https://example.com/oauth/authorize"
+
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            authorization_url=new_auth_url,
+        )
+
+        assert updated_config.authorization_url == new_auth_url
+
+    def test_update_oauth_config_token_url(self, db_session: Session) -> None:
+        """Test updating token_url"""
+        oauth_config = _create_test_oauth_config(db_session)
+        new_token_url = "https://example.com/oauth/token"
+
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            token_url=new_token_url,
+        )
+
+        assert updated_config.token_url == new_token_url
+
+    def test_update_oauth_config_additional_params(self, db_session: Session) -> None:
+        """Test updating additional_params"""
+        oauth_config = _create_test_oauth_config(db_session)
+        new_params = {"access_type": "offline", "prompt": "consent"}
+
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            additional_params=new_params,
+        )
+
+        assert updated_config.additional_params == new_params
+
+    def test_update_oauth_config_multiple_fields(self, db_session: Session) -> None:
+        """Test updating multiple fields at once"""
+        oauth_config = _create_test_oauth_config(db_session)
+        new_name = f"Updated Config {uuid4().hex[:8]}"
+        new_auth_url = "https://example.com/oauth/authorize"
+        new_token_url = "https://example.com/oauth/token"
+        new_scopes = ["read", "write", "admin"]
+        new_params = {"access_type": "offline"}
+        new_client_id = "new_client_id"
+
+        updated_config = update_oauth_config(
+            oauth_config.id,
+            db_session,
+            name=new_name,
+            authorization_url=new_auth_url,
+            token_url=new_token_url,
+            scopes=new_scopes,
+            additional_params=new_params,
+            client_id=new_client_id,
+        )
+
+        assert updated_config.name == new_name
+        assert updated_config.authorization_url == new_auth_url
+        assert updated_config.token_url == new_token_url
+        assert updated_config.scopes == new_scopes
+        assert updated_config.additional_params == new_params
+        assert updated_config.client_id == new_client_id
+
     def test_delete_oauth_config(self, db_session: Session) -> None:
         """Test deleting an OAuth configuration"""
         oauth_config = _create_test_oauth_config(db_session)
