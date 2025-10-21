@@ -743,7 +743,7 @@ export function LLMProviderUpdateForm({
                     }
 
                     // If the deleted provider was the default, set the first remaining provider as default
-                    if (existingLlmProvider?.is_default_provider) {
+                    if (existingLlmProvider.is_default_provider) {
                       const remainingProvidersResponse = await fetch(
                         LLM_PROVIDERS_ADMIN_URL
                       );
