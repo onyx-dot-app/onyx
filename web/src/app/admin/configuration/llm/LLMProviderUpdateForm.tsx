@@ -10,9 +10,10 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
   TextFormField,
-  MultiSelectField,
   FileUploadFormField,
+  SubLabel,
 } from "@/components/Field";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 import {
@@ -26,6 +27,27 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import SvgTrash from "@/icons/trash";
+
+// Helper types for MultiSelectDropdown
+interface Option {
+  value: string;
+  label: string;
+}
+
+// Helper to convert model names to dropdown options
+function modelNamesToOptions(names: string[]): Option[] {
+  return names.map((name) => ({ value: name, label: name }));
+}
+
+// Helper to convert dropdown options to model names
+function optionsToModelNames(options: Option[]): string[] {
+  return options.map((option) => option.value);
+}
+
+// Helper to convert model configurations to dropdown options
+function modelConfigurationsToOptions(configs: ModelConfiguration[]): Option[] {
+  return configs.map((config) => ({ value: config.name, label: config.name }));
+}
 
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
@@ -656,28 +678,27 @@ export function LLMProviderUpdateForm({
                     <>
                       {currentModelConfigurations.length > 0 && (
                         <div className="w-full">
-                          <MultiSelectField
-                            selectedInitially={
-                              formikProps.values.selected_model_names ?? []
-                            }
+                          <MultiSelectDropdown
                             name="selected_model_names"
                             label="Display Models"
-                            subtext="Select the models to make available to users. Unselected models will not be available."
-                            options={currentModelConfigurations.map(
-                              (modelConfiguration) => ({
-                                value: modelConfiguration.name,
-                                // don't clean up names here to give admins descriptive names / handle duplicates
-                                // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                                label: modelConfiguration.name,
-                              })
+                            options={modelConfigurationsToOptions(
+                              currentModelConfigurations
                             )}
+                            initialSelectedOptions={modelNamesToOptions(
+                              formikProps.values.selected_model_names ?? []
+                            )}
+                            creatable={false}
                             onChange={(selected) =>
                               formikProps.setFieldValue(
                                 "selected_model_names",
-                                selected
+                                optionsToModelNames(selected)
                               )
                             }
                           />
+                          <SubLabel>
+                            Select the models to make available to users.
+                            Unselected models will not be available.
+                          </SubLabel>
                         </div>
                       )}
                       <IsPublicGroupSelector
