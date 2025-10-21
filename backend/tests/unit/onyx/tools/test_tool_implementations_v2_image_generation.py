@@ -39,11 +39,23 @@ class MockAggregatedContext:
         self.global_iteration_responses: list[IterationAnswer] = []
 
 
+class MockRedisClient:
+    """Mock Redis client for dependency injection"""
+
+    def __init__(self, is_cancelled: bool = False) -> None:
+        self.is_cancelled = is_cancelled
+
+    def exists(self, key: str) -> bool:
+        """Mock Redis exists method - returns True if session is cancelled"""
+        return self.is_cancelled
+
+
 class MockRunDependencies:
     """Mock run dependencies for dependency injection"""
 
-    def __init__(self) -> None:
+    def __init__(self, redis_client: MockRedisClient | None = None) -> None:
         self.emitter = MockEmitter()
+        self.redis_client = redis_client or MockRedisClient(is_cancelled=False)
 
 
 class MockImageGenerationTool:
@@ -66,6 +78,7 @@ class MockImageGenerationTool:
 
 def create_test_run_context(
     current_run_step: int = 0,
+    redis_client: MockRedisClient | None = None,
 ) -> RunContextWrapper[ChatTurnContext]:
     """Create a real RunContextWrapper with test dependencies"""
 
@@ -73,7 +86,7 @@ def create_test_run_context(
     emitter = MockEmitter()
     aggregated_context = MockAggregatedContext()
 
-    run_dependencies = MockRunDependencies()
+    run_dependencies = MockRunDependencies(redis_client=redis_client)
     run_dependencies.emitter = emitter
 
     # Create the actual context object
@@ -358,3 +371,60 @@ def test_image_generation_core_empty_response(
     # Check the types of emitted events
     assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
     assert isinstance(emitter.packet_history[1].obj, SectionEnd)
+
+
+@patch("onyx.tools.tool_implementations_v2.image_generation.save_files")
+@patch("onyx.tools.tool_implementations_v2.image_generation.build_frontend_file_url")
+def test_image_generation_core_handles_cancellation_gracefully(
+    mock_build_frontend_file_url: Mock, mock_save_files: Mock
+) -> None:
+    """Test that _image_generation_core handles cancellation gracefully without erroring"""
+    # Arrange
+    # Create a redis client that indicates the session is cancelled
+    redis_client = MockRedisClient(is_cancelled=True)
+    test_run_context = create_test_run_context(redis_client=redis_client)
+    prompt = "test image prompt"
+    shape = "square"
+
+    # Create test responses with some heartbeats and a response
+    # (but the response should never be processed due to cancellation check)
+    test_responses = [
+        Mock(
+            id="image_generation_heartbeat",
+            response=None,
+        ),
+        Mock(
+            id="image_generation_response",
+            response=[
+                ImageGenerationResponse(
+                    url="https://example.com/image1.jpg",
+                    image_data=None,
+                    revised_prompt="Revised: test image prompt",
+                ),
+            ],
+        ),
+    ]
+
+    test_tool = MockImageGenerationTool(responses=test_responses)
+
+    # Act - This should NOT raise an exception when cancelled gracefully
+    result = _image_generation_core(test_run_context, prompt, shape, test_tool)  # type: ignore[arg-type]
+
+    # Assert - When cancelled gracefully, we should get an empty list or appropriate response
+    # The implementation should handle cancellation without throwing RuntimeError
+    assert isinstance(result, list)
+    # Could be empty list or have some sentinel value
+    # The key is that no exception should be raised
+
+    # Verify emitter events - should have start and section end at minimum
+    emitter = test_run_context.context.run_dependencies.emitter
+    assert len(emitter.packet_history) >= 2
+
+    # Check that we emitted at least the start event
+    assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
+
+    # The last event should be SectionEnd (added by decorator)
+    assert isinstance(emitter.packet_history[-1].obj, SectionEnd)
+
+    # Verify that the decorator properly handled the flow and updated current_run_step
+    assert test_run_context.context.current_run_step == 2

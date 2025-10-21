@@ -63,7 +63,7 @@ def _remove_last_task_prompt_and_insert_new_one(
     return current_messages
 
 
-# Todo -- this can be refactored out and played with in evals + normal demo
+# TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[dict],
     dependencies: ChatTurnDependencies,
@@ -224,7 +224,8 @@ def _process_stream(
                 dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
         if isinstance(getattr(ev, "item", None), ToolCallItem):
             tool_call_events.append(ev.item.raw_item)
-    assert agent_stream.streamed is not None
+    if agent_stream.streamed is None:
+        raise ValueError("agent_stream.streamed is None")
     return agent_stream.streamed, tool_call_events
 
 

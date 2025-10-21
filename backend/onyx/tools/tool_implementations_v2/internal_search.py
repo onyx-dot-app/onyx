@@ -148,7 +148,9 @@ def _internal_search_core(
             all_retrieved_docs.extend(retrieved_docs)
 
     # Set flag to include citation requirements since we retrieved documents
-    run_context.context.should_cite_documents = True
+    run_context.context.should_cite_documents = (
+        run_context.context.should_cite_documents or bool(all_retrieved_docs)
+    )
 
     return all_retrieved_docs
 

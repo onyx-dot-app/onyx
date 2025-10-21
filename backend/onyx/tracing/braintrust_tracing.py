@@ -28,7 +28,7 @@ def _mask(data: Any) -> Any:
     if isinstance(data, dict):
         masked_dict = {}
         for key, value in data.items():
-            if "private_key" in key.lower():
+            if isinstance(key, str) and "private_key" in key.lower():
                 masked_dict[key] = "***REDACTED***"
             else:
                 masked_dict[key] = _mask(value)
