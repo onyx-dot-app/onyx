@@ -2,7 +2,7 @@ name: onyx
 
 services:
   indexing_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NAMESPACE:-onyxdotapp}/${IMAGE_REPO_PREFIX:-}onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server

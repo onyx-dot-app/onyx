@@ -155,23 +155,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          # Pull all images from ECR in parallel
-          echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag with expected names for docker-compose
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-
       - name: Setup node
         uses: actions/setup-node@v4
         with:
@@ -194,7 +177,9 @@ jobs:
           EXA_API_KEY=${{ env.EXA_API_KEY }}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          IMAGE_TAG=test
+          IMAGE_NAMESPACE="${{ env.ECR_REGISTRY }}"
+          IMAGE_REPO_PREFIX="integration-test-"
+          IMAGE_TAG="playwright-test-${{ github.run_id }}"
           EOF
 
       - name: Start Docker containers

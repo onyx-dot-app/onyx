@@ -230,36 +230,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
+      - name: Create .env file for Docker Compose
         run: |
-          # Pull all images from registry in parallel
-          echo "Pulling Docker images in parallel..."
-          # Pull images from private registry
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag to remove registry prefix for docker-compose
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+          cat <<EOF > deployment/docker_compose/.env
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          IMAGE_NAMESPACE="${{ env.PRIVATE_REGISTRY }}"
+          IMAGE_REPO_PREFIX="integration-test-"
+          IMAGE_TAG="test-${{ github.run_id }}"
+          INTEGRATION_TESTS_MODE=true
+          EOF
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          AUTH_TYPE=basic \
-          POSTGRES_POOL_PRE_PING=true \
-          POSTGRES_USE_NULL_POOL=true \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
-          INTEGRATION_TESTS_MODE=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
