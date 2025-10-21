@@ -42,8 +42,7 @@ import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
-import { cn } from "@/lib/utils";
+import { sidebarBody } from "@/sections/sidebar/utils";
 
 const connectors_items = () => [
   {
@@ -340,29 +339,28 @@ export default function AdminSidebar({
         </SidebarTab>
       </div>
 
-      {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
-      <div className="flex flex-col min-h-0 gap-spacing-interline">
-        <VerticalShadowScroller className="flex px-spacing-interline gap-padding-content">
-          {items.map((collection, index) => (
-            <SidebarSection key={index} title={collection.name}>
-              <div className="flex flex-col w-full">
-                {collection.items.map(({ link, icon: Icon, name }, index) => (
-                  <SidebarTab
-                    key={index}
-                    href={link}
-                    active={pathname.startsWith(link)}
-                    leftIcon={({ className }) => (
-                      <Icon className={className} size={16} />
-                    )}
-                  >
-                    {name}
-                  </SidebarTab>
-                ))}
-              </div>
-            </SidebarSection>
-          ))}
-        </VerticalShadowScroller>
+      {sidebarBody(
+        // Main Scrollable Body
+        items.map((collection, index) => (
+          <SidebarSection key={index} title={collection.name}>
+            <div className="flex flex-col w-full">
+              {collection.items.map(({ link, icon: Icon, name }, index) => (
+                <SidebarTab
+                  key={index}
+                  href={link}
+                  active={pathname.startsWith(link)}
+                  leftIcon={({ className }) => (
+                    <Icon className={className} size={16} />
+                  )}
+                >
+                  {name}
+                </SidebarTab>
+              ))}
+            </div>
+          </SidebarSection>
+        )),
 
+        // Footer
         <div className="flex flex-col px-spacing-interline gap-spacing-interline">
           {combinedSettings.webVersion && (
             <Text
@@ -375,7 +373,7 @@ export default function AdminSidebar({
           )}
           <Settings removeAdminPanelLink />
         </div>
-      </div>
+      )}
     </SidebarWrapper>
   );
 }

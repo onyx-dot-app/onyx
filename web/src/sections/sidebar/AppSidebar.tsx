@@ -57,11 +57,11 @@ import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
   LOCAL_STORAGE_KEYS,
-} from "./constants";
+} from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 import { ChatSession } from "@/app/chat/interfaces";
+import { sidebarBody, pxPadding } from "@/sections/sidebar/utils";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -78,6 +78,7 @@ function buildVisibleAgents(
     : [...pinnedAgents, currentAgent];
   return [visibleAgents, currentAgentIsPinned];
 }
+
 interface RecentsSectionProps {
   isHistoryEmpty: boolean;
   chatSessions: ChatSession[];
@@ -305,6 +306,27 @@ function AppSidebarInner() {
     [chatSessions]
   );
 
+  const newSessionButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/new-session">
+        <SidebarTab
+          leftIcon={SvgEditBig}
+          folded={folded}
+          onClick={() => route({})}
+          active={Array.from(searchParams).length === 0}
+        >
+          New Session
+        </SidebarTab>
+      </div>
+    ),
+    [folded, searchParams]
+  );
+
+  const settingsButton = useMemo(
+    () => pxPadding(<Settings folded={folded} />),
+    [folded]
+  );
+
   if (!combinedSettings) {
     return null;
   }
@@ -349,52 +371,43 @@ function AppSidebarInner() {
       )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        <div className="flex flex-col px-spacing-interline gap-spacing-interline">
-          <div data-testid="AppSidebar/new-session">
-            <SidebarTab
-              leftIcon={SvgEditBig}
-              folded={folded}
-              onClick={() => route({})}
-              active={Array.from(searchParams).length === 0}
-            >
-              New Session
-            </SidebarTab>
+        {folded ? (
+          <div className="flex flex-col h-full justify-between">
+            {pxPadding(
+              <>
+                {newSessionButton}
+                <SidebarTab
+                  leftIcon={SvgOnyxOctagon}
+                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                  active={isOpen(ModalIds.AgentsModal)}
+                  folded
+                >
+                  Agents
+                </SidebarTab>
+                <SidebarTab
+                  leftIcon={SvgFolderPlus}
+                  onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+                  active={isOpen(ModalIds.CreateProjectModal)}
+                  folded
+                >
+                  New Project
+                </SidebarTab>
+              </>
+            )}
+            {settingsButton}
           </div>
-
-          {folded && (
-            <>
-              <SidebarTab
-                leftIcon={SvgOnyxOctagon}
-                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                active={isOpen(ModalIds.AgentsModal)}
-                folded
-              >
-                Agents
-              </SidebarTab>
-              <SidebarTab
-                leftIcon={SvgFolderPlus}
-                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-                active={isOpen(ModalIds.CreateProjectModal)}
-                folded
-              >
-                New Project
-              </SidebarTab>
-            </>
-          )}
-        </div>
-
-        {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
-        <div className="flex flex-col min-h-0 gap-spacing-interline">
-          <VerticalShadowScroller className="gap-padding-content px-spacing-interline ">
-            {!folded && (
+        ) : (
+          <>
+            {pxPadding(newSessionButton)}
+            {sidebarBody(
               <>
                 {/* Agents */}
-                <SidebarSection title="Agents">
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleAgentDragEnd}
-                  >
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleAgentDragEnd}
+                >
+                  <SidebarSection title="Agents">
                     <SortableContext
                       items={visibleAgentIds}
                       strategy={verticalListSortingStrategy}
@@ -406,17 +419,17 @@ function AppSidebarInner() {
                         />
                       ))}
                     </SortableContext>
-                  </DndContext>
-                  <div data-testid="AppSidebar/more-agents">
-                    <SidebarTab
-                      leftIcon={SvgMoreHorizontal}
-                      onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                      lowlight
-                    >
-                      More Agents
-                    </SidebarTab>
-                  </div>
-                </SidebarSection>
+                    <div data-testid="AppSidebar/more-agents">
+                      <SidebarTab
+                        leftIcon={SvgMoreHorizontal}
+                        onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                        lowlight
+                      >
+                        More Agents
+                      </SidebarTab>
+                    </div>
+                  </SidebarSection>
+                </DndContext>
 
                 {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
                 <DndContext
@@ -462,14 +475,11 @@ function AppSidebarInner() {
                     chatSessions={chatSessions}
                   />
                 </DndContext>
-              </>
+              </>,
+              settingsButton
             )}
-          </VerticalShadowScroller>
-
-          <div className="px-spacing-interline">
-            <Settings folded={folded} />
-          </div>
-        </div>
+          </>
+        )}
       </SidebarWrapper>
     </>
   );
