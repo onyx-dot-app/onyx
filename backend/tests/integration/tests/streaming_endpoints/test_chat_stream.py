@@ -1,3 +1,4 @@
+from onyx.db.chat import ResearchAnswerPurpose
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -19,15 +20,13 @@ def test_deep_research_runs_tool_for_simple_prompt(
         use_agentic_search=True,
     )
 
-    # Success if either:
-    # 1) A tool is invoked (tool packet appears), or
-    # 2) A clarification question is asked (message_start without final_documents)
     tool_used = any(result.tool_name for result in response.used_tools)
-    asked_clarification = (
-        response.top_documents is None and len(response.full_message) > 0
-    )
 
-    assert tool_used or asked_clarification
+    assert (
+        tool_used
+        or response.research_answer_purpose
+        == ResearchAnswerPurpose.CLARIFICATION_REQUEST
+    )
 
 
 def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:

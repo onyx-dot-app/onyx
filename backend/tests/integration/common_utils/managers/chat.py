@@ -6,8 +6,11 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
+from onyx.db.chat import get_chat_messages_by_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -54,7 +57,7 @@ class ChatSessionManager:
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
-        file_descriptors: list[FileDescriptor] = [],
+        file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -99,7 +102,24 @@ class ChatSessionManager:
             cookies=cookies,
         )
 
-        return ChatSessionManager.analyze_response(response)
+        streamed_response = ChatSessionManager.analyze_response(response)
+
+        with get_session_with_current_tenant() as db_session:
+            messages = get_chat_messages_by_session(
+                chat_session_id=chat_session_id,
+                user_id=(
+                    UUID(user_performing_action.id) if user_performing_action else None
+                ),
+                db_session=db_session,
+            )
+            for message_obj in messages:
+                if message_obj.message_type == MessageType.ASSISTANT:
+                    streamed_response.research_answer_purpose = (
+                        message_obj.research_answer_purpose
+                    )
+                    break
+
+        return streamed_response
 
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
@@ -130,8 +150,6 @@ class ChatSessionManager:
                         SavedSearchDoc(**doc) for doc in final_docs
                     ]
                 else:
-                    # NOTE: This is the case when a clarification question is asked.
-                    # This is fairly brittle and we probably should make it better in the future.
                     analyzed.top_documents = None
                 analyzed.full_message = data_obj.get("content", "")
                 continue
@@ -144,14 +162,14 @@ class ChatSessionManager:
                 continue
 
             if packet_type == "internal_search_tool_start":
-                if data_obj.get("is_internet_search", False):
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.INTERNET_SEARCH,
-                    )
-                else:
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.INTERNAL_SEARCH,
-                    )
+                tool_name = (
+                    ToolName.INTERNET_SEARCH
+                    if data_obj.get("is_internet_search", False)
+                    else ToolName.INTERNAL_SEARCH
+                )
+                ind_to_tool_use[ind] = ToolResult(
+                    tool_name=tool_name,
+                )
                 continue
 
             if packet_type == "image_generation_tool_start":
@@ -208,6 +226,8 @@ class ChatSessionManager:
                 chat_session_id=chat_session.id,
                 parent_message_id=msg.get("parent_message"),
                 message=msg["message"],
+                research_answer_purpose=msg.get("research_answer_purpose"),
+                message_type=msg.get("message_type"),
             )
             for msg in response.json()["messages"]
         ]
