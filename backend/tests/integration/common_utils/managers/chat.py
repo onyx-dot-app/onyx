@@ -124,10 +124,16 @@ class ChatSessionManager:
                 continue
 
             if packet_type == "message_start":
-                analyzed.top_documents = [
-                    SavedSearchDoc(**doc) for doc in data_obj["final_documents"]
-                ]
-                analyzed.full_message = data_obj["content"]
+                final_docs = data_obj.get("final_documents")
+                if isinstance(final_docs, list):
+                    analyzed.top_documents = [
+                        SavedSearchDoc(**doc) for doc in final_docs
+                    ]
+                else:
+                    # NOTE: This is the case when a clarification question is asked.
+                    # This is fairly brittle and we probably should make it better in the future.
+                    analyzed.top_documents = None
+                analyzed.full_message = data_obj.get("content", "")
                 continue
 
             if packet_type == "message_delta":

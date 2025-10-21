@@ -562,7 +562,7 @@ def clarifier(
                 # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
                 llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
-            if llm_decision.decision == "LLM":
+            if llm_decision.decision == "LLM" and research_type != ResearchType.DEEP:
 
                 write_custom_event(
                     current_step_nr,
@@ -709,7 +709,10 @@ def clarifier(
                 )
 
             full_response = stream_and_process()
-            if len(full_response.ai_message_chunk.tool_calls) == 0:
+            if (
+                len(full_response.ai_message_chunk.tool_calls) == 0
+                and research_type != ResearchType.DEEP
+            ):
 
                 if isinstance(full_response.full_answer, str):
                     full_answer = (
