@@ -1,10 +1,12 @@
+from collections.abc import Sequence
+
 from langchain.schema.messages import BaseMessage
 
 
 # TODO: Currently, we only support native API input for images. For other
 # files, we process the content and share it as text in the message. In
 # the future, we might support native file uploads for other types of files.
-def base_messages_to_agent_sdk_msgs(msgs: list[BaseMessage]) -> list[dict]:
+def base_messages_to_agent_sdk_msgs(msgs: Sequence[BaseMessage]) -> list[dict]:
     return [_base_message_to_agent_sdk_msg(msg) for msg in msgs]
 
 
