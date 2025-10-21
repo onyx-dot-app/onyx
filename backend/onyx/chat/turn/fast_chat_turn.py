@@ -325,7 +325,7 @@ def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj |
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs
             )
-        elif ev.data.type == "response.output_text.delta":
+        elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             obj = MessageDelta(type="message_delta", content=ev.data.delta)
         elif ev.data.type == "response.content_part.done":
             obj = SectionEnd(type="section_end")
