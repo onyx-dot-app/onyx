@@ -19,6 +19,7 @@ export default function Logo({ folded, className }: LogoProps) {
       src="/api/enterprise-settings/logo"
       alt="Logo"
       style={{ objectFit: "contain", height: FOLDED_SIZE, width: FOLDED_SIZE }}
+      className={cn("flex-shrink-0", className)}
     />
   ) : (
     <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
