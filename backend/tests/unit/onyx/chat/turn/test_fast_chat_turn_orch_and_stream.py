@@ -1022,7 +1022,7 @@ class FakeCitationModelWithContext(StreamableFakeModel):
             # Use the provided message if available, otherwise use citation text
             if message is not None:
                 msg = message
-                citation_text = msg.content[0].text if msg.content else ""
+                citation_text = "hi"
             else:
                 # Create message with citation text
                 citation_text = "Based on the search results, here's the answer with citations [[1]](https://example.com)."

@@ -118,9 +118,8 @@ def get_llms_for_persona(
 
 def get_llm_model_and_settings_for_persona(
     persona: Persona,
-    llm_override: LLMOverride,
+    llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> tuple[Model, ModelSettings]:
     """Get LitellmModel and settings for a persona.
 
@@ -133,6 +132,7 @@ def get_llm_model_and_settings_for_persona(
     temperature_override = llm_override.temperature if llm_override else None
 
     provider_name = provider_name_override or persona.llm_model_provider_override
+    model_name = None
     if not provider_name:
         with get_session_with_current_tenant() as db_session:
             llm_provider = fetch_default_provider(db_session)
@@ -148,6 +148,8 @@ def get_llm_model_and_settings_for_persona(
     model = model_version_override or persona.llm_model_version_override or model_name
     if not model:
         raise ValueError("No model name found")
+    if not llm_provider:
+        raise ValueError("No LLM provider found")
 
     return get_llm_model_and_settings(
         provider=llm_provider.provider,

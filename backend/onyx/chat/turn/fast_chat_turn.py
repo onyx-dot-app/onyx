@@ -1,11 +1,11 @@
 from typing import cast
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from agents import Agent
 from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
 from agents import ToolCallItem
-from agents.items import ToolCallItemTypes
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
@@ -35,6 +35,9 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 
+if TYPE_CHECKING:
+    from openai.types.responses import ResponseFunctionToolCall
+
 
 def _remove_last_task_prompt_and_insert_new_one(
     chat_turn_user_message: str,
@@ -42,7 +45,6 @@ def _remove_last_task_prompt_and_insert_new_one(
     prompt_config: PromptConfig,
     ctx: ChatTurnContext,
 ) -> list[dict]:
-    # Remove previous task prompt
     new_task_prompt = build_task_prompt_reminders_v2(
         chat_turn_user_message,
         prompt_config,
@@ -65,7 +67,7 @@ def _run_agent_loop(
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
 ) -> None:
-    current_messages = messages
+    current_messages: list[dict] = messages
     last_call_is_final = False
     agent = Agent(
         name="Assistant",
@@ -83,7 +85,7 @@ def _run_agent_loop(
         streamed, tool_call_events = _process_stream(
             agent_stream, chat_session_id, dependencies, ctx
         )
-        current_messages = streamed.to_input_list()
+        current_messages = cast(list[dict], streamed.to_input_list())
         current_messages = _remove_last_task_prompt_and_insert_new_one(
             messages[-1]["content"], current_messages, prompt_config, ctx
         )
@@ -201,8 +203,8 @@ def _process_stream(
     dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
     emit_message_to_user: bool = True,
-) -> tuple[RunResultStreaming, list[ToolCallItemTypes]]:
-    tool_call_events: list[ToolCallItemTypes] = []
+) -> tuple[RunResultStreaming, list[ResponseFunctionToolCall]]:
+    tool_call_events: list[ResponseFunctionToolCall] = []
     for ev in agent_stream:
         connected = is_connected(
             chat_session_id,
@@ -217,7 +219,7 @@ def _process_stream(
             if obj:
                 dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
         if isinstance(getattr(ev, "item", None), ToolCallItem):
-            tool_call_events.append(ev.item.raw_item)
+            tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
         raise ValueError("agent_stream.streamed is None")
     return agent_stream.streamed, tool_call_events
