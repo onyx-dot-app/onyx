@@ -15,8 +15,6 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
-
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # Install system dependencies
 # cmake needed for psycopg (postgres)
 # libpq-dev needed for psycopg (postgres)

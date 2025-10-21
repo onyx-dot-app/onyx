@@ -12,8 +12,6 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface
 
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
-
 # Create non-root user for security best practices
 RUN mkdir -p /app && \
     groupadd -g 1001 onyx && \
