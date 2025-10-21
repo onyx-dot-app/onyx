@@ -391,8 +391,10 @@ def get_model_map() -> dict:
     starting_map = copy.deepcopy(original_map)
     for key in original_map:
         if DIVIDER in key:
-            truncated_key = DIVIDER.join(key.split(DIVIDER)[1:])
-            starting_map[truncated_key] = starting_map[key]
+            truncated_key = key.split(DIVIDER)[-1]
+            # make sure not to overwrite an existing key
+            if truncated_key not in starting_map:
+                starting_map[truncated_key] = starting_map[key]
 
     # NOTE: we could add additional models here in the future,
     # but for now there is no point. Ollama allows the user to
