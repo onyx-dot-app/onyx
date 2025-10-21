@@ -79,7 +79,7 @@ import {
   TrashIcon,
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { debounce } from "lodash";
+import { debounce, values } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
@@ -95,18 +95,8 @@ import {
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import FilesList from "@/app/chat/components/files/FilesList";
-import {
-  MultipleFilesIcon,
-  OpenFolderIcon,
-} from "@/components/icons/CustomIcons";
+import CoreModal from "@/refresh-components/modals/CoreModal";
+import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
@@ -127,8 +117,12 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePicker from "@/app/chat/components/files/FilePicker";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import SvgPlusCircle from "@/icons/plus-circle";
+import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -345,7 +339,7 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
-  const { recentFiles, uploadFiles: uploadProjectFiles } = useProjectsContext();
+  const { allRecentFiles, beginUpload } = useProjectsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
@@ -545,6 +539,8 @@ export function AssistantEditor({
       }
     }
   };
+
+  // Removed invalid helper; replacement happens inline in the upload handler using the beginUpload onSuccess callback
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -1108,22 +1104,24 @@ export function AssistantEditor({
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
-                                <div className="flex gap-3 mb-2">
+                                <div className="flex gap-spacing-inline">
                                   {values.user_file_ids
-                                    .slice(0, 3)
+                                    .slice(0, 4)
                                     .map((userFileId: string) => {
-                                      const rf = recentFiles.find(
+                                      const rf = allRecentFiles.find(
                                         (f) => f.id === userFileId
                                       );
+
                                       const fileData = rf || {
                                         id: userFileId,
                                         name: `File ${userFileId.slice(0, 8)}`,
                                         status: "completed" as const,
                                       };
                                       return (
-                                        <div key={userFileId} className="w-52">
+                                        <div key={userFileId} className="w-40">
                                           <FileCard
                                             file={fileData as ProjectFile}
+                                            hideProcessingState
                                             removeFile={() => {
                                               setFieldValue(
                                                 "user_file_ids",
@@ -1137,31 +1135,32 @@ export function AssistantEditor({
                                         </div>
                                       );
                                     })}
-                                  {values.user_file_ids.length > 3 && (
+                                  {values.user_file_ids.length > 4 && (
                                     <button
                                       type="button"
-                                      className="rounded-xl px-3 py-1 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                                      className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
                                       onClick={() => setShowAllUserFiles(true)}
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
-                                          <span className="text-onyx-medium text-sm truncate flex-1">
+                                          <Text text04 secondaryAction>
                                             View All
-                                          </span>
-                                          <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                                          </Text>
+                                          <SvgFiles className="h-5 w-5 stroke-text-02" />
                                         </div>
-                                        <span className="text-onyx-muted text-sm">
+                                        <Text text03 secondaryBody>
                                           {values.user_file_ids.length} files
-                                        </span>
+                                        </Text>
                                       </div>
                                     </button>
                                   )}
                                 </div>
                               )}
                               <FilePicker
-                                showTriggerLabel
-                                triggerLabel="Add User  Files"
-                                recentFiles={recentFiles}
+                                trigger={
+                                  <CreateButton>Add User Files</CreateButton>
+                                }
+                                recentFiles={allRecentFiles}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
                                     document_id: `project_file__${file.file_id}`,
@@ -1176,30 +1175,89 @@ export function AssistantEditor({
                                     ]);
                                   }
                                 }}
+                                onUnpickRecent={(file: ProjectFile) => {
+                                  if (values.user_file_ids.includes(file.id)) {
+                                    setFieldValue(
+                                      "user_file_ids",
+                                      values.user_file_ids.filter(
+                                        (id: string) => id !== file.id
+                                      )
+                                    );
+                                  }
+                                }}
                                 handleUploadChange={async (
                                   e: React.ChangeEvent<HTMLInputElement>
                                 ) => {
                                   const files = e.target.files;
                                   if (!files || files.length === 0) return;
-
                                   try {
-                                    const uploaded = await uploadProjectFiles(
-                                      Array.from(files)
+                                    // Use a local tracker to avoid stale closures inside onSuccess
+                                    let selectedIds = [
+                                      ...(values.user_file_ids || []),
+                                    ];
+                                    const optimistic = await beginUpload(
+                                      Array.from(files),
+                                      null,
+                                      setPopup,
+                                      (result) => {
+                                        const uploadedFiles =
+                                          result.user_files || [];
+                                        if (uploadedFiles.length === 0) return;
+                                        const tempToFinal = new Map(
+                                          uploadedFiles
+                                            .filter((f) => f.temp_id)
+                                            .map((f) => [
+                                              f.temp_id as string,
+                                              f.id,
+                                            ])
+                                        );
+                                        const replaced = (
+                                          selectedIds || []
+                                        ).map(
+                                          (id: string) =>
+                                            tempToFinal.get(id) ?? id
+                                        );
+                                        const deduped = Array.from(
+                                          new Set(replaced)
+                                        );
+                                        setFieldValue("user_file_ids", deduped);
+                                        selectedIds = deduped;
+                                      },
+                                      (failedTempIds) => {
+                                        if (
+                                          !failedTempIds ||
+                                          failedTempIds.length === 0
+                                        )
+                                          return;
+                                        const filtered = (
+                                          selectedIds || []
+                                        ).filter(
+                                          (id: string) =>
+                                            !failedTempIds.includes(id)
+                                        );
+                                        setFieldValue(
+                                          "user_file_ids",
+                                          filtered
+                                        );
+                                        selectedIds = filtered;
+                                      }
                                     );
-                                    const newIds = uploaded.user_files.map(
+                                    const optimisticIds = optimistic.map(
                                       (f) => f.id
                                     );
                                     const merged = Array.from(
                                       new Set([
-                                        ...(values.user_file_ids || []),
-                                        ...newIds,
+                                        ...(selectedIds || []),
+                                        ...optimisticIds,
                                       ])
                                     );
                                     setFieldValue("user_file_ids", merged);
+                                    selectedIds = merged;
                                   } finally {
                                     e.target.value = "";
                                   }
                                 }}
+                                selectedFileIds={values.user_file_ids}
                               />
                             </div>
                           )}
@@ -1830,7 +1888,14 @@ export function AssistantEditor({
                   </div>
                   <div className="flex gap-x-2 items-center">
                     <Button
-                      disabled={isSubmitting || isRequestSuccessful}
+                      disabled={
+                        isSubmitting ||
+                        isRequestSuccessful ||
+                        (values.user_file_ids || []).some(
+                          (id: string) =>
+                            id.startsWith("temp_") || id.includes("temp_")
+                        )
+                      }
                       type="submit"
                     >
                       {isUpdate ? "Update" : "Create"}
@@ -1841,22 +1906,20 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
-              <Dialog
-                open={showAllUserFiles}
-                onOpenChange={setShowAllUserFiles}
-              >
-                <DialogContent className="w-full max-w-lg">
-                  <DialogHeader>
-                    <OpenFolderIcon size={32} />
-                    <DialogTitle>User Files</DialogTitle>
-                    <DialogDescription>
-                      All files selected for this agent
-                    </DialogDescription>
-                  </DialogHeader>
-                  <FilesList
+              {showAllUserFiles && (
+                <CoreModal
+                  className="w-full max-w-lg"
+                  onClickOutside={() => setShowAllUserFiles(false)}
+                >
+                  <UserFilesModalContent
+                    title="User Files"
+                    description="All files selected for this assistant"
+                    icon={SvgFiles}
                     recentFiles={values.user_file_ids.map(
                       (userFileId: string) => {
-                        const rf = recentFiles.find((f) => f.id === userFileId);
+                        const rf = allRecentFiles.find(
+                          (f) => f.id === userFileId
+                        );
                         return (
                           rf || {
                             id: userFileId,
@@ -1875,9 +1938,10 @@ export function AssistantEditor({
                         )
                       );
                     }}
+                    onClose={() => setShowAllUserFiles(false)}
                   />
-                </DialogContent>
-              </Dialog>
+                </CoreModal>
+              )}
             </>
           );
         }}

@@ -7,6 +7,8 @@ export enum ModalIds {
   AgentsModal = "AgentsModal",
   CreateProjectModal = "CreateProjectModal",
   FeedbackModal = "FeedbackModal",
+  AddInstructionModal = "AddInstructionModal",
+  ProjectFilesModal = "ProjectFilesModal",
 }
 
 interface ModalProviderProps {

@@ -967,6 +967,7 @@ def get_recent_files(
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

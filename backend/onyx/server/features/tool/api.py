@@ -6,9 +6,11 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.schemas import UserRole
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -48,11 +50,39 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
+def _get_editable_custom_tool(
+    tool_id: int, db_session: Session, user: User | None
+) -> Tool:
+    """Fetch a custom tool and ensure the caller has permission to edit it."""
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if tool.in_code_tool_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Built-in tools cannot be modified through this endpoint.",
+        )
+
+    # Admins can always make changes; non-admins must own the tool.
+    if not user or user.role == UserRole.ADMIN:
+        return tool
+
+    if tool.user_id is None or tool.user_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only modify actions that you created.",
+        )
+
+    return tool
+
+
 @admin_router.post("/custom")
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -75,8 +105,9 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
+    existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -86,7 +117,7 @@ def update_custom_tool(
         description=tool_data.description,
         openapi_schema=tool_data.definition,
         custom_headers=tool_data.custom_headers,
-        user_id=user.id if user else None,
+        user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
     )
@@ -97,8 +128,9 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> None:
+    _ = _get_editable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
@@ -120,7 +152,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate")
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_curator_or_admin_user),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)

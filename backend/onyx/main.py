@@ -37,7 +37,6 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import BRAINTRUST_ENABLED
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
@@ -56,7 +55,6 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.evals.tracing import setup_braintrust
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -122,6 +120,8 @@ from onyx.server.token_rate_limits.api import (
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
+from onyx.tracing.langfuse_tracing import setup_langfuse_if_creds_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
@@ -258,9 +258,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if DISABLE_GENERATIVE_AI:
         logger.notice("Generative AI Q&A disabled")
 
-    if BRAINTRUST_ENABLED:
-        setup_braintrust()
-        logger.notice("Braintrust tracing initialized")
+    # Initialize tracing if credentials are provided
+    setup_braintrust_if_creds_available()
+    setup_langfuse_if_creds_available()
 
     # fill up Postgres connection pools
     await warm_up_connections()

@@ -269,6 +269,7 @@ class MCPServer(BaseModel):
     name: str
     description: Optional[str] = None
     server_url: str
+    owner: str
     transport: MCPTransport
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer

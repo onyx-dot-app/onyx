@@ -361,6 +361,7 @@ class OnyxCeleryQueues:
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
+    USER_FILE_DELETE = "user_file_delete"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -413,6 +414,8 @@ class OnyxRedisLocks:
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
     USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
+    USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
+    USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     USER_FILE_DOCID_MIGRATION_LOCK = "da_lock:user_file_docid_migration"
 
 
@@ -486,6 +489,8 @@ class OnyxCeleryTask:
     PROCESS_SINGLE_USER_FILE = "process_single_user_file"
     CHECK_FOR_USER_FILE_PROJECT_SYNC = "check_for_user_file_project_sync"
     PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
+    CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
+    DELETE_SINGLE_USER_FILE = "delete_single_user_file"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"

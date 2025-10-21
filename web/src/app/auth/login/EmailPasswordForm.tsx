@@ -43,6 +43,8 @@ export default function EmailPasswordForm({
           email: defaultEmail ? defaultEmail.toLowerCase() : "",
           password: "",
         }}
+        validateOnChange={false}
+        validateOnBlur={true}
         validationSchema={Yup.object().shape({
           email: Yup.string()
             .email()

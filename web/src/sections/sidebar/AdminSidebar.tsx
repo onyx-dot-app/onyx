@@ -37,12 +37,13 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
-  OnyxSparkleIcon,
 } from "@/components/icons/icons";
+import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
+import { cn } from "@/lib/utils";
 
 const connectors_items = () => [
   {
@@ -100,6 +101,12 @@ const custom_assistants_items = (
         link: "/admin/actions",
       }
     );
+  } else {
+    items.push({
+      name: "Actions",
+      icon: ToolIconSkeleton,
+      link: "/admin/actions",
+    });
   }
 
   if (enableEnterprise) {
@@ -154,7 +161,7 @@ const collections = (
           items: [
             {
               name: "Default Assistant",
-              icon: OnyxSparkleIcon,
+              icon: OnyxLogo,
               link: "/admin/configuration/default-assistant",
             },
             {
@@ -162,12 +169,16 @@ const collections = (
               icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
             },
-            {
-              error: settings?.settings.needs_reindexing,
-              name: "Search Settings",
-              icon: SearchIcon,
-              link: "/admin/configuration/search",
-            },
+            ...(!enableCloud
+              ? [
+                  {
+                    error: settings?.settings.needs_reindexing,
+                    name: "Search Settings",
+                    icon: SearchIcon,
+                    link: "/admin/configuration/search",
+                  },
+                ]
+              : []),
             {
               name: "Document Processing",
               icon: DocumentIcon2,
@@ -351,7 +362,14 @@ export default function AdminSidebar({
         ))}
       </VerticalShadowScroller>
 
-      <div className="flex flex-col px-spacing-interline gap-spacing-interline">
+      <div
+        className={cn(
+          "flex flex-col",
+          "px-spacing-interline",
+          "pt-spacing-interline",
+          "gap-spacing-interline"
+        )}
+      >
         {combinedSettings.webVersion && (
           <Text text02 secondaryBody className="px-spacing-interline">
             {`Onyx version: ${combinedSettings.webVersion}`}
