@@ -183,7 +183,9 @@ function DefaultAssistantConfig() {
 
         <div className="max-w-4xl">
           <div className="flex gap-x-2 items-center">
-            <div className="block font-medium text-sm">Instructions</div>
+            <Text mainUiBody text04 className="font-medium text-sm">
+              Instructions
+            </Text>
           </div>
           <SubLabel>
             Add instructions to tailor the behavior of the assistant.
@@ -205,9 +207,9 @@ function DefaultAssistantConfig() {
               placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
             />
             <div className="flex justify-between items-center mt-2">
-              <div className="text-sm text-gray-500">
+              <Text mainUiMuted text03 className="text-sm">
                 {systemPrompt.length} characters
-              </div>
+              </Text>
               <Button
                 onClick={handleSaveSystemPrompt}
                 disabled={savingPrompt || systemPrompt === originalPrompt}
@@ -221,7 +223,9 @@ function DefaultAssistantConfig() {
         <Separator />
 
         <div>
-          <p className="block font-medium text-sm mb-2">Actions</p>
+          <Text mainUiBody text04 className="font-medium text-sm mb-2">
+            Actions
+          </Text>
           <div className="space-y-3">
             {(availableTools || [])
               .slice()
