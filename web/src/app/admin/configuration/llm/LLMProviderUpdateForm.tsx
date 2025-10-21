@@ -743,22 +743,24 @@ export function LLMProviderUpdateForm({
                     }
 
                     // If the deleted provider was the default, set the first remaining provider as default
-                    const remainingProvidersResponse = await fetch(
-                      LLM_PROVIDERS_ADMIN_URL
-                    );
-                    if (remainingProvidersResponse.ok) {
-                      const remainingProviders =
-                        await remainingProvidersResponse.json();
+                    if (existingLlmProvider?.is_default_provider) {
+                      const remainingProvidersResponse = await fetch(
+                        LLM_PROVIDERS_ADMIN_URL
+                      );
+                      if (remainingProvidersResponse.ok) {
+                        const remainingProviders =
+                          await remainingProvidersResponse.json();
 
-                      if (remainingProviders.length > 0) {
-                        const setDefaultResponse = await fetch(
-                          `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                          {
-                            method: "POST",
+                        if (remainingProviders.length > 0) {
+                          const setDefaultResponse = await fetch(
+                            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+                            {
+                              method: "POST",
+                            }
+                          );
+                          if (!setDefaultResponse.ok) {
+                            console.error("Failed to set new default provider");
                           }
-                        );
-                        if (!setDefaultResponse.ok) {
-                          console.error("Failed to set new default provider");
                         }
                       }
                     }
