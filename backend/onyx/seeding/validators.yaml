@@ -15,6 +15,7 @@ validators:
           - "URL"
           - "DOMAIN_NAME"
           - "CRYPTO"
+    include_llm: false
   - id: -2
     name: "Валидатор запретных слов"
     description: "Обнаружение и маскирование запретных слов"
@@ -28,3 +29,23 @@ validators:
           - "война"
           - "бомба"
           - "наркотики"
+    include_llm: false
+  - id: -3
+    name: "Валидатор запретных тем"
+    description: "Обнаружение и блокировка ответа, содержащего запретные темы"
+    validator_type: "SENSITIVE_TOPIC"
+    config:
+      - type: "multiselect"
+        name: "sensitive_topics"
+        label: "Список запретных тем"
+        values:
+          - "война"
+          - "бомба"
+          - "наркотики"
+          - "аварии"
+          - "взлом"
+          - "кража"
+          - "убийство"
+          - "строительство"
+          - "уборка"
+    include_llm: true

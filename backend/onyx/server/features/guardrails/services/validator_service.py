@@ -1,11 +1,14 @@
 from onyx.db.enums import ValidatorType
 from onyx.db.models import Persona, Validator
+from onyx.llm.factory import llm_from_provider
 from onyx.server.features.guardrails.validators import (
     mask_pii,
     unmask_pii,
     mask_banned_words,
+    detect_sensitive_topic,
 )
 from onyx.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -113,10 +116,35 @@ class ValidatorManager:
                 )
                 return masked_message
 
+            # Валидация запретных и чувствительных тем
+            elif validator.validator_type == ValidatorType.SENSITIVE_TOPIC:
+                llm_provider = validator.llm_provider
+
+                if not llm_provider:
+                    logger.warning(
+                        "К валидатору %s не подключен LLM-провайдер",
+                        ValidatorType.SENSITIVE_TOPIC
+                    )
+                    return message
+
+                llm = llm_from_provider(
+                    model_name=llm_provider.default_model_name,
+                    llm_provider=llm_provider,
+                )
+
+                validated_message = detect_sensitive_topic(
+                    llm=llm, text=message, config=config
+                )
+
+                logger.info(
+                    "\nSENSITIVE_TOPIC | %s-валидация | Валидация запретных тем | Результат:\n%s",
+                    direction, validated_message,
+                )
+                return validated_message
+
             # Валидация JSON-структуры
             # Проверка ответов на токсичность
             # Проверка длины ответа
-            # Фильтрация запрещенных слов
             # Проверка на соответствие определенному стилю
             # Проверка на наличие ключевых сущностей в ответе
             # Проверка галлюцинаций в выводе модели
