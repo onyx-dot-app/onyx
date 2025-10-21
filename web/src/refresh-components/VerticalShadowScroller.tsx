@@ -45,25 +45,24 @@ export default function VerticalShadowScroller({
   }, [children]);
 
   return (
-    <div className="relative flex-1 flex flex-col overflow-y-scroll pt-[0rem]">
+    <div className="relative flex-1 flex flex-col overflow-y-scroll">
       <div
         ref={containerRef}
         className={cn(
           "flex flex-col flex-1 overflow-y-auto overflow-x-hidden",
           className
         )}
+        style={{
+          WebkitMaskImage: showBottomShadow
+            ? "linear-gradient(to bottom, white calc(100% - 3rem), transparent)"
+            : undefined,
+          maskImage: showBottomShadow
+            ? "linear-gradient(to bottom, white calc(100% - 3rem), transparent)"
+            : undefined,
+        }}
       >
         {children}
       </div>
-
-      {showBottomShadow && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[2rem] pointer-events-none z-[100] dbg-rd"
-          style={{
-            background: "linear-gradient(to top, var(--mask-01), transparent)",
-          }}
-        />
-      )}
     </div>
   );
 }
