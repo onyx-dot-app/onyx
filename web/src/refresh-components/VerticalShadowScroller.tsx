@@ -58,17 +58,10 @@ export default function VerticalShadowScroller({
 
       {showBottomShadow && (
         <div
-          className={cn(
-            "absolute",
-            "bottom-0",
-            "left-0",
-            "right-0",
-            "h-[2rem]",
-            "pointer-events-none",
-            "z-[100]"
-            // TODO: add masking to match mocks
-            // "mask-01"
-          )}
+          className="absolute bottom-0 left-0 right-0 h-[2rem] pointer-events-none z-[100] dbg-rd"
+          style={{
+            background: "linear-gradient(to top, var(--mask-01), transparent)",
+          }}
         />
       )}
     </div>
