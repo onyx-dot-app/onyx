@@ -277,6 +277,9 @@ module.exports = {
         "padding-body-main": "var(--padding-body-main)",
         "padding-section": "var(--padding-section)",
       },
+      backdropBlur: {
+        modal: "var(--backdrop-blur-modal)",
+      },
       calendar: {
         // Light mode
         "bg-selected": "var(--calendar-bg-selected)",
