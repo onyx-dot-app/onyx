@@ -223,7 +223,7 @@ class CitationProcessorGraph:
 
         # '[', '[[', '[1', '[[1', '[1,', '[1, ', '[1,2', '[1, 2,', etc.
         # Also supports '[D1', '[D1, D3' type patterns
-        self.possible_citation_pattern = re.compile(r"\[+(?:\d+(?:,\s*\d+)*(?:,\s*)?)?$")
+        self.possible_citation_pattern = re.compile(r"\[+(?:(?:\d+|D\d+)(?:,\s*(?:\d+|D\d+))*(?:,\s*)?)?$")
 
         # group 1: '[[1]]', [[2]], etc.
         # group 2: '[1]', '[1, 2]', '[1,2,16]', etc.
