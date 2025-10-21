@@ -528,7 +528,7 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
                 response = input("Continue with control plane cleanup? (y/n): ")
                 if response.lower() != "y":
                     print("Cleanup aborted by user")
-                    return
+                    return False
             else:
                 print("[FORCE MODE] Continuing despite schema cleanup failure")
     else:
