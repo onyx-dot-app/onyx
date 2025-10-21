@@ -385,7 +385,26 @@ def test_llm(llm: LLM) -> str | None:
 def get_model_map() -> dict:
     import litellm
 
-    starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+    DIVIDER = "/"
+
+    original_map = cast(dict[str, dict], litellm.model_cost)
+    starting_map = copy.deepcopy(original_map)
+    for key in original_map:
+        if DIVIDER in key:
+            truncated_key = key.split(DIVIDER)[-1]
+            # make sure not to overwrite an original key
+            if truncated_key in original_map:
+                continue
+
+            # if there are multiple possible matches, choose the most "detailed"
+            # one as a heuristic. "detailed" = the description of the model
+            # has the most filled out fields.
+            existing_truncated_value = starting_map.get(truncated_key)
+            potential_truncated_value = original_map[key]
+            if not existing_truncated_value or len(potential_truncated_value) > len(
+                existing_truncated_value
+            ):
+                starting_map[truncated_key] = potential_truncated_value
 
     # NOTE: we could add additional models here in the future,
     # but for now there is no point. Ollama allows the user to
