@@ -31,7 +31,7 @@ export default function ButtonRenaming({
     // Close immediately for instant feedback
     onClose();
 
-    // Fire and forget the rename operation
+    // Proceed with the rename operation after closing
     try {
       await onRename(newName);
     } catch (error) {
