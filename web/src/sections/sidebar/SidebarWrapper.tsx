@@ -31,7 +31,7 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-spacing-interline justify-between gap-padding-content group/SidebarWrapper",
+          "h-screen overflow-hidden flex flex-col bg-background-tint-02 py-spacing-interline justify-between gap-spacing-paragraph group/SidebarWrapper",
           folded ? "w-[4rem]" : "w-[15rem]"
         )}
       >

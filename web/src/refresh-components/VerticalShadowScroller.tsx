@@ -54,10 +54,10 @@ export default function VerticalShadowScroller({
         )}
         style={{
           WebkitMaskImage: showBottomShadow
-            ? "linear-gradient(to bottom, white calc(100% - 3rem), transparent)"
+            ? "linear-gradient(to bottom, white calc(100% - 2.5rem), transparent)"
             : undefined,
           maskImage: showBottomShadow
-            ? "linear-gradient(to bottom, white calc(100% - 3rem), transparent)"
+            ? "linear-gradient(to bottom, white calc(100% - 2.5rem), transparent)"
             : undefined,
         }}
       >
