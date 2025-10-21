@@ -10,6 +10,7 @@ def test_partial_match_in_model_map() -> None:
     """
     We should handle adding/not adding the provider prefix to the model name.
     """
+    get_model_map.cache_clear()
 
     model_map = get_model_map()
 
@@ -52,6 +53,8 @@ def test_partial_match_in_model_map() -> None:
         assert key in result2
         assert result2[key] == value
 
+    get_model_map.cache_clear()
+
 
 def test_no_overwrite_in_model_map() -> None:
     """Make sure we use the original entry if it exists."""
@@ -72,3 +75,5 @@ def test_no_overwrite_in_model_map() -> None:
         result = find_model_obj(model_map, "openai", "gpt-4o")
         assert result is not None
         assert result["is_correct"] is True
+
+    get_model_map.cache_clear()
