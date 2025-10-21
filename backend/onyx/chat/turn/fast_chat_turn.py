@@ -36,7 +36,7 @@ from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 
 if TYPE_CHECKING:
-    from openai.types.responses import ResponseFunctionToolCall
+    from litellm import ResponseFunctionToolCall
 
 
 def _remove_last_task_prompt_and_insert_new_one(
