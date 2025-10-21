@@ -320,6 +320,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         else:
             # This should never happen!
+            # This should not be happening!
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
     @staticmethod
