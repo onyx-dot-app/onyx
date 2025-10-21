@@ -56,12 +56,23 @@ def get_oauth_configs(db_session: Session) -> list[OAuthConfig]:
 
 
 def update_oauth_config(
-    oauth_config_id: int, db_session: Session, **updates: Any
+    oauth_config_id: int,
+    db_session: Session,
+    name: str | None = None,
+    authorization_url: str | None = None,
+    token_url: str | None = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    scopes: list[str] | None = None,
+    additional_params: dict[str, Any] | None = None,
+    clear_client_id: bool = False,
+    clear_client_secret: bool = False,
 ) -> OAuthConfig:
     """
     Update OAuth configuration.
 
-    NOTE: If client_id or client_secret not provided in updates, keep existing values.
+    NOTE: If client_id or client_secret are None, existing values are preserved.
+    To clear these values, set clear_client_id or clear_client_secret to True.
     This allows partial updates without re-entering secrets.
     """
     oauth_config = db_session.scalar(
@@ -71,12 +82,24 @@ def update_oauth_config(
         raise ValueError(f"OAuth config with id {oauth_config_id} does not exist")
 
     # Update only provided fields
-    for key, value in updates.items():
-        if hasattr(oauth_config, key):
-            # Skip None values for sensitive fields to preserve existing values
-            if key in ["client_id", "client_secret"] and value is None:
-                continue
-            setattr(oauth_config, key, value)
+    if name is not None:
+        oauth_config.name = name
+    if authorization_url is not None:
+        oauth_config.authorization_url = authorization_url
+    if token_url is not None:
+        oauth_config.token_url = token_url
+    if clear_client_id:
+        oauth_config.client_id = ""
+    elif client_id is not None:
+        oauth_config.client_id = client_id
+    if clear_client_secret:
+        oauth_config.client_secret = ""
+    elif client_secret is not None:
+        oauth_config.client_secret = client_secret
+    if scopes is not None:
+        oauth_config.scopes = scopes
+    if additional_params is not None:
+        oauth_config.additional_params = additional_params
 
     db_session.commit()
     return oauth_config
