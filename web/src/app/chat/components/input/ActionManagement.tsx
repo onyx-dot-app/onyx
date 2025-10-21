@@ -35,7 +35,7 @@ import SvgKey from "@/icons/key";
 import SvgLock from "@/icons/lock";
 import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
-import { FiKey, FiLoader } from "react-icons/fi";
+import { FiCheck, FiKey, FiLoader } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -48,6 +48,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
 import SvgSettings from "@/icons/settings";
+import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -91,6 +92,11 @@ interface ActionItemProps {
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
   tooltipSide?: "top" | "right" | "bottom" | "left";
+  oauthStatus?: {
+    has_token: boolean;
+    is_expired: boolean;
+  };
+  onOAuthAuthenticate?: () => void;
 }
 
 function ActionItem({
@@ -104,6 +110,8 @@ function ActionItem({
   onSourceManagementOpen,
   hasNoConnectors = false,
   tooltipSide = "left",
+  oauthStatus,
+  onOAuthAuthenticate,
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
@@ -162,6 +170,36 @@ function ActionItem({
               </Text>
             </div>
             <div className="flex items-center gap-2">
+              {/* OAuth Authentication Indicator */}
+              {tool?.oauth_config_id && oauthStatus && (
+                <div
+                  className="flex items-center gap-2 transition-opacity duration-200 opacity-0 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!oauthStatus.has_token || oauthStatus.is_expired) {
+                      onOAuthAuthenticate?.();
+                    }
+                  }}
+                >
+                  {!oauthStatus.has_token || oauthStatus.is_expired ? (
+                    <FiKey
+                      size={16}
+                      className="transition-colors cursor-pointer text-yellow-500 hover:text-yellow-600"
+                      title={
+                        oauthStatus.is_expired
+                          ? "OAuth token expired - click to re-authenticate"
+                          : "Click to authenticate"
+                      }
+                    />
+                  ) : (
+                    <FiCheck
+                      size={16}
+                      className="text-green-500"
+                      title="Authenticated"
+                    />
+                  )}
+                </div>
+              )}
               {!isSearchToolWithNoConnectors && (
                 <div
                   className={cn(
@@ -384,6 +422,11 @@ export function ActionToggle({
   const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+
+  // Use the OAuth hook
+  const { getOAuthStatusForTool, authenticateTool } = useToolOAuthStatus(
+    selectedAssistant.id
+  );
 
   const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
     useSourcePreferences({
@@ -951,6 +994,8 @@ export function ActionToggle({
                       setSecondaryView({ type: "sources" })
                     }
                     hasNoConnectors={hasNoConnectors}
+                    oauthStatus={getOAuthStatusForTool(tool)}
+                    onOAuthAuthenticate={() => authenticateTool(tool)}
                   />
                 ))}
 
