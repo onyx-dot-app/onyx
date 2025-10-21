@@ -42,7 +42,7 @@ import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { sidebarBody } from "@/sections/sidebar/utils";
+import { SidebarBody } from "@/sections/sidebar/utils";
 
 const connectors_items = () => [
   {
@@ -328,20 +328,33 @@ export default function AdminSidebar({
 
   return (
     <SidebarWrapper>
-      <div className="px-spacing-interline">
-        <SidebarTab
-          leftIcon={({ className }) => (
-            <CgArrowsExpandUpLeft className={className} size={16} />
-          )}
-          href="/chat"
-        >
-          Exit Admin
-        </SidebarTab>
-      </div>
-
-      {sidebarBody(
-        // Main Scrollable Body
-        items.map((collection, index) => (
+      <SidebarBody
+        actionButton={
+          <SidebarTab
+            leftIcon={({ className }) => (
+              <CgArrowsExpandUpLeft className={className} size={16} />
+            )}
+            href="/chat"
+          >
+            Exit Admin
+          </SidebarTab>
+        }
+        footer={
+          <div className="flex flex-col px-spacing-interline gap-spacing-interline">
+            {combinedSettings.webVersion && (
+              <Text
+                text02
+                secondaryBody
+                className="px-spacing-interline pt-spacing-inline"
+              >
+                {`Onyx version: ${combinedSettings.webVersion}`}
+              </Text>
+            )}
+            <Settings removeAdminPanelLink />
+          </div>
+        }
+      >
+        {items.map((collection, index) => (
           <SidebarSection key={index} title={collection.name}>
             <div className="flex flex-col w-full">
               {collection.items.map(({ link, icon: Icon, name }, index) => (
@@ -358,22 +371,8 @@ export default function AdminSidebar({
               ))}
             </div>
           </SidebarSection>
-        )),
-
-        // Footer
-        <div className="flex flex-col px-spacing-interline gap-spacing-interline">
-          {combinedSettings.webVersion && (
-            <Text
-              text02
-              secondaryBody
-              className="px-spacing-interline pt-spacing-inline"
-            >
-              {`Onyx version: ${combinedSettings.webVersion}`}
-            </Text>
-          )}
-          <Settings removeAdminPanelLink />
-        </div>
-      )}
+        ))}
+      </SidebarBody>
     </SidebarWrapper>
   );
 }

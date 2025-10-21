@@ -50,20 +50,26 @@ export function getAgentIcon(
   return GeneratedIcon;
 }
 
-export function pxPadding(children?: React.ReactNode) {
-  return <div className="px-spacing-interline">{children}</div>;
+export interface SidebarBodyProps {
+  actionButton: React.ReactNode;
+  children: React.ReactNode;
+  footer: React.ReactNode;
 }
 
-export function sidebarBody(
-  scrollable: React.ReactNode,
-  footer: React.ReactNode
-) {
+export function SidebarBody({
+  actionButton,
+  children,
+  footer,
+}: SidebarBodyProps) {
   return (
-    <div className="flex flex-col min-h-0 gap-spacing-interline">
-      <VerticalShadowScroller className="px-spacing-interline gap-spacing-paragraph">
-        {scrollable}
-      </VerticalShadowScroller>
-      {footer}
-    </div>
+    <>
+      <div className="px-spacing-interline">{actionButton}</div>
+      <div className="flex flex-col min-h-0 h-full gap-spacing-interline">
+        <VerticalShadowScroller className="px-spacing-interline gap-spacing-paragraph">
+          {children}
+        </VerticalShadowScroller>
+        {footer}
+      </div>
+    </>
   );
 }

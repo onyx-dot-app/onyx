@@ -61,7 +61,7 @@ import {
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/chat/interfaces";
-import { sidebarBody, pxPadding } from "@/sections/sidebar/utils";
+import { SidebarBody } from "@/sections/sidebar/utils";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -323,7 +323,11 @@ function AppSidebarInner() {
   );
 
   const settingsButton = useMemo(
-    () => pxPadding(<Settings folded={folded} />),
+    () => (
+      <div className="px-spacing-interline">
+        <Settings folded={folded} />
+      </div>
+    ),
     [folded]
   );
 
@@ -373,33 +377,33 @@ function AppSidebarInner() {
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         {folded ? (
           <div className="flex flex-col h-full justify-between">
-            {pxPadding(
-              <>
-                {newSessionButton}
-                <SidebarTab
-                  leftIcon={SvgOnyxOctagon}
-                  onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                  active={isOpen(ModalIds.AgentsModal)}
-                  folded
-                >
-                  Agents
-                </SidebarTab>
-                <SidebarTab
-                  leftIcon={SvgFolderPlus}
-                  onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-                  active={isOpen(ModalIds.CreateProjectModal)}
-                  folded
-                >
-                  New Project
-                </SidebarTab>
-              </>
-            )}
+            <div className="px-spacing-interline">
+              {newSessionButton}
+              <SidebarTab
+                leftIcon={SvgOnyxOctagon}
+                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                active={isOpen(ModalIds.AgentsModal)}
+                folded
+              >
+                Agents
+              </SidebarTab>
+              <SidebarTab
+                leftIcon={SvgFolderPlus}
+                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+                active={isOpen(ModalIds.CreateProjectModal)}
+                folded
+              >
+                New Project
+              </SidebarTab>
+            </div>
             {settingsButton}
           </div>
         ) : (
           <>
-            {pxPadding(newSessionButton)}
-            {sidebarBody(
+            <SidebarBody
+              actionButton={newSessionButton}
+              footer={settingsButton}
+            >
               <>
                 {/* Agents */}
                 <DndContext
@@ -475,9 +479,8 @@ function AppSidebarInner() {
                     chatSessions={chatSessions}
                   />
                 </DndContext>
-              </>,
-              settingsButton
-            )}
+              </>
+            </SidebarBody>
           </>
         )}
       </SidebarWrapper>
