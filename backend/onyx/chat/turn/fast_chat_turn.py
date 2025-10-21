@@ -53,13 +53,7 @@ def _remove_last_task_prompt_and_insert_new_one(
         if current_messages[i].get("role") == "user":
             current_messages.pop(i)
             break
-    current_messages = current_messages + [
-        {
-            "role": "user",
-            "content": new_task_prompt
-            + f"\n Please provide a final answer to the user's question: {chat_turn_user_message}",
-        }
-    ]
+    current_messages = current_messages + [{"role": "user", "content": new_task_prompt}]
     return current_messages
 
 

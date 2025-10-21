@@ -134,28 +134,28 @@ def get_llm_model_and_settings_for_persona(
 
     provider_name = provider_name_override or persona.llm_model_provider_override
     if not provider_name:
-        return get_default_llms(
-            temperature=temperature_override or GEN_AI_TEMPERATURE,
-            additional_headers=additional_headers,
-            long_term_logger=long_term_logger,
-        )
+        with get_session_with_current_tenant() as db_session:
+            llm_provider = fetch_default_provider(db_session)
 
-    with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_llm_provider_view(db_session, provider_name)
+        if not llm_provider:
+            raise ValueError("No default LLM provider found")
 
-    if not llm_provider:
-        raise ValueError("No LLM provider found")
+        model_name = llm_provider.default_model_name
+    else:
+        with get_session_with_current_tenant() as db_session:
+            llm_provider = fetch_llm_provider_view(db_session, provider_name)
 
-    model = model_version_override or persona.llm_model_version_override
+    model = model_version_override or persona.llm_model_version_override or model_name
     if not model:
         raise ValueError("No model name found")
 
     return get_llm_model_and_settings(
-        provider=provider_name,
+        provider=llm_provider.provider,
         model=model,
         deployment_name=llm_provider.deployment_name,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
         custom_config=llm_provider.custom_config,
         temperature=temperature_override,
         additional_headers=additional_headers,
@@ -370,8 +370,10 @@ def get_llm(
 def get_llm_model_and_settings(
     provider: str,
     model: str,
+    deployment_name: str | None = None,
     api_key: str | None = None,
     api_base: str | None = None,
+    api_version: str | None = None,
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
@@ -408,8 +410,10 @@ def get_llm_model_and_settings(
             elif k == VERTEX_LOCATION_KWARG:
                 model_kwargs[k] = v
                 continue
+    if api_version:
+        model_kwargs["api_version"] = api_version
     # Build the full model name in provider/model format
-    model_name = f"{provider}/{model}"
+    model_name = f"{provider}/{deployment_name or model}"
 
     # Create LitellmModel instance
     litellm_model = LitellmModel(
