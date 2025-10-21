@@ -67,6 +67,7 @@ RUN guardrails configure \
 
 # Install Guardrails validators from guardrails-hub
 RUN guardrails hub install hub://guardrails/detect_pii
+RUN guardrails hub install hub://guardrails/sensitive_topics
 
 
 # Cleanup for CVEs and size reduction
