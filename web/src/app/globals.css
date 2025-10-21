@@ -580,6 +580,28 @@ code[class*="language-"] {
   margin-bottom: 1rem;
 }
 
+/* MASKING */
+
+/* 
+TODO: add correct class
+.mask-01 {
+  background: linear-gradient(to top, var(--mask-01), transparent);
+  -webkit-mask-image: -webkit-gradient(
+    linear,
+    left top,
+    left bottom,
+    from(var(--mask-01)),
+    to(transparent)
+  );
+  mask-image: -webkit-gradient(
+    linear,
+    left top,
+    left bottom,
+    from(var(--mask-01)),
+    to(transparent)
+  );
+} */
+
 /* DEBUGGING UTILITIES
 
 If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.

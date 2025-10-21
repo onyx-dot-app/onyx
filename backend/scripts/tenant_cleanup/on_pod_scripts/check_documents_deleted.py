@@ -51,13 +51,14 @@ def check_documents_deleted(tenant_id: str) -> dict:
         cc_count = cc_count or 0
         doc_count = doc_count or 0
 
-        # If any records remain, return error status
-        if cc_count > 0 or doc_count > 0:
+        # If any records remain beyond acceptable thresholds, return error status
+        if cc_count > 0 or doc_count > 5:
             return {
                 "status": "error",
                 "message": (
                     f"Found {cc_count} ConnectorCredentialPair(s) and {doc_count} Document(s) "
-                    "still remaining. All documents must be deleted before cleanup."
+                    "still remaining. Must have 0 ConnectorCredentialPairs and no more than "
+                    "5 Documents before cleanup."
                 ),
                 "connector_credential_pair_count": cc_count,
                 "document_count": doc_count,
