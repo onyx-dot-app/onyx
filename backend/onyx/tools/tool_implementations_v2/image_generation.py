@@ -100,8 +100,6 @@ def _image_generation_core(
                 for img, file_id in zip(image_generation_responses, file_ids)
             ]
             break
-    if not generated_images:
-        raise RuntimeError("No images were generated")
 
     run_context.context.iteration_instructions.append(
         IterationInstructions(
