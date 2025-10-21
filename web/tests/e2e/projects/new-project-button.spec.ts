@@ -82,7 +82,7 @@ test.describe("New Project Button in WelcomeMessage", () => {
     await projectNameInput.press("Enter");
 
     // Wait for navigation to the new project
-    await page.waitForTimeout(1000);
+    await page.waitForURL(/projectid=/, { timeout: 10000 });
 
     // Verify URL contains projectid parameter
     expect(page.url()).toContain("projectid=");
@@ -122,8 +122,8 @@ test.describe("New Project Button in WelcomeMessage", () => {
     await projectNameInput.fill(projectName);
     await projectNameInput.press("Enter");
 
-    // Wait for project to be created
-    await page.waitForTimeout(1000);
+    // Wait for project to be created and URL to update
+    await page.waitForURL(/projectid=/, { timeout: 10000 });
 
     // Verify WelcomeMessage is not visible (ProjectContextPanel should be shown instead)
     const welcomeMessage = page.getByTestId("chat-intro");
@@ -153,7 +153,9 @@ test.describe("New Project Button in WelcomeMessage", () => {
     const projectNameInput = page.getByPlaceholder("What are you working on?");
     await projectNameInput.fill(projectName);
     await projectNameInput.press("Enter");
-    await page.waitForTimeout(1000);
+
+    // Wait for project to be created and URL to update
+    await page.waitForURL(/projectid=/, { timeout: 10000 });
 
     // Navigate back to chat page without project
     await page.goto("http://localhost:3000/chat");
