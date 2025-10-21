@@ -385,7 +385,14 @@ def test_llm(llm: LLM) -> str | None:
 def get_model_map() -> dict:
     import litellm
 
-    starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+    DIVIDER = "/"
+
+    original_map = cast(dict[str, dict], litellm.model_cost)
+    starting_map = copy.deepcopy(original_map)
+    for key in original_map:
+        if DIVIDER in key:
+            truncated_key = DIVIDER.join(key.split(DIVIDER)[1:])
+            starting_map[truncated_key] = starting_map[key]
 
     # NOTE: we could add additional models here in the future,
     # but for now there is no point. Ollama allows the user to
