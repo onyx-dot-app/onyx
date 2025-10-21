@@ -1212,6 +1212,14 @@ class Validator(Base):
     )
     config: Mapped[Any] = mapped_column(postgresql.JSONB(), nullable=False)
 
+    # Использует ли валидатор LLM
+    include_llm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Подключенный к валидатору LLM-провайдер
+    llm_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("llm_provider.id"),
+        nullable=True  # Опционально, т.к. не все валидаторы используют LLM
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -1224,6 +1232,12 @@ class Validator(Base):
         "User",
         back_populates="owned_validators",
         foreign_keys=[user_id]
+    )
+    # связь валидатора с llm-провайдером
+    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(
+        "LLMProvider",
+        back_populates="validators",
+        foreign_keys=[llm_provider_id]
     )
     # cвязь с ассистентом
     personas: Mapped[list["Persona"]] = relationship(
@@ -1653,6 +1667,11 @@ class LLMProvider(Base):
         "UserGroup",
         secondary="llm_provider__user_group",
         viewonly=True,
+    )
+    validators: Mapped[list["Validator"]] = relationship(
+        "Validator",
+        back_populates="llm_provider",
+        foreign_keys="Validator.llm_provider_id"
     )
 
 

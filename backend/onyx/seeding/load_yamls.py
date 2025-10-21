@@ -233,6 +233,7 @@ def load_validators_templates_from_yaml(
                 existing_validator.description = validator_template.get("description")
                 existing_validator.validator_type = validator_template["validator_type"]
                 existing_validator.config = validator_template["config"]
+                existing_validator.include_llm = validator_template["include_llm"]
 
                 db_session.commit()
 
@@ -250,6 +251,7 @@ def load_validators_templates_from_yaml(
                     description=validator_template.get("description"),
                     validator_type=validator_template["validator_type"],
                     config=validator_template["config"],
+                    include_llm=validator_template["include_llm"],
                 )
 
                 db_session.add(validator)
