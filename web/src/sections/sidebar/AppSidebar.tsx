@@ -449,15 +449,17 @@ function AppSidebarInner() {
                     <ProjectFolderButton key={project.id} project={project} />
                   ))}
 
-                  <SidebarTab
-                    leftIcon={SvgFolderPlus}
-                    onClick={() =>
-                      toggleModal(ModalIds.CreateProjectModal, true)
-                    }
-                    lowlight
-                  >
-                    New Project
-                  </SidebarTab>
+                  {projects.length === 0 && (
+                    <SidebarTab
+                      leftIcon={SvgFolderPlus}
+                      onClick={() =>
+                        toggleModal(ModalIds.CreateProjectModal, true)
+                      }
+                      lowlight
+                    >
+                      New Project
+                    </SidebarTab>
+                  )}
                 </SidebarSection>
 
                 {/* Recents */}

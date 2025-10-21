@@ -6,9 +6,16 @@ import { AgentIcon } from "@/refresh-components/AgentIcon";
 import Text from "@/refresh-components/texts/Text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useMemo } from "react";
+import Button from "@/refresh-components/buttons/Button";
+import SvgFolderPlus from "@/icons/folder-plus";
+import {
+  useChatModal,
+  ModalIds,
+} from "@/refresh-components/contexts/ChatModalContext";
 
 export default function WelcomeMessage() {
   const { currentAgent } = useAgentsContext();
+  const { toggleModal } = useChatModal();
 
   // If no agent is active OR the current agent is the default one, we show the Onyx logo.
   const isDefaultAgent = !currentAgent || currentAgent.id === 0;
@@ -24,7 +31,8 @@ export default function WelcomeMessage() {
         "flex-col",
         "items-center",
         "justify-center",
-        "mb-6"
+        "mb-6",
+        "gap-4"
       )}
     >
       <div className="flex items-center">
@@ -46,6 +54,19 @@ export default function WelcomeMessage() {
           </div>
         )}
       </div>
+      <Button
+        tertiary
+        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+        data-testid="new-project-button"
+        className="hover:bg-background-tint-03"
+      >
+        <div className="flex flex-row gap-1 items-center">
+          <SvgFolderPlus className="h-4 w-4 stroke-text-03" />
+          <Text text03 mainUiAction>
+            New Project
+          </Text>
+        </div>
+      </Button>
     </div>
   );
 }

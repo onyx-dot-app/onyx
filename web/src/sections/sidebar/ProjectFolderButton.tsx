@@ -149,6 +149,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
               params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)
             }
             onClick={handleTextClick}
+            className="hover:!bg-background-tint-03"
             rightChildren={
               <>
                 <PopoverTrigger asChild onClick={noProp()}>
