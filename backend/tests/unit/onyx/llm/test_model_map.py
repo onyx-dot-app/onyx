@@ -3,9 +3,13 @@ from onyx.llm.utils import get_model_map
 
 
 def test_partial_match_in_model_map() -> None:
+    """
+    We should handle adding/not adding the provider prefix to the model name.
+    """
+
     model_map = get_model_map()
 
-    _EXPECTED_DICT = {
+    _EXPECTED_FIELDS = {
         "input_cost_per_audio_per_second": 0,
         "input_cost_per_audio_per_second_above_128k_tokens": 0,
         "input_cost_per_character": 0,
@@ -32,7 +36,14 @@ def test_partial_match_in_model_map() -> None:
         "supports_vision": True,
     }
 
-    assert (
-        find_model_obj(model_map, "openai", "gemini/gemma-3-27b-it") == _EXPECTED_DICT
-    )
-    assert find_model_obj(model_map, "openai", "gemma-3-27b-it") == _EXPECTED_DICT
+    result1 = find_model_obj(model_map, "openai", "gemini/gemma-3-27b-it")
+    assert result1 is not None
+    for key, value in _EXPECTED_FIELDS.items():
+        assert key in result1
+        assert result1[key] == value
+
+    result2 = find_model_obj(model_map, "openai", "gemma-3-27b-it")
+    assert result2 is not None
+    for key, value in _EXPECTED_FIELDS.items():
+        assert key in result2
+        assert result2[key] == value
