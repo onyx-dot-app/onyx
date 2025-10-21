@@ -360,10 +360,11 @@ def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, str | None]:
         soup = BeautifulSoup(response.content, "html.parser")
         for url_tag in soup.find_all("url"):
             loc_tag = url_tag.find("loc")
+            if not loc_tag or not loc_tag.text:
+                continue
             url = _ensure_absolute_url(sitemap_url, loc_tag.text)
             lastmod_tag = url_tag.find("lastmod")
-            if loc_tag and loc_tag.text:
-                urls_data[url] = lastmod_tag.text if lastmod_tag else None
+            urls_data[url] = lastmod_tag.text if lastmod_tag else None
 
         if len(urls_data.keys()) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
