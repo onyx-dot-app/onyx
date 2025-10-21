@@ -203,7 +203,9 @@ def _process_stream(
     dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
     emit_message_to_user: bool = True,
-) -> tuple[RunResultStreaming, list[ResponseFunctionToolCall]]:
+) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
+    from litellm import ResponseFunctionToolCall
+
     tool_call_events: list[ResponseFunctionToolCall] = []
     for ev in agent_stream:
         connected = is_connected(
