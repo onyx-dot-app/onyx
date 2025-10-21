@@ -106,6 +106,7 @@ export const ALLOWED_URL_PROTOCOLS = [
 ];
 
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+export const MAX_STARTER_MESSAGES = 4;
 
 //Credential form data key constants
 export const CREDENTIAL_NAME = "name";

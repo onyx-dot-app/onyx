@@ -35,6 +35,13 @@ const buttonClasses = (active: boolean | undefined) =>
       ],
       disabled: ["bg-background-neutral-02"],
     },
+    danger: {
+      main: [
+        active ? "bg-action-danger-06" : "bg-action-danger-05",
+        "hover:bg-action-danger-04",
+      ],
+      disabled: ["bg-action-danger-02"],
+    },
     internal: {
       main: [
         active ? "bg-background-tint-00" : "bg-transparent",
@@ -64,6 +71,10 @@ const iconClasses = (active: boolean | undefined) =>
       ],
       disabled: ["stroke-text-01"],
     },
+    danger: {
+      main: ["stroke-text-light-05"],
+      disabled: ["stroke-text-light-05"],
+    },
     internal: {
       main: [
         active ? "!stroke-text-05" : "stroke-text-02",
@@ -84,6 +95,7 @@ export interface IconButtonProps
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
+  danger?: boolean;
 
   // Button properties:
   onHover?: (isHovering: boolean) => void;
@@ -100,6 +112,7 @@ export default function IconButton({
   secondary,
   tertiary,
   internal,
+  danger,
 
   onHover,
   onClick,
@@ -117,7 +130,9 @@ export default function IconButton({
         ? "tertiary"
         : internal
           ? "internal"
-          : "primary";
+          : danger
+            ? "danger"
+            : "primary";
   const state = disabled ? "disabled" : "main";
 
   const buttonElement = (
