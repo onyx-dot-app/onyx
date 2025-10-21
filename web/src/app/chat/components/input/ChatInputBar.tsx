@@ -531,6 +531,7 @@ function ChatInputBarInner({
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle
                 selectedAssistant={selectedAssistant}
+                filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
               />
             )}

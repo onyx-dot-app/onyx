@@ -30,7 +30,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
-import { useFilters, useSourcePreferences } from "@/lib/hooks";
+import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import {
   FiServer,
@@ -517,14 +517,15 @@ function MCPToolsList({
 
 interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
+  filterManager: FilterManager;
   availableSources?: ValidSources[];
 }
 
 export function ActionToggle({
   selectedAssistant,
+  filterManager,
   availableSources = [],
 }: ActionToggleProps) {
-  const filterManager = useFilters();
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [showSourceManagement, setShowSourceManagement] = useState(false);
