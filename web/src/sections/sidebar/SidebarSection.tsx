@@ -19,7 +19,7 @@ export function SidebarSection({
 }: SidebarSectionProps) {
   return (
     <div className={cn("flex flex-col gap-spacing-inline", className)}>
-      <div className="px-spacing-interline sticky top-[0rem] bg-background-tint-02 z-10 flex flex-row items-center justify-between">
+      <div className="px-spacing-interline py-spacing-inline sticky top-[0rem] bg-background-tint-02 z-10 flex flex-row items-center justify-between">
         <Text secondaryBody text02>
           {title}
         </Text>
