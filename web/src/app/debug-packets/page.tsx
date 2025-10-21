@@ -129,41 +129,54 @@ function DebugPacketsContent() {
   );
 
   // Incrementally process packets using shared utility (same as production AIMessage)
-  if (packets.length > lastProcessedIndexRef.current) {
-    // Use shared packet processing logic
-    const result = processNewPackets(
-      packets,
-      lastProcessedIndexRef.current,
-      documentMapRef.current,
-      citationsRef.current,
-      seenCitationDocIdsRef.current,
-      groupedPacketsMapRef.current
-    );
+  useEffect(() => {
+    // Reset if packets were cleared or reduced
+    if (packets.length < lastProcessedIndexRef.current) {
+      lastProcessedIndexRef.current = 0;
+      citationsRef.current = [];
+      seenCitationDocIdsRef.current = new Set();
+      documentMapRef.current = new Map();
+      groupedPacketsMapRef.current = new Map();
+      setDocsArray([]);
+      return;
+    }
 
-    lastProcessedIndexRef.current = result.lastProcessedIndex;
+    if (packets.length > lastProcessedIndexRef.current) {
+      // Use shared packet processing logic
+      const result = processNewPackets(
+        packets,
+        lastProcessedIndexRef.current,
+        documentMapRef.current,
+        citationsRef.current,
+        seenCitationDocIdsRef.current,
+        groupedPacketsMapRef.current
+      );
 
-    // Rebuild docs array from current state
-    const newDocsArray: any[] = [];
-    citationsRef.current.forEach((citation: any) => {
-      const doc = documentMapRef.current.get(citation.document_id);
-      if (doc) {
-        const index = citation.citation_num - 1;
-        newDocsArray[index] = doc;
-      }
-    });
+      lastProcessedIndexRef.current = result.lastProcessedIndex;
 
-    // Fill remaining positions with any uncited documents
-    const citedDocIds = new Set(
-      citationsRef.current.map((c: any) => c.document_id)
-    );
-    const uncitedDocs = Array.from(documentMapRef.current.values()).filter(
-      (doc: any) => !citedDocIds.has(doc.document_id)
-    );
+      // Rebuild docs array from current state
+      const newDocsArray: any[] = [];
+      citationsRef.current.forEach((citation: any) => {
+        const doc = documentMapRef.current.get(citation.document_id);
+        if (doc) {
+          const index = citation.citation_num - 1;
+          newDocsArray[index] = doc;
+        }
+      });
 
-    // Merge cited and uncited documents
-    const allDocs = [...newDocsArray.filter(Boolean), ...uncitedDocs];
-    setDocsArray(allDocs);
-  }
+      // Fill remaining positions with any uncited documents
+      const citedDocIds = new Set(
+        citationsRef.current.map((c: any) => c.document_id)
+      );
+      const uncitedDocs = Array.from(documentMapRef.current.values()).filter(
+        (doc: any) => !citedDocIds.has(doc.document_id)
+      );
+
+      // Merge cited and uncited documents
+      const allDocs = [...newDocsArray.filter(Boolean), ...uncitedDocs];
+      setDocsArray(allDocs);
+    }
+  }, [packets]);
 
   // Create stub functions for MemoizedAIMessage
   const handleFeedbackWithMessageId = useCallback(
@@ -190,14 +203,14 @@ function DebugPacketsContent() {
     []
   );
 
-  // Build citations map from citationsRef
+  // Build citations map from docsArray updates (which happen after citation processing)
   const citationsMap = useMemo(() => {
     const map: { [key: string]: number } = {};
     citationsRef.current.forEach((citation) => {
       map[citation.document_id] = citation.citation_num;
     });
     return map;
-  }, [citationsRef.current.length]);
+  }, [docsArray]);
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -284,6 +297,7 @@ Packets will render automatically as you paste."
             {hasRendered && packets.length > 0 && (
               <div className="border rounded-md p-4 bg-white dark:bg-background-900">
                 <MemoizedAIMessage
+                  key={`packets-${packets.length}-${docsArray.length}`}
                   rawPackets={packets}
                   handleFeedbackWithMessageId={handleFeedbackWithMessageId}
                   assistant={mockAssistant}
