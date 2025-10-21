@@ -130,11 +130,9 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
+          cache-from: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache
+          cache-to: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
 
   build-model-server-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -158,10 +156,8 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
-          provenance: false
+          cache-from: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache
+          cache-to: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
 
@@ -194,9 +190,8 @@ jobs:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
+          cache-from: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:cache
+          cache-to: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   integration-tests:
@@ -234,23 +229,40 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          # Pull all images from registry in parallel
-          echo "Pulling Docker images in parallel..."
-          # Pull images from private registry
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
 
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
+      - name: Build Model Server Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-model-server:test
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache
+          load: true
 
-          # Re-tag to remove registry prefix for docker-compose
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+      - name: Build Backend Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-backend:test
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache
+          load: true
+
+      - name: Build Integration Test Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/tests/integration/Dockerfile
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-integration:test
+          cache-from: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:cache
+          load: true
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
@@ -414,15 +426,41 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
-          wait
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Build Web Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-web-server:test
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-web-server:cache
+          load: true
+
+      - name: Build Model Server Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-model-server:test
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache
+          load: true
+
+      - name: Build Backend Docker image
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: onyxdotapp/onyx-backend:test
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache
+          load: true
 
       - name: Start Docker containers for multi-tenant tests
         run: |
