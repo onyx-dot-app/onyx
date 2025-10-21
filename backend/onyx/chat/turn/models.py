@@ -70,5 +70,4 @@ class ChatTurnContext:
         default_factory=list
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
-    no_final_message: bool = False
     should_cite_documents: bool = False

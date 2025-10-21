@@ -65,11 +65,6 @@ def _run_agent_loop(
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
 ) -> None:
-    """Run the agent loop for tool calling and final answer generation.
-
-    This function can return early if ctx.no_final_message is set to True
-    after the tool calling phase.
-    """
     current_messages = messages
     last_call_is_final = False
     agent = Agent(
@@ -92,7 +87,11 @@ def _run_agent_loop(
         current_messages = _remove_last_task_prompt_and_insert_new_one(
             messages[-1]["content"], current_messages, prompt_config, ctx
         )
-        if len(tool_call_events) == 0:
+        # TODO: Make this configurable on OnyxAgent level
+        stopping_tools = ["image_generation"]
+        if len(tool_call_events) == 0 or any(
+            tool.name in stopping_tools for tool in tool_call_events
+        ):
             last_call_is_final = True
 
 

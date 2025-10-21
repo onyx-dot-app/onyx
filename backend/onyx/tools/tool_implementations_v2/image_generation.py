@@ -138,9 +138,6 @@ def _image_generation_core(
             )
         )
 
-    # Set flag to skip final answer agent since image generation doesn't need it
-    run_context.context.no_final_message = True
-
     return generated_images
 
 
