@@ -66,9 +66,11 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> dict:
                         }
                     )
             else:
-                raise ValueError(f"Unexpected item type: {type(item)}")
+                raise ValueError(f"Unexpected item type: {type(item)}. Item: {item}")
     else:
-        raise ValueError(f"Unexpected content type: {type(content)}")
+        raise ValueError(
+            f"Unexpected content type: {type(content)}. Content: {content}"
+        )
 
     return {
         "role": role,
