@@ -8,9 +8,12 @@ from typing import cast
 from typing import Protocol
 from uuid import UUID
 
+from agents import Model
+from agents import ModelSettings
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -34,7 +37,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import (
     default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message_v2
 from onyx.chat.turn import fast_chat_turn
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -84,6 +86,7 @@ from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
+from onyx.llm.factory import get_llm_model_and_settings_for_persona
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
@@ -760,18 +763,10 @@ def stream_chat_message_objects(
             )
             and not new_msg_req.use_agentic_search
         )
-        prompt_user_message = (
-            default_build_user_message_v2(
-                user_query=final_msg.message,
-                prompt_config=prompt_config,
-                files=latest_query_files,
-            )
-            if simple_agent_framework_enabled
-            else default_build_user_message(
-                user_query=final_msg.message,
-                prompt_config=prompt_config,
-                files=latest_query_files,
-            )
+        prompt_user_message = default_build_user_message(
+            user_query=final_msg.message,
+            prompt_config=prompt_config,
+            files=latest_query_files,
         )
         mem_callback = make_memories_callback(user, db_session)
         system_message = (
@@ -824,6 +819,11 @@ def stream_chat_message_objects(
             project_instructions=project_instructions,
         )
         if simple_agent_framework_enabled:
+            llm_model, model_settings = get_llm_model_and_settings_for_persona(
+                persona=persona,
+                llm_override=(new_msg_req.llm_override or chat_session.llm_override),
+                additional_headers=litellm_additional_headers,
+            )
             yield from _fast_message_stream(
                 answer,
                 tools,
@@ -831,6 +831,9 @@ def stream_chat_message_objects(
                 get_redis_client(),
                 chat_session_id,
                 reserved_message_id,
+                prompt_config,
+                llm_model,
+                model_settings,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -882,6 +885,9 @@ def _fast_message_stream(
     redis_client: Redis,
     chat_session_id: UUID,
     reserved_message_id: int,
+    prompt_config: PromptConfig,
+    llm_model: Model,
+    model_settings: ModelSettings,
 ) -> Generator[Packet, None, None]:
     from onyx.tools.tool_implementations.images.image_generation_tool import (
         ImageGenerationTool,
@@ -889,7 +895,6 @@ def _fast_message_stream(
     from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
         OktaProfileTool,
     )
-    from onyx.llm.litellm_singleton import LitellmModel
 
     image_generation_tool_instance = None
     okta_profile_tool_instance = None
@@ -898,20 +903,16 @@ def _fast_message_stream(
             image_generation_tool_instance = tool
         elif isinstance(tool, OktaProfileTool):
             okta_profile_tool_instance = tool
-    converted_message_history = [
-        PreviousMessage.from_langchain_msg(message, 0).to_agent_sdk_msg()
-        for message in answer.graph_inputs.prompt_builder.build()
-    ]
+    messages = base_messages_to_agent_sdk_msgs(
+        answer.graph_inputs.prompt_builder.build()
+    )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
-        messages=converted_message_history,
+        messages=messages,
         # TODO: Maybe we can use some DI framework here?
         dependencies=ChatTurnDependencies(
-            llm_model=LitellmModel(
-                model=answer.graph_tooling.primary_llm.config.model_name,
-                base_url=answer.graph_tooling.primary_llm.config.api_base,
-                api_key=answer.graph_tooling.primary_llm.config.api_key,
-            ),
+            llm_model=llm_model,
+            model_settings=model_settings,
             llm=answer.graph_tooling.primary_llm,
             tools=tools_to_function_tools(tools),
             search_pipeline=answer.graph_tooling.search_tool,
@@ -924,6 +925,7 @@ def _fast_message_stream(
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,
         research_type=answer.graph_config.behavior.research_type,
+        prompt_config=prompt_config,
     )
 
 

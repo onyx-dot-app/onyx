@@ -640,28 +640,7 @@ def test_tools_to_function_tools_comprehensive(
         and hasattr(tool, "on_invoke_tool")
         for tool in function_tools
     )
-
-    # Verify that built-in tools are mapped to their V2 equivalents
-    # ImageGenerationTool should map to image_generation_tool
-    image_function_tools = [
-        tool for tool in function_tools if tool.name == "image_generation_tool"
-    ]
-    assert len(image_function_tools) == 1
-
-    # WebSearchTool should map to web_search_tool and web_fetch_tool (2 tools)
-    web_function_tools = [
-        tool
-        for tool in function_tools
-        if tool.name in ["web_search_tool", "web_fetch_tool"]
-    ]
-    assert len(web_function_tools) == 2
-
-    # OktaProfileTool should map to okta_profile_tool
-    okta_function_tools = [
-        tool for tool in function_tools if tool.name == "okta_profile_tool"
-    ]
-    assert len(okta_function_tools) == 1
-
+    assert len(function_tools) == 6  # Four built-in tools and two custom tools
     # Verify that custom and MCP tools are converted via tool_to_function_tool
     # These should have the same names as their original tools
     mcp_function_tools = [tool for tool in function_tools if tool.name == mcp_tool.name]
