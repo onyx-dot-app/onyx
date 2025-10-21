@@ -8,9 +8,9 @@ from typing import TypeVar
 
 from agents import Agent
 from agents import RunResultStreaming
+from agents import TContext
 from agents.run import Runner
 
-from onyx.chat.turn.models import ChatTurnContext
 from onyx.utils.threadpool_concurrency import run_in_background
 
 T = TypeVar("T")
@@ -42,7 +42,7 @@ class SyncAgentStream(Generic[T]):
         *,
         agent: Agent,
         input: list[dict],
-        context: ChatTurnContext,
+        context: TContext | None = None,
         max_turns: int = 100,
         queue_maxsize: int = 0,
     ) -> None:
