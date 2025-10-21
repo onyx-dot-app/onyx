@@ -1,3 +1,7 @@
+from unittest.mock import patch
+
+import litellm
+
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 
@@ -47,3 +51,24 @@ def test_partial_match_in_model_map() -> None:
     for key, value in _EXPECTED_FIELDS.items():
         assert key in result2
         assert result2[key] == value
+
+
+def test_no_overwrite_in_model_map() -> None:
+    """Make sure we use the original entry if it exists."""
+    # Create a mock model_cost dict with multiple entries for "onyx-llm"
+    mock_original_model_cost = {
+        "gpt-4o": {
+            "is_correct": True,
+        },
+        "provider/gpt-4o": {
+            "is_correct": False,
+        },
+    }
+
+    with patch.object(litellm, "model_cost", mock_original_model_cost):
+        get_model_map.cache_clear()  # Clear the LRU cache to use the patched data
+
+        model_map = get_model_map()
+        result = find_model_obj(model_map, "openai", "gpt-4o")
+        assert result is not None
+        assert result["is_correct"] is True
