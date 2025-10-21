@@ -62,6 +62,9 @@ export default function VerticalShadowScroller({
         }}
       >
         {children}
+
+        {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
+        <div className="min-h-[1rem]" />
       </div>
     </div>
   );
