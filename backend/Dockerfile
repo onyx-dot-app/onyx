@@ -95,37 +95,36 @@ nltk.download('punkt_tab', quiet=True);"
 # Set up application files
 WORKDIR /app
 
-# Enterprise Version Files
-COPY ./ee /app/ee
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Set up application files
-COPY ./onyx /app/onyx
-COPY ./shared_configs /app/shared_configs
-COPY ./alembic /app/alembic
-COPY ./alembic_tenants /app/alembic_tenants
-COPY ./alembic.ini /app/alembic.ini
-COPY supervisord.conf /usr/etc/supervisord.conf
-COPY ./static /app/static
-
-# Escape hatch scripts
-COPY ./scripts/debugging /app/scripts/debugging
-COPY ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
-COPY ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
-RUN chmod +x /app/scripts/supervisord_entrypoint.sh
-
-# Put logo in assets
-COPY ./assets /app/assets
-
-ENV PYTHONPATH=/app
-
 # Create non-root user for security best practices
 RUN groupadd -g 1001 onyx && \
     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    chown -R onyx:onyx /app && \
     mkdir -p /var/log/onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
+
+# Enterprise Version Files
+COPY --chown=onyx:onyx ./ee /app/ee
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Set up application files
+COPY --chown=onyx:onyx ./onyx /app/onyx
+COPY --chown=onyx:onyx ./shared_configs /app/shared_configs
+COPY --chown=onyx:onyx ./alembic /app/alembic
+COPY --chown=onyx:onyx ./alembic_tenants /app/alembic_tenants
+COPY --chown=onyx:onyx ./alembic.ini /app/alembic.ini
+COPY supervisord.conf /usr/etc/supervisord.conf
+COPY --chown=onyx:onyx ./static /app/static
+
+# Escape hatch scripts
+COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
+COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
+COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
+RUN chmod +x /app/scripts/supervisord_entrypoint.sh
+
+# Put logo in assets
+COPY --chown=onyx:onyx ./assets /app/assets
+
+ENV PYTHONPATH=/app
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD

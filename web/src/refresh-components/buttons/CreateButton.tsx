@@ -7,6 +7,7 @@ export default function CreateButton({
   href,
   onClick,
   children,
+  type = "button",
   ...props
 }: ButtonProps) {
   return (
@@ -15,6 +16,7 @@ export default function CreateButton({
       onClick={onClick}
       leftIcon={SvgPlusCircle}
       href={href}
+      type={type}
       {...props}
     >
       {children || "Create"}

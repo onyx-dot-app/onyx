@@ -42,8 +42,8 @@
   --alpha-grey-100-20: #00000033;
   --alpha-grey-100-15: #00000026;
   --alpha-grey-100-10: #0000001a;
-  --alpha-grey-100-5: #0000000d;
-  --alpha-grey-100-0: #00000000;
+  --alpha-grey-100-05: #0000000d;
+  --alpha-grey-100-00: #00000000;
 
   /* Alpha Grey 00 (White with opacity) */
   --alpha-grey-00-95: #fffffff2;
@@ -64,8 +64,8 @@
   --alpha-grey-00-20: #ffffff33;
   --alpha-grey-00-15: #ffffff26;
   --alpha-grey-00-10: #ffffff1a;
-  --alpha-grey-00-5: #ffffff0d;
-  --alpha-grey-00-0: #ffffff00;
+  --alpha-grey-00-05: #ffffff0d;
+  --alpha-grey-00-00: #ffffff00;
 
   /* Blue Scale */
   --blue-95: #040e25;

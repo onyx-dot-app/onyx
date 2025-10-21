@@ -150,7 +150,8 @@ export function ModelConfigurationField({
                   arrayHelpers.push({
                     name: "",
                     is_visible: true,
-                    max_input_tokens: "",
+                    // Use null so Yup.number().nullable() accepts empty inputs
+                    max_input_tokens: null,
                   });
                 }}
                 className="mt-3"

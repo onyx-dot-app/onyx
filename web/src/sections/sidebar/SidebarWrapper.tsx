@@ -31,13 +31,24 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-spacing-interline justify-between gap-padding-content group/SidebarWrapper",
+          "h-screen",
+          "flex flex-col",
+          "py-spacing-interline",
+          "bg-background-tint-02",
+          "justify-between",
+          "group/SidebarWrapper",
           folded ? "w-[4rem]" : "w-[15rem]"
         )}
       >
         <div
           className={cn(
-            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0 gap-spacing-paragraph",
+            "flex",
+            "flex-row",
+            "items-center",
+            "px-spacing-paragraph",
+            "pt-spacing-interline-mini",
+            "pb-spacing-paragraph",
+            "flex-shrink-0",
             folded ? "justify-center" : "justify-between"
           )}
         >

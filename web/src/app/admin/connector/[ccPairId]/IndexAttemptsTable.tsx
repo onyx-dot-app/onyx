@@ -19,14 +19,8 @@ import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { FaBarsProgress } from "react-icons/fa6";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import SvgClock from "@/icons/clock";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -96,6 +90,14 @@ export function IndexAttemptsTable({
           {indexAttempts.map((indexAttempt) => {
             const docsPerMinute =
               getDocsProcessedPerMinute(indexAttempt)?.toFixed(2);
+            const isReindexInProgress =
+              indexAttempt.status === "in_progress" ||
+              indexAttempt.status === "not_started";
+            const reindexTooltip = `This index attempt ${
+              isReindexInProgress ? "is" : "was"
+            } a full re-index. All documents from the source ${
+              isReindexInProgress ? "are being" : "were"
+            } synced into the system.`;
             return (
               <TableRow key={indexAttempt.id}>
                 <TableCell>
@@ -136,28 +138,11 @@ export function IndexAttemptsTable({
                   <div className="flex items-center">
                     {indexAttempt.total_docs_indexed}
                     {indexAttempt.from_beginning && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help flex items-center">
-                              <FaBarsProgress className="ml-2 h-3.5 w-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            This index attempt{" "}
-                            {indexAttempt.status === "in_progress" ||
-                            indexAttempt.status === "not_started"
-                              ? "is"
-                              : "was"}{" "}
-                            a full re-index. All documents from the source{" "}
-                            {indexAttempt.status === "in_progress" ||
-                            indexAttempt.status === "not_started"
-                              ? "are being "
-                              : "were "}
-                            synced into the system.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <SimpleTooltip side="top" tooltip={reindexTooltip}>
+                        <span className="cursor-help flex items-center">
+                          <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
+                        </span>
+                      </SimpleTooltip>
                     )}
                   </div>
                 </TableCell>

@@ -178,7 +178,6 @@ export const DocumentSetCreationForm = ({
                   name="name"
                   label="Name:"
                   placeholder="A name for the document set"
-                  disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
                 <TextFormField
