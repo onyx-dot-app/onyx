@@ -1,8 +1,6 @@
 import {
   Packet,
   PacketType,
-  CitationDelta,
-  SearchToolDelta,
   StreamingCitation,
 } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -24,6 +22,7 @@ import {
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
+  processNewPackets,
 } from "@/app/chat/services/packetUtils";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
@@ -120,45 +119,25 @@ export default function AIMessage({
 
   // Process only the new packets synchronously for this render
   if (rawPackets.length > lastProcessedIndexRef.current) {
-    for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
+    const startIndex = lastProcessedIndexRef.current;
+
+    // Use shared packet processing logic
+    const result = processNewPackets(
+      rawPackets,
+      lastProcessedIndexRef.current,
+      documentMapRef.current,
+      citationsRef.current,
+      seenCitationDocIdsRef.current,
+      groupedPacketsMapRef.current
+    );
+
+    lastProcessedIndexRef.current = result.lastProcessedIndex;
+    groupedPacketsRef.current = result.groupedPackets;
+
+    // Additional AIMessage-specific state tracking
+    for (let i = startIndex; i < rawPackets.length; i++) {
       const packet = rawPackets[i];
       if (!packet) continue;
-
-      // Grouping by ind
-      const existingGroup = groupedPacketsMapRef.current.get(packet.ind);
-      if (existingGroup) {
-        existingGroup.push(packet);
-      } else {
-        groupedPacketsMapRef.current.set(packet.ind, [packet]);
-      }
-
-      // Citations
-      if (packet.obj.type === PacketType.CITATION_DELTA) {
-        const citationDelta = packet.obj as CitationDelta;
-        if (citationDelta.citations) {
-          for (const citation of citationDelta.citations) {
-            if (!seenCitationDocIdsRef.current.has(citation.document_id)) {
-              seenCitationDocIdsRef.current.add(citation.document_id);
-              citationsRef.current.push(citation);
-            }
-          }
-        }
-      }
-
-      // Documents from tool deltas
-      if (
-        packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
-        packet.obj.type === PacketType.FETCH_TOOL_START
-      ) {
-        const toolDelta = packet.obj as SearchToolDelta;
-        if ("documents" in toolDelta && toolDelta.documents) {
-          for (const doc of toolDelta.documents) {
-            if (doc.document_id) {
-              documentMapRef.current.set(doc.document_id, doc);
-            }
-          }
-        }
-      }
 
       // check if final answer is coming
       if (
@@ -185,16 +164,6 @@ export default function AIMessage({
         setDisplayComplete(false);
       }
     }
-
-    // Rebuild the grouped packets array sorted by ind
-    // Clone packet arrays to ensure referential changes so downstream memo hooks update
-    groupedPacketsRef.current = Array.from(
-      groupedPacketsMapRef.current.entries()
-    )
-      .map(([ind, packets]) => ({ ind, packets: [...packets] }))
-      .sort((a, b) => a.ind - b.ind);
-
-    lastProcessedIndexRef.current = rawPackets.length;
   }
 
   const citations = citationsRef.current;
