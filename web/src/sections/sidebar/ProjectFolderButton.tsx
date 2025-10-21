@@ -42,7 +42,6 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(project.name);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
 
@@ -79,7 +78,6 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
 
   async function handleRename(newName: string) {
     await renameProject(project.id, newName);
-    setName(newName);
   }
 
   const popoverItems = [
@@ -180,7 +178,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 onClose={() => setIsEditing(false)}
               />
             ) : (
-              name
+              project.name
             )}
           </SidebarTab>
         </PopoverAnchor>

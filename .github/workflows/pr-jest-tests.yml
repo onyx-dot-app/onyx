@@ -1,0 +1,35 @@
+name: Run Jest Tests
+concurrency:
+  group: Run-Jest-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+on: push
+
+jobs:
+  jest-tests:
+    name: Jest Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Run Jest tests
+        working-directory: ./web
+        run: npm test -- --ci --coverage --maxWorkers=50%
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-coverage-${{ github.run_id }}
+          path: ./web/coverage
+          retention-days: 7

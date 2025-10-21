@@ -88,7 +88,13 @@ export function CustomLLMProviderUpdateForm({
       Yup.object({
         name: Yup.string().required("Model name is required"),
         is_visible: Yup.boolean().required("Visibility is required"),
-        max_input_tokens: Yup.number().nullable().optional(),
+        // Coerce empty string from input field into null so it's optional
+        max_input_tokens: Yup.number()
+          .transform((value, originalValue) =>
+            originalValue === "" || originalValue === undefined ? null : value
+          )
+          .nullable()
+          .optional(),
       })
     ),
     default_model_name: Yup.string().required("Model name is required"),

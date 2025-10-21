@@ -397,18 +397,16 @@ function ChatInputBarInner({
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="p-spacing-inline bg-background-neutral-01 rounded-t-16">
-            <div className="flex flex-wrap gap-2">
-              {currentMessageFiles.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  removeFile={handleRemoveMessageFile}
-                  hideProcessingState={hideProcessingState}
-                  onFileClick={handleFileClick}
-                />
-              ))}
-            </div>
+          <div className="p-spacing-inline rounded-t-16 flex flex-wrap gap-spacing-interline">
+            {currentMessageFiles.map((file) => (
+              <FileCard
+                key={file.id}
+                file={file}
+                removeFile={handleRemoveMessageFile}
+                hideProcessingState={hideProcessingState}
+                onFileClick={handleFileClick}
+              />
+            ))}
           </div>
         )}
 

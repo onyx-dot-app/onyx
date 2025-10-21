@@ -21,6 +21,7 @@ import { getDisplayNameForModel } from "@/lib/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 // Number of tokens to show cost calculation for
 const COST_CALCULATION_TOKENS = 1_000_000;
@@ -281,10 +282,15 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 name="disable_rerank_for_streaming"
               />
               <BooleanFormField
-                subtext="Enable contextual RAG for all chunk sizes."
+                subtext={
+                  NEXT_PUBLIC_CLOUD_ENABLED
+                    ? "Contextual RAG disabled in Onyx Cloud"
+                    : "Enable contextual RAG for all chunk sizes."
+                }
                 optional
                 label="Contextual RAG"
                 name="enable_contextual_rag"
+                disabled={NEXT_PUBLIC_CLOUD_ENABLED}
               />
               <div>
                 <SelectorFormField
