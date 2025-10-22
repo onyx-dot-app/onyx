@@ -254,6 +254,12 @@ jobs:
             type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache
           load: true
 
+      - name: Download OpenAPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-artifacts
+          path: backend/generated/
+
       - name: Build Integration Test Docker image
         uses: useblacksmith/build-push-action@v2
         with:
