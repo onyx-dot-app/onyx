@@ -14,7 +14,7 @@ def create_llm_callable(llm: LLM):
     """Создает callable функцию для Guardrails"""
 
     def llm_analyzer(text: str, topics: list[str]) -> list[str] | None:
-        """Анализирует текст на темы используя Ollama"""
+        """Анализирует текст ответа от LLM на используемые темы"""
 
         prompt = f"""
         Ты - классификатор текста. Проанализируй текст и определи, присутствуют ли в нем указанные темы.

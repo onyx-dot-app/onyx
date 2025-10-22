@@ -1,6 +1,7 @@
 from onyx.db.enums import ValidatorType
 from onyx.db.models import Persona, Validator
 from onyx.llm.factory import llm_from_provider
+from onyx.llm.interfaces import LLM
 from onyx.server.features.guardrails.validators import (
     mask_pii,
     unmask_pii,
@@ -87,6 +88,14 @@ class ValidatorManager:
                     direction=direction,
                 )
 
+                logger.info(
+                    "\n%s | %s-валидация | %s | Результат:\n%s",
+                    validator.validator_type,
+                    direction,
+                    validator.name,
+                    validated_message,
+                )
+
             except Exception as e:
                 logger.error(
                     "Ошибка при выполнении валидатора (name: %s, ID: %s): %s",
@@ -118,10 +127,6 @@ class ValidatorManager:
                 )
                 self._context[validator.validator_type] = mapping
 
-                logger.info(
-                    "\nDETECT_PII | %s-валидация | Маскирование перс. данных | Результат:\n%s",
-                    direction, masked_message,
-                )
                 return masked_message
 
             # Классификация и перенаправление запросов, не относящихся к заданным темам
@@ -136,10 +141,6 @@ class ValidatorManager:
                 )
                 del self._context[validator.validator_type]
 
-                logger.info(
-                    "\nDETECT_PII | %s-валидация | Демаскирование перс. данных | Результат:\n%s",
-                    direction, unmasked_message,
-                )
                 return unmasked_message
 
             # Фильтрация запрещенных слов
@@ -148,21 +149,12 @@ class ValidatorManager:
                     text=message, config=config
                 )
 
-                logger.info(
-                    "\nBAN_LIST | %s-валидация | Маскирование запретных слов | Результат:\n%s",
-                    direction, masked_message,
-                )
                 return masked_message
 
             # Валидация запретных и чувствительных тем
             elif validator.validator_type == ValidatorType.SENSITIVE_TOPIC:
-                llm_provider = validator.llm_provider
-
-                if not llm_provider:
-                    logger.warning(
-                        "К валидатору %s не подключен LLM-провайдер",
-                        ValidatorType.SENSITIVE_TOPIC
-                    )
+                llm = self._get_llm(validator=validator)
+                if not llm:
                     return message
 
                 validated_message, is_blocked = detect_sensitive_topic(
@@ -170,20 +162,30 @@ class ValidatorManager:
                 )
                 self._is_blocked = is_blocked
 
-                logger.info(
-                    "\nSENSITIVE_TOPIC | %s-валидация | Валидация запретных тем | Результат:\n%s",
-                    direction, validated_message,
-                )
                 return validated_message
 
-            # Валидация JSON-структуры
-            # Проверка ответов на токсичность
-            # Проверка длины ответа
             # Проверка на соответствие определенному стилю
             # Проверка на наличие ключевых сущностей в ответе
             # Проверка галлюцинаций в выводе модели
 
         return message
+
+    @staticmethod
+    def _get_llm(validator: Validator) -> LLM | None:
+        llm_provider = validator.llm_provider
+
+        if llm_provider:
+            llm = llm_from_provider(
+                model_name=llm_provider.default_model_name,
+                llm_provider=llm_provider,
+            )
+            return llm
+
+        logger.warning(
+            "К валидатору %s не подключен LLM-провайдер",
+            validator.validator_type,
+        )
+        return None
 
 
 if __name__=="__main__":
