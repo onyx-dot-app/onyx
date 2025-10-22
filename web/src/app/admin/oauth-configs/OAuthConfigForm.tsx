@@ -1,7 +1,7 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
-import { Modal } from "@/components/Modal";
+import CoreModal from "@/refresh-components/modals/CoreModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
@@ -51,8 +51,8 @@ export const OAuthConfigForm = ({
   const isUpdate = config !== undefined;
 
   return (
-    <Modal onOutsideClick={onClose} width="w-3/5">
-      <div className="max-h-[80vh] overflow-y-auto">
+    <CoreModal onClickOutside={onClose} className="w-[60%] max-h-[80vh]">
+      <div className="overflow-y-auto p-6">
         <h2 className="text-xl font-bold flex mb-4">
           {isUpdate
             ? "Update OAuth Configuration"
@@ -239,20 +239,14 @@ export const OAuthConfigForm = ({
               />
 
               <div className="flex gap-2 mt-6">
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  size="xs"
-                  color="blue"
-                >
+                <Button type="submit" disabled={isSubmitting} primary>
                   {isUpdate ? "Update" : "Create"}
                 </Button>
                 <Button
                   type="button"
                   onClick={onClose}
                   disabled={isSubmitting}
-                  size="xs"
-                  color="red"
+                  secondary
                 >
                   Cancel
                 </Button>
@@ -261,6 +255,6 @@ export const OAuthConfigForm = ({
           )}
         </Formik>
       </div>
-    </Modal>
+    </CoreModal>
   );
 };
