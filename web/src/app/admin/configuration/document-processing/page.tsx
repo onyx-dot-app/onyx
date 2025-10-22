@@ -3,11 +3,13 @@
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DocumentIcon2 } from "@/components/icons/icons";
 import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Lock } from "@phosphor-icons/react";
+import Text from "@/refresh-components/texts/Text";
+import SvgLock from "@/icons/lock";
 
 function Main() {
   const {
@@ -53,67 +55,79 @@ function Main() {
     return <ThreeDotsLoader />;
   }
   return (
-    <div className="container mx-auto p-4">
-      <CardSection className="mb-8 max-w-2xl bg-white text-text shadow-lg rounded-lg">
-        <h3 className="text-2xl text-text-800 font-bold mb-4 text-text border-b border-b-border pb-2">
-          Process with Unstructured API
-        </h3>
+    <div className="pb-spacing-section">
+      <div className="w-full max-w-2xl">
+        <CardSection className="flex flex-col gap-spacing-interline">
+          <Text
+            headingH3
+            text05
+            className="border-b border-border-01 pb-spacing-interline"
+          >
+            Process with Unstructured API
+          </Text>
 
-        <div className="space-y-4">
-          <p className="text-text-600">
-            Unstructured extracts and transforms complex data from formats like
-            .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to ingest.
-            Provide an API key to enable Unstructured document processing.
-            <br />
-            <br /> <strong>Note:</strong> this will send documents to
-            Unstructured servers for processing.
-          </p>
-          <p className="text-text-600">
-            Learn more about Unstructured{" "}
-            <a
-              href="https://docs.unstructured.io/welcome"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500 hover:underline font-medium"
-            >
-              here
-            </a>
-            .
-          </p>
-          <div className="mt-4">
-            {isApiKeySet ? (
-              <div className="w-full p-3 border rounded-md bg-background text-text flex items-center">
-                <span className="flex-grow">••••••••••••••••</span>
-                <Lock className="h-5 w-5 text-text-400" />
-              </div>
-            ) : (
-              <input
-                type="text"
-                placeholder="Enter API Key"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="w-full p-3 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
-              />
-            )}
-          </div>
-          <div className="flex space-x-4 mt-6">
-            {isApiKeySet ? (
-              <>
-                <Button onClick={handleDelete} danger>
-                  Delete API Key
+          <div className="flex flex-col gap-spacing-interline">
+            <Text mainContentBody text04 className="leading-relaxed">
+              Unstructured extracts and transforms complex data from formats
+              like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
+              ingest. Provide an API key to enable Unstructured document
+              processing.
+            </Text>
+            <Text mainContentMuted text03>
+              <span className="font-main-ui-action text-text-03">Note:</span>{" "}
+              this will send documents to Unstructured servers for processing.
+            </Text>
+            <Text mainContentBody text04 className="leading-relaxed">
+              Learn more about Unstructured{" "}
+              <a
+                href="https://docs.unstructured.io/welcome"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-action-link-05 underline-offset-4 hover:underline"
+              >
+                here
+              </a>
+              .
+            </Text>
+            <div className="pt-spacing-interline-mini">
+              {isApiKeySet ? (
+                <div className="flex items-center gap-spacing-inline-mini rounded-08 border border-border-01 bg-background-neutral-01 px-spacing-interline py-spacing-interline-mini">
+                  <Text
+                    mainUiMuted
+                    text03
+                    className="flex-1 tracking-[0.3em] text-text-03"
+                  >
+                    ••••••••••••••••
+                  </Text>
+                  <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
+                </div>
+              ) : (
+                <InputTypeIn
+                  placeholder="Enter API Key"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-spacing-interline desktop:flex-row desktop:items-center desktop:gap-spacing-interline">
+              {isApiKeySet ? (
+                <>
+                  <Button onClick={handleDelete} danger>
+                    Delete API Key
+                  </Button>
+                  <Text mainContentBody text04 className="desktop:mt-0">
+                    Delete the current API key before updating.
+                  </Text>
+                </>
+              ) : (
+                <Button onClick={handleSave} action>
+                  Save API Key
                 </Button>
-                <p className="text-text-600 my-auto">
-                  Delete the current API key before updating.
-                </p>
-              </>
-            ) : (
-              <Button onClick={handleSave} action>
-                Save API Key
-              </Button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </CardSection>
+        </CardSection>
+      </div>
     </div>
   );
 }

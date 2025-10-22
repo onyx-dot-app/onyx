@@ -15,6 +15,7 @@ import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";
+import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 
 export function getAgentIcon(
   agent: MinimalPersonaSnapshot
@@ -47,4 +48,28 @@ export function getAgentIcon(
   );
   GeneratedIcon.displayName = "SidebarGeneratedAgentIcon";
   return GeneratedIcon;
+}
+
+export interface SidebarBodyProps {
+  actionButton: React.ReactNode;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}
+
+export function SidebarBody({
+  actionButton,
+  children,
+  footer,
+}: SidebarBodyProps) {
+  return (
+    <>
+      <div className="px-spacing-interline">{actionButton}</div>
+      <div className="flex flex-col min-h-0 h-full gap-spacing-interline">
+        <VerticalShadowScroller className="px-spacing-interline gap-spacing-paragraph">
+          {children}
+        </VerticalShadowScroller>
+        {footer}
+      </div>
+    </>
+  );
 }
