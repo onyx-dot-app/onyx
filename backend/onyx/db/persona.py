@@ -528,6 +528,17 @@ def upsert_persona(
         if not validators and validator_ids:  # проверка, что все запрошенные валидаторы существуют
             raise ValueError("validators not found")
 
+        # Проверка подключения к ассистенту валидаторов
+        # одного типа (с одинаковой функциональностью)
+        seen = set()
+        for validator in validators:
+            if validator.validator_type in seen:
+                raise ValueError(
+                    f"Вы пытаетесь подключить несколько валидаторов "
+                    f"с одинаковой функциональностью ({validator.name})"
+                )
+            seen.add(validator.validator_type)
+
     # Fetch and attach prompts by IDs
     prompts = None
     if prompt_ids is not None:
