@@ -40,6 +40,7 @@ import {
 import { FaRobot } from "react-icons/fa";
 import { SiBookstack } from "react-icons/si";
 
+import axeroImage from "../../../public/Axero.jpeg";
 import airtableIcon from "../../../public/Airtable.svg";
 import amazonSVG from "../../../public/Amazon.svg";
 import anthropicSVG from "../../../public/Anthropic.svg";
@@ -98,6 +99,13 @@ import zAIIcon from "../../../public/Z_AI.png";
 import zendeskIcon from "../../../public/Zendesk.svg";
 import zulipIcon from "../../../public/Zulip.png";
 
+import gitlabIcon from "../../../public/Gitlab.png";
+import gmailIcon from "../../../public/Gmail.png";
+import googleDriveIcon from "../../../public/GoogleDrive.png";
+import loopioIcon from "../../../public/Loopio.png";
+import notionIcon from "../../../public/Notion.png";
+import productboardIcon from "../../../public/Productboard.png";
+import slabLogoIcon from "../../../public/SlabLogo.png";
 export interface IconProps {
   size?: number;
   className?: string;
@@ -125,15 +133,38 @@ export const LogoIcon = ({
   />
 );
 
+// Helper to create simple icon components from react-icon libraries
+const createIcon =
+  (IconComponent: React.ComponentType<{ size?: number; className?: string }>) =>
+  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
+    <IconComponent size={size} className={className} />
+  );
+
+// Helper to create simple logo icon components
+const createLogoIcon =
+  (src: string | StaticImageData) =>
+  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
+    <LogoIcon size={size} className={className} src={src} />
+  );
+
+// Helper to create logo icons with dark mode variants
+const createDarkModeLogoIcon =
+  (lightSrc: StaticImageData, darkSrc: StaticImageData) =>
+  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
+    <div className="flex items-center justify-center">
+      <div className="dark:hidden">
+        <LogoIcon size={size} className={className} src={lightSrc} />
+      </div>
+      <div className="hidden dark:block">
+        <LogoIcon size={size} className={className} src={darkSrc} />
+      </div>
+    </div>
+  );
+
 // ============================================================================
 // GENERIC SVG COMPONENTS (sorted alphabetically)
 // ============================================================================
-export const AlertIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiAlertCircle size={size} className={className} />;
-};
+export const AlertIcon = createIcon(FiAlertCircle);
 export const AppSearchIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -280,14 +311,7 @@ export const BackIcon = ({
     </svg>
   );
 };
-export const BarChartIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiBarChart2 size={size} className={className} />;
-};
-
-//  Admin Icons
+export const BarChartIcon = createIcon(FiBarChart2);
 export const BellIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -400,12 +424,7 @@ export const BroomIcon = ({
     </svg>
   );
 };
-export const CPUIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiCpu size={size} className={className} />;
-};
+export const CPUIcon = createIcon(FiCpu);
 export const CameraIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -494,12 +513,7 @@ export const CheckmarkIcon = ({
     </svg>
   );
 };
-export const ChevronDownIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronDown size={size} className={className} />;
-};
+export const ChevronDownIcon = createIcon(FiChevronDown);
 export const ChevronIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -520,36 +534,11 @@ export const ChevronIcon = ({
     </svg>
   );
 };
-export const ChevronLeftIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronLeft size={size} className={className} />;
-};
-export const ChevronRightIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronRight size={size} className={className} />;
-};
-export const ChevronUpIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronUp size={size} className={className} />;
-};
-export const ChevronsDownIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronsDown size={size} className={className} />;
-};
-export const ChevronsUpIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiChevronsUp size={size} className={className} />;
-};
+export const ChevronLeftIcon = createIcon(FiChevronLeft);
+export const ChevronRightIcon = createIcon(FiChevronRight);
+export const ChevronUpIcon = createIcon(FiChevronUp);
+export const ChevronsDownIcon = createIcon(FiChevronsDown);
+export const ChevronsUpIcon = createIcon(FiChevronsUp);
 export const CirclingArrowIcon = ({
   size = 24,
   className = defaultTailwindCSS,
@@ -589,12 +578,7 @@ export const CirclingArrowIcon = ({
     </svg>
   );
 };
-export const ClipboardIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiClipboard size={size} className={className} />;
-};
+export const ClipboardIcon = createIcon(FiClipboard);
 export const ClosedBookIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -692,12 +676,7 @@ export const ConnectorIconSkeleton = ({
     </svg>
   );
 };
-export const CopyIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiCopy size={size} className={className} />;
-};
+export const CopyIcon = createIcon(FiCopy);
 export const CopyMessageIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1012,16 +991,8 @@ export const DownloadCSVIcon = ({
     </svg>
   );
 };
-export const EditIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiEdit2 size={size} className={className} />;
-};
-export const EmailIcon = ({
-  size = 24,
-  className = defaultTailwindCSSBlue,
-}: IconProps) => <FiMail size={size} className={className} />;
+export const EditIcon = createIcon(FiEdit2);
+export const EmailIcon = createIcon(FiMail);
 
 //  COMPANY LOGOS
 export const EmbeddingIcon = ({
@@ -1113,12 +1084,7 @@ export const ExtendIcon = ({
     </svg>
   );
 };
-export const FileIcon = ({
-  size = 16,
-  className = defaultTailwindCSSBlue,
-}: IconProps) => {
-  return <FiFile size={size} className={className} />;
-};
+export const FileIcon = createIcon(FiFile);
 export const FileIcon2 = ({
   size = 16,
   className = defaultTailwindCSSBlue,
@@ -1290,12 +1256,7 @@ export const GeneralAssistantIcon = ({
     </svg>
   );
 };
-export const GlobeIcon = ({
-  size = 16,
-  className = defaultTailwindCSSBlue,
-}: IconProps) => {
-  return <FiGlobe size={size} className={className} />;
-};
+export const GlobeIcon = createIcon(FiGlobe);
 export const GlobeIcon2 = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1383,12 +1344,7 @@ export const ImageIcon = ({
     </svg>
   );
 };
-export const InfoIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiInfo size={size} className={className} />;
-};
+export const InfoIcon = createIcon(FiInfo);
 export const KeyIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2443,18 +2399,8 @@ export const SwapIcon = ({
     </svg>
   );
 };
-export const ThumbsDownIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiThumbsDown size={size} className={className} />;
-};
-export const ThumbsUpIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiThumbsUp size={size} className={className} />;
-};
+export const ThumbsDownIcon = createIcon(FiThumbsDown);
+export const ThumbsUpIcon = createIcon(FiThumbsUp);
 export const ThumbsUpIconSkeleton = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2577,12 +2523,7 @@ export const TrashIcon = ({
 }: IconProps) => {
   return <Trash size={size} className={className} />;
 };
-export const TriangleAlertIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <FiAlertTriangle size={size} className={className} />;
-};
+export const TriangleAlertIcon = createIcon(FiAlertTriangle);
 export const TwoRightArrowIcons = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2829,72 +2770,18 @@ export const ZoomInIconSkeleton = ({
 // ============================================================================
 // THIRD-PARTY / COMPANY ICONS (Alphabetically)
 // ============================================================================
-export const AirtableIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={airtableIcon} />;
-};
-export const AmazonIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={amazonSVG} />;
-export const AnthropicIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={anthropicSVG} />;
-};
-export const AsanaIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={asanaIcon} />;
-export const AxeroIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Axero.jpeg" />
-);
-export const AzureIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={azureIcon} />;
-export const BitbucketIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={bitbucketIcon} />
-);
-export const BookstackIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <SiBookstack size={size} className={className} />;
-};
-export const ClickupIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={clickupIcon} />
-);
-export const CohereIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={cohereIcon} />
-);
-export const ColorDiscordIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={discordIcon} />;
-};
-export const ColorSlackIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={slackIcon} />;
-};
+export const AirtableIcon = createLogoIcon(airtableIcon);
+export const AmazonIcon = createLogoIcon(amazonSVG);
+export const AnthropicIcon = createLogoIcon(anthropicSVG);
+export const AsanaIcon = createLogoIcon(asanaIcon);
+export const AxeroIcon = createLogoIcon(axeroImage);
+export const AzureIcon = createLogoIcon(azureIcon);
+export const BitbucketIcon = createLogoIcon(bitbucketIcon);
+export const BookstackIcon = createIcon(SiBookstack);
+export const ClickupIcon = createLogoIcon(clickupIcon);
+export const CohereIcon = createLogoIcon(cohereIcon);
+export const ColorDiscordIcon = createLogoIcon(discordIcon);
+export const ColorSlackIcon = createLogoIcon(slackIcon);
 export const ConfluenceIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2905,112 +2792,28 @@ export const ConfluenceIcon = ({
     src={confluenceSVG}
   />
 );
-export const DeepseekIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={deepseekSVG} />
+export const DeepseekIcon = createLogoIcon(deepseekSVG);
+export const DiscourseIcon = createLogoIcon(discourseIcon);
+export const Document360Icon = createLogoIcon(document360Icon);
+export const DropboxIcon = createLogoIcon(dropboxIcon);
+export const EgnyteIcon = createLogoIcon(egnyteIcon);
+export const FirefliesIcon = createLogoIcon(firefliesIcon);
+export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
+export const GeminiIcon = createLogoIcon(geminiSVG);
+export const GitbookIcon = createDarkModeLogoIcon(
+  gitbookDarkIcon,
+  gitbookLightIcon
 );
-export const DiscourseIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={discourseIcon} />
+export const GithubIcon = createDarkModeLogoIcon(
+  githubLightIcon,
+  githubDarkIcon
 );
-export const Document360Icon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={document360Icon} />
-);
-export const DropboxIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={dropboxIcon} />
-);
-export const EgnyteIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={egnyteIcon} />;
-};
-export const FirefliesIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={firefliesIcon} />
-);
-export const FreshdeskIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={freshdeskIcon} />
-);
-export const GeminiIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={geminiSVG} />;
-export const GitbookIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <div className="flex items-center justify-center">
-    <div className="dark:hidden">
-      <LogoIcon size={size} className={className} src={gitbookDarkIcon} />
-    </div>
-    <div className="hidden dark:block">
-      <LogoIcon size={size} className={className} src={gitbookLightIcon} />
-    </div>
-  </div>
-);
-export const GithubIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <div className="flex items-center justify-center">
-    <div className="dark:hidden">
-      <LogoIcon size={size} className={className} src={githubLightIcon} />
-    </div>
-    <div className="hidden dark:block">
-      <LogoIcon size={size} className={className} src={githubDarkIcon} />
-    </div>
-  </div>
-);
-export const GitlabIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Gitlab.png" />
-);
-export const GmailIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Gmail.png" />
-);
-export const GongIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={gongIcon} />;
-export const GoogleDriveIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/GoogleDrive.png" />
-);
-export const GoogleIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={googleIcon} />
-);
-export const GoogleSitesIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={googleSitesIcon} />
-);
+export const GitlabIcon = createLogoIcon(gitlabIcon);
+export const GmailIcon = createLogoIcon(gmailIcon);
+export const GongIcon = createLogoIcon(gongIcon);
+export const GoogleDriveIcon = createLogoIcon(googleDriveIcon);
+export const GoogleIcon = createLogoIcon(googleIcon);
+export const GoogleSitesIcon = createLogoIcon(googleSitesIcon);
 export const GoogleStorageIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3021,122 +2824,24 @@ export const GoogleStorageIcon = ({
     src={googleCloudStorageIcon}
   />
 );
-export const GuruIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={guruIcon} />;
-export const HighspotIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={highspotIcon} />;
-};
-export const HubSpotIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={hubSpotIcon} />
-);
-export const JiraIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size + 4} className={`${className} -m-0.5`} src={jiraSVG} />
-);
-export const KimiIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={kimiIcon} />;
-export const LinearIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={linearIcon} />
-);
-export const LiteLLMIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={litellmIcon} />;
-};
-export const LoopioIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon
-    size={size}
-    className={`${className} dark:invert`}
-    src="/Loopio.png"
-  />
-);
-export const MediaWikiIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={mediawikiIcon} />
-);
-export const MetaIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={metaSVG} />;
-export const MicrosoftIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={microsoftIcon} />;
-};
-export const MicrosoftIconSVG = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={microsoftSVG} />
-);
-export const MistralIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={mistralSVG} />
-);
-export const MixedBreadIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={mixedBreadSVG} />;
-};
-export const NewIconTest = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/NewIconTest.svg" />
-);
-export const NomicIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={nomicSVG} />;
-};
-export const NotionIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Notion.png" />
-);
-export const OCIStorageIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon
-    size={size + 4}
-    className={`${className} -m-0.5`}
-    src={OCIStorageSVG}
-  />
-);
-export const OllamaIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={ollamaIcon} />
-);
+export const GuruIcon = createLogoIcon(guruIcon);
+export const HighspotIcon = createLogoIcon(highspotIcon);
+export const HubSpotIcon = createLogoIcon(hubSpotIcon);
+export const JiraIcon = createLogoIcon(jiraSVG);
+export const KimiIcon = createLogoIcon(kimiIcon);
+export const LinearIcon = createLogoIcon(linearIcon);
+export const LiteLLMIcon = createLogoIcon(litellmIcon);
+export const LoopioIcon = createLogoIcon(loopioIcon);
+export const MediaWikiIcon = createLogoIcon(mediawikiIcon);
+export const MetaIcon = createLogoIcon(metaSVG);
+export const MicrosoftIcon = createLogoIcon(microsoftIcon);
+export const MicrosoftIconSVG = createLogoIcon(microsoftSVG);
+export const MistralIcon = createLogoIcon(mistralSVG);
+export const MixedBreadIcon = createLogoIcon(mixedBreadSVG);
+export const NomicIcon = createLogoIcon(nomicSVG);
+export const NotionIcon = createLogoIcon(notionIcon);
+export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
+export const OllamaIcon = createLogoIcon(ollamaIcon);
 export const OpenAIISVG = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3157,10 +2862,7 @@ export const OpenAIISVG = ({
     />
   </svg>
 );
-export const OpenAIIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={openAISVG} />;
+export const OpenAIIcon = createLogoIcon(openAISVG);
 export const OpenAISVG = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3179,12 +2881,7 @@ export const OpenAISVG = ({
     </svg>
   );
 };
-export const OpenSourceIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <LogoIcon size={size} className={className} src={openSourceIcon} />;
-};
+export const OpenSourceIcon = createLogoIcon(openSourceIcon);
 export const OutlineIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3195,42 +2892,13 @@ export const OutlineIcon = ({
     src={outlinePNG}
   />
 );
-export const ProductboardIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Productboard.png" />
-);
-export const QwenIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={qwenSVG} />;
-export const R2Icon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={r2Icon} />;
-export const S3Icon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={s3Icon} />;
-export const SalesforceIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={salesforceIcon} />
-);
-export const SharepointIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={sharepointIcon} />
-);
-export const SlabIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src="/SlabLogo.png" />
-);
+export const ProductboardIcon = createLogoIcon(productboardIcon);
+export const QwenIcon = createLogoIcon(qwenSVG);
+export const R2Icon = createLogoIcon(r2Icon);
+export const S3Icon = createLogoIcon(s3Icon);
+export const SalesforceIcon = createLogoIcon(salesforceIcon);
+export const SharepointIcon = createLogoIcon(sharepointIcon);
+export const SlabIcon = createLogoIcon(slabLogoIcon);
 export const SlackIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3275,10 +2943,7 @@ export const SlackIconSkeleton = ({
     </svg>
   );
 };
-export const TeamsIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={teamsIcon} />;
+export const TeamsIcon = createLogoIcon(teamsIcon);
 export const VoyageIconSVG = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3388,22 +3053,9 @@ export const VoyageIconSVG = ({
     />
   </svg>
 );
-export const WikipediaIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={wikipediaIcon} />
-);
-export const XenforoIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={xenforoIcon} />
-);
-export const ZAIIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={zAIIcon} />;
+export const WikipediaIcon = createLogoIcon(wikipediaIcon);
+export const XenforoIcon = createLogoIcon(xenforoIcon);
+export const ZAIIcon = createLogoIcon(zAIIcon);
 export const ZendeskIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -3424,10 +3076,7 @@ export const ZendeskIcon = ({
     />
   </div>
 );
-export const ZulipIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={zulipIcon} />;
+export const ZulipIcon = createLogoIcon(zulipIcon);
 
 // ============================================================================
 // FILE TYPE ICONS (Alphabetically)
