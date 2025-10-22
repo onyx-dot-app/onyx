@@ -1219,6 +1219,53 @@ class OAuth2AuthorizeResponse(BaseModel):
     authorization_url: str
 
 
+def _extract_identity_from_id_token(
+    id_token: str,
+) -> tuple[str | None, str | None, int | None]:
+    """Decode an ID token to extract the subject, email, and expiry timestamp."""
+    try:
+        decoded_token = jwt.decode(
+            id_token,
+            options={
+                "verify_signature": False,
+                "verify_aud": False,
+                "verify_iss": False,
+            },
+        )
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - want to log and gracefully handle parsing errors
+        logger.error(f"Failed to decode id_token for OIDC fallback: {exc}")
+        return None, None, None
+
+    account_id_value = decoded_token.get("sub")
+    account_id = str(account_id_value) if account_id_value is not None else None
+    email_raw = decoded_token.get("email")
+    email: str | None = str(email_raw) if email_raw is not None else None
+
+    if email is None:
+        emails_claim = decoded_token.get("emails")
+        if isinstance(emails_claim, list) and emails_claim:
+            email = str(emails_claim[0])
+        elif isinstance(emails_claim, str):
+            email = emails_claim
+
+    if email is None:
+        preferred_username = decoded_token.get("preferred_username")
+        if preferred_username is not None:
+            email = str(preferred_username)
+
+    expires_at_raw = decoded_token.get("exp")
+    expires_at: int | None = None
+    if expires_at_raw is not None:
+        try:
+            expires_at = int(expires_at_raw)
+        except (TypeError, ValueError):
+            logger.debug("OIDC id_token exp claim was not an int: %s", expires_at_raw)
+
+    return account_id, email, expires_at
+
+
 def generate_state_token(
     data: Dict[str, str], secret: SecretType, lifetime_seconds: int = 3600
 ) -> str:
@@ -1344,9 +1391,39 @@ def get_oauth_router(
         strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
     ) -> RedirectResponse:
         token, state = access_token_state
-        account_id, account_email = await oauth_client.get_id_email(
-            token["access_token"]
-        )
+        access_token = token.get("access_token")
+        id_token = token.get("id_token")
+        token_for_storage = access_token
+        expires_at = token.get("expires_at")
+
+        if access_token:
+            account_id, account_email = await oauth_client.get_id_email(access_token)
+        elif id_token:
+            logger.warning(
+                "OIDC provider '%s' did not return an access_token; falling back to id_token.",
+                oauth_client.name,
+            )
+            account_id, account_email, id_token_expires_at = (
+                _extract_identity_from_id_token(id_token)
+            )
+            if expires_at is None:
+                expires_at = id_token_expires_at
+            token_for_storage = id_token
+        else:
+            logger.error(
+                "OIDC provider '%s' response missing both access_token and id_token.",
+                oauth_client.name,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+            )
+
+        if account_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+            )
 
         if account_email is None:
             raise HTTPException(
@@ -1374,10 +1451,10 @@ def get_oauth_router(
         try:
             user = await user_manager.oauth_callback(
                 oauth_client.name,
-                token["access_token"],
+                cast(str, token_for_storage),
                 account_id,
                 account_email,
-                token.get("expires_at"),
+                expires_at,
                 token.get("refresh_token"),
                 request,
                 associate_by_email=associate_by_email,
