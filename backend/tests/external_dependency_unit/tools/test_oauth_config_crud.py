@@ -27,13 +27,11 @@ from tests.external_dependency_unit.conftest import create_test_user
 def _create_test_oauth_config(
     db_session: Session,
     name: str | None = None,
-    provider: str = "github",
 ) -> OAuthConfig:
     """Helper to create a test OAuth config with unique name"""
-    unique_name = name or f"Test {provider} OAuth {uuid4().hex[:8]}"
+    unique_name = name or f"Test OAuth Config {uuid4().hex[:8]}"
     return create_oauth_config(
         name=unique_name,
-        provider=provider,
         authorization_url="https://github.com/login/oauth/authorize",
         token_url="https://github.com/login/oauth/access_token",
         client_id="test_client_id",
@@ -70,8 +68,7 @@ class TestOAuthConfigCRUD:
         oauth_config = _create_test_oauth_config(db_session)
 
         assert oauth_config.id is not None
-        assert oauth_config.name.startswith("Test github OAuth")
-        assert oauth_config.provider == "github"
+        assert oauth_config.name.startswith("Test OAuth Config")
         assert (
             oauth_config.authorization_url == "https://github.com/login/oauth/authorize"
         )
@@ -94,7 +91,6 @@ class TestOAuthConfigCRUD:
         assert retrieved_config is not None
         assert retrieved_config.id == created_config.id
         assert retrieved_config.name == created_config.name
-        assert retrieved_config.provider == created_config.provider
 
     def test_get_oauth_config_not_found(self, db_session: Session) -> None:
         """Test retrieving a non-existent OAuth config returns None"""
@@ -104,8 +100,8 @@ class TestOAuthConfigCRUD:
     def test_get_oauth_configs(self, db_session: Session) -> None:
         """Test retrieving all OAuth configurations"""
         # Create multiple configs with unique names
-        config1 = _create_test_oauth_config(db_session, provider="github")
-        config2 = _create_test_oauth_config(db_session, provider="google")
+        config1 = _create_test_oauth_config(db_session)
+        config2 = _create_test_oauth_config(db_session)
 
         configs = get_oauth_configs(db_session)
 

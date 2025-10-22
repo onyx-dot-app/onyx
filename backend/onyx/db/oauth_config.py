@@ -18,7 +18,6 @@ logger = setup_logger()
 
 def create_oauth_config(
     name: str,
-    provider: str,
     authorization_url: str,
     token_url: str,
     client_id: str,
@@ -30,7 +29,6 @@ def create_oauth_config(
     """Create a new OAuth configuration"""
     oauth_config = OAuthConfig(
         name=name,
-        provider=provider,
         authorization_url=authorization_url,
         token_url=token_url,
         client_id=client_id,
