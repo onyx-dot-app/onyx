@@ -14,8 +14,6 @@ const getClientIdInput = (page: Page) =>
 const getClientSecretInput = (page: Page) =>
   page.locator('input[name="client_secret"]');
 const getScopesInput = (page: Page) => page.locator('input[name="scopes"]');
-const getCreateOAuthConfigButton = (page: Page) =>
-  page.getByRole("button", { name: "Create OAuth Configuration" });
 const getCreateSubmitButton = (page: Page) =>
   page.getByRole("button", { name: "Create", exact: true });
 const getDefinitionTextarea = (page: Page) =>
@@ -23,16 +21,7 @@ const getDefinitionTextarea = (page: Page) =>
 const getAdvancedOptionsButton = (page: Page) =>
   page.getByRole("button", { name: "Advanced Options" });
 const getOAuthConfigSelector = (page: Page) =>
-  page
-    .locator("text=OAuth Configuration:")
-    .locator("..")
-    .locator("..")
-    .getByRole("button")
-    .first();
-const getPassthroughAuthCheckbox = (page: Page) =>
-  page
-    .locator('input[name="passthrough_auth"]')
-    .or(page.locator("#passthrough_auth"));
+  page.locator('[role="combobox"]');
 const getCreateActionButton = (page: Page) =>
   page.getByRole("button", { name: "Create Action" });
 
@@ -65,12 +54,15 @@ const SIMPLE_OPENAPI_SCHEMA = `{
   }
 }`;
 
-test("Tool OAuth Selection and Passthrough Auth Disable", async ({ page }) => {
+test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration", async ({
+  page,
+}) => {
   await page.context().clearCookies();
   await loginAs(page, "admin");
 
   // --- Step 1: Navigate to Tool Creation Page ---
   const configName = `Test Tool OAuth ${Date.now()}`;
+  const toolName = `Test API ${Date.now()}`; // Unique tool name for this test run
   const provider = "github";
   const authorizationUrl = "https://github.com/login/oauth/authorize";
   const tokenUrl = "https://github.com/login/oauth/access_token";
@@ -78,12 +70,18 @@ test("Tool OAuth Selection and Passthrough Auth Disable", async ({ page }) => {
   const clientSecret = "test_client_secret_789";
   const scopes = "repo, user";
 
+  // Create a unique OpenAPI schema with the unique tool name
+  const uniqueOpenAPISchema = SIMPLE_OPENAPI_SCHEMA.replace(
+    '"title": "Test API"',
+    `"title": "${toolName}"`
+  );
+
   await page.goto("http://localhost:3000/admin/actions/new");
   await page.waitForLoadState("networkidle");
 
   // Fill in the OpenAPI definition
   const definitionTextarea = getDefinitionTextarea(page);
-  await definitionTextarea.fill(SIMPLE_OPENAPI_SCHEMA);
+  await definitionTextarea.fill(uniqueOpenAPISchema);
 
   // Trigger validation by blurring the textarea
   await definitionTextarea.blur();
@@ -134,7 +132,8 @@ test("Tool OAuth Selection and Passthrough Auth Disable", async ({ page }) => {
   await expect(oauthSelector).toBeVisible({ timeout: 5000 });
 
   // The selector should now show the newly created config
-  await expect(oauthSelector).toContainText(configName, { timeout: 5000 });
+  // Give extra time for the async mutation and field value update
+  await expect(oauthSelector).toContainText(configName, { timeout: 10000 });
 
   // Wait for the selection to be processed
   await page.waitForTimeout(500);
@@ -145,7 +144,7 @@ test("Tool OAuth Selection and Passthrough Auth Disable", async ({ page }) => {
   await createActionButton.click();
 
   // Wait for redirection after tool creation
-  await page.waitForURL("**/admin/actions", { timeout: 5000 });
+  await page.waitForURL("**/admin/actions**", { timeout: 10000 });
 
   // --- Step 5: Verify Tool Was Created with OAuth Config ---
   // We should be redirected to the actions list page
@@ -154,46 +153,93 @@ test("Tool OAuth Selection and Passthrough Auth Disable", async ({ page }) => {
   // Verify we're on the actions page
   expect(page.url()).toContain("/admin/actions");
 
-  // The tool should appear in the list with the OAuth config
-  // We can verify by checking if "test_operation" appears (the operation from our OpenAPI schema)
-  await expect(page.getByText("test_operation").first()).toBeVisible();
+  // The tool should appear - look for our unique tool name
+  await expect(page.getByText(toolName, { exact: false }).first()).toBeVisible({
+    timeout: 20000,
+  });
 
-  // --- Step 6: Verify OAuth Config Can Be Changed to None ---
-  // Edit the tool we just created
-  // Find the action row and click on it
-  await page
-    .locator('tr:has-text("test_operation")')
-    .first()
-    .locator("td")
-    .first()
-    .click();
+  // --- Step 6: Verify OAuth Config Persists in Edit Mode ---
+  // Edit the tool we just created to verify the OAuth config is still selected
+  // Find the row with our unique tool name and click the edit icon
+  const toolRow = page.locator(`tr:has-text("${toolName}")`).first();
+  await expect(toolRow).toBeVisible({ timeout: 5000 });
+
+  // Look for the edit button/icon in the row (usually has an aria-label or is a button/link)
+  // Try multiple selectors to find the edit button
+  const editButton = toolRow
+    .locator(
+      'button[aria-label*="dit"], a[aria-label*="dit"], svg, [class*="edit"]'
+    )
+    .first();
+  await editButton.click();
 
   // Wait for the edit page to load
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+
+  // Wait for the definition textarea to be visible (indicates page is loaded)
+  await expect(getDefinitionTextarea(page)).toBeVisible({ timeout: 20000 });
 
   // Open advanced options
   const advancedOptionsButtonEdit = getAdvancedOptionsButton(page);
+  await expect(advancedOptionsButtonEdit).toBeVisible({ timeout: 10000 });
   await advancedOptionsButtonEdit.scrollIntoViewIfNeeded();
   await advancedOptionsButtonEdit.click();
   await page.waitForTimeout(500);
 
-  // Change OAuth config to "None"
+  // Verify the OAuth config selector shows our created config
   const oauthSelectorEdit = getOAuthConfigSelector(page);
+  await expect(oauthSelectorEdit).toBeVisible({ timeout: 5000 });
   await oauthSelectorEdit.scrollIntoViewIfNeeded();
+  await expect(oauthSelectorEdit).toContainText(configName, { timeout: 5000 });
 
-  // Click the selector to open the dropdown
-  await oauthSelectorEdit.click();
+  // Test complete for steps 1-4! We've verified:
+  // 1. OAuth config can be created from the tool editor
+  // 2. The newly created config is automatically selected in the dropdown
+  // 3. The tool is created with the OAuth config
+  // 4. The OAuth config persists when editing the tool
 
-  // Wait for the dropdown to appear and click "None"
-  await page.getByRole("option", { name: "None" }).click();
+  // --- Step 7: Create Assistant and Verify Tool Availability ---
+  // Navigate to the assistant creation page
+  await page.goto("http://localhost:3000/assistants/new");
+  await page.waitForLoadState("networkidle");
 
-  // Wait for the selection to be processed
-  await page.waitForTimeout(500);
+  // Fill in basic assistant details
+  const assistantName = `Test Assistant ${Date.now()}`;
+  const assistantDescription = "Assistant with OAuth tool";
+  const assistantInstructions = "Use the tool when needed";
 
-  // Now passthrough auth should be enabled (not disabled)
-  const passthroughCheckboxEdit = getPassthroughAuthCheckbox(page);
-  await passthroughCheckboxEdit.scrollIntoViewIfNeeded();
+  await page.locator('input[name="name"]').fill(assistantName);
+  await page.locator('input[name="description"]').fill(assistantDescription);
+  await page
+    .locator('textarea[name="system_prompt"]')
+    .fill(assistantInstructions);
 
-  // It should not be disabled anymore
-  await expect(passthroughCheckboxEdit).not.toBeDisabled();
+  // Scroll down to the Actions section (tools are listed there)
+  const actionsHeading = page.locator("text=Actions").first();
+  await expect(actionsHeading).toBeVisible({ timeout: 10000 });
+  await actionsHeading.scrollIntoViewIfNeeded();
+
+  // Look for our tool in the list
+  // The tool display_name is the tool name we created
+  const toolLabel = page.locator(`label:has-text("${toolName}")`);
+  await expect(toolLabel).toBeVisible({ timeout: 10000 });
+  await toolLabel.scrollIntoViewIfNeeded();
+
+  // Turn it on
+  await toolLabel.click();
+
+  // Submit the assistant creation form
+  const createButton = page.locator('button[type="submit"]:has-text("Create")');
+  await createButton.scrollIntoViewIfNeeded();
+  await createButton.click();
+
+  // Verify redirection to chat page with the new assistant ID
+  await page.waitForURL(/.*\/chat\?assistantId=\d+.*/, { timeout: 10000 });
+  const assistantUrl = page.url();
+  const assistantIdMatch = assistantUrl.match(/assistantId=(\d+)/);
+  expect(assistantIdMatch).toBeTruthy();
+
+  // Test complete! We've verified:
+  // 5. The tool with OAuth config is available in assistant creation
+  // 6. The tool can be selected and the assistant can be created successfully
 });

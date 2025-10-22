@@ -41,13 +41,17 @@ export const OAuthConfigSelector = ({
       onConfigCreated(createdConfig);
     }
 
-    // Now set the newly created config as selected
-    setFieldValue(name, createdConfig.id.toString(), true);
+    // Wait a moment for the options list to update before setting the field value
+    // This ensures the new config is in the options when the selector tries to find it
+    setTimeout(() => {
+      // Now set the newly created config as selected
+      setFieldValue(name, createdConfig.id.toString(), true);
 
-    // Call the onSelect callback if provided
-    if (onSelect) {
-      onSelect(createdConfig.id);
-    }
+      // Call the onSelect callback if provided
+      if (onSelect) {
+        onSelect(createdConfig.id);
+      }
+    }, 100);
   };
 
   const handleModalClose = () => {
