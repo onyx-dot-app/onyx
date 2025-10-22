@@ -209,6 +209,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    IRONCLAD = "ironclad"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
@@ -618,5 +619,6 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.IRONCLAD: "ironclad - contract lifecycle management records",
     DocumentSource.IMAP: "imap - email data",
 }

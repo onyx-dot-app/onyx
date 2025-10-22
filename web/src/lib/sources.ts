@@ -17,6 +17,7 @@ import {
   GoogleSitesIcon,
   GuruIcon,
   HubSpotIcon,
+  IroncladIcon,
   JiraIcon,
   LinearIcon,
   LoopioIcon,
@@ -324,6 +325,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Sales,
     docs: "https://docs.onyx.app/admin/connectors/official/hubspot",
     isPopular: true,
+  },
+  ironclad: {
+    icon: IroncladIcon,
+    displayName: "Ironclad",
+    category: SourceCategory.Sales,
+    docs: "https://docs.onyx.app/admin/connectors/official/ironclad",
   },
   gong: {
     icon: GongIcon,
