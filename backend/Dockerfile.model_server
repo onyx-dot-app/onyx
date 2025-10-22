@@ -12,6 +12,8 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Create non-root user for security best practices
 RUN mkdir -p /app && \
     groupadd -g 1001 onyx && \
@@ -32,19 +34,17 @@ RUN set -eux; \
         pkg-config \
         curl \
         ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
     # Install latest stable Rust (supports Cargo.lock v4)
     && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
-    && rustc --version && cargo --version
+    && rustc --version && cargo --version \
+    && apt-get remove -y --allow-remove-essential perl-base \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt
-
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
-    apt-get autoremove -y
+RUN uv pip install --system --no-cache-dir --upgrade \
+        -r /tmp/requirements.txt && \
+    rm -rf ~/.cache/uv /tmp/*.txt
 
 # Pre-downloading models for setups with limited egress
 # Download tokenizers, distilbert for the Onyx model

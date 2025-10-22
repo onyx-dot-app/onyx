@@ -15,6 +15,8 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Install system dependencies
 # cmake needed for psycopg (postgres)
 # libpq-dev needed for psycopg (postgres)
@@ -46,22 +48,19 @@ RUN apt-get update && \
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
+RUN uv pip install --system --no-cache-dir --upgrade \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
-    ln -s /usr/local/bin/supervisord /usr/bin/supervisord
-
-# Cleanup for CVEs and size reduction
-# https://github.com/tornadoweb/tornado/issues/3107
-# xserver-common and xvfb included by playwright installation but not needed after
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality
-# perl-base could only be removed with --allow-remove-essential
-RUN apt-get update && \
+    ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
+    # Cleanup for CVEs and size reduction
+    # https://github.com/tornadoweb/tornado/issues/3107
+    # xserver-common and xvfb included by playwright installation but not needed after
+    # perl-base is part of the base Python Debian image but not needed for Onyx functionality
+    # perl-base could only be removed with --allow-remove-essential
+    apt-get update && \
     apt-get remove -y --allow-remove-essential \
         perl-base \
         xserver-common \
@@ -71,14 +70,15 @@ RUN apt-get update && \
         libxmlsec1-dev \
         pkg-config \
         gcc && \
-    apt-get install -y libxmlsec1-openssl && \
+    # Install here to avoid some packages being cleaned up above
+    apt-get install -y \
+        libxmlsec1-openssl \
+        # Install postgresql-client for easy manual tests
+        postgresql-client && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
+    rm -rf ~/.cache/uv /tmp/*.txt && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
-
-# Install postgresql-client for easy manual tests
-# Install it here to avoid it being cleaned up above
-RUN apt-get update && apt-get install -y postgresql-client
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
