@@ -325,6 +325,8 @@ function MCPServerItem({
     }
   };
 
+  const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
+
   return (
     <div
       className={`
@@ -341,6 +343,7 @@ function MCPServerItem({
         py-2
         mx-1
         ${isActive ? "bg-accent-100 hover:bg-accent-200" : ""}
+        ${allToolsDisabled ? "opacity-60" : ""}
       `}
       onClick={handleClick}
       data-mcp-server-id={server.id}
@@ -349,18 +352,22 @@ function MCPServerItem({
       <div className="flex items-center gap-2 flex-1">
         {getServerIcon()}
         <span
-          className="text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle"
+          className={`text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle ${
+            allToolsDisabled ? "line-through" : ""
+          }`}
           title={server.name}
         >
           {server.name}
         </span>
-        {isAuthenticated && tools.length > 0 && (
-          <span className="text-xs text-neutral-400 dark:text-neutral-500 whitespace-nowrap ml-1">
-            {tools.length !== enabledTools.length
-              ? `${enabledTools.length} of ${tools.length}`
-              : ``}
-          </span>
-        )}
+        {isAuthenticated &&
+          tools.length > 0 &&
+          enabledTools.length > 0 &&
+          tools.length !== enabledTools.length && (
+            <span className="text-xs whitespace-nowrap ml-1 text-neutral-400 dark:text-neutral-500">
+              <span className="text-blue-500">{enabledTools.length}</span>
+              {` of ${tools.length}`}
+            </span>
+          )}
       </div>
       <div className="flex items-center gap-1">
         {showReauthButton && (
@@ -415,7 +422,6 @@ function MCPToolsList({
   onReauthenticate,
   isReauthLoading = false,
 }: MCPToolsListProps) {
-  console.log(showTopShadow, showFadeMask, showReauthRow);
   const [searchTerm, setSearchTerm] = useState("");
   const {
     agentPreferences: assistantPreferences,
@@ -423,6 +429,7 @@ function MCPToolsList({
     forcedToolIds,
     setForcedToolIds,
   } = useAgentsContext();
+  const { theme } = useTheme();
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -441,12 +448,26 @@ function MCPToolsList({
     }
   };
 
-  const toggleForcedTool = (toolId: number) => {
-    if (forcedToolIds.includes(toolId)) {
-      setForcedToolIds([]);
-    } else {
-      setForcedToolIds([toolId]);
-    }
+  const serverToolIds = tools.map((tool) => tool.id);
+  const allToolsDisabled = tools.every((tool) =>
+    disabledToolIds.includes(tool.id)
+  );
+
+  const disableAllToolsForServer = () => {
+    const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: merged,
+    });
+    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
+  };
+
+  const enableAllToolsForServer = () => {
+    const serverToolIdSet = new Set(serverToolIds);
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: disabledToolIds.filter(
+        (id) => !serverToolIdSet.has(id)
+      ),
+    });
   };
 
   // Filter tools based on search
@@ -512,6 +533,47 @@ function MCPToolsList({
             />
           </div>
         </div>
+        <div className="mx-1">
+          <div className="relative mt-1">
+            <input
+              type="text"
+              placeholder={
+                allToolsDisabled ? "Enable All Tools" : "Disable All Tools"
+              }
+              readOnly
+              onClick={
+                allToolsDisabled
+                  ? enableAllToolsForServer
+                  : disableAllToolsForServer
+              }
+              className="
+                w-full
+                pl-7
+                pr-9
+                py-2
+                bg-transparent
+                rounded-lg
+                text-sm
+                outline-none
+                text-neutral-700 dark:text-neutral-300
+                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+                cursor-pointer
+              "
+            />
+            <img
+              src={allToolsDisabled ? "/plug.svg" : "/unplug.svg"}
+              alt={allToolsDisabled ? "Enable All Tools" : "Disable All Tools"}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
+              style={{
+                filter:
+                  theme === "dark"
+                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
+                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
+                opacity: theme === "dark" ? 0.9 : 0.8,
+              }}
+            />
+          </div>
+        </div>
         <div className="border-b border-border mx-1 mt-1" />
         <div
           className="mx-1 h-2 -mb-2 transition-opacity ease-out"
@@ -534,31 +596,94 @@ function MCPToolsList({
               No matching tools found
             </div>
           ) : (
-            filteredTools.map((tool) => (
-              <ActionItem
-                key={tool.id}
-                tool={tool}
-                disabled={disabledToolIds.includes(tool.id)}
-                isForced={forcedToolIds.includes(tool.id)}
-                onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-                onForceToggle={() => toggleForcedTool(tool.id)}
-                onSourceManagementOpen={onShowSourceManagement}
-                hasNoConnectors={false}
-                tooltipSide="right"
-              />
-            ))
+            filteredTools.map((tool) => {
+              const isDisabled = disabledToolIds.includes(tool.id);
+              const isEnabled = !isDisabled;
+
+              const label = (
+                <div className="flex flex-col cursor-default">
+                  <span
+                    className={`text-sm font-medium ${
+                      isEnabled
+                        ? "text-neutral-700 dark:text-neutral-200"
+                        : "text-neutral-400 dark:text-neutral-500"
+                    }`}
+                  >
+                    {tool.display_name || tool.name}
+                  </span>
+                </div>
+              );
+
+              return (
+                <div
+                  key={tool.id}
+                  className="flex items-center justify-between px-2 py-1.5 mx-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  {tool.description ? (
+                    <TooltipProvider delayDuration={600}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>{label}</TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          align="start"
+                          className="max-w-xs"
+                        >
+                          <Text inverted>{tool.description}</Text>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    label
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleToolForCurrentAssistant(tool.id);
+                      if (forcedToolIds.includes(tool.id)) {
+                        setForcedToolIds(
+                          forcedToolIds.filter((id) => id !== tool.id)
+                        );
+                      }
+                    }}
+                    className={`relative transition-colors ${
+                      isEnabled
+                        ? "bg-blue-500"
+                        : "bg-neutral-300 dark:bg-neutral-700"
+                    }`}
+                    style={{
+                      width: "28px",
+                      height: "16px",
+                      borderRadius: "var(--Radius-Round, 1000px)",
+                    }}
+                    aria-pressed={isEnabled}
+                    aria-label={`Toggle ${tool.display_name || tool.name}`}
+                  >
+                    <div
+                      className={`absolute top-[2px] left-[2px] h-[12px] w-[12px] rounded-full transition-transform duration-200 ease-in-out ${
+                        isEnabled
+                          ? "translate-x-[12px] bg-white"
+                          : "translate-x-0 bg-white dark:bg-neutral-900"
+                      }`}
+                      style={{
+                        boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
+                      }}
+                    />
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
         <div
           className="sticky w-full pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
           style={{
-            bottom: showReauthRow ? "36px" : "0px",
+            bottom: showReauthRow ? "40px" : "0px",
             height: "24px",
             opacity: showFadeMask ? 1 : 0,
           }}
         />
         {showReauthRow && onReauthenticate && (
-          <div className="sticky bottom-0 bg-background dark:bg-neutral-950 border-t border-border z-[1] rounded-b-lg">
+          <div className="sticky bottom-0 bg-background-neutral-00 border-t border-border z-[1] rounded-b-lg">
             <button
               type="button"
               onClick={onReauthenticate}
@@ -570,8 +695,10 @@ function MCPToolsList({
                 px-2
                 py-2.5
                 text-left
+                bg-background-neutral-00
                 hover:bg-neutral-100
                 dark:hover:bg-neutral-800
+                rounded-b-lg
                 hover:rounded-b-lg
                 transition-colors
               "
