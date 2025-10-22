@@ -9,8 +9,6 @@ from requests.models import Response
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -68,6 +66,7 @@ class ChatSessionManager:
         use_existing_user_message: bool = False,
         use_agentic_search: bool = False,
         forced_tool_ids: list[int] | None = None,
+        chat_session: DATestChatSession | None = None,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -104,20 +103,21 @@ class ChatSessionManager:
 
         streamed_response = ChatSessionManager.analyze_response(response)
 
-        with get_session_with_current_tenant() as db_session:
-            messages = get_chat_messages_by_session(
-                chat_session_id=chat_session_id,
-                user_id=(
-                    UUID(user_performing_action.id) if user_performing_action else None
-                ),
-                db_session=db_session,
-            )
-            for message_obj in messages:
-                if message_obj.message_type == MessageType.ASSISTANT:
-                    streamed_response.research_answer_purpose = (
-                        message_obj.research_answer_purpose
-                    )
-                    break
+        if not chat_session:
+            return streamed_response
+
+        chat_history = ChatSessionManager.get_chat_history(
+            chat_session=chat_session,
+            user_performing_action=user_performing_action,
+        )
+
+        for message_obj in chat_history:
+            if message_obj.message_type == MessageType.ASSISTANT:
+                streamed_response.research_answer_purpose = (
+                    message_obj.research_answer_purpose
+                )
+                streamed_response.assistant_message_id = message_obj.id
+                break
 
         return streamed_response
 
