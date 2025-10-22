@@ -19,7 +19,7 @@ const backgroundClasses = (active?: boolean) =>
     ],
     focused: [
       "border-background-tint-04 border-[2px]",
-      "bg-background-neutral-02",
+      "bg-background-neutral-00",
     ],
   }) as const;
 
