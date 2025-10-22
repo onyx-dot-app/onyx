@@ -6,6 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import { KeyIcon } from "@/components/icons/icons";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useState } from "react";
+import { useSettingsContext } from "../settings/SettingsProvider";
 
 interface OAuthPromptModalProps {
   oauthConfigId: number;
@@ -23,6 +24,8 @@ export function OAuthPromptModal({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const settings = useSettingsContext();
+
   const handleAuthenticate = async () => {
     try {
       setIsAuthenticating(true);
@@ -36,6 +39,9 @@ export function OAuthPromptModal({
       setError(err.message || "Failed to initiate authentication");
     }
   };
+
+  const applicationName =
+    settings?.enterpriseSettings?.application_name || "Onyx";
 
   return (
     <Modal
@@ -54,9 +60,9 @@ export function OAuthPromptModal({
         </Text>
 
         <Text className="text-sm text-subtle">
-          To use this tool, you need to authorize Onyx to access your account.
-          You'll be redirected to the provider's login page to complete the
-          authentication process.
+          To use this tool, you need to authorize {applicationName} to access
+          your account. You&apos;ll be redirected to the provider&apos;s login
+          page to complete the authentication process.
         </Text>
 
         {error && (
@@ -71,8 +77,7 @@ export function OAuthPromptModal({
           <Button
             onClick={handleAuthenticate}
             disabled={isAuthenticating}
-            color="blue"
-            size="xs"
+            primary
             className="flex-1"
           >
             {isAuthenticating ? "Redirecting..." : "Authenticate"}
@@ -80,8 +85,7 @@ export function OAuthPromptModal({
           <Button
             onClick={onClose}
             disabled={isAuthenticating}
-            color="red"
-            size="xs"
+            danger
             className="flex-1"
           >
             Cancel

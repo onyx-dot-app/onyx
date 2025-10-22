@@ -154,7 +154,7 @@ export const OAuthConfigForm = ({
                   📋 Redirect URI for OAuth App Configuration
                 </Text>
                 <Text className="text-sm text-subtle mb-2">
-                  When configuring your OAuth application in the provider's
+                  When configuring your OAuth application in the provider&apos;s
                   dashboard, use this redirect URI:
                 </Text>
                 <code className="block p-2 bg-background-100 rounded text-sm font-mono">

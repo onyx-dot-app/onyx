@@ -296,7 +296,6 @@ function ActionForm({
               <OAuthConfigSelector
                 name="oauth_config_id"
                 oauthConfigs={oauthConfigs}
-                selectedConfigId={values.oauth_config_id}
                 onSelect={(configId) => {
                   setFieldValue("oauth_config_id", configId, true);
                   // Disable passthrough_auth if OAuth config is selected

@@ -11,7 +11,6 @@ interface OAuthConfigSelectorProps {
   name: string;
   label?: string;
   oauthConfigs: OAuthConfig[];
-  selectedConfigId?: number | null;
   onSelect?: (configId: number | null) => void;
   onConfigCreated?: (config: OAuthConfig) => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
@@ -21,7 +20,6 @@ export const OAuthConfigSelector = ({
   name,
   label = "OAuth Configuration:",
   oauthConfigs,
-  selectedConfigId,
   onSelect,
   onConfigCreated,
   setPopup,
@@ -30,10 +28,10 @@ export const OAuthConfigSelector = ({
   const { setFieldValue } = useFormikContext();
 
   const options = [
-    { name: "None", value: "null" },
+    { name: "None", value: -1 },
     ...oauthConfigs.map((config) => ({
-      name: `${config.name} (${config.provider})`,
-      value: config.id.toString(),
+      name: config.name,
+      value: config.id,
     })),
   ];
 
@@ -65,7 +63,14 @@ export const OAuthConfigSelector = ({
         subtext="Select an OAuth configuration for this tool. Users will be prompted to authenticate when using this tool."
         onSelect={(selected) => {
           // SelectorFormField passes the value string directly, not an object
-          const configId = selected === "null" ? null : parseInt(selected);
+          let configId: number;
+          if (selected === null || selected === "null") {
+            configId = -1;
+          } else if (typeof selected === "number") {
+            configId = selected;
+          } else {
+            configId = parseInt(selected);
+          }
           if (onSelect) {
             onSelect(configId);
           }
