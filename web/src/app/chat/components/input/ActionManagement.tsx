@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  SearchIcon,
   DisableIcon,
   IconProps,
   MoreActionsIcon,
 } from "@/components/icons/icons";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { createPortal } from "react-dom";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Popover,
   PopoverContent,
@@ -267,30 +265,38 @@ interface MCPServer {
   user_credentials?: Record<string, string>;
 }
 
+type SecondaryViewState =
+  | { type: "sources" }
+  | { type: "mcp"; serverId: number };
+
 interface MCPServerItemProps {
   server: MCPServer;
-  isExpanded: boolean;
-  onToggleExpand: (element: HTMLElement) => void;
+  isActive: boolean;
+  onSelect: () => void;
   onAuthenticate: () => void;
   tools: ToolSnapshot[];
+  enabledTools: ToolSnapshot[];
   isAuthenticated: boolean;
   isLoading: boolean;
 }
 
 function MCPServerItem({
   server,
-  isExpanded,
-  onToggleExpand,
+  isActive,
+  onSelect,
   onAuthenticate,
   tools,
+  enabledTools,
   isAuthenticated,
   isLoading,
 }: MCPServerItemProps) {
-  const itemRef = useRef<HTMLDivElement>(null);
   const showAuthTrigger =
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
     server.auth_type !== MCPAuthenticationType.NONE;
-  const showReauthButton = showAuthTrigger && isAuthenticated;
+  const showInlineReauth =
+    showAuthTrigger && isAuthenticated && tools.length > 0;
+  const showReauthButton =
+    showAuthTrigger && isAuthenticated && !showInlineReauth;
 
   const getServerIcon = () => {
     if (isLoading) {
@@ -310,8 +316,8 @@ function MCPServerItem({
 
   const handleClick = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (isAuthenticated && itemRef.current) {
-      onToggleExpand(itemRef.current);
+    if (isAuthenticated && tools.length > 0) {
+      onSelect();
       return;
     }
     if (showAuthTrigger) {
@@ -321,7 +327,6 @@ function MCPServerItem({
 
   return (
     <div
-      ref={itemRef}
       className={`
         group
         flex
@@ -335,7 +340,7 @@ function MCPServerItem({
         rounded-lg
         py-2
         mx-1
-        ${isExpanded ? "bg-accent-100 hover:bg-accent-200" : ""}
+        ${isActive ? "bg-accent-100 hover:bg-accent-200" : ""}
       `}
       onClick={handleClick}
       data-mcp-server-id={server.id}
@@ -343,10 +348,17 @@ function MCPServerItem({
     >
       <div className="flex items-center gap-2 flex-1">
         {getServerIcon()}
-        <span className="text-sm font-medium select-none">{server.name}</span>
+        <span
+          className="text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle"
+          title={server.name}
+        >
+          {server.name}
+        </span>
         {isAuthenticated && tools.length > 0 && (
-          <span className="text-xs text-neutral-400 dark:text-neutral-500">
-            ({tools.length} tools)
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 whitespace-nowrap ml-1">
+            {tools.length !== enabledTools.length
+              ? `${enabledTools.length} of ${tools.length}`
+              : ``}
           </span>
         )}
       </div>
@@ -367,7 +379,7 @@ function MCPServerItem({
         )}
         {isAuthenticated && tools.length > 0 && (
           <FiChevronRight
-            className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+            className={`transition-transform ${isActive ? "rotate-90" : ""}`}
             size={14}
           />
         )}
@@ -379,20 +391,31 @@ function MCPServerItem({
 interface MCPToolsListProps {
   tools: ToolSnapshot[];
   serverName: string;
-  onClose: () => void;
   selectedAssistant: MinimalPersonaSnapshot;
-  preventMainPopupClose: () => void;
-  onSourceManagementOpen?: () => void;
+  onBack: () => void;
+  onShowSourceManagement?: () => void;
+  onScrollStateChange: (element: HTMLElement) => void;
+  showTopShadow: boolean;
+  showFadeMask: boolean;
+  showReauthRow?: boolean;
+  onReauthenticate?: () => void;
+  isReauthLoading?: boolean;
 }
 
 function MCPToolsList({
   tools,
   serverName,
-  onClose,
   selectedAssistant,
-  preventMainPopupClose,
-  onSourceManagementOpen,
+  onBack,
+  onShowSourceManagement,
+  onScrollStateChange,
+  showTopShadow,
+  showFadeMask,
+  showReauthRow = false,
+  onReauthenticate,
+  isReauthLoading = false,
 }: MCPToolsListProps) {
+  console.log(showTopShadow, showFadeMask, showReauthRow);
   const [searchTerm, setSearchTerm] = useState("");
   const {
     agentPreferences: assistantPreferences,
@@ -419,8 +442,6 @@ function MCPToolsList({
   };
 
   const toggleForcedTool = (toolId: number) => {
-    // Keep both popovers open; only outside clicks should close
-    preventMainPopupClose();
     if (forcedToolIds.includes(toolId)) {
       setForcedToolIds([]);
     } else {
@@ -439,79 +460,149 @@ function MCPToolsList({
     );
   });
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const element = document.getElementById(
+        "action-submenu-scroll"
+      ) as HTMLElement | null;
+      if (element) {
+        onScrollStateChange(element);
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, tools, onScrollStateChange]);
+
+  const placeholderName = serverName || "server";
+
   return (
-    <div
-      className="
-        w-[244px] 
-        max-h-[300px]
-        text-text-600 
-        text-sm 
-        p-0 
-        bg-background 
-        border 
-        border-border 
-        rounded-xl 
-        shadow-xl 
-        overflow-hidden
-        flex
-        flex-col
-      "
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Search Input */}
-      <div className="pt-1 mx-1">
-        <div className="relative">
-          <SearchIcon
-            size={16}
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-400"
-          />
-          <input
-            type="text"
-            placeholder={`Search ${serverName} tools`}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="
-              w-full 
-              pl-9 
-              pr-3 
-              py-2 
-              bg-background-50 
-              rounded-lg 
-              text-sm 
-              outline-none 
-              text-text-700
-              placeholder:text-text-400
-              dark:placeholder:text-neutral-600
-              dark:bg-neutral-950
-            "
-            autoFocus
-          />
+    <>
+      <div className="bg-transparent flex-shrink-0">
+        <div className="mx-1">
+          <div className="relative">
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                onBack();
+              }}
+              className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
+              style={{ borderRadius: "8px" }}
+              aria-label="Back to action menu"
+            >
+              <FiChevronLeft size={16} />
+            </button>
+            <input
+              type="text"
+              placeholder={`Search ${placeholderName} tools`}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="
+                w-full
+                pl-7
+                pr-3
+                py-2
+                bg-transparent
+                rounded-lg
+                text-sm
+                outline-none
+                text-neutral-700 dark:text-neutral-300
+                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+              "
+              autoFocus
+            />
+          </div>
         </div>
+        <div className="border-b border-border mx-1 mt-1" />
+        <div
+          className="mx-1 h-2 -mb-2 transition-opacity ease-out"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(0, 0, 0, 0.06), transparent)",
+            opacity: showTopShadow ? 1 : 0,
+          }}
+        />
       </div>
 
-      {/* Tools List */}
-      <div className="pt-2 flex-1 overflow-y-auto mx-1 pb-2">
-        {filteredTools.length === 0 ? (
-          <div className="text-center py-1 text-text-400">
-            No matching tools found
+      <div
+        id="action-submenu-scroll"
+        className="flex-1 overflow-y-auto min-h-0 relative"
+        onScroll={(e) => onScrollStateChange(e.currentTarget)}
+      >
+        <div className="space-y-1.5 pb-2 pt-2">
+          {filteredTools.length === 0 ? (
+            <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
+              No matching tools found
+            </div>
+          ) : (
+            filteredTools.map((tool) => (
+              <ActionItem
+                key={tool.id}
+                tool={tool}
+                disabled={disabledToolIds.includes(tool.id)}
+                isForced={forcedToolIds.includes(tool.id)}
+                onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                onForceToggle={() => toggleForcedTool(tool.id)}
+                onSourceManagementOpen={onShowSourceManagement}
+                hasNoConnectors={false}
+                tooltipSide="right"
+              />
+            ))
+          )}
+        </div>
+        <div
+          className="sticky w-full pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
+          style={{
+            bottom: showReauthRow ? "36px" : "0px",
+            height: "24px",
+            opacity: showFadeMask ? 1 : 0,
+          }}
+        />
+        {showReauthRow && onReauthenticate && (
+          <div className="sticky bottom-0 bg-background dark:bg-neutral-950 border-t border-border z-[1] rounded-b-lg">
+            <button
+              type="button"
+              onClick={onReauthenticate}
+              className="
+                w-full
+                flex
+                items-center
+                justify-between
+                px-2
+                py-2.5
+                text-left
+                hover:bg-neutral-100
+                dark:hover:bg-neutral-800
+                hover:rounded-b-lg
+                transition-colors
+              "
+            >
+              <div className="flex items-center gap-2">
+                {isReauthLoading ? (
+                  <FiLoader
+                    className="animate-spin text-text-400 dark:text-neutral-500"
+                    size={14}
+                  />
+                ) : (
+                  <FiKey
+                    className="text-text-500 dark:text-neutral-300"
+                    size={14}
+                  />
+                )}
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                  Re-Authenticate
+                </span>
+              </div>
+              {!isReauthLoading && (
+                <FiChevronRight
+                  size={14}
+                  className="text-neutral-400 dark:text-neutral-500 transition-colors"
+                />
+              )}
+            </button>
           </div>
-        ) : (
-          filteredTools.map((tool) => (
-            <ActionItem
-              key={tool.id}
-              tool={tool}
-              disabled={disabledToolIds.includes(tool.id)}
-              isForced={forcedToolIds.includes(tool.id)}
-              onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-              onForceToggle={() => toggleForcedTool(tool.id)}
-              onSourceManagementOpen={onSourceManagementOpen}
-              hasNoConnectors={false}
-              tooltipSide="right"
-            />
-          ))
         )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -528,7 +619,9 @@ export function ActionToggle({
 }: ActionToggleProps) {
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
-  const [showSourceManagement, setShowSourceManagement] = useState(false);
+  const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
+    null
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceSearchTerm, setSourceSearchTerm] = useState("");
   const [showFadeMask, setShowFadeMask] = useState(false);
@@ -542,13 +635,6 @@ export function ActionToggle({
       selectedSources,
       setSelectedSources,
     });
-  const [mcpToolsPopup, setMcpToolsPopup] = useState<{
-    serverId: number | null;
-    serverName: string;
-    anchorElement: HTMLElement | null;
-  }>({ serverId: null, serverName: "", anchorElement: null });
-
-  const preventCloseRef = useRef(false);
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -631,24 +717,22 @@ export function ActionToggle({
     setShowTopShadow(shouldShowTopShadow);
   }, []);
 
-  // Check scroll state when search term changes or when entering source management
+  // Check scroll state when entering secondary views
   useEffect(() => {
-    if (showSourceManagement) {
+    if (secondaryView) {
       const timer = setTimeout(() => {
         const scrollContainer = document.getElementById(
-          "chat-scroll-container"
-        ) as HTMLElement;
+          "action-submenu-scroll"
+        ) as HTMLElement | null;
         if (scrollContainer) {
           checkScrollState(scrollContainer);
         }
       }, 50);
       return () => clearTimeout(timer);
-    } else {
-      // Reset masks when not in source management
-      setShowFadeMask(false);
-      setShowTopShadow(false);
     }
-  }, [sourceSearchTerm, showSourceManagement, checkScrollState]);
+    setShowFadeMask(false);
+    setShowTopShadow(false);
+  }, [secondaryView, sourceSearchTerm, checkScrollState]);
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
@@ -708,43 +792,29 @@ export function ActionToggle({
 
   // No separate MCP tool loading; tools already exist in selectedAssistant.tools
 
-  // Handle clicking outside MCP tools popup
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (mcpToolsPopup.serverId && mcpToolsPopup.anchorElement) {
-        const target = event.target as Node;
-        const mcpPopupElement = document.querySelector(
-          '[data-mcp-popup="true"]'
-        );
-
-        // If click is not on the anchor element or inside the MCP popup, close it
-        if (
-          !mcpToolsPopup.anchorElement.contains(target) &&
-          (!mcpPopupElement || !mcpPopupElement.contains(target))
-        ) {
-          console.log("Closing MCP popup due to outside click");
-          setMcpToolsPopup({
-            serverId: null,
-            serverName: "",
-            anchorElement: null,
-          });
-        }
-      }
-    };
-
-    if (mcpToolsPopup.serverId) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [mcpToolsPopup.serverId, mcpToolsPopup.anchorElement]);
-
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
     serverId: number,
     authType: MCPAuthenticationType
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
+      const updateLoadingState = (loading: boolean) => {
+        setMcpServerData((prev) => {
+          const previous = prev[serverId] ?? {
+            isAuthenticated: false,
+            isLoading: false,
+          };
+          return {
+            ...prev,
+            [serverId]: {
+              ...previous,
+              isLoading: loading,
+            },
+          };
+        });
+      };
+
+      updateLoadingState(true);
       try {
         const response = await fetch("/api/mcp/oauth/connect", {
           method: "POST",
@@ -761,9 +831,12 @@ export function ActionToggle({
         if (response.ok) {
           const { oauth_url } = await response.json();
           window.location.href = oauth_url;
+        } else {
+          updateLoadingState(false);
         }
       } catch (error) {
         console.error("Error initiating OAuth:", error);
+        updateLoadingState(false);
       }
     }
   };
@@ -865,6 +938,32 @@ export function ActionToggle({
     return server.name.toLowerCase().includes(searchLower);
   });
 
+  const activeMcpServerId =
+    secondaryView?.type === "mcp" ? secondaryView.serverId : null;
+  const activeMcpServer = activeMcpServerId
+    ? mcpServers.find((server) => server.id === activeMcpServerId)
+    : undefined;
+  const activeMcpTools =
+    activeMcpServerId !== null
+      ? selectedAssistant.tools.filter(
+          (t) => t.mcp_server_id === Number(activeMcpServerId)
+        )
+      : [];
+  const activeMcpServerData = activeMcpServer
+    ? mcpServerData[activeMcpServer.id]
+    : undefined;
+  const isActiveServerAuthenticated =
+    activeMcpServerData?.isAuthenticated ??
+    !!(
+      activeMcpServer?.user_authenticated || activeMcpServer?.is_authenticated
+    );
+  const showActiveReauthRow =
+    !!activeMcpServer &&
+    activeMcpTools.length > 0 &&
+    activeMcpServer.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    activeMcpServer.auth_type !== MCPAuthenticationType.NONE &&
+    isActiveServerAuthenticated;
+
   // If no tools or MCP servers are available, don't render the component
   if (displayTools.length === 0 && mcpServers.length === 0) {
     return null;
@@ -874,24 +973,12 @@ export function ActionToggle({
       <Popover
         open={open}
         onOpenChange={(newOpen) => {
-          // If we're trying to close but we should prevent it, don't close
-          if (!newOpen && preventCloseRef.current) {
-            console.log("Preventing popover close due to preventCloseRef");
-            preventCloseRef.current = false; // Reset the flag
-            return;
-          }
-
           setOpen(newOpen);
           // Clear search when closing
           if (!newOpen) {
             setSearchTerm("");
             setSourceSearchTerm("");
-            setShowSourceManagement(false);
-            setMcpToolsPopup({
-              serverId: null,
-              serverName: "",
-              anchorElement: null,
-            }); // Close expanded MCP server
+            setSecondaryView(null);
           }
         }}
       >
@@ -909,24 +996,6 @@ export function ActionToggle({
           data-testid="tool-options"
           side="top"
           align="start"
-          // Keep main popover open when interacting with nested MCP popup
-          onPointerDownOutside={(e) => {
-            const target = e.target as Node | null;
-            const mcpPopup = document.querySelector('[data-mcp-popup="true"]');
-            if (target && mcpPopup && mcpPopup.contains(target)) {
-              // Prevent Radix from closing and set guard
-              preventCloseRef.current = true;
-              e.preventDefault();
-            }
-          }}
-          onFocusOutside={(e) => {
-            const target = e.target as Node | null;
-            const mcpPopup = document.querySelector('[data-mcp-popup="true"]');
-            if (target && mcpPopup && mcpPopup.contains(target)) {
-              preventCloseRef.current = true;
-              e.preventDefault();
-            }
-          }}
           className="
             w-[15.5rem] 
             max-h-[300px]
@@ -944,7 +1013,7 @@ export function ActionToggle({
           }}
         >
           {/* Search Input */}
-          {!showSourceManagement && (
+          {!secondaryView && (
             <div className="pt-1 mx-2">
               <InputTypeIn
                 placeholder="Search Menu"
@@ -958,14 +1027,17 @@ export function ActionToggle({
 
           {/* Options */}
           <div className="pt-2 flex-1 flex flex-col mx-1 relative overflow-hidden">
-            {showSourceManagement ? (
+            {secondaryView?.type === "sources" ? (
               <>
                 {/* Fixed Header */}
                 <div className="bg-transparent flex-shrink-0">
                   <div className="mx-1">
                     <div className="relative">
                       <button
-                        onClick={() => setShowSourceManagement(false)}
+                        onClick={() => {
+                          setSecondaryView(null);
+                          setSourceSearchTerm("");
+                        }}
                         className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
                         style={{ borderRadius: "8px" }}
                       >
@@ -1082,7 +1154,7 @@ export function ActionToggle({
 
                 {/* Scrollable Content */}
                 <div
-                  id="chat-scroll-container"
+                  id="action-submenu-scroll"
                   className="flex-1 overflow-y-auto min-h-0 relative"
                   onScroll={(e) => checkScrollState(e.currentTarget)}
                   onLoad={(e) => checkScrollState(e.currentTarget)}
@@ -1176,6 +1248,28 @@ export function ActionToggle({
                   }}
                 />
               </>
+            ) : secondaryView?.type === "mcp" ? (
+              <MCPToolsList
+                tools={activeMcpTools}
+                serverName={activeMcpServer?.name ?? ""}
+                selectedAssistant={selectedAssistant}
+                onBack={() => {
+                  setSecondaryView(null);
+                }}
+                onShowSourceManagement={() =>
+                  setSecondaryView({ type: "sources" })
+                }
+                onScrollStateChange={checkScrollState}
+                showTopShadow={showTopShadow}
+                showFadeMask={showFadeMask}
+                showReauthRow={showActiveReauthRow}
+                onReauthenticate={
+                  activeMcpServer
+                    ? () => handleServerAuthentication(activeMcpServer)
+                    : undefined
+                }
+                isReauthLoading={activeMcpServerData?.isLoading ?? false}
+              />
             ) : filteredTools.length === 0 &&
               filteredMCPServers.length === 0 ? (
               <div className="text-center py-1 text-neutral-400 dark:text-neutral-500">
@@ -1195,7 +1289,9 @@ export function ActionToggle({
                       toggleForcedTool(tool.id);
                       setOpen(false);
                     }}
-                    onSourceManagementOpen={() => setShowSourceManagement(true)}
+                    onSourceManagementOpen={() =>
+                      setSecondaryView({ type: "sources" })
+                    }
                     hasNoConnectors={hasNoConnectors}
                   />
                 ))}
@@ -1212,50 +1308,25 @@ export function ActionToggle({
                   const serverTools = selectedAssistant.tools.filter(
                     (t) => t.mcp_server_id === Number(server.id)
                   );
+                  const enabledTools = serverTools.filter(
+                    (t) => !disabledToolIds.includes(t.id)
+                  );
 
                   return (
                     <MCPServerItem
                       key={server.id}
                       server={server}
-                      isExpanded={mcpToolsPopup.serverId === server.id}
+                      isActive={activeMcpServerId === server.id}
                       tools={serverTools}
+                      enabledTools={enabledTools}
                       isAuthenticated={serverData.isAuthenticated}
                       isLoading={serverData.isLoading}
-                      onToggleExpand={(element: HTMLElement) => {
-                        const serverName = element.getAttribute(
-                          "data-mcp-server-name"
-                        );
-                        console.log(
-                          "onToggleExpand called",
-                          server.id,
-                          mcpToolsPopup.serverId
-                        );
-
-                        if (mcpToolsPopup.serverId === server.id) {
-                          // Close if already open
-                          console.log("Closing MCP popup");
-                          setMcpToolsPopup({
-                            serverId: null,
-                            serverName: "",
-                            anchorElement: null,
-                          });
-                        } else {
-                          // Set flag to prevent popover from closing
-                          console.log("Setting preventCloseRef to true");
-                          preventCloseRef.current = true;
-
-                          console.log(
-                            "Opening MCP popup",
-                            server.id,
-                            serverName
-                          );
-                          setMcpToolsPopup({
-                            serverId: server.id,
-                            serverName: serverName || server.name,
-                            anchorElement: element,
-                          });
-                        }
-                      }}
+                      onSelect={() =>
+                        setSecondaryView({
+                          type: "mcp",
+                          serverId: server.id,
+                        })
+                      }
                       onAuthenticate={() => handleServerAuthentication(server)}
                     />
                   );
@@ -1333,62 +1404,6 @@ export function ActionToggle({
           existingCredentials={mcpApiKeyModal.existingCredentials}
         />
       )}
-
-      {/* MCP Tools Popup */}
-      {mcpToolsPopup.serverId !== null &&
-        mcpToolsPopup.anchorElement &&
-        (() => {
-          const rect = mcpToolsPopup.anchorElement.getBoundingClientRect();
-          // Anchor the popup to the server element using viewport coordinates
-          // Ensure the popup never falls off-screen vertically.
-          const POPUP_MAX_HEIGHT = 300; // matches max-h-[300px]
-          const MARGIN = 8; // small offset from edges and trigger
-          const clampedTop = Math.max(
-            MARGIN,
-            Math.min(rect.top, window.innerHeight - POPUP_MAX_HEIGHT - MARGIN)
-          );
-
-          const positioning = {
-            position: "fixed" as const,
-            left: rect.right + MARGIN,
-            top: clampedTop,
-            zIndex: 1000,
-          };
-
-          return createPortal(
-            <div
-              style={positioning}
-              onClick={(e) => e.stopPropagation()}
-              onMouseDownCapture={() => {
-                preventCloseRef.current = true;
-              }}
-              onPointerDownCapture={() => {
-                preventCloseRef.current = true;
-              }}
-              data-mcp-popup="true"
-            >
-              <MCPToolsList
-                tools={selectedAssistant.tools.filter(
-                  (t) => t.mcp_server_id === Number(mcpToolsPopup.serverId)
-                )}
-                serverName={mcpToolsPopup.serverName}
-                onClose={() =>
-                  setMcpToolsPopup({
-                    serverId: null,
-                    serverName: "",
-                    anchorElement: null,
-                  })
-                }
-                selectedAssistant={selectedAssistant}
-                preventMainPopupClose={() => {
-                  preventCloseRef.current = true;
-                }}
-                onSourceManagementOpen={() => setShowSourceManagement(true)}
-              />
-            </div>,
-            document.body
-          );
-        })()}
     </>
   );
 }
