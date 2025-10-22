@@ -4,15 +4,15 @@ import Image from "next/image";
 import { StaticImageData } from "next/image";
 
 import {
-  ArrowSquareOut,
-  Brain,
-  Gear,
-  Link,
-  LinkBreak,
-  Plug,
-  Question,
-  Trash,
-  XSquare,
+  ArrowSquareOutIcon as ArrowSquareOut,
+  BrainIcon as Brain,
+  GearIcon as Gear,
+  LinkIcon as Link,
+  LinkBreakIcon as LinkBreak,
+  PlugIcon as Plug,
+  QuestionIcon as Question,
+  TrashIcon as Trash,
+  XSquareIcon as XSquare,
 } from "@phosphor-icons/react";
 
 import {
