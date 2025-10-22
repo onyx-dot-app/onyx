@@ -172,7 +172,7 @@ def initiate_oauth_flow(
     )
 
     # Build authorization URL
-    redirect_uri = f"{WEB_DOMAIN}/oauth/callback"
+    redirect_uri = f"{WEB_DOMAIN}/oauth-config/callback"
     authorization_url = OAuthTokenManager.build_authorization_url(
         oauth_config, redirect_uri, state
     )
@@ -217,7 +217,7 @@ def handle_oauth_callback(
             )
 
         # Exchange code for token
-        redirect_uri = f"{WEB_DOMAIN}/oauth/callback"
+        redirect_uri = f"{WEB_DOMAIN}/oauth-config/callback"
         token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
         token_data = token_manager.exchange_code_for_token(request.code, redirect_uri)
 
