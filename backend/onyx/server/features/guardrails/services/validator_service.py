@@ -7,6 +7,7 @@ from onyx.server.features.guardrails.validators import (
     unmask_pii,
     mask_banned_words,
     detect_sensitive_topic,
+    validate_text_style,
 )
 from onyx.utils.logger import setup_logger
 
@@ -165,6 +166,20 @@ class ValidatorManager:
                 return validated_message
 
             # Проверка на соответствие определенному стилю
+            elif validator.validator_type == ValidatorType.TEXT_STYLE:
+                llm = self._get_llm(validator=validator)
+                if not llm:
+                    return message
+
+                validated_message = validate_text_style(
+                    llm=llm, text=message, config=config
+                )
+
+                return validated_message
+
+            # Валидация JSON-структуры
+            # Проверка ответов на токсичность
+            # Проверка длины ответа
             # Проверка на наличие ключевых сущностей в ответе
             # Проверка галлюцинаций в выводе модели
 

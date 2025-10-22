@@ -1,0 +1,70 @@
+from onyx.llm.interfaces import LLM
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def llm_analyzer(
+    llm: LLM,
+    text: str,
+    text_styles: list[str],
+) -> str:
+    """Анализирует и корректирует стиль текста ответа от LLM
+    согласно заданным требованиям.
+
+    Функция проверяет, соответствует ли текст указанным стилям общения.
+    Если текст не соответствует - переписывает его, сохраняя содержание,
+    но изменяя стилистику. Если соответствует - возвращает оригинал
+    """
+
+    prompt = f"""
+        Ты - эксперт по анализу стиля общения. Проверь, соответствует ли текст требуемым
+        стилям общения. 
+
+        ТЕКСТ ДЛЯ АНАЛИЗА: "{text}"
+
+        ТРЕБУЕМЫЕ СТИЛИ ОБЩЕНИЯ ДЛЯ ПРОВЕРКИ: {text_styles}
+
+        ПРАВИЛА, ОТ КОТОРЫХ СТРОГО ЗАПРЕЩЕНО ОТХОДИТЬ:
+        1. Если текст соответствует требуемым стилям общения - верни оригинальный текст без изменений.
+        2. Если текст НЕ соответствует требуемым стилям общения - перепиши его, сохраняя:
+            - Полный смысл и содержание;
+            - Все факты и детали;
+            - Основную структуру сообщения;
+            - Все персональные данные;
+
+        ВЕРНИ ТОЛЬКО ФИНАЛЬНЫЙ ТЕКСТ.
+
+        ТВОЙ ОТВЕТ, ФИНАЛЬНЫЙ ТЕКСТ:
+        """
+
+    try:
+
+        response = llm.invoke(prompt=prompt)
+        result_text = response.content.strip()
+
+        return result_text
+
+    except Exception as e:
+        logger.error(
+            "Ошибка при анализе стиля ответа LLM: %s", repr(e)
+        )
+        return text
+
+
+def validate_text_style(
+    llm: LLM,
+    text: str,
+    config: dict,
+) -> str:
+
+    text_styles = config.get("text_styles")
+
+    if not text_styles:
+        return text
+
+    validated_text = llm_analyzer(
+        llm=llm, text=text, text_styles=text_styles
+    )
+
+    return validated_text
