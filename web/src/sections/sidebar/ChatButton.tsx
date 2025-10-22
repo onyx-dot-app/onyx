@@ -16,6 +16,7 @@ import { cn, noProp } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
@@ -325,7 +326,7 @@ function ChatButtonInner({
         </div>
       </PopoverTrigger>
       <PopoverContent side="right" align="end">
-        {popoverItems}
+        <PopoverMenu>{popoverItems}</PopoverMenu>
       </PopoverContent>
     </>
   );
