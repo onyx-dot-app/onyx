@@ -16,7 +16,6 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import SvgSettings from "@/icons/settings";
 import SvgLogOut from "@/icons/log-out";
 import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
@@ -35,17 +34,15 @@ function getUsernameFromEmail(email?: string): string {
 }
 
 interface SettingsPopoverProps {
-  removeAdminPanelLink?: boolean;
   onUserSettingsClick: () => void;
   onNotificationsClick: () => void;
 }
 
 function SettingsPopover({
-  removeAdminPanelLink,
   onUserSettingsClick,
   onNotificationsClick,
 }: SettingsPopoverProps) {
-  const { user, isAdmin, isCurator } = useUser();
+  const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
     errorHandlingFetcher
@@ -54,8 +51,6 @@ function SettingsPopover({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const showAdminPanel = (!user || isAdmin) && !removeAdminPanelLink;
-  const showCuratorPanel = user && isCurator;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
@@ -89,24 +84,6 @@ function SettingsPopover({
           //     {item.title}
           //   </NavigationTab>
           // )),
-          showAdminPanel && (
-            <MenuButton
-              key="admin-panel"
-              href="/admin/indexing/status"
-              icon={SvgSettings}
-            >
-              Admin Panel
-            </MenuButton>
-          ),
-          showCuratorPanel && (
-            <MenuButton
-              key="curator-panel"
-              href="/admin/indexing/status"
-              icon={SvgSettings}
-            >
-              Curator Panel
-            </MenuButton>
-          ),
           <div key="user-settings" data-testid="Settings/user-settings">
             <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
@@ -179,13 +156,9 @@ function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
 
 export interface SettingsProps {
   folded?: boolean;
-  removeAdminPanelLink?: boolean;
 }
 
-export default function Settings({
-  folded,
-  removeAdminPanelLink,
-}: SettingsProps) {
+export default function Settings({ folded }: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
@@ -227,7 +200,6 @@ export default function Settings({
       <PopoverContent align="end" side="right">
         {popupState === "Settings" && (
           <SettingsPopover
-            removeAdminPanelLink={removeAdminPanelLink}
             onUserSettingsClick={() => {
               setPopupState(undefined);
               setShowUserSettingsModal(true);
