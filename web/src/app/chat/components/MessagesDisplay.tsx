@@ -155,6 +155,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
                 onMessageSelection={onMessageSelection}
+                setPresentingDocument={setPresentingDocument}
               />
             </div>
           );
