@@ -49,7 +49,7 @@ export default function LineItem({
             </>
           )}
 
-          <Text secondaryBody text03 className="">
+          <Text secondaryBody text03>
             {description}
           </Text>
         </div>
