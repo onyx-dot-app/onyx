@@ -3,6 +3,7 @@ from typing import Any
 
 from agents import ModelSettings
 from agents.models.interface import Model
+from litellm import Reasoning
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -23,6 +24,7 @@ from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -414,6 +416,12 @@ def get_llm_model_and_settings(
                 continue
     if api_version:
         model_kwargs["api_version"] = api_version
+
+    # Support reasoning streaming
+    if provider == "openai":
+        provider = "openai/responses"
+    if provider == "azure":
+        provider = "azure/responses"
     # Build the full model name in provider/model format
     model_name = f"{provider}/{deployment_name or model}"
 
@@ -428,10 +436,15 @@ def get_llm_model_and_settings(
 
     # Create ModelSettings with the provided configuration
     model_settings = ModelSettings(
-        temperature=temperature,
-        include_usage=True,
+        temperature=(
+            temperature if not model_is_reasoning_model(model, provider) else 1.0
+        ),
         extra_headers=extra_headers if extra_headers else None,
         extra_args=model_kwargs,
+        reasoning=Reasoning(
+            summary="detailed",
+            effort="medium",
+        ),
     )
 
     return litellm_model, model_settings

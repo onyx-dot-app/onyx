@@ -7,6 +7,10 @@ from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
+from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
+from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
+from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses import ResponseReasoningSummaryTextDoneEvent
 
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -21,7 +25,6 @@ from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
 from onyx.chat.turn.infra.session_sink import save_iteration
-from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
@@ -72,7 +75,7 @@ def _run_agent_loop(
     agent = Agent(
         name="Assistant",
         model=dependencies.llm_model,
-        tools=cast(list[AgentToolType], dependencies.tools),
+        tools=[],
         model_settings=dependencies.model_settings,
         tool_use_behavior="stop_on_first_tool",
     )
@@ -314,6 +317,20 @@ def _process_citations_for_final_answer(
 
 
 def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj | None:
+    try:
+        if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
+            print("REASONING!: ResponseReasoningSummaryPartAddedEvent", ev.data)
+
+        elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
+            print("REASONING!: ResponseReasoningSummaryTextDeltaEvent", ev.data)
+
+        elif isinstance(ev.data, ResponseReasoningSummaryTextDoneEvent):
+            print("REASONING!: ResponseReasoningSummaryTextDoneEvent", ev.data)
+
+        elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
+            print("REASONING!: ResponseReasoningSummaryPartDoneEvent", ev.data)
+    except:
+        pass
     if isinstance(ev, RawResponsesStreamEvent):
         # TODO: might need some variation here for different types of models
         # OpenAI packet translator
