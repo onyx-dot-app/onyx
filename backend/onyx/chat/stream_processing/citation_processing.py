@@ -40,7 +40,7 @@ class CitationProcessor:
         self.non_citation_count = 0
 
         # '[', '[[', '[1', '[[1', '[1,', '[1, ', '[1,2', '[1, 2,', etc.
-        self.possible_citation_pattern = re.compile(r"(\[+(?:\d+,? ?)*$)")
+        self.possible_citation_pattern = re.compile(r"\[+(?:\d+(?:,\s*\d+)*(?:,\s*)?)?$")
 
         # group 1: '[[1]]', [[2]], etc.
         # group 2: '[1]', '[1, 2]', '[1,2,16]', etc.
@@ -77,9 +77,9 @@ class CitationProcessor:
                     self.curr_segment = self.curr_segment.replace("```", "```plaintext")
 
         citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
-        possible_citation_found = bool(
-            re.search(self.possible_citation_pattern, self.curr_segment)
-        )
+        last_lb = self.curr_segment.rfind("[")
+        suffix = self.curr_segment[last_lb:] if last_lb != -1 else "" # avoid scanning the entire accumulated buffer
+        possible_citation_found = bool(self.possible_citation_pattern.search(suffix))
 
         result = ""
         if citation_matches and not in_code_block(self.llm_out):
