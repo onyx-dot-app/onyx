@@ -26,7 +26,7 @@ export default function VerticalShadowScroller({
 
       {/* Mask Layer */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[100]"
+        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
         style={{
           background: disable
             ? undefined
