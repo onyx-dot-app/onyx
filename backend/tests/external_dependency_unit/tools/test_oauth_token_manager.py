@@ -27,7 +27,6 @@ def _create_test_oauth_config(db_session: Session) -> OAuthConfig:
     """Helper to create a test OAuth config"""
     return create_oauth_config(
         name=f"Test OAuth Config {uuid4().hex[:8]}",
-        provider="github",
         authorization_url="https://github.com/login/oauth/authorize",
         token_url="https://github.com/login/oauth/access_token",
         client_id="test_client_id",
@@ -422,7 +421,6 @@ class TestOAuthTokenManagerURLBuilding:
         """Test building URL with additional provider-specific parameters"""
         oauth_config = create_oauth_config(
             name=f"Test OAuth {uuid4().hex[:8]}",
-            provider="google",
             authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
             token_url="https://oauth2.googleapis.com/token",
             client_id="google_client_id",
@@ -446,7 +444,6 @@ class TestOAuthTokenManagerURLBuilding:
         """Test building URL when no scopes are configured"""
         oauth_config = create_oauth_config(
             name=f"Test OAuth {uuid4().hex[:8]}",
-            provider="simple",
             authorization_url="https://oauth.example.com/authorize",
             token_url="https://oauth.example.com/token",
             client_id="simple_client_id",
@@ -472,7 +469,6 @@ class TestOAuthTokenManagerURLBuilding:
         """Test building URL when authorization_url already has query parameters"""
         oauth_config = create_oauth_config(
             name=f"Test OAuth {uuid4().hex[:8]}",
-            provider="custom",
             authorization_url="https://oauth.example.com/authorize?foo=bar",
             token_url="https://oauth.example.com/token",
             client_id="custom_client_id",
