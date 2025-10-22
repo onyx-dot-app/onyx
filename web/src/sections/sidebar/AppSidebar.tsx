@@ -319,7 +319,7 @@ function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded, searchParams]
+    [folded, route, searchParams]
   );
 
   const settingsButton = useMemo(
