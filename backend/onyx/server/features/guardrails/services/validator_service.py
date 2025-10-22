@@ -76,6 +76,10 @@ class ValidatorManager:
         for validator in ordered_validators:
             try:
 
+                if self._is_blocked:
+                    logger.info("Валидация заблокирована")
+                    break
+
                 validated_message = self._apply_validator(
                     validator=validator,
                     message=validated_message,
@@ -161,14 +165,10 @@ class ValidatorManager:
                     )
                     return message
 
-                llm = llm_from_provider(
-                    model_name=llm_provider.default_model_name,
-                    llm_provider=llm_provider,
-                )
-
-                validated_message = detect_sensitive_topic(
+                validated_message, is_blocked = detect_sensitive_topic(
                     llm=llm, text=message, config=config
                 )
+                self._is_blocked = is_blocked
 
                 logger.info(
                     "\nSENSITIVE_TOPIC | %s-валидация | Валидация запретных тем | Результат:\n%s",

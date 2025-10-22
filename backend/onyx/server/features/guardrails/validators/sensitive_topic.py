@@ -62,13 +62,13 @@ def detect_sensitive_topic(
     llm: LLM,
     text: str,
     config: dict,
-) -> str | None:
+) -> tuple[str, bool]:
     """Распознавание запретных тем"""
 
     sensitive_topics = config.get("sensitive_topics")
 
     if not sensitive_topics:
-        return text
+        return text, False
 
     llm_callable = create_llm_callable(llm=llm)
 
@@ -85,6 +85,6 @@ def detect_sensitive_topic(
         guard.validate(text)
     except Exception as e:
         text = "К сожалению, я не могу ответить на ваш запрос."
-        return text
+        return text, True
 
-    return text
+    return text, False
