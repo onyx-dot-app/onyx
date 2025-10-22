@@ -24,7 +24,6 @@ def upgrade() -> None:
         "oauth_config",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
-        sa.Column("provider", sa.String(), nullable=False),
         sa.Column("authorization_url", sa.Text(), nullable=False),
         sa.Column("token_url", sa.Text(), nullable=False),
         sa.Column("client_id", sa.LargeBinary(), nullable=False),

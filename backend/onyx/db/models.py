@@ -2538,9 +2538,6 @@ class OAuthConfig(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    provider: Mapped[str] = mapped_column(
-        String, nullable=False
-    )  # Free text: "github", "google", "gitlab", etc.
 
     # OAuth provider endpoints
     authorization_url: Mapped[str] = mapped_column(Text, nullable=False)
