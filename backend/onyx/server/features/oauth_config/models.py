@@ -50,12 +50,6 @@ class OAuthInitiateResponse(BaseModel):
     state: str  # OAuth state parameter for CSRF protection
 
 
-class OAuthCallbackRequest(BaseModel):
-    code: str
-    state: str
-    oauth_config_id: int
-
-
 class OAuthCallbackResponse(BaseModel):
     success: bool
     redirect_url: str

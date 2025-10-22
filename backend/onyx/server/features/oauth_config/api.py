@@ -23,7 +23,6 @@ from onyx.db.oauth_config import update_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.federated_connectors.oauth_utils import generate_oauth_state
 from onyx.federated_connectors.oauth_utils import verify_oauth_state
-from onyx.server.features.oauth_config.models import OAuthCallbackRequest
 from onyx.server.features.oauth_config.models import OAuthCallbackResponse
 from onyx.server.features.oauth_config.models import OAuthConfigCreate
 from onyx.server.features.oauth_config.models import OAuthConfigSnapshot
@@ -182,7 +181,8 @@ def initiate_oauth_flow(
 
 @router.post("/callback")
 def handle_oauth_callback(
-    request: OAuthCallbackRequest,
+    code: str,
+    state: str,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> OAuthCallbackResponse:
@@ -190,13 +190,14 @@ def handle_oauth_callback(
     Handle OAuth callback after user authorizes the application.
 
     Exchanges the authorization code for an access token and stores it.
+    Accepts code and state as query parameters (standard OAuth flow).
     """
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
 
     try:
         # Verify state and retrieve session data
-        session = verify_oauth_state(request.state)
+        session = verify_oauth_state(state)
 
         # Verify the user_id matches
         if str(user.id) != session.user_id:
@@ -204,22 +205,21 @@ def handle_oauth_callback(
                 status_code=403, detail="User mismatch in OAuth callback"
             )
 
-        # Verify the oauth_config_id matches
-        if request.oauth_config_id != session.federated_connector_id:
-            raise HTTPException(status_code=400, detail="OAuth config ID mismatch")
+        # Extract oauth_config_id from session (stored during initiate)
+        oauth_config_id = session.federated_connector_id
 
         # Get OAuth config
-        oauth_config = get_oauth_config(request.oauth_config_id, db_session)
+        oauth_config = get_oauth_config(oauth_config_id, db_session)
         if not oauth_config:
             raise HTTPException(
                 status_code=404,
-                detail=f"OAuth config with id {request.oauth_config_id} not found",
+                detail=f"OAuth config with id {oauth_config_id} not found",
             )
 
         # Exchange code for token
         redirect_uri = f"{WEB_DOMAIN}/oauth-config/callback"
         token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
-        token_data = token_manager.exchange_code_for_token(request.code, redirect_uri)
+        token_data = token_manager.exchange_code_for_token(code, redirect_uri)
 
         # Store token
         upsert_user_oauth_token(oauth_config.id, user.id, token_data, db_session)
