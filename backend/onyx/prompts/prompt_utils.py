@@ -154,14 +154,12 @@ def build_task_prompt_reminders_v2(
     citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return f"""
-    <TASK_PROMPT>
+    <long_conversation_reminder>
     {base_task}
     {citation_or_nothing}
     {language_hint_or_nothing}
-    </TASK_PROMPT>
-    <USER_PROMPT>
+    </long_conversation_reminder>
     {chat_turn_user_message}
-    </USER_PROMPT>
     """.strip()
 
 

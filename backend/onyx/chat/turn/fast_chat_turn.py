@@ -87,7 +87,7 @@ def _run_agent_loop(
         )
         current_messages = cast(list[dict], streamed.to_input_list())
         current_messages = _remove_last_task_prompt_and_insert_new_one(
-            messages[-1]["content"], current_messages, prompt_config, ctx
+            messages[-1]["content"][0]["text"], current_messages, prompt_config, ctx
         )
         # TODO: Make this configurable on OnyxAgent level
         stopping_tools = ["image_generation"]
