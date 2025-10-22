@@ -21,12 +21,12 @@ export default function VerticalShadowScroller({
       <div className={cn("flex flex-col flex-1 overflow-y-scroll", className)}>
         {children}
         {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
-        <div className="min-h-[0.5rem]" />
+        <div className="min-h-[1rem]" />
       </div>
 
       {/* Mask Layer */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-[2rem] z-[20] pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
         style={{
           background: disable
             ? undefined
