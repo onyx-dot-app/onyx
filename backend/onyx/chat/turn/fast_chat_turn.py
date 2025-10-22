@@ -8,6 +8,10 @@ from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
+from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
+from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
+from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses import ResponseReasoningSummaryTextDoneEvent
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
@@ -72,7 +76,13 @@ def _run_agent_loop(
     current_user_message_typed: UserMessage = current_user_message  # type: ignore
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
-    first_iteration = True
+    agent = Agent(
+        name="Assistant",
+        model=dependencies.llm_model,
+        tools=[],
+        model_settings=dependencies.model_settings,
+        tool_use_behavior="stop_on_first_tool",
+    )
 
     while not last_call_is_final:
         current_messages = chat_history + [current_user_message] + agent_turn_messages

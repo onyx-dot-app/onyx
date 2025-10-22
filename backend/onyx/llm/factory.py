@@ -3,6 +3,7 @@ from typing import Any
 
 from agents import ModelSettings
 from agents.models.interface import Model
+from litellm import Reasoning
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -428,8 +429,16 @@ def get_llm_model_and_settings(
         os.environ["OLLAMA_API_BASE"] = api_base
     if api_version:
         model_kwargs["api_version"] = api_version
+
     # Add timeout to model_kwargs so it gets passed to litellm
     model_kwargs["timeout"] = timeout
+
+    # Support reasoning streaming
+    if provider == "openai":
+        provider = "openai/responses"
+    if provider == "azure":
+        provider = "azure/responses"
+
     # Build the full model name in provider/model format
     model_name = f"{provider}/{deployment_name or model}"
 
@@ -444,10 +453,15 @@ def get_llm_model_and_settings(
 
     # Create ModelSettings with the provided configuration
     model_settings = ModelSettings(
-        temperature=temperature,
-        include_usage=True,
+        temperature=(
+            temperature if not model_is_reasoning_model(model, provider) else 1.0
+        ),
         extra_headers=extra_headers if extra_headers else None,
         extra_args=model_kwargs,
+        reasoning=Reasoning(
+            summary="detailed",
+            effort="medium",
+        ),
     )
 
     return litellm_model, model_settings
