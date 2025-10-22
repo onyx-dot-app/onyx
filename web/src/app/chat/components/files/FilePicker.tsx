@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Loader2 } from "lucide-react";
@@ -22,7 +23,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 
 // Small helper to render an icon + label row
 const Row = ({ children }: { children: React.ReactNode }) => (
@@ -54,117 +55,125 @@ export function FilePickerContents({
   setShowRecentFiles,
   onDelete,
 }: FilePickerContentsProps) {
+  // These are the "quick" files that we show. Essentially "speed dial", but for files.
+  // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
+  const hasFiles = recentFiles.length > 0;
+  const shouldShowMoreFilesButton = recentFiles.length > MAX_FILES_TO_SHOW;
+  const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
+
   return (
-    <>
-      {recentFiles.length > 0 && (
-        <>
-          <Text text02 secondaryBody className="mx-2 mt-2 mb-1">
+    <PopoverMenu className="w-[15.5rem] max-h-[300px] border-transparent">
+      {[
+        // Title
+        hasFiles && (
+          <Text key="recent-files" text02 secondaryBody>
             Recent Files
           </Text>
+        ),
 
-          {recentFiles.slice(0, 3).map((f) => (
-            <div
-              role="button"
-              tabIndex={0}
-              key={f.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                onPickRecent && onPickRecent(f);
-              }}
-              className="w-full rounded-lg hover:bg-background-neutral-02 group p-0.5"
-            >
-              <div className="flex items-center w-full m-1 mt-1 p-0.5 group">
-                <Row>
-                  <div className="p-0.5">
-                    {String(f.status) === UserFileStatus.PROCESSING ||
-                    String(f.status) === UserFileStatus.UPLOADING ||
-                    String(f.status) === UserFileStatus.DELETING ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-text-02" />
-                    ) : (
-                      <SvgFileText className="h-4 w-4 stroke-text-02" />
+        // Quick access files
+        ...quickAccessFiles.map((f) => (
+          <div
+            role="button"
+            tabIndex={0}
+            key={f.id}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onPickRecent && onPickRecent(f);
+            }}
+            className="w-full rounded-lg hover:bg-background-neutral-02 group p-0.5"
+          >
+            <div className="flex items-center w-full m-1 mt-1 p-0.5 group">
+              <Row>
+                <div className="p-0.5">
+                  {String(f.status) === UserFileStatus.PROCESSING ||
+                  String(f.status) === UserFileStatus.UPLOADING ||
+                  String(f.status) === UserFileStatus.DELETING ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-text-02" />
+                  ) : (
+                    <SvgFileText className="h-4 w-4 stroke-text-02" />
+                  )}
+                </div>
+                <div className="flex items-center gap-1 min-w-0">
+                  <Text
+                    text03
+                    mainUiBody
+                    nowrap
+                    className="truncate max-w-[160px]"
+                  >
+                    {f.name}
+                  </Text>
+                  {onFileClick &&
+                    String(f.status) !== UserFileStatus.PROCESSING &&
+                    String(f.status) !== UserFileStatus.UPLOADING &&
+                    String(f.status) !== UserFileStatus.DELETING && (
+                      <IconButton
+                        internal
+                        icon={SvgExternalLink}
+                        tooltip="View file"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onFileClick(f);
+                        }}
+                      />
                     )}
-                  </div>
-                  <div className="flex items-center gap-1 min-w-0">
-                    <Text
-                      text03
-                      mainUiBody
-                      nowrap
-                      className="truncate max-w-[160px]"
-                    >
-                      {f.name}
-                    </Text>
-                    {onFileClick &&
-                      String(f.status) !== UserFileStatus.PROCESSING &&
-                      String(f.status) !== UserFileStatus.UPLOADING &&
-                      String(f.status) !== UserFileStatus.DELETING && (
-                        <IconButton
-                          internal
-                          icon={SvgExternalLink}
-                          tooltip="View file"
-                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onFileClick(f);
-                          }}
-                        />
-                      )}
-                  </div>
+                </div>
 
-                  <div className="relative flex items-center ml-auto mr-2">
-                    <Text
-                      text02
-                      secondaryBody
-                      className="p-0.5 group-hover:opacity-0 transition-opacity duration-150"
-                    >
-                      {getFileExtension(f.name)}
-                    </Text>
+                <div className="relative flex items-center ml-auto mr-2">
+                  <Text
+                    text02
+                    secondaryBody
+                    className="p-0.5 group-hover:opacity-0 transition-opacity duration-150"
+                  >
+                    {getFileExtension(f.name)}
+                  </Text>
 
-                    {onDelete &&
-                      String(f.status) !== UserFileStatus.UPLOADING &&
-                      String(f.status) !== UserFileStatus.DELETING && (
-                        <IconButton
-                          internal
-                          icon={SvgTrash}
-                          tooltip="Delete file"
-                          className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onDelete(f);
-                          }}
-                        />
-                      )}
-                  </div>
-                </Row>
-              </div>
+                  {onDelete &&
+                    String(f.status) !== UserFileStatus.UPLOADING &&
+                    String(f.status) !== UserFileStatus.DELETING && (
+                      <IconButton
+                        internal
+                        icon={SvgTrash}
+                        tooltip="Delete file"
+                        className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onDelete(f);
+                        }}
+                      />
+                    )}
+                </div>
+              </Row>
             </div>
-          ))}
+          </div>
+        )),
 
-          {recentFiles.length > 3 && (
-            <LineItem
-              icon={MoreHorizontal}
-              onClick={() => setShowRecentFiles(true)}
-            >
-              <Text text03 mainUiBody>
-                All Recent Files
-              </Text>
-            </LineItem>
-          )}
+        // Rest of the files
+        shouldShowMoreFilesButton && (
+          <LineItem
+            icon={MoreHorizontal}
+            onClick={() => setShowRecentFiles(true)}
+          >
+            All Recent Files
+          </LineItem>
+        ),
+        null,
 
-          <div className="border-b my-0.5" />
-        </>
-      )}
-
-      <LineItem
-        icon={SvgPaperclip}
-        description="Upload a file from your device"
-        onClick={triggerUploadPicker}
-      >
-        Upload Files
-      </LineItem>
-    </>
+        // Action button to upload more files
+        <LineItem
+          key="upload-files"
+          icon={SvgPaperclip}
+          description="Upload a file from your device"
+          onClick={triggerUploadPicker}
+        >
+          Upload Files
+        </LineItem>,
+      ]}
+    </PopoverMenu>
   );
 }
 
@@ -283,12 +292,7 @@ export default function FilePicker({
             {trigger}
           </div>
         </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          sideOffset={6}
-          className="w-[15.5rem] max-h-[300px] border-transparent"
-          side="top"
-        >
+        <PopoverContent align="start" sideOffset={6} side="top">
           <FilePickerContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
