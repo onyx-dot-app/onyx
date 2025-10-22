@@ -134,23 +134,38 @@ export const LogoIcon = ({
 );
 
 // Helper to create simple icon components from react-icon libraries
-const createIcon =
-  (IconComponent: React.ComponentType<{ size?: number; className?: string }>) =>
-  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
-    <IconComponent size={size} className={className} />
-  );
+const createIcon = (
+  IconComponent: React.ComponentType<{ size?: number; className?: string }>
+) => {
+  const IconWrapper = ({
+    size = 16,
+    className = defaultTailwindCSS,
+  }: IconProps) => <IconComponent size={size} className={className} />;
+  IconWrapper.displayName = `Icon(${
+    IconComponent.displayName || IconComponent.name || "Component"
+  })`;
+  return IconWrapper;
+};
 
 // Helper to create simple logo icon components
-const createLogoIcon =
-  (src: string | StaticImageData) =>
-  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
-    <LogoIcon size={size} className={className} src={src} />
-  );
+const createLogoIcon = (src: string | StaticImageData) => {
+  const LogoIconWrapper = ({
+    size = 16,
+    className = defaultTailwindCSS,
+  }: IconProps) => <LogoIcon size={size} className={className} src={src} />;
+  LogoIconWrapper.displayName = "LogoIconWrapper";
+  return LogoIconWrapper;
+};
 
 // Helper to create logo icons with dark mode variants
-const createDarkModeLogoIcon =
-  (lightSrc: StaticImageData, darkSrc: StaticImageData) =>
-  ({ size = 16, className = defaultTailwindCSS }: IconProps) => (
+const createDarkModeLogoIcon = (
+  lightSrc: StaticImageData,
+  darkSrc: StaticImageData
+) => {
+  const DarkModeLogoIcon = ({
+    size = 16,
+    className = defaultTailwindCSS,
+  }: IconProps) => (
     <div className="flex items-center justify-center">
       <div className="dark:hidden">
         <LogoIcon size={size} className={className} src={lightSrc} />
@@ -160,6 +175,9 @@ const createDarkModeLogoIcon =
       </div>
     </div>
   );
+  DarkModeLogoIcon.displayName = "DarkModeLogoIcon";
+  return DarkModeLogoIcon;
+};
 
 // ============================================================================
 // GENERIC SVG COMPONENTS (sorted alphabetically)
