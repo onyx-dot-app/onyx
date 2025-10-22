@@ -21,10 +21,41 @@ class ValidatorManager:
     валидациями (например, маппинг PII данных для маскирования/демаскирования).
     """
 
+    # Заданный порядок валидации по направлениям
+    _VALIDATION_ORDER = {
+        "input": [
+            ValidatorType.DETECT_PII,  # 1. Маскирование данных
+        ],
+        "output": [
+            ValidatorType.SENSITIVE_TOPIC,  # 1. Запретные темы
+            ValidatorType.DETECT_PII,  # 2. Демаскирование данных
+            ValidatorType.TEXT_STYLE,  # 3. Валидация текста определенному стилю
+            ValidatorType.BAN_LIST,  # 4. Запретные слова
+        ]
+    }
+
     def __init__(self, persona: Persona):
         self.persona = persona
         self._validators = persona.validators
         self._context = {}
+        self._is_blocked = False
+
+    def _get_ordered_validators(self, direction: str) -> list[Validator]:
+        """Возвращает валидаторы в правильном порядке,
+        исходя из заданного направления валидации (input, output)
+        """
+
+        order = self._VALIDATION_ORDER.get(direction, [])
+
+        validator_by_type = {v.validator_type: v for v in self._validators}
+
+        ordered = []
+
+        for validator_type in order:
+            if validator_type in validator_by_type:
+                ordered.append(validator_by_type[validator_type])
+
+        return ordered
 
     def validate_message(self, message: str, direction: str) -> str:
         """Применяет цепочку валидаторов к сообщению в указанном направлении.
@@ -37,9 +68,12 @@ class ValidatorManager:
         if not self._validators or not message or not message.strip():
             return message
 
+        # Сортируем валидаторы согласно порядку
+        ordered_validators = self._get_ordered_validators(direction)
+
         validated_message = message
 
-        for validator in self._validators:
+        for validator in ordered_validators:
             try:
 
                 validated_message = self._apply_validator(
