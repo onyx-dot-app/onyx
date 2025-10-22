@@ -36,6 +36,11 @@ repos:
       types_or: [html, css, javascript, ts, tsx]
       language_version: system
 
+  - repo: https://github.com/sirwart/ripsecrets
+    rev: v0.1.11
+    hooks:
+      - id: ripsecrets
+
   - repo: local
     hooks:
       - id: check-lazy-imports
