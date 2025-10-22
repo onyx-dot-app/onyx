@@ -4,7 +4,7 @@ import { TextFormField } from "@/components/Field";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import {
   OAuthConfig,
   OAuthConfigCreate,
@@ -22,7 +22,6 @@ interface OAuthConfigFormProps {
 
 const OAuthConfigSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
-  provider: Yup.string().required("Provider is required"),
   authorization_url: Yup.string()
     .url("Must be a valid URL")
     .required("Authorization URL is required"),
@@ -64,7 +63,6 @@ export const OAuthConfigForm = ({
         <Formik
           initialValues={{
             name: config?.name || "",
-            provider: config?.provider || "",
             authorization_url: config?.authorization_url || "",
             token_url: config?.token_url || "",
             client_id: "",
@@ -109,7 +107,6 @@ export const OAuthConfigForm = ({
                 // Create new config
                 const createPayload: OAuthConfigCreate = {
                   name: values.name,
-                  provider: values.provider,
                   authorization_url: values.authorization_url,
                   token_url: values.token_url,
                   client_id: values.client_id,
@@ -170,15 +167,6 @@ export const OAuthConfigForm = ({
                 subtext="A friendly name to identify this OAuth configuration (e.g., 'GitHub OAuth', 'Google OAuth')"
                 placeholder="e.g., GitHub OAuth"
                 autoCompleteDisabled={true}
-              />
-
-              <TextFormField
-                name="provider"
-                label="Provider:"
-                subtext="The OAuth provider name (e.g., 'github', 'google', 'linear')"
-                placeholder="e.g., github"
-                autoCompleteDisabled={true}
-                disabled={isUpdate}
               />
 
               <TextFormField

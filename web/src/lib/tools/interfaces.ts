@@ -75,7 +75,6 @@ export interface MethodSpec {
 export interface OAuthConfig {
   id: number;
   name: string;
-  provider: string;
   authorization_url: string;
   token_url: string;
   scopes: string[] | null;
@@ -87,7 +86,6 @@ export interface OAuthConfig {
 
 export interface OAuthConfigCreate {
   name: string;
-  provider: string;
   authorization_url: string;
   token_url: string;
   client_id: string;

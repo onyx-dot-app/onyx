@@ -1,7 +1,7 @@
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { SelectorFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { FiPlus } from "react-icons/fi";
+import SvgPlusCircle from "@/icons/plus-circle";
 import { useState } from "react";
 import { OAuthConfigForm } from "@/app/admin/oauth-configs/OAuthConfigForm";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -67,9 +67,9 @@ export const OAuthConfigSelector = ({
         subtext="Select an OAuth configuration for this tool. Users will be prompted to authenticate when using this tool."
         onSelect={(selected) => {
           // SelectorFormField passes the value string directly, not an object
-          let configId: number;
+          let configId: number | null;
           if (selected === null || selected === "null") {
-            configId = -1;
+            configId = null;
           } else if (typeof selected === "number") {
             configId = selected;
           } else {
@@ -80,9 +80,13 @@ export const OAuthConfigSelector = ({
           }
         }}
       />
-      <Button onClick={() => setShowModal(true)} type="button" secondary>
-        <FiPlus className="mr-1" />
-        Create New OAuth Config
+      <Button
+        onClick={() => setShowModal(true)}
+        type="button"
+        secondary
+        leftIcon={SvgPlusCircle}
+      >
+        New OAuth Configuration
       </Button>
 
       {showModal && (
