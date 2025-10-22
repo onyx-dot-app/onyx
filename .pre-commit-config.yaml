@@ -40,6 +40,10 @@ repos:
     rev: v0.1.11
     hooks:
       - id: ripsecrets
+        args:
+        - --additional-pattern
+        - ^sk-[A-Za-z0-9_\-]{20,}$
+
 
   - repo: local
     hooks:
