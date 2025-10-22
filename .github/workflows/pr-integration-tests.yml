@@ -157,6 +157,8 @@ jobs:
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
+          build-args: |
+            BASE_IMAGE=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
           outputs: type=registry
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
