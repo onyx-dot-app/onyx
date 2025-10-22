@@ -55,9 +55,12 @@ export function trinaryLogic<T>(
 // # Note:
 // This is a desired behaviour in MANY locations, since we have buttons nested within buttons.
 // When the nested button is pressed, the click event that triggered it should (in most scenarios) NOT trigger its parent button!
-export function noProp(f?: () => void): React.MouseEventHandler {
+export function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
   return (event) => {
     event.stopPropagation();
-    f?.();
+    event.preventDefault();
+    f?.(event);
   };
 }

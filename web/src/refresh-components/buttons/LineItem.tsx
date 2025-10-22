@@ -9,6 +9,7 @@ interface LineItemProps {
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   children?: string | React.ReactNode;
+  rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
 }
 
@@ -16,13 +17,14 @@ export default function LineItem({
   icon: Icon,
   description,
   children,
+  rightChildren,
   onClick,
 }: LineItemProps) {
   return (
     <button
       type="button"
       className={cn(
-        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08"
+        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08 group/LineItem"
       )}
       onClick={onClick}
     >
@@ -39,6 +41,7 @@ export default function LineItem({
         ) : (
           children
         )}
+        {rightChildren}
       </div>
       {description && (
         <div className="flex flex-row">
