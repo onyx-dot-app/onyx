@@ -40,6 +40,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm.utils import sanitize_custom_config
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -283,7 +284,8 @@ class DefaultMultiLLM(LLM):
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
         self._max_input_tokens = max_input_tokens
-        self._custom_config = custom_config
+        sanitized_custom_config = sanitize_custom_config(custom_config)
+        self._custom_config = sanitized_custom_config or None
 
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
@@ -293,11 +295,11 @@ class DefaultMultiLLM(LLM):
         # variables. We'll also try passing them in, since litellm just ignores
         # addtional kwargs (and some kwargs MUST be passed in rather than set as
         # env variables)
-        if custom_config:
+        if sanitized_custom_config:
             # Specifically pass in "vertex_credentials" / "vertex_location" as a
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
-            for k, v in custom_config.items():
+            for k, v in sanitized_custom_config.items():
                 if model_provider == "vertex_ai":
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v

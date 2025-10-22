@@ -53,6 +53,30 @@ ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 
 
+def sanitize_custom_config(
+    custom_config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Drop empty credential values and trim strings before use."""
+
+    if not custom_config:
+        return {}
+
+    sanitized: dict[str, Any] = {}
+    for key, value in custom_config.items():
+        if value is None:
+            continue
+        if isinstance(value, str):
+            trimmed_value = value.strip()
+            if not trimmed_value:
+                continue
+            sanitized[key] = trimmed_value
+            continue
+
+        sanitized[key] = value
+
+    return sanitized
+
+
 def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM,

@@ -24,6 +24,7 @@ from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import sanitize_custom_config
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -348,7 +349,11 @@ def get_llm(
     # NOTE: this is needed since Ollama API key is optional
     # User may access Ollama cloud via locally hosted instance (logged in)
     # or just via the cloud API (not logged in, using API key)
-    provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
+    sanitized_custom_config = sanitize_custom_config(custom_config)
+
+    provider_extra_headers = _build_provider_extra_headers(
+        provider, sanitized_custom_config or None
+    )
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
@@ -361,7 +366,7 @@ def get_llm(
         api_version=api_version,
         timeout=timeout,
         temperature=temperature,
-        custom_config=custom_config,
+        custom_config=sanitized_custom_config or None,
         extra_headers=extra_headers,
         model_kwargs={},
         long_term_logger=long_term_logger,
@@ -387,11 +392,14 @@ def get_llm_model_and_settings(
         temperature = GEN_AI_TEMPERATURE
 
     extra_headers = build_llm_extra_headers(additional_headers)
+    sanitized_custom_config = sanitize_custom_config(custom_config)
 
     # NOTE: this is needed since Ollama API key is optional
     # User may access Ollama cloud via locally hosted instance (logged in)
     # or just via the cloud API (not logged in, using API key)
-    provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
+    provider_extra_headers = _build_provider_extra_headers(
+        provider, sanitized_custom_config or None
+    )
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
@@ -401,11 +409,12 @@ def get_llm_model_and_settings(
     # addtional kwargs (and some kwargs MUST be passed in rather than set as
     # env variables)
     model_kwargs = model_kwargs or {}
-    if custom_config:
-        for k, v in custom_config.items():
+
+    if sanitized_custom_config:
+        for k, v in sanitized_custom_config.items():
             os.environ[k] = v
-    if custom_config and provider == "vertex_ai":
-        for k, v in custom_config.items():
+    if sanitized_custom_config and provider == "vertex_ai":
+        for k, v in sanitized_custom_config.items():
             if k == VERTEX_CREDENTIALS_FILE_KWARG:
                 model_kwargs[k] = v
                 continue
