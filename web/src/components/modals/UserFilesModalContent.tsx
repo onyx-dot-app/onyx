@@ -332,20 +332,23 @@ export default function UserFilesModalContent({
                   </Text>
                 )}
                 {!showRemove && <div className="p-spacing-inline"></div>}
-                {showRemove &&
-                  String(f.status) !== UserFileStatus.UPLOADING &&
-                  String(f.status) !== UserFileStatus.DELETING && (
-                    <IconButton
-                      internal
-                      icon={SvgTrash}
-                      tooltip="Remove from project"
-                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove && onRemove(f);
-                      }}
-                    />
-                  )}
+                {showRemove && (
+                  <div className="h-6 w-6">
+                    {String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
+                        <IconButton
+                          internal
+                          icon={SvgTrash}
+                          tooltip="Remove file"
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove && onRemove(f);
+                          }}
+                        />
+                      )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

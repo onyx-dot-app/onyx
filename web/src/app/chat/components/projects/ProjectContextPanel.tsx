@@ -257,6 +257,17 @@ export default function ProjectContextPanel({
             recentFiles={allRecentFiles}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
+              if (
+                file.status === UserFileStatus.UPLOADING ||
+                file.status === UserFileStatus.DELETING
+              ) {
+                setPopup({
+                  message:
+                    "Cannot add file while it is being uploaded or deleted.",
+                  type: "warning",
+                });
+                return;
+              }
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
               linkFileToProject(currentProjectId, file);

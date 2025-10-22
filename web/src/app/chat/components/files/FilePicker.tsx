@@ -102,7 +102,7 @@ export function FilePickerContents({
                           internal
                           icon={SvgExternalLink}
                           tooltip="View file"
-                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
@@ -128,7 +128,7 @@ export function FilePickerContents({
                           internal
                           icon={SvgTrash}
                           tooltip="Delete file"
-                          className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
+                          className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
