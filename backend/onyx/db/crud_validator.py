@@ -104,11 +104,20 @@ def create_validator(
 ) -> Validator:
     """Создает новый валидатор"""
 
+    if validator_create.include_llm:
+        if not validator_create.llm_provider_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Необходимо выбрать LLM-провайдер для валидатора!"
+            )
+
     new_validator = Validator(
         name=validator_create.name,
         description=validator_create.description,
         validator_type=validator_create.validator_type,
         config=validator_create.config,
+        include_llm=validator_create.include_llm,
+        llm_provider_id=validator_create.llm_provider_id,
         user_id=user.id,
     )
 
@@ -140,9 +149,17 @@ def update_validator(
         db_session=db_session, validator_id=validator_id, user=user
     )
 
-    validator.name = validator_update.name
-    validator.description = validator_update.description
-    validator.config = validator_update.config
+    if validator.include_llm:
+        if not validator_update.llm_provider_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Необходимо выбрать LLM-провайдер для валидатора!"
+            )
+
+        validator.name = validator_update.name
+        validator.description = validator_update.description
+        validator.config = validator_update.config
+        validator.llm_provider_id = validator_update.llm_provider_id
 
     try:
         db_session.commit()

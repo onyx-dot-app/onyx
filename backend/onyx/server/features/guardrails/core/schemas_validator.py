@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from onyx.db.enums import ValidatorType
 from onyx.db.models import Validator
+from onyx.server.manage.llm.models import LLMProviderView
 
 
 class ValidatorOwner(BaseModel):
@@ -40,6 +41,20 @@ class ValidatorCreate(BaseModel):
         description="Настройки валидатора в формате JSON",
         examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
     )
+    include_llm: bool = Field(
+        default=False,
+        description=(
+            "Использовать LLM-провайдер для валидации? "
+            "При подключении требуется выбрать LLM-провайдер в поле 'llm_provider_id'"
+        ),
+        examples=[True, False]
+    )
+    llm_provider_id: int | None = Field(
+        default=None,
+        description="ID LLM-провайдера",
+        examples=["1"]
+    )
+
 
 
 class ValidatorUpdate(BaseModel):
@@ -57,6 +72,11 @@ class ValidatorUpdate(BaseModel):
     config: dict[str, Any] = Field(
         description="Настройки валидатора в формате JSON",
         examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
+    )
+    llm_provider_id: int | None = Field(
+        default=None,
+        description="ID LLM-провайдера",
+        examples=["1"]
     )
 
 
@@ -82,6 +102,28 @@ class ValidatorResponse(BaseModel):
         examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
     )
 
+    include_llm: bool = Field(
+        default=False,
+        description=(
+            "Использовать LLM-провайдер для валидации? "
+            "При подключении требуется выбрать LLM-провайдера в поле 'llm_provider_id'"
+        ),
+        examples=[True, False]
+    )
+    llm_provider: LLMProviderView | None = Field(
+        default=None,
+        description="Подключенный LLM-провайдер для валидации",
+        examples=[
+            {
+                "id": 1,
+                "name": "DeepSeek",
+                "provider": "deepseek",
+                "default_model_name": "deepseek-chat",
+                "model_names": ["deepseek-chat", "deepseek-reasoner"]
+            }
+        ]
+    )
+
     created_at: datetime = Field(
         description="Дата создания валидатора",
         examples=["2025-10-06 15:25:15.695 +0300"]
@@ -104,6 +146,12 @@ class ValidatorResponse(BaseModel):
             description=validator.description,
             validator_type=validator.validator_type,
             config=validator.config,
+            include_llm=validator.include_llm,
+            llm_provider=(
+                LLMProviderView.from_model(validator.llm_provider)
+                if validator.llm_provider
+                else None
+            ),
             created_at=validator.created_at,
             updated_at=validator.updated_at,
         )
