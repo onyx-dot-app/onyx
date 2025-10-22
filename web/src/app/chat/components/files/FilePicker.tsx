@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { ProjectFile, UserFileStatus } from "../../projects/projectsService";
@@ -24,20 +23,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
-
-// Small helper to render an icon + label row
-const Row = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex items-center gap-2 w-full">{children}</div>
-);
-
-interface FilePickerContentsProps {
-  recentFiles: ProjectFile[];
-  onPickRecent?: (file: ProjectFile) => void;
-  onFileClick?: (file: ProjectFile) => void;
-  triggerUploadPicker: () => void;
-  setShowRecentFiles: (show: boolean) => void;
-  onDelete?: (file: ProjectFile) => void;
-}
+import SvgLoader from "@/icons/loader";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -47,7 +33,75 @@ const getFileExtension = (fileName: string): string => {
   return ext.toUpperCase();
 };
 
-export function FilePickerContents({
+interface RowProps {
+  projectFile: ProjectFile;
+  onPickRecent: (file: ProjectFile) => void;
+  onFileClick: (file: ProjectFile) => void;
+  onDelete: (file: ProjectFile) => void;
+}
+
+function Row({ projectFile, onPickRecent, onFileClick, onDelete }: RowProps) {
+  const showLoader = useMemo(
+    () =>
+      String(projectFile.status) === UserFileStatus.PROCESSING ||
+      String(projectFile.status) === UserFileStatus.UPLOADING ||
+      String(projectFile.status) === UserFileStatus.DELETING,
+    [projectFile.status]
+  );
+
+  const disableActionButton = useMemo(
+    () =>
+      String(projectFile.status) === UserFileStatus.UPLOADING ||
+      String(projectFile.status) === UserFileStatus.DELETING,
+    [projectFile.status]
+  );
+
+  return (
+    <LineItem
+      key={projectFile.id}
+      onClick={noProp(() => onPickRecent(projectFile))}
+      description={getFileExtension(projectFile.name)}
+      icon={
+        showLoader
+          ? ({ className }) => (
+              <SvgLoader className={cn(className, "animate-spin")} />
+            )
+          : SvgFileText
+      }
+      rightChildren={
+        <div className="flex flex-row items-center invisible group-hover/LineItem:visible">
+          <IconButton
+            icon={SvgExternalLink}
+            onClick={noProp(() => onFileClick(projectFile))}
+            tooltip="View File"
+            disabled={disableActionButton}
+            internal
+          />
+          <IconButton
+            icon={SvgTrash}
+            onClick={noProp(() => onDelete(projectFile))}
+            tooltip="Delete File"
+            disabled={disableActionButton}
+            internal
+          />
+        </div>
+      }
+    >
+      {projectFile.name}
+    </LineItem>
+  );
+}
+
+interface FilePickerContentsProps {
+  recentFiles: ProjectFile[];
+  onPickRecent: (file: ProjectFile) => void;
+  onFileClick: (file: ProjectFile) => void;
+  triggerUploadPicker: () => void;
+  setShowRecentFiles: (show: boolean) => void;
+  onDelete: (file: ProjectFile) => void;
+}
+
+function FilePickerContents({
   recentFiles,
   onPickRecent,
   onFileClick,
@@ -72,84 +126,14 @@ export function FilePickerContents({
         ),
 
         // Quick access files
-        ...quickAccessFiles.map((f) => (
-          <div
-            role="button"
-            tabIndex={0}
-            key={f.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              onPickRecent && onPickRecent(f);
-            }}
-            className="w-full rounded-lg hover:bg-background-neutral-02 group p-0.5"
-          >
-            <div className="flex items-center w-full m-1 mt-1 p-0.5 group">
-              <Row>
-                <div className="p-0.5">
-                  {String(f.status) === UserFileStatus.PROCESSING ||
-                  String(f.status) === UserFileStatus.UPLOADING ||
-                  String(f.status) === UserFileStatus.DELETING ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-text-02" />
-                  ) : (
-                    <SvgFileText className="h-4 w-4 stroke-text-02" />
-                  )}
-                </div>
-                <div className="flex items-center gap-1 min-w-0">
-                  <Text
-                    text03
-                    mainUiBody
-                    nowrap
-                    className="truncate max-w-[160px]"
-                  >
-                    {f.name}
-                  </Text>
-                  {onFileClick &&
-                    String(f.status) !== UserFileStatus.PROCESSING &&
-                    String(f.status) !== UserFileStatus.UPLOADING &&
-                    String(f.status) !== UserFileStatus.DELETING && (
-                      <IconButton
-                        internal
-                        icon={SvgExternalLink}
-                        tooltip="View file"
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          onFileClick(f);
-                        }}
-                      />
-                    )}
-                </div>
-
-                <div className="relative flex items-center ml-auto mr-2">
-                  <Text
-                    text02
-                    secondaryBody
-                    className="p-0.5 group-hover:opacity-0 transition-opacity duration-150"
-                  >
-                    {getFileExtension(f.name)}
-                  </Text>
-
-                  {onDelete &&
-                    String(f.status) !== UserFileStatus.UPLOADING &&
-                    String(f.status) !== UserFileStatus.DELETING && (
-                      <IconButton
-                        internal
-                        icon={SvgTrash}
-                        tooltip="Delete file"
-                        className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          onDelete(f);
-                        }}
-                      />
-                    )}
-                </div>
-              </Row>
-            </div>
-          </div>
+        ...quickAccessFiles.map((projectFile) => (
+          <Row
+            key={projectFile.id}
+            projectFile={projectFile}
+            onPickRecent={onPickRecent}
+            onFileClick={onFileClick}
+            onDelete={onDelete}
+          />
         )),
 
         // Rest of the files
@@ -161,6 +145,8 @@ export function FilePickerContents({
             All Recent Files
           </LineItem>
         ),
+
+        // Separator
         null,
 
         // Action button to upload more files
