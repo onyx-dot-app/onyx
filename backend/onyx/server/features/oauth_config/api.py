@@ -46,7 +46,6 @@ def _oauth_config_to_snapshot(
     return OAuthConfigSnapshot(
         id=oauth_config.id,
         name=oauth_config.name,
-        provider=oauth_config.provider,
         authorization_url=oauth_config.authorization_url,
         token_url=oauth_config.token_url,
         scopes=oauth_config.scopes,
@@ -72,7 +71,6 @@ def create_oauth_config_endpoint(
     try:
         oauth_config = create_oauth_config(
             name=oauth_data.name,
-            provider=oauth_data.provider,
             authorization_url=oauth_data.authorization_url,
             token_url=oauth_data.token_url,
             client_id=oauth_data.client_id,

@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 class OAuthConfigCreate(BaseModel):
     name: str
-    provider: str  # Free text: "github", "google", "gitlab", "linear", etc.
     authorization_url: str
     token_url: str
     client_id: str
@@ -30,7 +29,6 @@ class OAuthConfigUpdate(BaseModel):
 class OAuthConfigSnapshot(BaseModel):
     id: int
     name: str
-    provider: str
     authorization_url: str
     token_url: str
     scopes: list[str] | None
