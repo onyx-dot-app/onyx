@@ -343,7 +343,7 @@ function ChatButtonInner({
           onClick={() => route({ chatSessionId: chatSession.id })}
           active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
           rightChildren={rightMenu}
-          className={cn(renaming && "hover:bg-transparent")}
+          focused={renaming}
         >
           {renaming ? (
             <ButtonRenaming
