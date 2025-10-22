@@ -109,6 +109,31 @@ def _get_test_llms() -> tuple[LLM, LLM]:
     return llm, fast_llm
 
 
+def _get_authorization_header(headers: dict[str, str]) -> str | None:
+    """
+    Helper to extract authorization header from headers dict.
+    Checks both 'authorization' and 'Authorization' keys.
+
+    Returns:
+        The authorization header value, or None if not present.
+    """
+    return headers.get("authorization") or headers.get("Authorization")
+
+
+def _assert_has_authorization_header(headers: dict[str, str]) -> None:
+    """Assert that headers contain an authorization header (any case)."""
+    assert (
+        "authorization" in headers or "Authorization" in headers
+    ), "Expected authorization header to be present"
+
+
+def _assert_no_authorization_header(headers: dict[str, str]) -> None:
+    """Assert that headers do NOT contain an authorization header."""
+    assert (
+        "authorization" not in headers and "Authorization" not in headers
+    ), "Expected no authorization header"
+
+
 class TestOAuthToolIntegrationPriority:
     """Tests for OAuth token priority logic in tool_constructor"""
 
@@ -190,15 +215,9 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify the OAuth config token is used (Priority 1), NOT passthrough token
-        assert (
-            "authorization" in custom_tool.headers
-            or "Authorization" in custom_tool.headers
-        )
-        assert (
-            custom_tool.headers.get("authorization")
-            or custom_tool.headers.get("Authorization")
-            == "Bearer oauth_config_token_67890"
-        )
+        _assert_has_authorization_header(custom_tool.headers)
+        auth_header = _get_authorization_header(custom_tool.headers)
+        assert auth_header == "Bearer oauth_config_token_67890"
 
     def test_passthrough_auth_when_no_oauth_config(self, db_session: Session) -> None:
         """
@@ -261,15 +280,9 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify the passthrough token is used
-        assert (
-            "authorization" in custom_tool.headers
-            or "Authorization" in custom_tool.headers
-        )
-        assert (
-            custom_tool.headers.get("authorization")
-            or custom_tool.headers.get("Authorization")
-            == "Bearer user_passthrough_token_99999"
-        )
+        _assert_has_authorization_header(custom_tool.headers)
+        auth_header = _get_authorization_header(custom_tool.headers)
+        assert auth_header == "Bearer user_passthrough_token_99999"
 
     def test_oauth_config_without_valid_token_logs_warning(
         self, db_session: Session, caplog: pytest.LogCaptureFixture
@@ -334,10 +347,7 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify NO authorization header is present
-        assert (
-            "authorization" not in custom_tool.headers
-            and "Authorization" not in custom_tool.headers
-        )
+        _assert_no_authorization_header(custom_tool.headers)
 
     def test_no_auth_when_both_disabled(self, db_session: Session) -> None:
         """
@@ -399,10 +409,7 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify NO authorization header
-        assert (
-            "authorization" not in custom_tool.headers
-            and "Authorization" not in custom_tool.headers
-        )
+        _assert_no_authorization_header(custom_tool.headers)
 
     def test_oauth_config_with_expired_token_refreshes(
         self, db_session: Session
@@ -488,15 +495,9 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify the refreshed token is used
-        assert (
-            "authorization" in custom_tool.headers
-            or "Authorization" in custom_tool.headers
-        )
-        assert (
-            custom_tool.headers.get("authorization")
-            or custom_tool.headers.get("Authorization")
-            == "Bearer refreshed_token_67890"
-        )
+        _assert_has_authorization_header(custom_tool.headers)
+        auth_header = _get_authorization_header(custom_tool.headers)
+        assert auth_header == "Bearer refreshed_token_67890"
 
     def test_custom_headers_combined_with_oauth_token(
         self, db_session: Session
@@ -562,14 +563,9 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify both OAuth token AND custom headers are present
-        assert (
-            "authorization" in custom_tool.headers
-            or "Authorization" in custom_tool.headers
-        )
-        auth_value = custom_tool.headers.get(
-            "authorization"
-        ) or custom_tool.headers.get("Authorization")
-        assert auth_value == "Bearer oauth_token_abc123"
+        _assert_has_authorization_header(custom_tool.headers)
+        auth_header = _get_authorization_header(custom_tool.headers)
+        assert auth_header == "Bearer oauth_token_abc123"
 
         # Headers are capitalized by the tool
         assert "X-Custom-Header" in custom_tool.headers
@@ -628,7 +624,4 @@ class TestOAuthToolIntegrationPriority:
         assert isinstance(custom_tool, CustomTool)
 
         # Verify NO authorization header (user has no OAuth account)
-        assert (
-            "authorization" not in custom_tool.headers
-            and "Authorization" not in custom_tool.headers
-        )
+        _assert_no_authorization_header(custom_tool.headers)
