@@ -1393,11 +1393,12 @@ def get_oauth_router(
         token, state = access_token_state
         access_token = token.get("access_token")
         id_token = token.get("id_token")
-        token_for_storage = access_token
+        token_for_storage = ""
         expires_at = token.get("expires_at")
 
         if access_token:
             account_id, account_email = await oauth_client.get_id_email(access_token)
+            token_for_storage = access_token
         elif id_token:
             logger.warning(
                 "OIDC provider '%s' did not return an access_token; falling back to id_token.",
@@ -1408,7 +1409,11 @@ def get_oauth_router(
             )
             if expires_at is None:
                 expires_at = id_token_expires_at
-            token_for_storage = id_token
+            token_for_storage = ""
+            logger.debug(
+                "Storing empty OAuth access token for provider '%s' due to id_token-only response.",
+                oauth_client.name,
+            )
         else:
             logger.error(
                 "OIDC provider '%s' response missing both access_token and id_token.",
@@ -1417,6 +1422,11 @@ def get_oauth_router(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+            )
+
+        if expires_at is None:
+            expires_at = int(
+                (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()
             )
 
         if account_id is None:
@@ -1430,6 +1440,8 @@ def get_oauth_router(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
             )
+
+        refresh_token = token.get("refresh_token") or ""
 
         try:
             state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
@@ -1451,11 +1463,11 @@ def get_oauth_router(
         try:
             user = await user_manager.oauth_callback(
                 oauth_client.name,
-                cast(str, token_for_storage),
+                token_for_storage,
                 account_id,
                 account_email,
                 expires_at,
-                token.get("refresh_token"),
+                refresh_token,
                 request,
                 associate_by_email=associate_by_email,
                 is_verified_by_default=is_verified_by_default,
