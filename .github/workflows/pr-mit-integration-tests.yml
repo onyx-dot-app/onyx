@@ -64,46 +64,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: |
-            backend/requirements/default.txt
-            backend/requirements/dev.txt
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
-          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-
-      - name: Generate OpenAPI schema
-        working-directory: ./backend
-        env:
-          PYTHONPATH: "."
-        run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
-
-      - name: Generate OpenAPI Python client
-        working-directory: ./backend
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}/backend/generated:/local" \
-            openapitools/openapi-generator-cli generate \
-            -i /local/openapi.json \
-            -g python \
-            -o /local/onyx_openapi_client \
-            --package-name onyx_openapi_client \
-            --skip-validate-spec \
-            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-
-      - name: Upload OpenAPI artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: openapi-artifacts
-          path: backend/generated/
+      - name: Prepare build
+        uses: ./.github/actions/prepare-build
 
   build-backend-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
