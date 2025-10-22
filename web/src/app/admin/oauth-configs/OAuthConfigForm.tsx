@@ -4,6 +4,7 @@ import { TextFormField } from "@/components/Field";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
+import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import {
   OAuthConfig,
@@ -87,7 +88,7 @@ export const OAuthConfigForm = ({
                   name: values.name,
                   authorization_url: values.authorization_url,
                   token_url: values.token_url,
-                  scopes: scopesArray.length > 0 ? scopesArray : undefined,
+                  scopes: scopesArray,
                 };
 
                 // Only include client credentials if they are provided
@@ -111,7 +112,7 @@ export const OAuthConfigForm = ({
                   token_url: values.token_url,
                   client_id: values.client_id,
                   client_secret: values.client_secret,
-                  scopes: scopesArray.length > 0 ? scopesArray : undefined,
+                  scopes: scopesArray,
                 };
 
                 const createdConfig = await createOAuthConfig(createPayload);
@@ -140,17 +141,19 @@ export const OAuthConfigForm = ({
         >
           {({ isSubmitting }) => (
             <Form className="w-full overflow-visible">
-              <Text className="mb-4">
+              <Text>
                 Configure an OAuth provider that can be shared across multiple
                 custom tools. Users will authenticate with this provider when
                 using tools that require it.
               </Text>
 
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <Text className="text-sm font-semibold mb-1">
-                  📋 Redirect URI for OAuth App Configuration
-                </Text>
-                <Text className="text-sm text-subtle mb-2">
+              <Callout
+                type="notice"
+                icon="📋"
+                title="Redirect URI for OAuth App Configuration"
+                className="my-0"
+              >
+                <Text className="text-sm mb-2">
                   When configuring your OAuth application in the provider&apos;s
                   dashboard, use this redirect URI:
                 </Text>
@@ -159,7 +162,7 @@ export const OAuthConfigForm = ({
                     ? `${window.location.origin}/oauth-config/callback`
                     : "{YOUR_DOMAIN}/oauth-config/callback"}
                 </code>
-              </div>
+              </Callout>
 
               <TextFormField
                 name="name"

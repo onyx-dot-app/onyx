@@ -68,7 +68,12 @@ export const OAuthConfigSelector = ({
         onSelect={(selected) => {
           // SelectorFormField passes the value string directly, not an object
           let configId: number | null;
-          if (selected === null || selected === "null") {
+          if (
+            !selected ||
+            selected === "null" ||
+            selected === -1 ||
+            selected === "-1"
+          ) {
             configId = null;
           } else if (typeof selected === "number") {
             configId = selected;
