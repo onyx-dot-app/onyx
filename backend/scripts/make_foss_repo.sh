@@ -38,6 +38,13 @@ git filter-repo \
   --path web/src/app/ee/LICENSE --invert-paths \
   --force
 
+# NOTE: not ideal, since this means every day folks with the repo
+# locally will need to hard reset if they want to pull in more stuff.
+echo "=== Recreating empty enterprise directory ==="
+mkdir -p backend/ee
+git add backend/ee
+git commit -m "Add empty enterprise directory" --allow-empty
+
 echo "=== Creating blob callback script ==="
 cat > /tmp/license_replacer.py << 'PYEOF'
 #!/usr/bin/env python3
