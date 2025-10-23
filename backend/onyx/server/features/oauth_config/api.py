@@ -225,21 +225,18 @@ def handle_oauth_callback(
         # Return success with redirect
         return_path = session.redirect_uri or "/chat"
         return OAuthCallbackResponse(
-            success=True,
             redirect_url=return_path,
         )
 
     except ValueError as e:
         logger.error(f"OAuth callback error: {e}")
         return OAuthCallbackResponse(
-            success=False,
             redirect_url="/chat",
             error=str(e),
         )
     except Exception as e:
         logger.error(f"Unexpected OAuth callback error: {e}")
         return OAuthCallbackResponse(
-            success=False,
             redirect_url="/chat",
             error="An unexpected error occurred during OAuth callback",
         )

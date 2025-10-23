@@ -49,7 +49,6 @@ class OAuthInitiateResponse(BaseModel):
 
 
 class OAuthCallbackResponse(BaseModel):
-    success: bool
     redirect_url: str
     error: str | None = None
 
