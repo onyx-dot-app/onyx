@@ -19,6 +19,8 @@ import { User, UserGroup } from "@/lib/types";
 import Link from "next/link";
 import { DeleteButton } from "@/components/DeleteButton";
 import { TableHeader } from "@/components/ui/table";
+import Button from "@/refresh-components/buttons/Button";
+import SvgEdit from "@/icons/edit";
 
 const MAX_USERS_TO_DISPLAY = 6;
 
@@ -73,15 +75,14 @@ export const UserGroupsTable = ({
               return (
                 <TableRow key={userGroup.id}>
                   <TableCell>
-                    <Link
-                      className="whitespace-nowrap overflow-hidden text-ellipsis inline-flex items-center cursor-pointer p-2 rounded hover:bg-accent-background-hovered max-w-full"
+                    <Button
+                      internal
+                      leftIcon={SvgEdit}
                       href={`/admin/groups/${userGroup.id}`}
+                      className="truncate"
                     >
-                      <FiEdit2 className="mr-2 flex-shrink-0" />
-                      <span className="font-medium truncate">
-                        {userGroup.name}
-                      </span>
-                    </Link>
+                      {userGroup.name}
+                    </Button>
                   </TableCell>
                   <TableCell>
                     {userGroup.cc_pairs.length > 0 ? (

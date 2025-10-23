@@ -32,7 +32,10 @@ const variantClasses = (active?: boolean) =>
         disabled: [],
       },
       internal: {
-        enabled: [],
+        enabled: [
+          active && "bg-background-tint-00",
+          "hover:bg-background-tint-02",
+        ],
         disabled: [],
       },
     },
@@ -102,8 +105,11 @@ const textClasses = (active?: boolean) =>
         disabled: ["text-text-01"],
       },
       internal: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          active ? "text-text-05" : "text-text-03",
+          "group-hover/Button:text-text-04",
+        ],
+        disabled: ["text-text-01"],
       },
     },
     action: {
@@ -166,8 +172,11 @@ const iconClasses = (active?: boolean) =>
         disabled: ["stroke-text-01"],
       },
       internal: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          active ? "stroke-text-05" : "stroke-text-03",
+          "group-hover/Button:stroke-text-04",
+        ],
+        disabled: ["stroke-text-01"],
       },
     },
     action: {
