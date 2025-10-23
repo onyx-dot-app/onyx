@@ -120,7 +120,10 @@ def mocked_settings(mocker: MockerFixture) -> None:
 
 @pytest.mark.parametrize(
     "builder",
-    [default_build_system_message],
+    [
+        default_build_system_message,
+        default_build_system_message_for_default_assistant_v2,
+    ],
 )
 @pytest.mark.parametrize("has_memories", [True, False])
 @pytest.mark.parametrize("has_company_settings", [True, False])
