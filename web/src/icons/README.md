@@ -7,7 +7,7 @@ Integrating `@svgr/webpack` into the TypeScript compiler was not working via the
 Therefore, we need to manually convert each SVG into a TSX file using the following command:
 
 ```sh
-bunx @svgr/cli ${SVG_FILE} --typescript --no-dimensions --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity"]}}]}' > ${SVG_FILE_NAME}.tsx
+bunx @svgr/cli ${SVG_FILE_NAME}.svg --typescript --no-dimensions --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity"]}}]}' > ${SVG_FILE_NAME}.tsx
 ```
 
 This command:
