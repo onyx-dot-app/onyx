@@ -11,7 +11,6 @@
     "lint:unused": "eslint --ext .js,.jsx,.ts,.tsx --rule 'unused-imports/no-unused-imports: error' --quiet --fix=false src/",
     "lint:fix-unused": "eslint --ext .js,.jsx,.ts,.tsx --rule 'unused-imports/no-unused-imports: error' --quiet --fix src/",
     "lint:fix-unused-vars": "eslint --ext .js,.jsx,.ts,.tsx --fix --quiet src/",
-    "type-check": "tsc --noEmit --incremental",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

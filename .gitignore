@@ -10,9 +10,6 @@
 .mypy_cache
 .idea
 
-# typescript
-*.tsbuildinfo
-
 # testing
 /web/test-results/
 backend/onyx/agent_search/main/test_data.json
