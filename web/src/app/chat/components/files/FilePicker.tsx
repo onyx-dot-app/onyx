@@ -117,11 +117,30 @@ function FilePickerContents({
   return (
     <PopoverMenu className="w-[15.5rem] max-h-[300px] border-transparent">
       {[
+        // Action button to upload more files
+        <LineItem
+          key="upload-files"
+          icon={SvgPaperclip}
+          description="Upload a file from your device"
+          onClick={triggerUploadPicker}
+        >
+          Upload Files
+        </LineItem>,
+
+        // Separator
+        null,
+
         // Title
         hasFiles && (
-          <Text key="recent-files" text02 secondaryBody>
-            Recent Files
-          </Text>
+          <div key="recent-files" className="pt-spacing-inline">
+            <Text
+              text02
+              secondaryBody
+              className="py-spacing-inline px-padding-button"
+            >
+              Recent Files
+            </Text>
+          </div>
         ),
 
         // Quick access files
@@ -143,19 +162,6 @@ function FilePickerContents({
             All Recent Files
           </LineItem>
         ),
-
-        // Separator
-        null,
-
-        // Action button to upload more files
-        <LineItem
-          key="upload-files"
-          icon={SvgPaperclip}
-          description="Upload a file from your device"
-          onClick={triggerUploadPicker}
-        >
-          Upload Files
-        </LineItem>,
       ]}
     </PopoverMenu>
   );
@@ -268,7 +274,7 @@ export default function FilePicker({
             {trigger}
           </div>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={6} side="top">
+        <PopoverContent align="start" side="bottom">
           <FilePickerContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
