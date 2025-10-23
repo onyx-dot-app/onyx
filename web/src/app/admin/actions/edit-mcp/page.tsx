@@ -10,7 +10,7 @@ import { ToolIcon } from "@/components/icons/icons";
 import { FiLink, FiCheck } from "react-icons/fi";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {

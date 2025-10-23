@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 interface OAuthCallbackConfig {
   // UI customization

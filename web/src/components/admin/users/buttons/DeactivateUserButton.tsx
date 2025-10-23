@@ -1,6 +1,6 @@
 import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import useSWRMutation from "swr/mutation";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 
@@ -41,7 +41,7 @@ const DeactivateUserButton = ({
       className={className}
       onClick={() => trigger({ user_email: user.email })}
       disabled={isMutating}
-      variant="ghost"
+      tertiary
     >
       {children}
     </Button>

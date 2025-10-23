@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Card } from "@/components/ui/card";
 import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";

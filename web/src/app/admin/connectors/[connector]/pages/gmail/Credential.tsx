@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";

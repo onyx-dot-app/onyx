@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { ModelSelector } from "../../../../components/embedding/ModelSelector";

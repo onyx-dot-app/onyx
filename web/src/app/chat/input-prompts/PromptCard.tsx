@@ -3,7 +3,7 @@ import { SourceChip } from "../components/input/ChatInputBar";
 import { useEffect } from "react";
 import { useState } from "react";
 import { InputPrompt } from "../interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { XIcon } from "@/components/icons/icons";
 import { Textarea } from "@/components/ui/textarea";
 import {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PlusIcon } from "@/components/icons/icons";
 import { MoreVertical, XIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";

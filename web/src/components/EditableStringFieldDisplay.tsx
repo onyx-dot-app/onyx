@@ -1,6 +1,6 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";

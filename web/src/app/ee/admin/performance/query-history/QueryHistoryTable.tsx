@@ -48,7 +48,7 @@ import {
 } from "./constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 
 function QueryHistoryTableRow({
@@ -329,7 +329,7 @@ export function QueryHistoryTable() {
           </div>
           <div className="flex flex-row w-full items-center gap-x-2">
             <KickoffCSVExport dateRange={dateRange} />
-            <Button variant="secondary" onClick={() => setShowModal(true)}>
+            <Button secondary onClick={() => setShowModal(true)}>
               {PREVIOUS_CSV_TASK_BUTTON_NAME}
             </Button>
           </div>

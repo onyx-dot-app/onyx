@@ -37,7 +37,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -299,7 +299,6 @@ export const GroupDisplay = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              size="sm"
               className={userGroup.is_up_to_date ? "" : "opacity-50"}
               variant="submit"
               onClick={() => {
@@ -411,7 +410,6 @@ export const GroupDisplay = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              size="sm"
               className={userGroup.is_up_to_date ? "" : "opacity-50"}
               variant="submit"
               onClick={() => {
@@ -513,7 +511,6 @@ export const GroupDisplay = ({
       {isAdmin && (
         <Button
           variant="submit"
-          size="sm"
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}
         >

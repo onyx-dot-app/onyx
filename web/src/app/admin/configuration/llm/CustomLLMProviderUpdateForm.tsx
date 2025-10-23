@@ -1,7 +1,7 @@
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
   ArrayHelpers,

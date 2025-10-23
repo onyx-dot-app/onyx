@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   ConfigurableSources,
   CredentialSchemaResponse,
@@ -493,11 +493,7 @@ export function FederatedConnectorForm({
           <div className="ml-auto flex gap-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-x-1"
-                >
+                <Button secondary className="flex items-center gap-x-1">
                   <FiSettings className="h-4 w-4" />
                   <span className="text-sm ml-1">Manage</span>
                 </Button>

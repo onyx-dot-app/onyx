@@ -1,5 +1,5 @@
 import { BooleanFormField, TextFormField } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { HostedEmbeddingModel } from "./interfaces";

@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useUser } from "@/components/user/UserProvider";
 import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

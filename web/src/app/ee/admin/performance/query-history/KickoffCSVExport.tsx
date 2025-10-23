@@ -1,5 +1,5 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
 import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import { FaSpinner, FaRegArrowAltCircleUp } from "react-icons/fa";
@@ -117,7 +117,7 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
         <Button
           className="flex ml-auto py-2 px-4 h-fit cursor-pointer text-sm w-[140px]"
           onClick={startExport}
-          variant={spinnerStatus === "spinning" ? "destructive" : "default"}
+          danger={spinnerStatus === "spinning"}
         >
           {spinnerStatus === "spinning" ? (
             <>

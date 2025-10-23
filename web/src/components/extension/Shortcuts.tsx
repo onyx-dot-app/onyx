@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Shortcut } from "@/app/chat/nrf/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { PencilIcon, PlusIcon } from "lucide-react";
 import Image from "next/image";

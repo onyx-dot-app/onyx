@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FiKey, FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";

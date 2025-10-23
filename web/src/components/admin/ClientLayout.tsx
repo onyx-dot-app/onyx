@@ -7,7 +7,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useContext } from "react";
 import { ApplicationStatus } from "@/app/admin/settings/interfaces";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 export interface ClientLayoutProps {
   user: User | null;
@@ -40,10 +40,7 @@ export function ClientLayout({
           less than 5 days and no payment method has been added.
           <div className="mt-2">
             <Link href="/admin/billing">
-              <Button
-                variant="default"
-                className="bg-amber-600 hover:bg-amber-700 text-white"
-              >
+              <Button className="bg-amber-600 hover:bg-amber-700 text-white">
                 Update Billing Information
               </Button>
             </Link>

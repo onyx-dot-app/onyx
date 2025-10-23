@@ -10,7 +10,7 @@ import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   Credential,
   GoogleDriveCredentialJson,

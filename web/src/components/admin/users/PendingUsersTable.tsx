@@ -11,7 +11,7 @@ import CenteredPageSelector from "./CenteredPageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { TableHeader } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
