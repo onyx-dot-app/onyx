@@ -94,6 +94,9 @@ def get_validators_for_user(
     ).where(Validator.user_id.is_not(None))
 
     stmt = _add_user_filters(stmt=stmt, user=user)
+
+    stmt = stmt.order_by(Validator.id.asc())
+
     return list(db_session.scalars(stmt).unique().all())
 
 
