@@ -1010,7 +1010,9 @@ export function AssistantEditor({
                                     >
                                       <FastField
                                         name={`enabled_tools_map.${
-                                          searchTool?.id || 1
+                                          // -1 is a placeholder -- this section
+                                          // should be disabled anyways if no search tool
+                                          searchTool?.id || -1
                                         }`}
                                       >
                                         {({ form }: any) => (
@@ -1024,11 +1026,11 @@ export function AssistantEditor({
                                                 null
                                               );
                                               toggleToolInValues(
-                                                searchTool?.id || 1
+                                                searchTool?.id || -1
                                               );
                                             }}
                                             name={`enabled_tools_map.${
-                                              searchTool?.id || 1
+                                              searchTool?.id || -1
                                             }`}
                                             disabled={
                                               !connectorsExist || !searchTool
