@@ -9,7 +9,7 @@ When testing Playwright tests locally, you can skip the authentication step if y
 Set the `SKIP_AUTH` environment variable to `true` when running your tests:
 
 ```bash
-SKIP_AUTH=true npx playwright test web/tests/e2e/assistants/create_and_edit_assistant.spec.ts
+SKIP_AUTH=true npx playwright test web/tests/e2e/assistants/create_and_edit_assistant.spec.ts --headed
 ```
 
 ### How It Works
