@@ -10,14 +10,16 @@ import {
 import { cn, noProp } from "@/lib/utils";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
-import { ProjectFile, UserFileStatus } from "../../projects/projectsService";
+import {
+  ProjectFile,
+  UserFileStatus,
+} from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgFiles from "@/icons/files";
 import MoreHorizontal from "@/icons/more-horizontal";
 import SvgFileText from "@/icons/file-text";
 import SvgExternalLink from "@/icons/external-link";
-import SvgTrash from "@/icons/trash";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -37,10 +39,9 @@ interface RowProps {
   projectFile: ProjectFile;
   onPickRecent: (file: ProjectFile) => void;
   onFileClick: (file: ProjectFile) => void;
-  onDelete: (file: ProjectFile) => void;
 }
 
-function Row({ projectFile, onPickRecent, onFileClick, onDelete }: RowProps) {
+function Row({ projectFile, onPickRecent, onFileClick }: RowProps) {
   const showLoader = useMemo(
     () =>
       String(projectFile.status) === UserFileStatus.PROCESSING ||
@@ -60,7 +61,6 @@ function Row({ projectFile, onPickRecent, onFileClick, onDelete }: RowProps) {
     <LineItem
       key={projectFile.id}
       onClick={noProp(() => onPickRecent(projectFile))}
-      description={getFileExtension(projectFile.name)}
       icon={
         showLoader
           ? ({ className }) => (
@@ -69,21 +69,22 @@ function Row({ projectFile, onPickRecent, onFileClick, onDelete }: RowProps) {
           : SvgFileText
       }
       rightChildren={
-        <div className="flex flex-row items-center invisible group-hover/LineItem:visible">
+        <div className="h-[1rem] flex flex-col justify-center">
           <IconButton
             icon={SvgExternalLink}
             onClick={noProp(() => onFileClick(projectFile))}
             tooltip="View File"
             disabled={disableActionButton}
             internal
+            className="hidden group-hover/LineItem:flex"
           />
-          <IconButton
-            icon={SvgTrash}
-            onClick={noProp(() => onDelete(projectFile))}
-            tooltip="Delete File"
-            disabled={disableActionButton}
-            internal
-          />
+          <Text
+            className="flex group-hover/LineItem:hidden"
+            secondaryBody
+            text03
+          >
+            {getFileExtension(projectFile.name)}
+          </Text>
         </div>
       }
     >
@@ -98,7 +99,6 @@ interface FilePickerContentsProps {
   onFileClick: (file: ProjectFile) => void;
   triggerUploadPicker: () => void;
   setShowRecentFiles: (show: boolean) => void;
-  onDelete: (file: ProjectFile) => void;
 }
 
 function FilePickerContents({
@@ -107,7 +107,6 @@ function FilePickerContents({
   onFileClick,
   triggerUploadPicker,
   setShowRecentFiles,
-  onDelete,
 }: FilePickerContentsProps) {
   // These are the "quick" files that we show. Essentially "speed dial", but for files.
   // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
@@ -132,7 +131,6 @@ function FilePickerContents({
             projectFile={projectFile}
             onPickRecent={onPickRecent}
             onFileClick={onFileClick}
-            onDelete={onDelete}
           />
         )),
 
@@ -264,14 +262,6 @@ export default function FilePicker({
   return (
     <div className={cn("relative", className)}>
       {popup}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        onChange={handleUploadChange}
-        accept={"*/*"}
-      />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <div className="relative cursor-pointer flex items-center group rounded-lg text-input-text px-0 h-8">
@@ -289,7 +279,6 @@ export default function FilePicker({
               onFileClick && onFileClick(file);
               setOpen(false);
             }}
-            onDelete={handleDeleteFile}
             triggerUploadPicker={() => {
               triggerUploadPicker();
               setOpen(false);
