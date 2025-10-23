@@ -12,7 +12,7 @@ import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
 import { MetadataBadge } from "../MetadataBadge";
 import { BookIcon, LightBulbIcon } from "../icons/icons";
-
+import Text from "@/refresh-components/texts/Text";
 import { FaStar } from "react-icons/fa";
 import { FiTag } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
@@ -456,23 +456,27 @@ export function CompactDocumentCard({
     >
       <div className={cn("flex !pb-0 !mb-0 pt-0 mt-0 w-full")}>
         <div className="inline-block align-top">{icon}</div>
-        <p className="gap-0 !p-0 !my-0 line-clamp-2 text-sm text-text-04 font-bold ml-2">
+        <Text
+          text04
+          mainUiAction
+          className="gap-0 !p-0 !my-0 line-clamp-2 ml-2"
+        >
           {(document.semantic_identifier || document.document_id).slice(0, 40)}
           {(document.semantic_identifier || document.document_id).length > 40 &&
             "..."}
-        </p>
+        </Text>
       </div>
       {document.blurb && (
-        <div className="text-xs mb-0 mt-1 text-text-03 line-clamp-2">
+        <Text text03 secondaryBody className="mb-0 mt-1 line-clamp-2">
           {document.blurb}
-        </div>
+        </Text>
       )}
       {document.updated_at && (
-        <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
+        <div className="flex mt-0 pt-0 items-center justify-between w-full ">
           {!isNaN(new Date(document.updated_at).getTime()) && (
-            <span className="text-xs text-text-500">
+            <Text text03 figureSmallLabel className="text-xs text-text-500">
               Updated {new Date(document.updated_at).toLocaleDateString()}
-            </span>
+            </Text>
           )}
         </div>
       )}
