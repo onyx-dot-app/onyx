@@ -35,6 +35,7 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -131,6 +132,12 @@ def _assert_no_authorization_header(headers: dict[str, str]) -> None:
     assert (
         "authorization" not in headers and "Authorization" not in headers
     ), "Expected no authorization header"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_llm_provider(db_session: Session) -> None:
+    """Ensure default LLM provider is set up once for all tests in this module."""
+    ensure_default_llm_provider(db_session)
 
 
 class TestOAuthToolIntegrationPriority:
