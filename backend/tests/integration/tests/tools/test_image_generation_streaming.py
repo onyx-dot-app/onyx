@@ -84,5 +84,6 @@ def test_image_generation_streaming(
 
 
 if __name__ == "__main__":
-    # Run with: python -m pytest tests/integration/tests/tools/test_image_generation_heartbeat.py -v -s
+    # Run with: python -m dotenv -f .vscode/.env run --
+    # python -m pytest tests/integration/tests/tools/test_image_generation_heartbeat.py -v -s
     pytest.main([__file__, "-v", "-s"])
