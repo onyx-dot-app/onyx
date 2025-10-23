@@ -28,7 +28,7 @@ jobs:
       - name: Push to FOSS repo
         env:
           FOSS_REPO_TOKEN: ${{ secrets.FOSS_REPO_TOKEN }}
-          FOSS_REPO_URL: ${{ secrets.FOSS_REPO_URL }}
+          FOSS_REPO_URL: https://github.com/onyx-dot-app/onyx-foss.git
         run: |
           cd /tmp/foss_repo
           git config user.name "onyx-bot"
