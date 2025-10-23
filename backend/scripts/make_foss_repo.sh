@@ -37,14 +37,20 @@ cat > /tmp/license_replacer.py << 'PYEOF'
 with open('/tmp/mit_license.txt', 'rb') as f:
     MIT_LICENSE = f.read()
 
-def replace_license(blob, metadata):
-    if blob.original_path == b'LICENSE':
-        blob.data = MIT_LICENSE
-
 import git_filter_repo as fr
 
+# We need to create the new blob and get its ID
+new_license_blob = fr.Blob(MIT_LICENSE)
+
+def replace_license_in_commits(commit, metadata):
+    """Replace LICENSE file content in all commits"""
+    for change in commit.file_changes:
+        if change.filename == b'LICENSE':
+            # Replace with our new MIT license blob
+            change.blob_id = new_license_blob.original_id
+
 args = fr.FilteringOptions.parse_args(['--force'], error_on_empty=False)
-filter = fr.RepoFilter(args, blob_callback=replace_license)
+filter = fr.RepoFilter(args, commit_callback=replace_license_in_commits)
 filter.run()
 PYEOF
 
