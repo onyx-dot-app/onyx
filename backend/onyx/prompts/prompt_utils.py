@@ -13,6 +13,8 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
@@ -154,11 +156,11 @@ def build_task_prompt_reminders_v2(
     citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return f"""
-    <long_conversation_reminder>
+    {LONG_CONVERSATION_REMINDER_TAG_OPEN}
     {base_task}
     {citation_or_nothing}
     {language_hint_or_nothing}
-    </long_conversation_reminder>
+    {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
     {chat_turn_user_message}
     """.strip()
 

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import cast
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
@@ -21,6 +22,9 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
+from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.prompts.prompt_utils import handle_company_awareness
@@ -32,13 +36,25 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 
+if TYPE_CHECKING:
+    pass
 
-def default_build_system_message_v2(
+
+def default_build_system_message_for_default_assistant_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
     memories_callback: Callable[[], list[str]] | None = None,
+    tools: list[Tool] | None = None,
 ) -> SystemMessage | None:
-    system_prompt = prompt_config.system_prompt.strip()
+    # Check if we should include custom instructions (before date processing)
+    custom_instructions = prompt_config.system_prompt.strip()
+    should_include_custom_instructions = (
+        custom_instructions and custom_instructions != DEFAULT_SYSTEM_PROMPT.strip()
+    )
+
+    # Start with base prompt
+    system_prompt = DEFAULT_SYSTEM_PROMPT + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
+
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
     if (
@@ -46,6 +62,8 @@ def default_build_system_message_v2(
         and llm_config.model_name.startswith("o")
     ):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
+
+    # Handle date/time awareness
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
         prompt_config,
@@ -55,10 +73,46 @@ def default_build_system_message_v2(
     if not tag_handled_prompt:
         return None
 
+    # Handle company awareness
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
+    # Handle memories
     if memories_callback:
         tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+
+    # Add Custom Instructions section if provided and not default
+    if should_include_custom_instructions:
+        tag_handled_prompt += "\n\n# Custom Instructions\n"
+        tag_handled_prompt += "The user has provided the following instructions,"
+        tag_handled_prompt += (
+            "these are VERY IMPORTANT and must be adhered to at all times:\n"
+        )
+        tag_handled_prompt += custom_instructions
+
+    # Add Tools section if tools are provided
+    if tools:
+        tag_handled_prompt += "\n\n# Tools\n"
+        tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
+
+        for tool in tools:
+            if type(tool).__name__ == "WebSearchTool":
+                # Import at runtime to avoid circular dependency
+                from onyx.tools.tool_implementations_v2.web import (
+                    WEB_SEARCH_LONG_DESCRIPTION,
+                    OPEN_URL_LONG_DESCRIPTION,
+                )
+
+                # Special handling for WebSearchTool - expand to web_search and open_url
+                tag_handled_prompt += "\n### web_search\n"
+                tag_handled_prompt += WEB_SEARCH_LONG_DESCRIPTION
+                tag_handled_prompt += "\n\n### open_url\n"
+                tag_handled_prompt += OPEN_URL_LONG_DESCRIPTION
+            else:
+                # TODO: ToolV2 should make this much cleaner
+                from onyx.tools.adapter_v1_to_v2 import tool_to_function_tool
+
+                tag_handled_prompt += f"\n### {tool_to_function_tool(tool).name}\n"
+                tag_handled_prompt += tool.description
 
     return SystemMessage(content=tag_handled_prompt)
 

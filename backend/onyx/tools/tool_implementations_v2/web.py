@@ -204,6 +204,12 @@ def web_search(
     return response.model_dump_json()
 
 
+# TODO: Make a ToolV2 class to encapsulate all of this
+WEB_SEARCH_LONG_DESCRIPTION = """
+Tool for searching the public internet. Useful for up to date information on PUBLIC knowledge.
+"""
+
+
 @tool_accounting
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
@@ -315,3 +321,9 @@ def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -
         raise ValueError("No search provider found")
     response = _open_url_core(run_context, urls, search_provider)
     return response.model_dump_json()
+
+
+# TODO: Make a ToolV2 class to encapsulate all of this
+OPEN_URL_LONG_DESCRIPTION = """
+Tool for searching the public internet. Useful for up to date information on PUBLIC knowledge.
+"""
