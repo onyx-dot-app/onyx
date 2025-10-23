@@ -209,6 +209,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    DRUPAL_WIKI = "drupal_wiki"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
@@ -618,5 +619,6 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content",
     DocumentSource.IMAP: "imap - email data",
 }
