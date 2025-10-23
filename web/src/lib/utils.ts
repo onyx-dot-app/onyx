@@ -60,7 +60,6 @@ export function noProp(
 ): React.MouseEventHandler {
   return (event) => {
     event.stopPropagation();
-    event.preventDefault();
     f?.(event);
   };
 }
