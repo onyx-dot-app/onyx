@@ -11,6 +11,8 @@ import {
   DeepseekIcon,
   OpenAISVG,
   QwenIcon,
+  OllamaIcon,
+  ZAIIcon,
 } from "@/components/icons/icons";
 import {
   WellKnownLLMProviderDescriptor,
@@ -34,6 +36,7 @@ export const getProviderIcon = (
     mistral: MistralIcon,
     ministral: MistralIcon,
     llama: MetaIcon,
+    ollama: OllamaIcon,
     gemini: GeminiIcon,
     deepseek: DeepseekIcon,
     claude: AnthropicIcon,
@@ -46,6 +49,7 @@ export const getProviderIcon = (
     google: GeminiIcon,
     qwen: QwenIcon,
     qwq: QwenIcon,
+    zai: ZAIIcon,
   };
 
   // First check if provider name directly matches an icon
