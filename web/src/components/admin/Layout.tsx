@@ -13,6 +13,8 @@ import {
 import { AnnouncementBanner } from "../header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "../../refresh-components/contexts/ChatContext";
+import { headers } from "next/headers";
+import { buildLoginRedirectPath } from "@/lib/loginRedirect";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
   const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
@@ -34,7 +36,30 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   if (!authDisabled) {
     if (!user) {
-      return redirect("/auth/login");
+      const headersList = headers();
+      const referrer = headersList.get("referer") || "";
+      const fullUrl = headersList.get("x-url");
+
+      let nextPath: string | undefined = "/admin";
+      if (fullUrl) {
+        try {
+          const parsed = new URL(fullUrl);
+          nextPath = `${parsed.pathname}${parsed.search}`;
+        } catch {
+          if (fullUrl.startsWith("/")) {
+            nextPath = fullUrl;
+          }
+        }
+      }
+
+      const sessionExpired = !!referrer && !referrer.includes("/auth/login");
+
+      return redirect(
+        buildLoginRedirectPath(authTypeMetadata?.authType ?? null, {
+          next: nextPath,
+          sessionExpired,
+        })
+      );
     }
     if (user.role === UserRole.BASIC) {
       return redirect("/chat");

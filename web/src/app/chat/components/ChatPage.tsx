@@ -1,6 +1,6 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   personaIncludesRetrieval,
@@ -17,7 +17,12 @@ import {
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import {
+  useFederatedConnectors,
+  useFilters,
+  useLlmManager,
+  useAuthType,
+} from "@/lib/hooks";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
@@ -79,6 +84,7 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
+import { buildLoginRedirectPath } from "@/lib/loginRedirect";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -109,6 +115,8 @@ export function ChatPage({
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  const authType = useAuthType();
+  const hasRedirectedRef = useRef(false);
 
   const {
     chatSessions,
@@ -155,6 +163,46 @@ export function ChatPage({
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
+
+  useEffect(() => {
+    if (user || hasRedirectedRef.current) {
+      return;
+    }
+
+    if (authType === null) {
+      return;
+    }
+
+    hasRedirectedRef.current = true;
+
+    const searchParamsString = searchParams?.toString() || "";
+    const nextPath = searchParamsString
+      ? `/chat?${searchParamsString}`
+      : "/chat";
+
+    let sessionExpired = false;
+    const referrer = document.referrer;
+    if (referrer) {
+      try {
+        const refUrl = new URL(referrer);
+        if (
+          refUrl.origin === window.location.origin &&
+          !refUrl.pathname.startsWith("/auth")
+        ) {
+          sessionExpired = true;
+        }
+      } catch {
+        sessionExpired = false;
+      }
+    }
+
+    const loginPath = buildLoginRedirectPath(authType, {
+      next: nextPath,
+      sessionExpired,
+    });
+
+    router.replace(loginPath);
+  }, [user, authType, router, searchParams]);
 
   const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
 
@@ -602,10 +650,6 @@ export function ChatPage({
     () => setIsChatSearchModalOpen((open) => !open),
     [setIsChatSearchModalOpen]
   );
-
-  if (!user) {
-    redirect("/auth/login");
-  }
 
   const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
     setSelectedDocuments((prev) =>

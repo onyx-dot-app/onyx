@@ -31,6 +31,7 @@ import {
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
 import { Project } from "@/app/chat/projects/projectsService";
+import { buildLoginRedirectPath } from "@/lib/loginRedirect";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -145,8 +146,12 @@ export async function fetchChatData(searchParams: {
       !isRedirectedFromLogin
     ) {
       console.log("Redirecting to login from chat page");
+      const sessionExpired = !!referrer && !referrer.includes("/auth/login");
       return {
-        redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
+        redirect: buildLoginRedirectPath(authTypeMetadata?.authType ?? null, {
+          next: redirectUrl,
+          sessionExpired,
+        }),
       };
     }
   }

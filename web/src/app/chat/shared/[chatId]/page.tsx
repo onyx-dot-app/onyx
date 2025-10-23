@@ -10,6 +10,8 @@ import { BackendChatSession } from "../../interfaces";
 import { SharedChatDisplay } from "./SharedChatDisplay";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
+import { headers } from "next/headers";
+import { buildLoginRedirectPath } from "@/lib/loginRedirect";
 
 async function getSharedChat(chatId: string) {
   const response = await fetchSS(
@@ -47,7 +49,16 @@ export default async function Page(props: {
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
-    return redirect("/auth/login");
+    const headersList = headers();
+    const referrer = headersList.get("referer") || "";
+    const sessionExpired = !!referrer && !referrer.includes("/auth/login");
+
+    return redirect(
+      buildLoginRedirectPath(authTypeMetadata?.authType ?? null, {
+        next: `/chat/shared/${params.chatId}`,
+        sessionExpired,
+      })
+    );
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
