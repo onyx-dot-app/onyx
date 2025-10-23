@@ -61,6 +61,10 @@ For more complicated queries, try to do more tool calls to obtain information re
 Only terminate your turn when you are sure that the problem is solved.\n"
 """
 
+CUSTOM_INSTRUCTIONS_PROMPT = """
+The user has provided the following instructions, these are VERY IMPORTANT and must be adhered to at all times:
+"""
+
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
