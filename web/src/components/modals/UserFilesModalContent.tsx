@@ -2,13 +2,11 @@
 
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import { SvgProps } from "@/icons";
@@ -20,13 +18,18 @@ import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
-interface UserFilesModalProps {
+const getFileExtension = (fileName: string): string => {
+  const idx = fileName.lastIndexOf(".");
+  if (idx === -1) return "";
+  const ext = fileName.slice(idx + 1).toLowerCase();
+  if (ext === "txt") return "PLAINTEXT";
+  return ext.toUpperCase();
+};
+
+export interface UserFilesModalProps {
   title: string;
   description: string;
   icon: React.FunctionComponent<SvgProps>;
@@ -40,14 +43,6 @@ interface UserFilesModalProps {
   onClose?: () => void;
   selectedFileIds?: string[];
 }
-
-const getFileExtension = (fileName: string): string => {
-  const idx = fileName.lastIndexOf(".");
-  if (idx === -1) return "";
-  const ext = fileName.slice(idx + 1).toLowerCase();
-  if (ext === "txt") return "PLAINTEXT";
-  return ext.toUpperCase();
-};
 
 export default function UserFilesModalContent({
   title,
@@ -105,7 +100,7 @@ export default function UserFilesModalContent({
           e.stopPropagation();
         }}
       >
-        <div className="flex items-center gap-spacing-inline py-padding-button px-spacing-paragraph">
+        <div className="flex items-center gap-spacing-interline p-padding-button">
           <InputTypeIn
             placeholder="Search files..."
             value={search}
