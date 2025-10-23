@@ -40,7 +40,7 @@ type Validator = {
 };
 
 function Main() {
-    const { popup, setPopup } = usePopup();
+  const { popup, setPopup } = usePopup();
   const { t } = useTranslation();
   const [showCreateUpdateForm, setShowCreateUpdateForm] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<APIKey | undefined>();
@@ -76,88 +76,83 @@ function Main() {
 
   return (
     <div>
-    {popup}
+      {popup}
       <div className="mb-4">{newApiKeyButton}</div>
-      {validators.length === 0 ? 
-      <Text className="mb-4">{t(k.NO_DATA_AVAILABLE)}</Text>  : <Table className="overflow-visible">
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>{t(k.VALIDATOR_NAME_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_DESCRIPTION_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_OWNER_HEADER)}</TableHead>
-            <TableHead>{t(k.VALIDATOR_GROUPS_HEADER)}</TableHead>
-            <TableHead className="w-40">{t(k.ACTIONS)}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {validators.map((v) => (
-            <TableRow key={v.id}>
-              <TableCell className="max-w-20 break-words">{v.id}</TableCell>
-              <TableCell className="max-w-64 break-words">{v.name}</TableCell>
-              <TableCell className="max-w-96 break-words">
-                {v.description || ""}
-              </TableCell>
-              <TableCell className="max-w-64 break-words">
-                {v.owner?.email || ""}
-              </TableCell>
-              <TableCell className="max-w-64 break-words">
-                {(v.groups || [])
-                  .map((g) => g.name)
-                  .filter(Boolean)
-                  .join(", ")}
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedApiKey(v as unknown as APIKey);
-                      setShowCreateUpdateForm(true);
-                    }}
-                  >
-                    <FiEdit2 className="mr-1" />
-                    {t(k.EDIT)}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={async () => {
-                      const response = await deleteApiKey(Number(v.id));
-                      if (!response.ok) {
-                        const errorMsg = await response.text();
-                        setPopup({
-                          type: "error",
-                          message: `Failed to delete validator ${errorMsg}`,
-                        });
-                        return;
-                      }
-                      mutate("/api/validators");
-                    }}
-                  >
-                    <FiTrash className="mr-1" />
-                    {t(k.DELETE)}
-                  </Button>
-                </div>
-              </TableCell>
+      {validators.length === 0 ? (
+        <Text className="mb-4">{t(k.NO_DATA_AVAILABLE)}</Text>
+      ) : (
+        <Table className="overflow-visible">
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>{t(k.VALIDATOR_NAME_HEADER)}</TableHead>
+              <TableHead>{t(k.VALIDATOR_DESCRIPTION_HEADER)}</TableHead>
+              <TableHead>{t(k.VALIDATOR_OWNER_HEADER)}</TableHead>
+              <TableHead className="w-40">{t(k.ACTIONS)}</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>}
-      
+          </TableHeader>
+          <TableBody>
+            {validators.map((v) => (
+              <TableRow key={v.id}>
+                <TableCell className="max-w-20 break-words">{v.id}</TableCell>
+                <TableCell className="max-w-64 break-words">{v.name}</TableCell>
+                <TableCell className="max-w-96 break-words">
+                  {v.description || ""}
+                </TableCell>
+                <TableCell className="max-w-64 break-words">
+                  {v.owner?.email || ""}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedApiKey(v as unknown as APIKey);
+                        setShowCreateUpdateForm(true);
+                      }}
+                    >
+                      <FiEdit2 className="mr-1" />
+                      {t(k.EDIT)}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={async () => {
+                        const response = await deleteApiKey(Number(v.id));
+                        if (!response.ok) {
+                          const errorMsg = await response.text();
+                          setPopup({
+                            type: "error",
+                            message: `Failed to delete validator ${errorMsg}`,
+                          });
+                          return;
+                        }
+                        mutate("/api/validators");
+                      }}
+                    >
+                      <FiTrash className="mr-1" />
+                      {t(k.DELETE)}
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
-{showCreateUpdateForm && (
-  <OnyxApiKeyForm
-    onClose={() => {
-      setShowCreateUpdateForm(false);
-      setSelectedApiKey(undefined);
-      mutate("/api/validators");
-    }}
-    setPopup={setPopup}
-    apiKey={selectedApiKey}
-  />
-)}
+      {showCreateUpdateForm && (
+        <OnyxApiKeyForm
+          onClose={() => {
+            setShowCreateUpdateForm(false);
+            setSelectedApiKey(undefined);
+            mutate("/api/validators");
+          }}
+          setPopup={setPopup}
+          apiKey={selectedApiKey}
+        />
+      )}
     </div>
   );
 }
@@ -166,25 +161,21 @@ export default function Page() {
   const { t } = useTranslation();
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title={t(k.VALIDATORS_LIST)} icon={<KeyIcon size={32} />}  />
+      <AdminPageTitle
+        title={t(k.VALIDATORS_LIST)}
+        icon={<KeyIcon size={32} />}
+      />
       <Main />
     </div>
   );
 }
-
-
-
 
 {
   config: [
     {
       type: "select",
       name: "pii_entities",
-      values: [
-        "EMAIL_ADDRESS",
-        "PHONE_NUMBER",
-        "CREDIT_CARD"
-      ]
-    }
-  ]
+      values: ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"],
+    },
+  ];
 }

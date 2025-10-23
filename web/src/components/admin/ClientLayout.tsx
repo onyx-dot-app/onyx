@@ -270,6 +270,16 @@ export function ClientLayout({
                         },
                       ]
                     : []),
+                  {
+                    name: (
+                      <div className="flex">
+                        <ShieldIconSkeleton className="text-text-700" />
+                        <div className="ml-1">{t(k.VALIDATORS)}</div>
+                      </div>
+                    ),
+
+                    link: "/admin/guardrails",
+                  },
                 ],
               },
               ...(isCurator
@@ -525,18 +535,6 @@ export function ClientLayout({
                               },
                             ]
                           : []),
-                          {
-                            name: (
-                              <div className="flex">
-                                <ShieldIconSkeleton className="text-text-700" />
-                                <div className="ml-1">
-                                  {t(k.VALIDATORS)}
-                                </div>
-                              </div>
-                            ),
-  
-                            link: "/admin/guardrails",
-                          },
                       ],
                     },
                     {
