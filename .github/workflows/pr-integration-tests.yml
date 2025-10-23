@@ -150,16 +150,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
 
-      - name: Build and push integration test Docker image
-        uses: useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/tests/integration/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+      - name: Build and push integration test image with Docker Bake
+        env:
+          REGISTRY: ${{ env.PRIVATE_REGISTRY }}
+          TAG: test-${{ github.run_id }}
+        run: cd backend && docker buildx bake ${{ vars.DOCKER_NO_CACHE == 'true' && '--no-cache' || '' }} --push integration
 
   integration-tests:
     needs:

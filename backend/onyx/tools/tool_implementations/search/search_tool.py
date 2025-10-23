@@ -33,6 +33,8 @@ from onyx.context.search.models import SearchRequest
 from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
+from onyx.db.connector import check_connectors_exist
+from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
@@ -70,14 +72,27 @@ class SearchResponseSummary(SearchQueryInfo):
 
 
 SEARCH_TOOL_DESCRIPTION = """
-Runs a semantic search over the user's knowledge base. The default behavior is to use this tool. \
-The only scenario where you should not use this tool is if:
+Runs a semantic search over the user's knowledge base.
 
+## Decision boundary
+- MUST call this tool if the user's query requires internal information, like
+if it references "we" or "us" or "our" or "internal" or if it references
+the organization the user works for.
+- MUST call this tool if the user's query sounds like the name of a specific internal document,
+like some keyword that could be a document name.
+- The default behavior is to use this tool. \
+The only scenario where you should not use this tool is if:
 - There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
 additional information or details would provide little or no value.
 - The query is some form of request that does not require additional information to handle.
 
 HINT: if you are unfamiliar with the user input OR think the user input is a typo, use this tool.
+
+## Usage hints
+- Expand the users's query into a broader list of queries.
+- Batch a list of natural-language queries per call.
+- Generally try searching with some semantic queries and some keyword queries
+to give the hybrid search the best chance of finding relevant results.
 """
 
 
@@ -173,6 +188,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         self._id = tool_id
+
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        """Check if search tool is available by verifying connectors exist."""
+        return check_connectors_exist(db_session) or check_federated_connectors_exist(
+            db_session
+        )
 
     @property
     def id(self) -> int:

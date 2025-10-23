@@ -10,7 +10,7 @@ from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
-from onyx.tools.adapter_v1_to_v2 import tool_to_function_tool
+from onyx.tools.adapter_v1_to_v2 import custom_or_mcp_tool_to_function_tool
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -170,7 +170,7 @@ def test_tool_to_function_tool_post_method(
 
     # Get the second tool (POST method)
     v1_tool = tools[1]
-    v2_tool = tool_to_function_tool(v1_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(v1_tool)
 
     # Verify the conversion works for POST method
     assert v2_tool.name == v1_tool.name
@@ -199,7 +199,7 @@ def test_custom_tool_invocation(
     )
 
     v1_tool = tools[0]
-    v2_tool = tool_to_function_tool(v1_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(v1_tool)
 
     # Create a mock emitter that tracks packet history
     mock_emitter = MockEmitter()
@@ -250,7 +250,7 @@ def test_tool_to_function_tool_mcp_tool(mcp_tool: MCPTool) -> None:
     Test conversion of an MCP tool to FunctionTool.
     Verifies that the adapter works with MCP tools.
     """
-    v2_tool = tool_to_function_tool(mcp_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(mcp_tool)
 
     # Verify the conversion works for MCP tool
     assert v2_tool.name == mcp_tool.name
@@ -271,7 +271,7 @@ def test_mcp_tool_invocation(mock_call_mcp_tool: MagicMock, mcp_tool: MCPTool) -
     # Mock the MCP tool call response
     mock_call_mcp_tool.return_value = "Search results: test query"
 
-    v2_tool = tool_to_function_tool(mcp_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(mcp_tool)
 
     # Create a mock emitter that tracks packet history
     mock_emitter = MockEmitter()
@@ -340,7 +340,7 @@ def test_custom_tool_iteration_instructions_and_answers(
     )
 
     v1_tool = tools[0]
-    v2_tool = tool_to_function_tool(v1_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(v1_tool)
 
     # Create a mock emitter that tracks packet history
     mock_emitter = MockEmitter()
@@ -437,7 +437,7 @@ def test_custom_tool_csv_response_with_file_ids(
     )
 
     v1_tool = tools[0]
-    v2_tool = tool_to_function_tool(v1_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(v1_tool)
 
     # Create a mock emitter that tracks packet history
     mock_emitter = MockEmitter()
@@ -536,7 +536,7 @@ def test_mcp_tool_iteration_instructions_and_answers(
     # Mock the MCP tool call response
     mock_call_mcp_tool.return_value = "MCP search results: test query"
 
-    v2_tool = tool_to_function_tool(mcp_tool)
+    v2_tool = custom_or_mcp_tool_to_function_tool(mcp_tool)
 
     # Create a mock emitter that tracks packet history
     mock_emitter = MockEmitter()
