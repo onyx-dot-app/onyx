@@ -37,10 +37,10 @@ function BackToOnyxButton({
       <div
         style={{ transition: "width 0.30s ease-out" }}
         className={`
-            flex-none 
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
+            flex-none
+            overflow-y-hidden
+            transition-all
+            duration-300
             ease-in-out
             ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
         `}
@@ -135,7 +135,7 @@ export function SharedChatDisplay({
               <div
                 style={{ transition: "width 0.30s ease-out" }}
                 className={`
-                  flex-none 
+                  flex-none
                   fixed
                   right-0
                   z-[1000]
@@ -258,10 +258,10 @@ export function SharedChatDisplay({
                 <div
                   style={{ transition: "width 0.30s ease-out" }}
                   className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          duration-300 
+                          flex-none
+                          overflow-y-hidden
+                          transition-all
+                          duration-300
                           ease-in-out
                           ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
                       `}
@@ -270,7 +270,6 @@ export function SharedChatDisplay({
             </div>
           </div>
 
-          <FixedLogo backgroundToggled={false} />
           <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
         </div>
       </div>
