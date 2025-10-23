@@ -1703,6 +1703,13 @@ export const FirefliesIcon = ({
   <LogoIcon size={size} className={className} src={firefliesIcon} />
 );
 
+export const DrupalWikiIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src="/DrupalWiki.png" />
+);
+
 /* 
 EE Icons
 */
