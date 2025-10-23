@@ -94,6 +94,7 @@ def create_custom_tool(
         user_id=user.id if user else None,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
+        oauth_config_id=tool_data.oauth_config_id,
         enabled=True,
     )
     db_session.commit()
@@ -120,6 +121,7 @@ def update_custom_tool(
         user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
+        oauth_config_id=tool_data.oauth_config_id,
     )
     return ToolSnapshot.from_model(updated_tool)
 

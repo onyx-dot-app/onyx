@@ -343,8 +343,10 @@ export function AssistantEditor({
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
+  const connectorsExist = ccPairs.length > 0;
+
   const canShowKnowledgeSource =
-    ccPairs.length > 0 &&
+    connectorsExist &&
     searchTool &&
     !(user?.role === UserRole.BASIC && documentSets.length === 0);
 
@@ -1002,7 +1004,7 @@ export function AssistantEditor({
                                     <TooltipTrigger asChild>
                                       <div
                                         className={`${
-                                          ccPairs.length === 0
+                                          !connectorsExist
                                             ? "opacity-70 cursor-not-allowed"
                                             : ""
                                         }`}
@@ -1025,19 +1027,20 @@ export function AssistantEditor({
                                                 );
                                               }}
                                               name={`enabled_tools_map.${searchTool.id}`}
-                                              disabled={ccPairs.length === 0}
+                                              disabled={!connectorsExist}
                                             />
                                           )}
                                         </FastField>
                                       </div>
                                     </TooltipTrigger>
 
-                                    {ccPairs.length === 0 && (
+                                    {!connectorsExist && (
                                       <TooltipContent side="top" align="center">
                                         <Text inverted>
-                                          To use the Knowledge Action, you need
-                                          to have at least one Connector
-                                          configured.
+                                          To use Knowledge, you need to have at
+                                          least one Connector configured. You
+                                          can still upload user files to the
+                                          agent below.
                                         </Text>
                                       </TooltipContent>
                                     )}
@@ -1050,7 +1053,8 @@ export function AssistantEditor({
                       </>
                     )}
 
-                    {searchTool && values.enabled_tools_map[searchTool.id] && (
+                    {((searchTool && values.enabled_tools_map[searchTool.id]) ||
+                      !connectorsExist) && (
                       <div>
                         {canShowKnowledgeSource && (
                           <>
@@ -1268,7 +1272,7 @@ export function AssistantEditor({
                           )}
 
                         {values.knowledge_source === "team_knowledge" &&
-                          ccPairs.length > 0 && (
+                          connectorsExist && (
                             <>
                               {canShowKnowledgeSource && (
                                 <div className="mt-4">

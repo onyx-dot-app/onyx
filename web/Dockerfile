@@ -10,7 +10,6 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder

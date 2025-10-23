@@ -95,6 +95,12 @@ If using PowerShell, the command slightly differs:
 Install the required python dependencies:
 
 ```bash
+pip install -r backend/requirements/combined.txt
+```
+
+or
+
+```bash
 pip install -r backend/requirements/default.txt
 pip install -r backend/requirements/dev.txt
 pip install -r backend/requirements/ee.txt
@@ -122,7 +128,7 @@ Onyx uses Node v22.20.0. We highly recommend you use [Node Version Manager (nvm)
 to manage your Node installations. Once installed, you can run
 
 ```bash
-nvm install 22 && nvm use 22`
+nvm install 22 && nvm use 22
 node -v # verify your active version
 ``` 
 
