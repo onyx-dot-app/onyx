@@ -121,12 +121,7 @@ export const InviteUserButton = ({
         />
       )}
 
-      <Button
-        className="w-min"
-        onClick={() => setShowInviteModal(true)}
-        disabled={isMutating}
-        size="sm"
-      >
+      <Button onClick={() => setShowInviteModal(true)} disabled={isMutating}>
         {invited ? "Uninvite" : "Invite"}
       </Button>
     </>

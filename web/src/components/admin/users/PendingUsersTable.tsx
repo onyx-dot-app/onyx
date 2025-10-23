@@ -16,6 +16,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import SvgCheck from "@/icons/check";
 
 const USERS_PER_PAGE = 10;
 
@@ -118,11 +119,10 @@ const PendingUsersTable = ({
                 <TableCell>
                   <div className="flex justify-end">
                     <Button
-                      variant="outline"
-                      size="sm"
+                      secondary
                       onClick={() => setUserToApprove(user.email)}
+                      leftIcon={SvgCheck}
                     >
-                      <CheckIcon className="h-4 w-4" />
                       Accept Join Request
                     </Button>
                   </div>

@@ -3,6 +3,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
 import useSWRMutation from "swr/mutation";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
+import SvgXCircle from "@/icons/x-circle";
 
 const DeactivateUserButton = ({
   user,
@@ -17,7 +18,7 @@ const DeactivateUserButton = ({
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
-  children?: React.ReactNode;
+  children?: string;
 }) => {
   const { trigger, isMutating } = useSWRMutation(
     deactivate
@@ -41,6 +42,7 @@ const DeactivateUserButton = ({
       className={className}
       onClick={() => trigger({ user_email: user.email })}
       disabled={isMutating}
+      leftIcon={SvgXCircle}
       tertiary
     >
       {children}

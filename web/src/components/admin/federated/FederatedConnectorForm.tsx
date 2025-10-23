@@ -11,14 +11,13 @@ import {
 } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import Title from "@/components/ui/title";
-import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +33,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import SvgLoader from "@/icons/loader";
+import { cn } from "@/lib/utils";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -543,19 +544,19 @@ export function FederatedConnectorForm({
 
               <Button
                 type="button"
-                variant="outline"
+                secondary
                 onClick={handleValidateCredentials}
                 disabled={isValidating || !formState.schema}
                 className="flex items-center gap-2 self-center ml-auto"
+                leftIcon={
+                  isValidating
+                    ? ({ className }) => (
+                        <SvgLoader className={cn(className, "animate-spin")} />
+                      )
+                    : undefined
+                }
               >
-                {isValidating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Validating...
-                  </>
-                ) : (
-                  "Validate"
-                )}
+                {isValidating ? "Validating..." : "Validate"}
               </Button>
               <Button
                 type="submit"

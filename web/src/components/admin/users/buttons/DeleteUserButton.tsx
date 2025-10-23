@@ -55,8 +55,7 @@ const DeleteUserButton = ({
         className={className}
         onClick={() => setShowDeleteModal(true)}
         disabled={isMutating}
-        size="sm"
-        variant="destructive"
+        danger
       >
         {children}
       </Button>

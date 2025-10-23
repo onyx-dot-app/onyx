@@ -64,7 +64,7 @@ export const LeaveOrganizationButton = ({
         className={className}
         onClick={() => setShowLeaveModal(true)}
         disabled={isMutating}
-        variant="ghost"
+        internal
       >
         {children}
       </Button>
