@@ -105,12 +105,14 @@ interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
+  showSearchWorkflowIcon?: boolean;
 }
 
 function ChatButtonInner({
   chatSession,
   project,
   draggable = false,
+  showSearchWorkflowIcon = false,
 }: ChatButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
@@ -340,7 +342,9 @@ function ChatButtonInner({
     >
       <PopoverAnchor>
         <SidebarTab
-          leftIcon={project ? () => <></> : SvgBubbleText}
+          leftIcon={
+            showSearchWorkflowIcon && !project ? SvgBubbleText : undefined
+          }
           onClick={() => route({ chatSessionId: chatSession.id })}
           active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
           rightChildren={rightMenu}
