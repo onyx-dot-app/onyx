@@ -22,16 +22,24 @@ jobs:
           curl -L https://raw.githubusercontent.com/newren/git-filter-repo/main/git-filter-repo -o /usr/local/bin/git-filter-repo
           chmod +x /usr/local/bin/git-filter-repo
 
+      - name: Configure SSH for deploy key
+        env:
+          FOSS_REPO_DEPLOY_KEY: ${{ secrets.FOSS_REPO_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$FOSS_REPO_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
       - name: Build FOSS version
         run: bash backend/scripts/make_foss_repo.sh
 
       - name: Push to FOSS repo
         env:
-          FOSS_REPO_TOKEN: ${{ secrets.FOSS_REPO_TOKEN }}
-          FOSS_REPO_URL: https://github.com/onyx-dot-app/onyx-foss.git
+          FOSS_REPO_URL: git@github.com:onyx-dot-app/onyx-foss.git
         run: |
           cd /tmp/foss_repo
           git config user.name "onyx-bot"
           git config user.email "bot@onyx.app"
-          git remote add public "https://x-access-token:${FOSS_REPO_TOKEN}@${FOSS_REPO_URL#https://}"
+          git remote add public "$FOSS_REPO_URL"
           git push --force public main
