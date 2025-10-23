@@ -265,30 +265,22 @@ def get_oauth_token_status(
     for oauth_config in oauth_configs:
         user_token = get_user_oauth_token(oauth_config.id, user.id, db_session)
 
+        is_expired = False
+        expires_at = None
         if user_token:
             token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
             is_expired = token_manager.is_token_expired(user_token.token_data)
             expires_at = user_token.token_data.get("expires_at")
 
-            statuses.append(
-                OAuthTokenStatus(
-                    oauth_config_id=oauth_config.id,
-                    oauth_config_name=oauth_config.name,
-                    has_token=True,
-                    expires_at=expires_at,
-                    is_expired=is_expired,
-                )
+        statuses.append(
+            OAuthTokenStatus(
+                oauth_config_id=oauth_config.id,
+                oauth_config_name=oauth_config.name,
+                has_token=True,
+                expires_at=expires_at,
+                is_expired=is_expired,
             )
-        else:
-            statuses.append(
-                OAuthTokenStatus(
-                    oauth_config_id=oauth_config.id,
-                    oauth_config_name=oauth_config.name,
-                    has_token=False,
-                    expires_at=None,
-                    is_expired=False,
-                )
-            )
+        )
 
     return statuses
 
