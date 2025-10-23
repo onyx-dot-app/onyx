@@ -1,8 +1,9 @@
 name: Sync FOSS Repo
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    # Run daily at 3am PT (11am UTC during PST)
+    - cron: '0 11 * * *'
   workflow_dispatch:
 
 jobs:
