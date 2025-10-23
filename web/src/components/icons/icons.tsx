@@ -86,6 +86,7 @@ import googleIcon from "../../../public/Google.png";
 import xenforoIcon from "../../../public/Xenforo.svg";
 import highspotIcon from "../../../public/Highspot.png";
 import bitbucketIcon from "../../../public/Bitbucket.svg";
+import pylonIcon from "../../../public/Pylon.png";
 import { FaGithub, FaRobot } from "react-icons/fa";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -1245,6 +1246,11 @@ export const BitbucketIcon = ({
 }: IconProps) => (
   <LogoIcon size={size} className={className} src={bitbucketIcon} />
 );
+
+export const PylonIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={pylonIcon} />;
 
 export const GlobeIcon = ({
   size = 16,
