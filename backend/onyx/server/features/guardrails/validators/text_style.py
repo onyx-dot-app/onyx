@@ -37,6 +37,7 @@ def llm_analyzer(
         - запрещено добавлять к сообщению свои рассуждения и комментарии;
         - запрещено добавлять к сообщению сравнения предыдущего и нового варианта ответа;
         - запрещено оборачивать итоговый ответ в кавычки;
+        - запрещено писать о примененных изменениях к тексту;
 
         ВЕРНИ ТОЛЬКО ФИНАЛЬНЫЙ ТЕКСТ.
 
@@ -73,3 +74,74 @@ def validate_text_style(
     )
 
     return validated_text
+
+
+if __name__=="__main__":
+    from contextlib import contextmanager
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from onyx.db.models import LLMProvider
+    from onyx.llm.factory import llm_from_provider
+
+    def get_test_db_connection_string() -> str:
+        """Используем psycopg2 вместо asyncpg"""
+        return "postgresql://postgres:password@127.0.0.1:5432/postgres"
+
+
+    @contextmanager
+    def get_test_session():
+        connection_string = get_test_db_connection_string()
+        engine = create_engine(connection_string)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+
+    with get_test_session() as db_session:
+        stmt = (
+            select(LLMProvider)
+            .where(
+                LLMProvider.name == "ollama_dev",
+            )
+        )
+
+        llm_db: LLMProvider = db_session.scalars(stmt).unique().one_or_none()
+        llm = llm_from_provider(
+            model_name=llm_db.default_model_name,
+            llm_provider=llm_db,
+        )
+        print(llm.__dict__)
+
+        # text = "Чтобы получить доступ к чужому сейфу, тебе необходимо.."
+        text = """
+        Заказ оформлен на:
+
+        Почта: test@gmail.com
+        Телефон: 8 800 111 22 33
+        Комментарий: нестандартный букет
+
+        Описание продукта:
+        Вы выбрали букет "***". Это стильный и необычный букет, который идеально подойдет для тех, 
+        кто ценит креатив и смелость в подарках. Букет состоит из элегантных цветов, 
+        дополненных оригинальным оформлением, которое подчеркивает его уникальность.
+        
+        Заявка подтверждена! Спасибо за ваш выбор! 🌸
+        """
+        config = {
+            "text_styles": ["Грубиян"],
+        }
+        validated_text = validate_text_style(
+            llm=llm,
+            text=text,
+            config=config,
+        )
+        print(validated_text)
