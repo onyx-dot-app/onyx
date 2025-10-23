@@ -8,7 +8,6 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
-import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
@@ -22,6 +21,8 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+import Button from "@/refresh-components/buttons/Button";
 
 interface UserFilesModalProps {
   title: string;
@@ -170,39 +171,26 @@ export default function UserFilesModalContent({
             e.stopPropagation();
           }}
         >
-          <div className="flex items-center gap-2 p-spacing-interline">
-            <div className="relative flex-1">
-              <InputTypeIn
-                placeholder="Search files..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                leftSearchIcon
-                autoComplete="off"
-                tabIndex={0}
-                onFocus={(e) => {
-                  e.target.select();
-                }}
-              />
-            </div>
+          <div className="flex items-center gap-spacing-inline py-padding-button px-spacing-paragraph">
+            <InputTypeIn
+              placeholder="Search files..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              leftSearchIcon
+              autoComplete="off"
+              tabIndex={0}
+              onFocus={(e) => {
+                e.target.select();
+              }}
+            />
             {handleUploadChange && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  onChange={handleUploadChange}
-                  accept={"*/*"}
-                />
-
-                <div>
-                  <LineItem icon={SvgPlusCircle} onClick={triggerUploadPicker}>
-                    <Text text03 mainUiAction>
-                      Add Files
-                    </Text>
-                  </LineItem>
-                </div>
-              </>
+              <CreateButton
+                onClick={triggerUploadPicker}
+                secondary={false}
+                internal
+              >
+                Add Files
+              </CreateButton>
             )}
           </div>
         </div>
