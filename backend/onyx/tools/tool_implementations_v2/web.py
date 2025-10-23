@@ -276,16 +276,16 @@ def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -
 
 # TODO: Make a ToolV2 class to encapsulate all of this
 OPEN_URL_LONG_DESCRIPTION = """
-## Decision boundary
+### Decision boundary
 - You MUST use this tool before quoting, citing, or relying on page content.
 - Use it whenever you already have URLs (from the user or from `web_search`).
 - Do NOT answer questions based on search snippets alone.
 - After a web_search call, strong bias towards using this tool to investigate further.
 
-## When NOT to use
+### When NOT to use
 - If you do not yet have URLs (search first).
 
-## Usage hints
+### Usage hints
 - If you've just called web_search, be generous with the number of URLs you fetch.
 - Avoid many tiny calls; batch URLs in one request.
 - Prefer primary, recent, and reputable sources.
