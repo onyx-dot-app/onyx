@@ -657,16 +657,17 @@ export function ActionToggle({
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
+    // Advertise to admin/curator users that they can connect an internal search tool
+    // even if it's not available or has no connectors
+    if (tool.in_code_tool_id === SEARCH_TOOL_ID && (isAdmin || isCurator)) {
+      return true;
+    }
+
     // Filter out tools that are not available
     if (!availableToolIds.includes(tool.id)) return false;
 
     // Filter out internal search tool for non-admin/curator users when there are no connectors
-    if (
-      tool.in_code_tool_id === SEARCH_TOOL_ID &&
-      hasNoConnectors &&
-      !isAdmin &&
-      !isCurator
-    ) {
+    if (tool.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors) {
       return false;
     }
 

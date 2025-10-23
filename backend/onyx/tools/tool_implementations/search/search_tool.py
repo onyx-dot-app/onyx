@@ -33,6 +33,7 @@ from onyx.context.search.models import SearchRequest
 from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
+from onyx.db.connector import check_connectors_exist
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
@@ -186,6 +187,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         self._id = tool_id
+
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        """Check if search tool is available by verifying connectors exist."""
+        return check_connectors_exist(db_session)
 
     @property
     def id(self) -> int:
