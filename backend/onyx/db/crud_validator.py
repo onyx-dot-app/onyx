@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, aliased
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import ValidatorType
 from onyx.db.models import (
     Persona,
     Persona__UserGroup,
@@ -159,10 +160,11 @@ def update_validator(
                 detail="Необходимо выбрать LLM-провайдер для валидатора!"
             )
 
-        validator.name = validator_update.name
-        validator.description = validator_update.description
-        validator.config = validator_update.config
         validator.llm_provider_id = validator_update.llm_provider_id
+
+    validator.name = validator_update.name
+    validator.description = validator_update.description
+    validator.config = validator_update.config
 
     try:
         db_session.commit()
