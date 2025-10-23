@@ -153,6 +153,10 @@ export interface HubSpotCredentialJson {
   hubspot_access_token: string;
 }
 
+export interface IroncladCredentialJson {
+  ironclad_api_token: string;
+}
+
 export interface Document360CredentialJson {
   portal_id: string;
   document360_api_token: string;
@@ -306,6 +310,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
   linear: { linear_access_token: "" } as LinearCredentialJson,
   hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
+  ironclad: { ironclad_api_token: "" } as IroncladCredentialJson,
   document360: {
     portal_id: "",
     document360_api_token: "",
@@ -533,6 +538,8 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // HubSpot
   hubspot_access_token: "HubSpot Access Token",
+  // Ironclad
+  ironclad_api_token: "Ironclad API Token",
   // Document360
   portal_id: "Document360 Portal ID",
   document360_api_token: "Document360 API Token",

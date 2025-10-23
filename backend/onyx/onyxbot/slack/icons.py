@@ -41,6 +41,8 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Guru.png"
     if source == DocumentSource.HUBSPOT.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/HubSpot.png"
+    if source == DocumentSource.IRONCLAD.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Ironclad.png"
     if source == DocumentSource.DOCUMENT360.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Document360.png"
     if source == DocumentSource.BOOKSTACK.value:

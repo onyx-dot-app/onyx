@@ -991,6 +991,80 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  ironclad: {
+    description: "Configure Ironclad connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Ironclad API base URL:",
+        label: "API Base URL",
+        name: "api_base_url",
+        optional: false,
+        default: "https://na1.ironcladapp.com/public/api/v1",
+        description:
+          "Provide the API base URL for your Ironclad environment. Use na1, eu1, or demo domains depending on your tenant.",
+      },
+      {
+        type: "list",
+        query: "Enter record types to include",
+        label: "Record Types",
+        name: "record_types",
+        optional: true,
+        description:
+          "Optional filter to limit syncing to specific record types (for example mutualNDA or masterServiceAgreement). Leave blank to index every available record.",
+      },
+      {
+        type: "checkbox",
+        query: "Hydrate related entities and attachments",
+        label: "Hydrate Entities",
+        name: "hydrate_entities",
+        optional: true,
+        default: true,
+        description:
+          "Enable to request expanded payloads that include attachment metadata. Disable if your token should only access metadata fields.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter an email to impersonate requests",
+        label: "As-User Email",
+        name: "impersonation_email",
+        optional: true,
+        description:
+          "Optional x-as-user-email header for acting on behalf of a specific Ironclad user when using client credential tokens.",
+      },
+      {
+        type: "text",
+        query: "Enter a user ID to impersonate requests",
+        label: "As-User ID",
+        name: "impersonation_user_id",
+        optional: true,
+        description:
+          "Optional x-as-user-id header to pair with client credential tokens when an email is not available.",
+      },
+      {
+        type: "number",
+        query: "Set the maximum attachments per record",
+        label: "Attachment Limit",
+        name: "max_attachments",
+        optional: true,
+        default: 5,
+        description:
+          "Caps how many attachments we ingest for each record to keep sync times predictable.",
+      },
+      {
+        type: "number",
+        query: "Set the Ironclad API page size",
+        label: "Page Size",
+        name: "page_size",
+        optional: true,
+        default: 50,
+        description:
+          "Controls how many records we request per page (Ironclad accepts values between 1 and 100).",
+      },
+    ],
+  },
   document360: {
     description: "Configure Document360 connector",
     values: [

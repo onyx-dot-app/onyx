@@ -71,6 +71,7 @@ import airtableIcon from "../../../public/Airtable.svg";
 import s3Icon from "../../../public/S3.png";
 import r2Icon from "../../../public/r2.png";
 import salesforceIcon from "../../../public/Salesforce.png";
+import ironcladIcon from "../../../public/Ironclad.png";
 import freshdeskIcon from "../../../public/Freshdesk.png";
 import firefliesIcon from "../../../public/Fireflies.png";
 import gitbookDarkIcon from "../../../public/GitBookDark.png";
@@ -1599,6 +1600,13 @@ export const HubSpotIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src={hubSpotIcon} />
+);
+
+export const IroncladIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={ironcladIcon} />
 );
 
 export const Document360Icon = ({
