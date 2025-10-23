@@ -773,10 +773,14 @@ def fake_tool_call_model() -> Model:
 
 @pytest.fixture
 def sample_messages() -> list[dict]:
-    """Fixture providing sample messages for testing."""
     return [
-        {"role": "user", "content": "Hello, how are you?"},
-        {"role": "assistant", "content": "I'm doing well, thank you!"},
+        {
+            "role": "system",
+            "content": [
+                {"type": "input_text", "text": "\nYou are a highly capable assistant"}
+            ],
+        },
+        {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
     ]
 
 
