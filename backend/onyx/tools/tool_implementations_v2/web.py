@@ -185,6 +185,7 @@ WEB_SEARCH_LONG_DESCRIPTION = """
 - When the user already provided URLs (go straight to `open_url`).
 
 ### Usage hints
+- Expand the users's query into a broader list of queries.
 - Batch a list of natural-language queries per call.
 - Prefer searches for distinct intents; then batch-fetch best URLs.
 - Deduplicate domains/near-duplicates. Prefer recent, authoritative sources.

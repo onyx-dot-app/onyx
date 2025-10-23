@@ -92,15 +92,17 @@ def default_build_system_message_for_default_assistant_v2(
                 )
 
                 # Special handling for WebSearchTool - expand to web_search and open_url
-                tag_handled_prompt += "\n### web_search\n"
+                tag_handled_prompt += "\n## web_search\n"
                 tag_handled_prompt += WEB_SEARCH_LONG_DESCRIPTION
-                tag_handled_prompt += "\n\n### open_url\n"
+                tag_handled_prompt += "\n\n## open_url\n"
                 tag_handled_prompt += OPEN_URL_LONG_DESCRIPTION
             else:
                 # TODO: ToolV2 should make this much cleaner
-                from onyx.tools.adapter_v1_to_v2 import tool_to_function_tool
+                from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 
-                tag_handled_prompt += f"\n### {tool_to_function_tool(tool).name}\n"
+                tag_handled_prompt += (
+                    f"\n## {tools_to_function_tools([tool])[0].name}\n"
+                )
                 tag_handled_prompt += tool.description
 
     return SystemMessage(content=tag_handled_prompt)
