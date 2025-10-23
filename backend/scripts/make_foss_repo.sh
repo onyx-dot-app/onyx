@@ -2,9 +2,9 @@
 set -euo pipefail
 
 echo "=== Building FOSS mirror ==="
-rm -rf /tmp/foss && mkdir -p /tmp/foss
-git clone --mirror . /tmp/foss/.git
-cd /tmp/foss
+rm -rf /tmp/foss_repo && mkdir -p /tmp/foss_repo
+git clone . /tmp/foss_repo
+cd /tmp/foss_repo
 
 echo "=== Creating MIT license file ==="
 cat > /tmp/mit_license.txt << 'EOF'
@@ -29,6 +29,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
 
+# NOTE: intentionally keeping the web/src/app/ee directory
+# for now since there's no clean way to remove it
+echo "=== Removing enterprise directory and licenses from history ==="
+git filter-repo \
+  --path backend/ee --invert-paths \
+  --path backend/ee/LICENSE --invert-paths \
+  --path web/src/app/ee/LICENSE --invert-paths \
+  --force
+
 echo "=== Creating blob callback script ==="
 cat > /tmp/license_replacer.py << 'PYEOF'
 #!/usr/bin/env python3
@@ -49,9 +58,14 @@ def replace_license_blob_content(blob, metadata):
     # Check if this blob looks like a license file
     # We'll replace any blob that contains the old Apache/custom license text
     if blob.data and len(blob.data) > 100:
-        # Check for license-like content (contains "Copyright" and "License")
+        # Check for license-like content
+        # Unfortunately, we don't have access to the path, so we can't just check that the path
+        # is `LICENSE`.
         data_lower = blob.data.lower()
-        if b'copyright' in data_lower and (b'license' in data_lower or b'apache' in data_lower):
+        if (
+            b'portions of this software are licensed as follows' in data_lower and
+            b'all third party components incorporated into the' in data_lower
+        ):
             # Additional check: make sure it's actually a license file, not source code
             # License files typically don't have common code patterns
             if b'def ' not in blob.data and b'class ' not in blob.data and b'import ' not in blob.data[:200]:
@@ -65,21 +79,8 @@ filter_obj.run()
 print(f"Replaced {replaced_count} LICENSE blob(s)", file=sys.stderr)
 PYEOF
 
-chmod +x /tmp/license_replacer.py
-
-# NOTE: intentionally keeping the web/src/app/ee directory
-# for now since there's no clean way to remove it
-echo "=== Removing enterprise directory and licenses from history ==="
-git filter-repo \
-  --path backend/ee --invert-paths \
-  --path backend/ee/LICENSE --invert-paths \
-  --path web/src/app/ee/LICENSE --invert-paths \
-  --force
-
 echo "=== Replacing LICENSE file in all commits ==="
+chmod +x /tmp/license_replacer.py
 /tmp/license_replacer.py
-
-echo "=== Checking out working tree ==="
-git clone . ../foss_repo
 
 echo "=== Done building FOSS repo ==="
