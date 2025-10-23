@@ -305,7 +305,7 @@ export default function FilePicker({
 
       {showRecentFiles && (
         <CoreModal
-          className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
+          className="w-[32rem] border flex flex-col bg-background-tint-00"
           onClickOutside={() => setShowRecentFiles(false)}
         >
           <UserFilesModalContent
