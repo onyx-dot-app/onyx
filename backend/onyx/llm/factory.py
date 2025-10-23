@@ -403,12 +403,7 @@ def get_llm_model_and_settings(
     model_kwargs = model_kwargs or {}
     if custom_config:
         for k, v in custom_config.items():
-            # If there are any empty or null values
-            # They MUST NOT be set in the env
-            if v is not None and v.strip():
-                os.environ[k] = v
-            else:
-                os.environ.pop(k, None)
+            os.environ[k] = v
     if custom_config and provider == "vertex_ai":
         for k, v in custom_config.items():
             if k == VERTEX_CREDENTIALS_FILE_KWARG:
