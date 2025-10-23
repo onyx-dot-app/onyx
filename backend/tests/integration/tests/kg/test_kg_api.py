@@ -50,7 +50,7 @@ def connectors() -> None:
         create_connector(db_session, connector_data)
 
 
-def test_kg_enable_and_disable() -> None:
+def test_kg_enable_and_disable(connectors: None) -> None:
     admin_user = UserManager.create(name="admin_user")
 
     # Enable KG
