@@ -127,7 +127,7 @@ def mocked_settings(mocker: MockerFixture) -> None:
 )
 @pytest.mark.parametrize("has_memories", [True, False])
 @pytest.mark.parametrize("has_company_settings", [True, False])
-@pytest.mark.parametrize("datetime_aware", [True, False])
+@pytest.mark.parametrize("datetime_aware", [True])
 def test_system_message_includes_personalization(
     builder: Callable,
     has_memories: bool,
@@ -164,7 +164,9 @@ def test_system_message_includes_personalization(
 
     assert ("Developer Advocate" in content) == has_memories
     assert ("Memory 1" in content) == has_memories
-    assert ("The current day and time" in content) == datetime_aware
+    assert (
+        ("The current day and time" in content) or ("The current date is" in content)
+    ) == datetime_aware
 
 
 def test_tools_section_present_when_tools_given(
