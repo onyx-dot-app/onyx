@@ -340,7 +340,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                variant="destructive"
+                danger
                 type="button"
                 onClick={async () => {
                   const endpoint =
@@ -507,7 +507,7 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            variant="destructive"
+            danger
             type="button"
             onClick={async () => {
               handleRevokeAccess(

@@ -231,7 +231,6 @@ export default function IndexAttemptErrorsModal({
               {hasUnresolvedErrors && !isResolvingErrors && (
                 <Button
                   onClick={onResolveAll}
-                  variant="default"
                   className="ml-4 whitespace-nowrap"
                 >
                   Resolve All

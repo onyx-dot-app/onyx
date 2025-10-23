@@ -260,11 +260,7 @@ export default function OAuthFinalizePage() {
                 )}
                 <br />
                 {!redirectUrl && (
-                  <Button
-                    type="submit"
-                    variant="submit"
-                    disabled={!isValid || isSubmitting}
-                  >
+                  <Button type="submit" disabled={!isValid || isSubmitting}>
                     {isSubmitting ? "Submitting..." : "Submit"}
                   </Button>
                 )}
