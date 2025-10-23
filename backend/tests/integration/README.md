@@ -10,6 +10,14 @@ The integration tests are designed with a "manager" class and a "test" class for
 The idea is that each test can use the manager class to create (.create()) a "test*" object. It can then perform an operation on the object (e.g., send a request to the API) and then check if the "test*" object is in the expected state by using the manager class (.verify()) function.
 
 ## Instructions for Running Integration Tests Locally
+0. Generate dependencies
+```sh
+brew install openapi-generator
+```
+Then run Onyx OpenAPI schema generator in launch.json
+```sh
+openapi-generator generate -i backend/generated/openapi.json -g python -o backend/generated/onyx_openapi_client --package-name onyx_openapi_client --skip-validate-spec --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+```
 
 1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
    - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
@@ -17,15 +25,15 @@ The idea is that each test can use the manager class to create (.create()) a "te
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh
-   pytest -s tests/integration/tests/
+   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/
    ```
    or to run all tests in a file:
    ```sh
-   pytest -s tests/integration/tests/path_to/test_file.py
+   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/path_to/test_file.py
    ```
    or to run a single test:
    ```sh
-   pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
+   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
    ```
 
 Running some single tests require the `mock_connector_server` container to be running. If the above doesn't work, 
