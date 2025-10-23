@@ -267,6 +267,10 @@ export interface ImapCredentialJson {
   imap_password: string;
 }
 
+export interface JoplinCredentialJson {
+  joplin_api_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -464,6 +468,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     imap_username: "",
     imap_password: "",
   } as ImapCredentialJson,
+  joplin: {
+    joplin_api_token: "",
+  } as JoplinCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -557,6 +564,9 @@ export const credentialDisplayNames: Record<string, string> = {
   // IMAP
   imap_username: "IMAP Username",
   imap_password: "IMAP Password",
+
+  // Joplin
+  joplin_api_token: "Joplin API Token",
 
   // S3
   aws_access_key_id: "AWS Access Key ID",
