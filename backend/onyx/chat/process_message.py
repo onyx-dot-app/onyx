@@ -1120,6 +1120,10 @@ def stream_chat_message_objects(
         else:
             logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
 
+        logger.info(
+            "\nИтоговый ответ после input и output валидации: %s",
+            validated_llm_answer,
+        )
         other_packets.extend(stream_stop_info_packets)
 
         # reference_db_search_docs = None
