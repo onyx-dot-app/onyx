@@ -48,62 +48,64 @@ interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
   parentMessage?: Message;
 }
 
-const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
-  rawPackets,
-  handleFeedbackChange,
-  assistant,
-  docs,
-  citations,
-  setPresentingDocument,
-  regenerate,
-  overriddenModel,
-  nodeId,
-  messageId,
-  currentFeedback,
-  otherMessagesCanSwitchTo,
-  onMessageSelection,
-  llmManager,
-  projectFiles,
-  researchType,
-}: InternalMemoizedAIMessageProps) {
-  const chatState = React.useMemo(
-    () => ({
-      handleFeedbackChange,
-      assistant,
-      docs,
-      userFiles: projectFiles || [],
-      citations,
-      setPresentingDocument,
-      regenerate,
-      overriddenModel,
-      researchType,
-    }),
-    [
-      handleFeedbackChange,
-      assistant,
-      docs,
-      projectFiles,
-      citations,
-      setPresentingDocument,
-      regenerate,
-      overriddenModel,
-      researchType,
-    ]
-  );
+const InternalMemoizedAIMessage = React.memo(
+  function InternalMemoizedAIMessage({
+    rawPackets,
+    handleFeedbackChange,
+    assistant,
+    docs,
+    citations,
+    setPresentingDocument,
+    regenerate,
+    overriddenModel,
+    nodeId,
+    messageId,
+    currentFeedback,
+    otherMessagesCanSwitchTo,
+    onMessageSelection,
+    llmManager,
+    projectFiles,
+    researchType,
+  }: InternalMemoizedAIMessageProps) {
+    const chatState = React.useMemo(
+      () => ({
+        handleFeedbackChange,
+        assistant,
+        docs,
+        userFiles: projectFiles || [],
+        citations,
+        setPresentingDocument,
+        regenerate,
+        overriddenModel,
+        researchType,
+      }),
+      [
+        handleFeedbackChange,
+        assistant,
+        docs,
+        projectFiles,
+        citations,
+        setPresentingDocument,
+        regenerate,
+        overriddenModel,
+        researchType,
+      ]
+    );
 
-  return (
-    <AIMessage
-      rawPackets={rawPackets}
-      chatState={chatState}
-      nodeId={nodeId}
-      messageId={messageId}
-      currentFeedback={currentFeedback}
-      llmManager={llmManager}
-      otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
-      onMessageSelection={onMessageSelection}
-    />
-  );
-});
+    return (
+      <AIMessage
+        rawPackets={rawPackets}
+        chatState={chatState}
+        nodeId={nodeId}
+        messageId={messageId}
+        currentFeedback={currentFeedback}
+        llmManager={llmManager}
+        otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
+        onMessageSelection={onMessageSelection}
+      />
+    );
+  }
+);
 
 export const MemoizedAIMessage = ({
   rawPackets,
@@ -163,7 +165,7 @@ export const MemoizedAIMessage = ({
   );
 
   return (
-    <_MemoizedAIMessage
+    <InternalMemoizedAIMessage
       rawPackets={rawPackets}
       handleFeedbackChange={wrappedHandleFeedbackChange}
       assistant={assistant}
