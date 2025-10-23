@@ -127,7 +127,7 @@ def mocked_settings(mocker: MockerFixture) -> None:
 )
 @pytest.mark.parametrize("has_memories", [True, False])
 @pytest.mark.parametrize("has_company_settings", [True, False])
-@pytest.mark.parametrize("datetime_aware", [True])
+@pytest.mark.parametrize("datetime_aware", [True, False])
 def test_system_message_includes_personalization(
     builder: Callable,
     has_memories: bool,
