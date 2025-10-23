@@ -289,7 +289,12 @@ export default function UserFilesModalContent({
                 <div className="p-spacing-inline-mini flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="max-w-[250px] min-w-0 flex-none">
-                      <Truncated text04 secondaryAction nowrap>
+                      <Truncated
+                        text04
+                        secondaryAction
+                        nowrap
+                        className="truncate"
+                      >
                         {f.name}
                       </Truncated>
                     </div>

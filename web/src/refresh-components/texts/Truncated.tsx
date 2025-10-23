@@ -63,7 +63,7 @@ export default function Truncated({
 
   const text = (
     <Text
-      className={cn("line-clamp-1 break-all text-left truncate", className)}
+      className={cn("line-clamp-1 break-all text-left", className)}
       {...rest}
     >
       {children}
