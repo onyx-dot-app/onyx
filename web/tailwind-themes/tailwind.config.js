@@ -219,10 +219,11 @@ module.exports = {
         "token-function": "var(--token-function)",
         "token-regex": "var(--token-regex)",
         "token-attr-name": "var(--token-attr-name)",
-        // "non-selectable": "var(--non-selectable)",
       },
       boxShadow: {
-        "01": "0px 2px 8px 0px var(--shadow-02)",
+        "01": "0px 2px 8px 0px var(--shadow-01)",
+        "02": "0px 2px 8px 0px var(--shadow-02)",
+        "03": "0px 2px 8px 0px var(--shadow-03)",
 
         // light
         "tremor-input": "0 1px 2px 0 rgb(0 0 0 / 0.05)",

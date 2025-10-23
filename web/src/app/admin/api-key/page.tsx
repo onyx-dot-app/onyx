@@ -107,18 +107,23 @@ function Main() {
     );
   }
 
-  const newApiKeyButton = (
-    <CreateButton onClick={() => setShowCreateUpdateForm(true)}>
-      Create API Key
-    </CreateButton>
+  const introSection = (
+    <div className="flex flex-col items-start gap-spacing-paragraph">
+      <Text>{API_KEY_TEXT}</Text>
+      <CreateButton
+        className="self-start"
+        onClick={() => setShowCreateUpdateForm(true)}
+      >
+        Create API Key
+      </CreateButton>
+    </div>
   );
 
   if (apiKeys.length === 0) {
     return (
       <div>
         {popup}
-        <Text>{API_KEY_TEXT}</Text>
-        {newApiKeyButton}
+        {introSection}
 
         {showCreateUpdateForm && (
           <OnyxApiKeyForm
@@ -151,8 +156,7 @@ function Main() {
 
       {keyIsGenerating && <Spinner />}
 
-      <Text>{API_KEY_TEXT}</Text>
-      {newApiKeyButton}
+      {introSection}
 
       <Separator />
 

@@ -17,6 +17,10 @@ the brackets. To cite multiple documents, use [[1]](https://example.com), [[2]](
 Try to cite inline as opposed to leaving all citations until the very end of the response.
 """.rstrip()
 
+STRESS_USER_PROMPT_IMPORTANCE = """
+Here is the user's prompt:
+"""
+
 NO_CITATION_STATEMENT = """
 Do not provide any citations even if there are examples in the chat history.
 """.rstrip()

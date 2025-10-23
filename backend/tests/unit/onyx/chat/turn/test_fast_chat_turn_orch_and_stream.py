@@ -38,6 +38,7 @@ from openai.types.responses.response_usage import ResponseUsage
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import DocumentSource
@@ -255,9 +256,17 @@ def run_fast_chat_turn(
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
+    prompt_config: PromptConfig | None = None,
 ) -> list[Packet]:
     """Helper function to run fast_chat_turn and collect all packets."""
     from onyx.chat.turn.fast_chat_turn import fast_chat_turn
+
+    if prompt_config is None:
+        prompt_config = PromptConfig(
+            system_prompt="You are a helpful assistant.",
+            task_prompt="Answer the user's question.",
+            datetime_aware=False,
+        )
 
     generator = fast_chat_turn(
         sample_messages,
@@ -265,6 +274,7 @@ def run_fast_chat_turn(
         chat_session_id,
         message_id,
         research_type,
+        prompt_config,
     )
     return list(generator)
 
@@ -370,6 +380,66 @@ class FakeLLM(LLM):
 
 class FakeModel(StreamableFakeModel):
     """Simple fake Model implementation for testing Agents SDK."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._output_schema: AgentOutputSchemaBase | None = None
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list,
+        model_settings: ModelSettings,
+        tools: List[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: List[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None = None,
+        conversation_id: str | None = None,
+        prompt: Any = None,
+    ) -> ModelResponse:
+        """Override to handle structured output properly."""
+        # Store output_schema for streaming
+        self._output_schema = output_schema
+
+        # If there's an output schema, return JSON that matches it
+        if output_schema is not None:
+            # Return a message with JSON content that matches the schema
+            message = create_fake_message(text='{"ready_to_answer": true}')
+        else:
+            message = create_fake_message()
+
+        usage = create_fake_usage()
+        return ModelResponse(
+            output=[message], usage=usage, response_id="fake-response-id"
+        )
+
+    def stream_response(  # type: ignore[override]
+        self,
+        system_instructions: str | None,
+        input: str | list,
+        model_settings: ModelSettings,
+        tools: List[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: List[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None = None,
+        conversation_id: str | None = None,
+        prompt: Any = None,
+    ) -> AsyncIterator[object]:
+        """Override streaming to handle structured output."""
+        # Store output_schema for streaming
+        self._output_schema = output_schema
+
+        # If there's an output schema, create a message with JSON
+        if output_schema is not None:
+            message = create_fake_message(text='{"ready_to_answer": true}')
+        else:
+            message = create_fake_message()
+
+        return self._create_stream_events(message=message)
 
 
 class FakeCancellationModel(CancellationMixin, StreamableFakeModel):
@@ -679,6 +749,7 @@ def chat_turn_dependencies(
     emitter = get_default_emitter()
     return ChatTurnDependencies(
         llm_model=fake_model,
+        model_settings=ModelSettings(temperature=0.0, include_usage=True),
         llm=fake_llm,
         db_session=fake_db_session,  # type: ignore[arg-type]
         tools=fake_tools,
@@ -745,12 +816,19 @@ def test_fast_chat_turn_catch_exception(
 
     chat_turn_dependencies.llm_model = fake_failing_model
 
+    prompt_config = PromptConfig(
+        system_prompt="You are a helpful assistant.",
+        task_prompt="Answer the user's question.",
+        datetime_aware=False,
+    )
+
     generator = fast_chat_turn(
         sample_messages,
         chat_turn_dependencies,
         chat_session_id,
         message_id,
         research_type,
+        prompt_config,
     )
     with pytest.raises(Exception):
         list(generator)
@@ -880,14 +958,52 @@ class FakeCitationModelWithContext(StreamableFakeModel):
         prompt: Any = None,
     ) -> ModelResponse:
         """Override to create a response that includes citations."""
-        # Create a message with citations that reference our test documents
-        message = create_fake_message(
-            text="Based on the search results, here's the answer with citations [[1]]."
-        )
+        # If there's an output schema, return JSON that matches it
+        if output_schema is not None:
+            message = create_fake_message(text='{"ready_to_answer": true}')
+        else:
+            # Create a message with citations that reference our test documents
+            message = create_fake_message(
+                text="Based on the search results, here's the answer with citations [[1]]."
+            )
         usage = create_fake_usage()
         return ModelResponse(
             output=[message], usage=usage, response_id="fake-response-id"
         )
+
+    def stream_response(  # type: ignore[override]
+        self,
+        system_instructions: str | None,
+        input: str | list,
+        model_settings: ModelSettings,
+        tools: List[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: List[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None = None,
+        conversation_id: str | None = None,
+        prompt: Any = None,
+    ) -> AsyncIterator[object]:
+        """Override streaming to handle structured output."""
+        # If there's an output schema, create a message with JSON
+        if output_schema is not None:
+            message = create_fake_message(text='{"ready_to_answer": true}')
+            return self._create_stream_events(message=message)
+        else:
+            # For non-structured output, use the citation text
+            return super().stream_response(
+                system_instructions,
+                input,
+                model_settings,
+                tools,
+                output_schema,
+                handoffs,
+                tracing,
+                previous_response_id=previous_response_id,
+                conversation_id=conversation_id,
+                prompt=prompt,
+            )
 
     def _create_stream_events(
         self,
@@ -903,9 +1019,14 @@ class FakeCitationModelWithContext(StreamableFakeModel):
         )
 
         async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
-            # Create message with citation text
-            citation_text = "Based on the search results, here's the answer with citations [[1]](https://example.com)."
-            msg = create_fake_message(text=citation_text)
+            # Use the provided message if available, otherwise use citation text
+            if message is not None:
+                msg = message
+                citation_text = "hi"
+            else:
+                # Create message with citation text
+                citation_text = "Based on the search results, here's the answer with citations [[1]](https://example.com)."
+                msg = create_fake_message(text=citation_text)
 
             final_response = create_fake_response(response_id, msg)
 
@@ -1023,6 +1144,13 @@ def test_fast_chat_turn_citation_processing(
     )
     chat_turn_dependencies.llm_model = citation_model
 
+    # Create a fake prompt config
+    prompt_config = PromptConfig(
+        system_prompt="You are a helpful assistant.",
+        task_prompt="Answer the user's question.",
+        datetime_aware=False,
+    )
+
     # Create a decorated version of _fast_chat_turn_core for testing
     @unified_event_stream
     def test_fast_chat_turn_core(
@@ -1031,6 +1159,7 @@ def test_fast_chat_turn_citation_processing(
         session_id: UUID,
         msg_id: int,
         res_type: ResearchType,
+        p_config: PromptConfig,
     ) -> None:
         # Manually populate cited_documents from the iteration answer for this test
         # In real usage, cited_documents would be populated by the tool implementations
@@ -1042,6 +1171,7 @@ def test_fast_chat_turn_citation_processing(
             session_id,
             msg_id,
             res_type,
+            p_config,
             starter_global_iteration_responses=[fake_iteration_answer],
             starter_cited_documents=context_docs,
         )
@@ -1053,6 +1183,7 @@ def test_fast_chat_turn_citation_processing(
         chat_session_id,
         message_id,
         research_type,
+        prompt_config,
     )
     packets = list(generator)
 

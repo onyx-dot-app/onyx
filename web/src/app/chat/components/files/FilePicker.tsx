@@ -203,7 +203,6 @@ export default function FilePicker({
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
-    console.log("Recent files changed", recentFiles);
     setRecentFilesSnapshot(
       recentFiles.slice().filter((f) => !deletedFileIds.includes(f.id))
     );

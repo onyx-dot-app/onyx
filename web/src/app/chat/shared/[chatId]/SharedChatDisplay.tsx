@@ -118,8 +118,6 @@ export function SharedChatDisplay({
               clearSelectedDocuments={() => {}}
               selectedDocumentTokens={0}
               maxTokens={0}
-              initialWidth={400}
-              isOpen={true}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               closeSidebar={() => {
@@ -165,8 +163,6 @@ export function SharedChatDisplay({
                   clearSelectedDocuments={() => {}}
                   selectedDocumentTokens={0}
                   maxTokens={0}
-                  initialWidth={400}
-                  isOpen={true}
                   setPresentingDocument={setPresentingDocument}
                   closeSidebar={() => {
                     setDocumentSidebarVisible(false);

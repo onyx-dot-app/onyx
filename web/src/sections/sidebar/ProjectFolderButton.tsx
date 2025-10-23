@@ -12,6 +12,7 @@ import SvgEdit from "@/icons/edit";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
@@ -42,7 +43,6 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(project.name);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
 
@@ -79,7 +79,6 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
 
   async function handleRename(newName: string) {
     await renameProject(project.id, newName);
-    setName(newName);
   }
 
   const popoverItems = [
@@ -168,7 +167,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 </PopoverTrigger>
 
                 <PopoverContent side="right" align="end">
-                  {popoverItems}
+                  <PopoverMenu>{popoverItems}</PopoverMenu>
                 </PopoverContent>
               </>
             }
@@ -180,7 +179,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 onClose={() => setIsEditing(false)}
               />
             ) : (
-              name
+              project.name
             )}
           </SidebarTab>
         </PopoverAnchor>

@@ -16,13 +16,13 @@ import { cn, noProp } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   Project,
-  moveChatSession,
   removeChatSessionFromProject,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -42,13 +42,13 @@ import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
   LOCAL_STORAGE_KEYS,
-} from "./constants";
+} from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
   showErrorNotification,
   handleMoveOperation,
-} from "./sidebarUtils";
-import ButtonRenaming from "./ButtonRenaming";
+} from "@/sections/sidebar/sidebarUtils";
+import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
 
 // (no local constants; use shared constants/imports)
 
@@ -326,7 +326,7 @@ function ChatButtonInner({
         </div>
       </PopoverTrigger>
       <PopoverContent side="right" align="end">
-        {popoverItems}
+        <PopoverMenu>{popoverItems}</PopoverMenu>
       </PopoverContent>
     </>
   );
@@ -344,6 +344,7 @@ function ChatButtonInner({
           onClick={() => route({ chatSessionId: chatSession.id })}
           active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
           rightChildren={rightMenu}
+          focused={renaming}
         >
           {renaming ? (
             <ButtonRenaming
@@ -362,6 +363,7 @@ function ChatButtonInner({
   return (
     <>
       {popup}
+
       {deleteConfirmationModalOpen && (
         <ConfirmationModal
           title="Delete Chat"

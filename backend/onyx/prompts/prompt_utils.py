@@ -13,6 +13,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT_V2
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
@@ -129,6 +130,39 @@ def build_task_prompt_reminders(
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
+
+
+def build_task_prompt_reminders_v2(
+    chat_turn_user_message: str,
+    prompt: Persona | PromptConfig,
+    use_language_hint: bool,
+    should_cite: bool,
+    language_hint_str: str = LANGUAGE_HINT,
+) -> str:
+    """V2 version that conditionally includes citation requirements.
+
+    Args:
+        prompt: Persona or PromptConfig with task_prompt
+        use_language_hint: Whether to include language hint
+        should_cite: Whether to include citation requirement statement
+        language_hint_str: Language hint string to use
+
+    Returns:
+        Task prompt with optional citation statement and language hint
+    """
+    base_task = prompt.task_prompt or ""
+    citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
+    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
+    return f"""
+    <TASK_PROMPT>
+    {base_task}
+    {citation_or_nothing}
+    {language_hint_or_nothing}
+    </TASK_PROMPT>
+    <USER_PROMPT>
+    {chat_turn_user_message}
+    </USER_PROMPT>
+    """.strip()
 
 
 # Maps connector enum string to a more natural language representation for the LLM

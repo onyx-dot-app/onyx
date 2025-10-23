@@ -36,6 +36,15 @@ repos:
       types_or: [html, css, javascript, ts, tsx]
       language_version: system
 
+  - repo: https://github.com/sirwart/ripsecrets
+    rev: v0.1.11
+    hooks:
+      - id: ripsecrets
+        args:
+        - --additional-pattern
+        - ^sk-[A-Za-z0-9_\-]{20,}$
+
+
   - repo: local
     hooks:
       - id: check-lazy-imports

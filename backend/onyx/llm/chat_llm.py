@@ -37,6 +37,8 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -49,8 +51,6 @@ if TYPE_CHECKING:
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
-VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
-VERTEX_LOCATION_KWARG = "vertex_location"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 

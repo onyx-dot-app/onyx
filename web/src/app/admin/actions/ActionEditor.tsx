@@ -7,6 +7,7 @@ import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
 import {
   createCustomTool,
   updateCustomTool,
@@ -25,7 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuthType } from "@/lib/hooks";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon } from "@/components/icons/icons";
 import {
   Table,
   TableBody,
@@ -161,28 +162,32 @@ function ActionForm({
         </button>
       </div>
       {definitionError && (
-        <div className="text-error text-sm">{definitionError}</div>
+        <Text className="text-error text-sm">{definitionError}</Text>
       )}
       <ErrorMessage
         name="definition"
         component="div"
         className="mb-4 text-error text-sm"
       />
-      <div className="mt-4 text-sm bg-blue-50 text-blue-700 dark:text-blue-300 dark:bg-blue-900 p-4 rounded-md border border-blue-200 dark:border-blue-800">
+      <div className="mt-4 rounded-md border border-border bg-background-50 p-4">
         <Link
           href="https://docs.onyx.app/admin/actions/overview"
-          className="text-link hover:underline flex items-center"
+          className="flex items-center group"
           target="_blank"
           rel="noopener noreferrer"
         >
-          <InfoIcon className="w-4 h-4 mr-2 " />
-          Learn more about actions in our documentation
+          <InfoIcon size={16} className="mr-2 text-link" />
+          <Text className="text-link group-hover:underline">
+            Learn more about actions in our documentation
+          </Text>
         </Link>
       </div>
 
       {methodSpecs && methodSpecs.length > 0 && (
         <div className="my-4">
-          <h3 className="text-base font-semibold mb-2">Available methods</h3>
+          <Text className="text-base font-semibold mb-2">
+            Available methods
+          </Text>
           <div className="rounded-lg border border-background-200 bg-background-50">
             <Table className="min-w-full">
               <TableHeader className="bg-background-neutral-00">
@@ -198,11 +203,17 @@ function ActionForm({
                   <TableRow
                     key={`${method.method}-${method.path}-${method.name}`}
                   >
-                    <TableCell className="font-medium">{method.name}</TableCell>
-                    <TableCell>{method.summary}</TableCell>
-                    <TableCell className="uppercase">{method.method}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {method.path}
+                    <TableCell>
+                      <Text className="font-medium">{method.name}</Text>
+                    </TableCell>
+                    <TableCell>
+                      <Text>{method.summary}</Text>
+                    </TableCell>
+                    <TableCell>
+                      <Text className="uppercase">{method.method}</Text>
+                    </TableCell>
+                    <TableCell>
+                      <Text className="font-mono">{method.path}</Text>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -218,12 +229,12 @@ function ActionForm({
       />
       {showAdvancedOptions && (
         <div>
-          <h3 className="text-xl font-bold mb-2 text-primary-600">
+          <Text className="text-xl font-bold mb-2 text-primary-600">
             Custom Headers
-          </h3>
-          <p className="text-sm mb-6 text-text-600 italic">
+          </Text>
+          <Text className="text-sm mb-6 text-text-600 italic">
             Specify custom headers for each request to this action&apos;s API.
-          </p>
+          </Text>
           <FieldArray
             name="customHeaders"
             render={(arrayHelpers) => (
@@ -267,9 +278,9 @@ function ActionForm({
           />
 
           <div className="mt-6">
-            <h3 className="text-xl font-bold mb-2 text-primary-600">
+            <Text className="text-xl font-bold mb-2 text-primary-600">
               Authentication
-            </h3>
+            </Text>
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
                 <div className="flex items-center space-x-2">
@@ -304,10 +315,10 @@ function ActionForm({
                         (header) => header.key.toLowerCase() === "authorization"
                       ) && (
                         <TooltipContent side="top" align="center">
-                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                          <Text className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
                             Cannot enable OAuth passthrough when an
                             Authorization header is already set
-                          </p>
+                          </Text>
                         </TooltipContent>
                       )}
                     </Tooltip>
@@ -319,18 +330,18 @@ function ActionForm({
                     >
                       Pass through user&apos;s OAuth token
                     </label>
-                    <p className="text-xs text-subtle mt-1">
+                    <Text className="text-xs text-subtle mt-1">
                       When enabled, the user&apos;s OAuth token will be passed
                       as the Authorization header for all API calls
-                    </p>
+                    </Text>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-subtle">
+              <Text className="text-sm text-subtle">
                 OAuth passthrough is only available when OIDC or OAuth
                 authentication is enabled
-              </p>
+              </Text>
             )}
           </div>
         </div>

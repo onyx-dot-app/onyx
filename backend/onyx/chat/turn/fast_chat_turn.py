@@ -1,27 +1,31 @@
 from typing import cast
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from agents import Agent
-from agents import ModelSettings
 from agents import RawResponsesStreamEvent
-from agents import StopAtTools
+from agents import RunResultStreaming
+from agents import ToolCallItem
+from agents.tracing import trace
 
+from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
 from onyx.chat.turn.infra.session_sink import save_iteration
-from onyx.chat.turn.infra.sync_agent_stream_adapter import SyncAgentStream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
+from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -30,7 +34,67 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations_v2.image_generation import image_generation_tool
+
+if TYPE_CHECKING:
+    from litellm import ResponseFunctionToolCall
+
+
+def _remove_last_task_prompt_and_insert_new_one(
+    chat_turn_user_message: str,
+    current_messages: list[dict],
+    prompt_config: PromptConfig,
+    ctx: ChatTurnContext,
+) -> list[dict]:
+    new_task_prompt = build_task_prompt_reminders_v2(
+        chat_turn_user_message,
+        prompt_config,
+        use_language_hint=False,
+        should_cite=ctx.should_cite_documents,
+    )
+    for i in range(len(current_messages) - 1, -1, -1):
+        if current_messages[i].get("role") == "user":
+            current_messages.pop(i)
+            break
+    current_messages = current_messages + [{"role": "user", "content": new_task_prompt}]
+    return current_messages
+
+
+# TODO -- this can be refactored out and played with in evals + normal demo
+def _run_agent_loop(
+    messages: list[dict],
+    dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    ctx: ChatTurnContext,
+    prompt_config: PromptConfig,
+) -> None:
+    current_messages: list[dict] = messages
+    last_call_is_final = False
+    agent = Agent(
+        name="Assistant",
+        model=dependencies.llm_model,
+        tools=cast(list[AgentToolType], dependencies.tools),
+        model_settings=dependencies.model_settings,
+        tool_use_behavior="stop_on_first_tool",
+    )
+    while not last_call_is_final:
+        agent_stream: SyncAgentStream = SyncAgentStream(
+            agent=agent,
+            input=current_messages,
+            context=ctx,
+        )
+        streamed, tool_call_events = _process_stream(
+            agent_stream, chat_session_id, dependencies, ctx
+        )
+        current_messages = cast(list[dict], streamed.to_input_list())
+        current_messages = _remove_last_task_prompt_and_insert_new_one(
+            messages[-1]["content"], current_messages, prompt_config, ctx
+        )
+        # TODO: Make this configurable on OnyxAgent level
+        stopping_tools = ["image_generation"]
+        if len(tool_call_events) == 0 or any(
+            tool.name in stopping_tools for tool in tool_call_events
+        ):
+            last_call_is_final = True
 
 
 def _fast_chat_turn_core(
@@ -39,6 +103,7 @@ def _fast_chat_turn_core(
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
+    prompt_config: PromptConfig,
     # Dependency injectable arguments for testing
     starter_global_iteration_responses: list[IterationAnswer] | None = None,
     starter_cited_documents: list[InferenceSection] | None = None,
@@ -71,36 +136,14 @@ def _fast_chat_turn_core(
         message_id=message_id,
         research_type=research_type,
     )
-    agent = Agent(
-        name="Assistant",
-        model=dependencies.llm_model,
-        tools=cast(list[AgentToolType], dependencies.tools),
-        model_settings=ModelSettings(
-            temperature=dependencies.llm.config.temperature,
-            include_usage=True,
-        ),
-        tool_use_behavior=StopAtTools(stop_at_tool_names=[image_generation_tool.name]),
-    )
-    # By default, the agent can only take 10 turns. For our use case, it should be higher.
-    max_turns = 25
-    agent_stream: SyncAgentStream = SyncAgentStream(
-        agent=agent,
-        input=messages,
-        context=ctx,
-        max_turns=max_turns,
-    )
-    for ev in agent_stream:
-        connected = is_connected(
-            chat_session_id,
-            dependencies.redis_client,
+    with trace("fast_chat_turn"):
+        _run_agent_loop(
+            messages=messages,
+            dependencies=dependencies,
+            chat_session_id=chat_session_id,
+            ctx=ctx,
+            prompt_config=prompt_config,
         )
-        if not connected:
-            _emit_clean_up_packets(dependencies, ctx)
-            agent_stream.cancel()
-            break
-        obj = _default_packet_translation(ev, ctx)
-        if obj:
-            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
@@ -140,6 +183,7 @@ def fast_chat_turn(
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
+    prompt_config: PromptConfig,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -148,8 +192,39 @@ def fast_chat_turn(
         chat_session_id,
         message_id,
         research_type,
+        prompt_config,
         starter_global_iteration_responses=None,
     )
+
+
+def _process_stream(
+    agent_stream: SyncAgentStream,
+    chat_session_id: UUID,
+    dependencies: ChatTurnDependencies,
+    ctx: ChatTurnContext,
+    emit_message_to_user: bool = True,
+) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
+    from litellm import ResponseFunctionToolCall
+
+    tool_call_events: list[ResponseFunctionToolCall] = []
+    for ev in agent_stream:
+        connected = is_connected(
+            chat_session_id,
+            dependencies.redis_client,
+        )
+        if not connected:
+            _emit_clean_up_packets(dependencies, ctx)
+            agent_stream.cancel()
+            break
+        if emit_message_to_user:
+            obj = _default_packet_translation(ev, ctx)
+            if obj:
+                dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        if isinstance(getattr(ev, "item", None), ToolCallItem):
+            tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
+    if agent_stream.streamed is None:
+        raise ValueError("agent_stream.streamed is None")
+    return agent_stream.streamed, tool_call_events
 
 
 # TODO: Maybe in general there's a cleaner way to handle cancellation in the middle of a tool call?

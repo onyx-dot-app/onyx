@@ -147,11 +147,16 @@ def _internal_search_core(
         if retrieved_docs:
             all_retrieved_docs.extend(retrieved_docs)
 
+    # Set flag to include citation requirements since we retrieved documents
+    run_context.context.should_cite_documents = (
+        run_context.context.should_cite_documents or bool(all_retrieved_docs)
+    )
+
     return all_retrieved_docs
 
 
 @function_tool
-def internal_search_tool(
+def internal_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
@@ -160,9 +165,11 @@ def internal_search_tool(
     Will return a combination of keyword and semantic search results.
     ---
     ## Decision boundary
-    - MUST call internal_search_tool if the user's query requires internal information, like
+    - MUST call this tool if the user's query requires internal information, like
     if it references "we" or "us" or "our" or "internal" or if it references
     the organization the user works for.
+    - MUST call this tool if the user's query sounds like the name of a specific internal document,
+    like some keyword that could be a document name.
 
     ## Usage hints
     - Batch a list of natural-language queries per call.
