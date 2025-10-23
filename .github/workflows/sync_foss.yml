@@ -30,6 +30,11 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
+      - name: Set Git config
+        run: |
+          git config user.name "onyx-bot"
+          git config user.email "bot@onyx.app"
+
       - name: Build FOSS version
         run: bash backend/scripts/make_foss_repo.sh
 
@@ -38,7 +43,5 @@ jobs:
           FOSS_REPO_URL: git@github.com:onyx-dot-app/onyx-foss.git
         run: |
           cd /tmp/foss_repo
-          git config user.name "onyx-bot"
-          git config user.email "bot@onyx.app"
           git remote add public "$FOSS_REPO_URL"
           git push --force public main
