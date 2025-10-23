@@ -380,7 +380,7 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
 
 def _add_prefer_header(request: RequestOptions) -> None:
     """Add Prefer header to work around Microsoft Graph API ampersand bug.
-    See: https://learn.microsoft.com/en-us/graph/known-issues#search-for-directory-objects-fails-for-encoded-ampersand--character
+    See: https://developer.microsoft.com/en-us/graph/known-issues/?search=18185
     """
     if not hasattr(request, "headers") or request.headers is None:
         request.headers = {}
