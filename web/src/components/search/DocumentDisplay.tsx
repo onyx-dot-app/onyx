@@ -467,7 +467,11 @@ export function CompactDocumentCard({
         </Text>
       </div>
       {document.blurb && (
-        <Text text03 secondaryBody className="mb-0 mt-1 line-clamp-2">
+        <Text
+          text03
+          secondaryBody
+          className="mb-0 mt-1 !py-0 !mb-0 line-clamp-2"
+        >
           {document.blurb}
         </Text>
       )}
