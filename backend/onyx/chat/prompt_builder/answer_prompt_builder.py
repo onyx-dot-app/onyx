@@ -44,7 +44,7 @@ def default_build_system_message_for_default_assistant_v2(
     llm_config: LLMConfig,
     memories_callback: Callable[[], list[str]] | None = None,
     tools: list[Tool] | None = None,
-) -> SystemMessage | None:
+) -> SystemMessage:
     # Check if we should include custom instructions (before date processing)
     custom_instructions = prompt_config.system_prompt.strip()
     should_include_custom_instructions = (
@@ -67,9 +67,6 @@ def default_build_system_message_for_default_assistant_v2(
         prompt_config,
         add_additional_info_if_no_tag=prompt_config.datetime_aware,
     )
-
-    if not tag_handled_prompt:
-        return None
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 

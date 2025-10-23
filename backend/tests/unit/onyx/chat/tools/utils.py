@@ -60,9 +60,7 @@ class SimpleTestTool(Tool[dict]):
         return {"query": query}
 
     def run(self, override_kwargs: dict | None = None, **llm_kwargs: Any):
-        yield ToolResponse(
-            id="test_response", content="Test response content", is_error=False
-        )
+        yield ToolResponse(id="test_response", response="Test response content")
 
     def final_result(self, *args: ToolResponse) -> dict:
         return {"result": "test_result"}
