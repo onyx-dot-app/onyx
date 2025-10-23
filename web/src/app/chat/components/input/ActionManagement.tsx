@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ToggleList, ToggleListItem } from "@/components/ui/togglelist";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ToolSnapshot,
@@ -25,13 +26,12 @@ import {
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import Link from "next/link";
 import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import SvgChevronRight from "@/icons/chevron-right";
-import SvgChevronLeft from "@/icons/chevron-left";
+import SvgKey from "@/icons/key";
 import SvgLock from "@/icons/lock";
 import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
@@ -41,8 +41,8 @@ import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { useTheme } from "next-themes";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import Button from "@/refresh-components/buttons/Button";
 import SvgSliders from "@/icons/sliders";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -149,7 +149,7 @@ function ActionItem({
               <Icon
                 className={cn(
                   "h-[1rem] w-[1rem] stroke-text-04",
-                  isForced ? "text-theme-primary-05" : "text-text-03"
+                  isForced ? "text-action-link-05" : "text-text-03"
                 )}
               />
               <Text
@@ -341,18 +341,16 @@ function MCPServerItem({
       </div>
       <div className="flex items-center gap-1">
         {showReauthButton && (
-          <button
-            type="button"
+          <IconButton
+            icon={SvgKey}
+            tertiary
+            aria-label="Re-authenticate MCP server"
+            title="Re-authenticate"
             onClick={(event) => {
               event.stopPropagation();
               onAuthenticate();
             }}
-            className="p-1 text-text-03 hover:text-text-05 hover:bg-background-200 rounded-md transition-colors"
-            aria-label="Re-authenticate MCP server"
-            title="Re-authenticate"
-          >
-            <FiKey size={14} />
-          </button>
+          />
         )}
         {isAuthenticated && tools.length > 0 && (
           <SvgChevronRight
@@ -363,305 +361,6 @@ function MCPServerItem({
         )}
       </div>
     </div>
-  );
-}
-
-interface MCPToolsListProps {
-  tools: ToolSnapshot[];
-  serverName: string;
-  selectedAssistant: MinimalPersonaSnapshot;
-  onBack: () => void;
-  onShowSourceManagement?: () => void;
-  onScrollStateChange: (element: HTMLElement) => void;
-  showTopShadow: boolean;
-  showFadeMask: boolean;
-  showReauthRow?: boolean;
-  onReauthenticate?: () => void;
-  isReauthLoading?: boolean;
-}
-
-function MCPToolsList({
-  tools,
-  serverName,
-  selectedAssistant,
-  onBack,
-  onShowSourceManagement,
-  onScrollStateChange,
-  showTopShadow,
-  showFadeMask,
-  showReauthRow = false,
-  onReauthenticate,
-  isReauthLoading = false,
-}: MCPToolsListProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const {
-    agentPreferences: assistantPreferences,
-    setSpecificAgentPreferences: setSpecificAssistantPreferences,
-    forcedToolIds,
-    setForcedToolIds,
-  } = useAgentsContext();
-  const { theme } = useTheme();
-
-  const assistantPreference = assistantPreferences?.[selectedAssistant.id];
-  const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
-
-  const toggleToolForCurrentAssistant = (toolId: number) => {
-    const disabled = disabledToolIds.includes(toolId);
-    setSpecificAssistantPreferences(selectedAssistant.id, {
-      disabled_tool_ids: disabled
-        ? disabledToolIds.filter((id) => id !== toolId)
-        : [...disabledToolIds, toolId],
-    });
-
-    // If we're disabling a tool that is currently forced, remove it from forced tools
-    if (!disabled && forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-    }
-  };
-
-  const serverToolIds = tools.map((tool) => tool.id);
-  const allToolsDisabled = tools.every((tool) =>
-    disabledToolIds.includes(tool.id)
-  );
-
-  const disableAllToolsForServer = () => {
-    const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAssistantPreferences(selectedAssistant.id, {
-      disabled_tool_ids: merged,
-    });
-    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
-  };
-
-  const enableAllToolsForServer = () => {
-    const serverToolIdSet = new Set(serverToolIds);
-    setSpecificAssistantPreferences(selectedAssistant.id, {
-      disabled_tool_ids: disabledToolIds.filter(
-        (id) => !serverToolIdSet.has(id)
-      ),
-    });
-  };
-
-  // Filter tools based on search
-  const filteredTools = tools.filter((tool) => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      tool.display_name?.toLowerCase().includes(searchLower) ||
-      tool.name.toLowerCase().includes(searchLower) ||
-      tool.description?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const element = document.getElementById(
-        "action-submenu-scroll"
-      ) as HTMLElement | null;
-      if (element) {
-        onScrollStateChange(element);
-      }
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm, tools, onScrollStateChange]);
-
-  const placeholderName = serverName || "server";
-
-  return (
-    <>
-      <div className="bg-transparent flex-shrink-0">
-        <div className="mx-1">
-          <div className="relative">
-            <button
-              onClick={() => {
-                setSearchTerm("");
-                onBack();
-              }}
-              className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
-              style={{ borderRadius: "8px" }}
-              aria-label="Back to action menu"
-            >
-              <SvgChevronLeft
-                width={16}
-                height={16}
-                className="stroke-text-02"
-              />
-            </button>
-            <input
-              type="text"
-              placeholder={`Search ${placeholderName} tools`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-7 pr-3 py-2 bg-transparent rounded-lg text-sm outline-none text-text-04 placeholder:text-text-02"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="mx-1">
-          <div className="relative mt-1">
-            <input
-              type="text"
-              placeholder={
-                allToolsDisabled ? "Enable All Tools" : "Disable All Tools"
-              }
-              readOnly
-              onClick={
-                allToolsDisabled
-                  ? enableAllToolsForServer
-                  : disableAllToolsForServer
-              }
-              className="w-full pl-7 pr-9 py-2 bg-transparent rounded-lg text-sm outline-none text-text-04 placeholder:text-text-02 cursor-pointer"
-            />
-            <img
-              src={allToolsDisabled ? "/plug.svg" : "/unplug.svg"}
-              alt={allToolsDisabled ? "Enable All Tools" : "Disable All Tools"}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-              style={{
-                filter:
-                  theme === "dark"
-                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
-                opacity: theme === "dark" ? 0.9 : 0.8,
-              }}
-            />
-          </div>
-        </div>
-        <div className="border-b border-border mx-1 mt-1" />
-        <div
-          className="mx-1 h-2 -mb-2 transition-opacity ease-out"
-          style={{
-            background:
-              "linear-gradient(to bottom, rgba(0, 0, 0, 0.06), transparent)",
-            opacity: showTopShadow ? 1 : 0,
-          }}
-        />
-      </div>
-
-      <div
-        id="action-submenu-scroll"
-        className="flex-1 overflow-y-auto min-h-0 relative"
-        onScroll={(e) => onScrollStateChange(e.currentTarget)}
-      >
-        <div className="space-y-1.5 pb-2 pt-2">
-          {filteredTools.length === 0 ? (
-            <div className="text-center py-4 text-text-02">
-              No matching tools found
-            </div>
-          ) : (
-            filteredTools.map((tool) => {
-              const isDisabled = disabledToolIds.includes(tool.id);
-              const isEnabled = !isDisabled;
-
-              const label = (
-                <div className="flex flex-col cursor-default">
-                  <Text
-                    className={cn(
-                      "text-sm font-medium",
-                      isEnabled ? "text-text-04" : "text-text-02"
-                    )}
-                  >
-                    {tool.display_name || tool.name}
-                  </Text>
-                </div>
-              );
-
-              return (
-                <div
-                  key={tool.id}
-                  className="flex items-center justify-between px-2 py-1.5 mx-1 rounded-lg hover:bg-background-neutral-01 transition-colors"
-                >
-                  {tool.description ? (
-                    <TooltipProvider delayDuration={600}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>{label}</TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          align="start"
-                          className="max-w-xs"
-                        >
-                          <Text inverted>{tool.description}</Text>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    label
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toggleToolForCurrentAssistant(tool.id);
-                      if (forcedToolIds.includes(tool.id)) {
-                        setForcedToolIds(
-                          forcedToolIds.filter((id) => id !== tool.id)
-                        );
-                      }
-                    }}
-                    className={cn(
-                      "relative transition-colors",
-                      isEnabled
-                        ? "bg-action-link-05"
-                        : "bg-background-neutral-02"
-                    )}
-                    style={{
-                      width: "28px",
-                      height: "16px",
-                      borderRadius: "var(--Radius-Round, 1000px)",
-                    }}
-                    aria-pressed={isEnabled}
-                    aria-label={`Toggle ${tool.display_name || tool.name}`}
-                  >
-                    <div
-                      className={cn(
-                        "absolute top-[2px] left-[2px] h-[12px] w-[12px] rounded-full transition-transform duration-200 ease-in-out bg-background-neutral-light-00",
-                        isEnabled ? "translate-x-[12px]" : "translate-x-0"
-                      )}
-                      style={{
-                        boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
-                      }}
-                    />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-        <div
-          className="sticky w-full pointer-events-none transition-opacity ease-out bg-gradient-to-t from-background-neutral-00 to-transparent"
-          style={{
-            bottom: showReauthRow ? "40px" : "0px",
-            height: "24px",
-            opacity: showFadeMask ? 1 : 0,
-          }}
-        />
-        {showReauthRow && onReauthenticate && (
-          <div className="sticky bottom-0 bg-background-neutral-00 border-t border-border z-[1] rounded-b-lg">
-            <button
-              type="button"
-              onClick={onReauthenticate}
-              className="w-full flex items-center justify-between px-2 py-2.5 text-left bg-background-neutral-00 hover:bg-background-neutral-01 rounded-b-lg hover:rounded-b-lg transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                {isReauthLoading ? (
-                  <FiLoader className="animate-spin text-text-02" size={14} />
-                ) : (
-                  <FiKey className="text-text-03" size={14} />
-                )}
-                <Text className="text-sm font-medium text-text-04">
-                  Re-Authenticate
-                </Text>
-              </div>
-              {!isReauthLoading && (
-                <SvgChevronRight
-                  width={14}
-                  height={14}
-                  className="stroke-text-02 transition-colors"
-                />
-              )}
-            </button>
-          </div>
-        )}
-      </div>
-    </>
   );
 }
 
@@ -676,13 +375,11 @@ export function ActionToggle({
   filterManager,
   availableSources = [],
 }: ActionToggleProps) {
-  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
   );
   const [searchTerm, setSearchTerm] = useState("");
-  const [sourceSearchTerm, setSourceSearchTerm] = useState("");
   const [showFadeMask, setShowFadeMask] = useState(false);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
@@ -778,20 +475,11 @@ export function ActionToggle({
 
   // Check scroll state when entering secondary views
   useEffect(() => {
-    if (secondaryView) {
-      const timer = setTimeout(() => {
-        const scrollContainer = document.getElementById(
-          "action-submenu-scroll"
-        ) as HTMLElement | null;
-        if (scrollContainer) {
-          checkScrollState(scrollContainer);
-        }
-      }, 50);
-      return () => clearTimeout(timer);
+    if (!secondaryView) {
+      setShowFadeMask(false);
+      setShowTopShadow(false);
     }
-    setShowFadeMask(false);
-    setShowTopShadow(false);
-  }, [secondaryView, sourceSearchTerm, checkScrollState]);
+  }, [secondaryView]);
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
@@ -819,7 +507,7 @@ export function ActionToggle({
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
     const fetchMCPServers = async () => {
-      if (!selectedAssistant?.id) return;
+      if (selectedAssistant == null || selectedAssistant.id == null) return;
 
       try {
         const response = await fetch(
@@ -1024,6 +712,117 @@ export function ActionToggle({
     selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
     isActiveServerAuthenticated;
 
+  const mcpToggleItems: ToggleListItem[] = selectedMcpTools.map((tool) => ({
+    id: tool.id.toString(),
+    label: tool.display_name || tool.name,
+    description: tool.description,
+    isEnabled: !disabledToolIds.includes(tool.id),
+    onToggle: () => toggleToolForCurrentAssistant(tool.id),
+  }));
+
+  const mcpAllDisabled = selectedMcpTools.every((tool) =>
+    disabledToolIds.includes(tool.id)
+  );
+
+  const disableAllToolsForSelectedServer = () => {
+    if (!selectedMcpServer) return;
+    const serverToolIds = selectedMcpTools.map((tool) => tool.id);
+    const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: merged,
+    });
+    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
+  };
+
+  const enableAllToolsForSelectedServer = () => {
+    if (!selectedMcpServer) return;
+    const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: disabledToolIds.filter(
+        (id) => !serverToolIdSet.has(id)
+      ),
+    });
+  };
+
+  const handleFooterReauthClick = () => {
+    if (selectedMcpServer) {
+      handleServerAuthentication(selectedMcpServer);
+    }
+  };
+
+  const mcpFooter = showActiveReauthRow ? (
+    <div className="sticky bottom-0 bg-background-neutral-00 border-t border-border z-[1] rounded-b-lg">
+      <div
+        role="button"
+        tabIndex={0}
+        className="
+          w-full
+          flex
+          items-center
+          justify-between
+          px-2
+          py-2.5
+          text-left
+          bg-background-neutral-00
+          hover:bg-background-neutral-01
+          rounded-b-lg
+          hover:rounded-b-lg
+          transition-colors
+          cursor-pointer
+        "
+        onClick={handleFooterReauthClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleFooterReauthClick();
+          }
+        }}
+      >
+        <div className="flex items-center gap-2">
+          {selectedMcpServerData?.isLoading ? (
+            <FiLoader className="animate-spin text-text-02" size={14} />
+          ) : (
+            <IconButton
+              icon={SvgKey}
+              internal
+              aria-label="Re-Authenticate"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleFooterReauthClick();
+              }}
+            />
+          )}
+          <span className="text-sm font-medium text-text-04">
+            Re-Authenticate
+          </span>
+        </div>
+        {!selectedMcpServerData?.isLoading && (
+          <SvgChevronRight
+            width={14}
+            height={14}
+            className="stroke-text-02 transition-colors"
+          />
+        )}
+      </div>
+    </div>
+  ) : undefined;
+
+  const configuredSources = getConfiguredSources(availableSources);
+
+  const sourceToggleItems: ToggleListItem[] = configuredSources.map(
+    (source) => ({
+      id: source.uniqueKey,
+      label: source.displayName,
+      leading: <SourceIcon sourceType={source.internalName} iconSize={16} />,
+      isEnabled: isSourceEnabled(source.uniqueKey),
+      onToggle: () => toggleSource(source.uniqueKey),
+    })
+  );
+
+  const allSourcesDisabled = configuredSources.every(
+    (source) => !isSourceEnabled(source.uniqueKey)
+  );
+
   // If no tools or MCP servers are available, don't render the component
   if (displayTools.length === 0 && mcpServers.length === 0) {
     return null;
@@ -1037,8 +836,9 @@ export function ActionToggle({
           // Clear search when closing
           if (!newOpen) {
             setSearchTerm("");
-            setSourceSearchTerm("");
             setSecondaryView(null);
+            setShowFadeMask(false);
+            setShowTopShadow(false);
           }
         }}
       >
@@ -1086,251 +886,41 @@ export function ActionToggle({
           )}
 
           {/* Options */}
-          <div className="pt-2 flex-1 flex flex-col mx-1 relative overflow-hidden">
+          <div className="flex flex-col overflow-hidden">
             {secondaryView?.type === "sources" ? (
-              <>
-                {/* Fixed Header */}
-                <div className="bg-transparent flex-shrink-0">
-                  <div className="mx-1">
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setSecondaryView(null);
-                          setSourceSearchTerm("");
-                        }}
-                        className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
-                        style={{ borderRadius: "8px" }}
-                      >
-                        <SvgChevronLeft
-                          width={16}
-                          height={16}
-                          className="stroke-text-02"
-                        />
-                      </button>
-                      <input
-                        type="text"
-                        placeholder="Search Filters"
-                        value={sourceSearchTerm}
-                        onChange={(e) => setSourceSearchTerm(e.target.value)}
-                        className="
-                          w-full
-                          pl-7
-                          pr-3
-                          py-2
-                          bg-transparent
-                          rounded-lg
-                          text-sm
-                          outline-none
-                          text-text-04
-                          placeholder:text-text-02
-                        "
-                      />
-                    </div>
-                    {(() => {
-                      const anyEnabled = selectedSources.length > 0;
-                      if (anyEnabled) {
-                        return (
-                          <div className="relative mt-1">
-                            <input
-                              type="text"
-                              placeholder="Disable All Sources"
-                              readOnly
-                              onClick={disableAllSources}
-                              className="
-                                w-full
-                                pl-7
-                                pr-9
-                                py-2
-                                bg-transparent
-                                rounded-lg
-                                text-sm
-                                outline-none
-                                text-text-04
-                                placeholder:text-text-02
-                                cursor-pointer
-                              "
-                            />
-                            <img
-                              src="/unplug.svg"
-                              alt="Disable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-                              style={{
-                                filter:
-                                  theme === "dark"
-                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
-                                opacity: theme === "dark" ? 0.9 : 0.8,
-                              }}
-                            />
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="relative mt-1">
-                            <input
-                              type="text"
-                              placeholder="Enable All Sources"
-                              readOnly
-                              onClick={enableAllSources}
-                              className="
-                                w-full
-                                pl-7
-                                pr-9
-                                py-2
-                                bg-transparent
-                                rounded-lg
-                                text-sm
-                                outline-none
-                                text-text-04
-                                placeholder:text-text-02
-                                cursor-pointer
-                              "
-                            />
-                            <img
-                              src="/plug.svg"
-                              alt="Enable All Sources"
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-                              style={{
-                                filter:
-                                  theme === "dark"
-                                    ? "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(1.2)"
-                                    : "invert(0.6) sepia(1) saturate(0) hue-rotate(0deg) brightness(0.6)",
-                                opacity: theme === "dark" ? 0.9 : 0.8,
-                              }}
-                            />
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                  {/* Separator line - always visible, full width like sources */}
-                  <div className="border-b border-border mx-1 mt-1" />
-                  {/* Shadow below separator - only when scrolled down */}
-                  <div
-                    className="mx-1 h-2 -mb-2 transition-opacity ease-out"
-                    style={{
-                      background:
-                        "linear-gradient(to bottom, rgba(0, 0, 0, 0.06), transparent)",
-                      opacity: showTopShadow ? 1 : 0,
-                    }}
-                  />
-                </div>
-
-                {/* Scrollable Content */}
-                <div
-                  id="action-submenu-scroll"
-                  className="flex-1 overflow-y-auto min-h-0 relative"
-                  onScroll={(e) => checkScrollState(e.currentTarget)}
-                  onLoad={(e) => checkScrollState(e.currentTarget)}
-                >
-                  <div className="space-y-1.5 pb-2 pt-2">
-                    {getConfiguredSources(availableSources)
-                      .filter((source) => {
-                        if (!sourceSearchTerm) return true;
-                        const searchLower = sourceSearchTerm.toLowerCase();
-                        return source.displayName
-                          .toLowerCase()
-                          .includes(searchLower);
-                      })
-                      .map((source) => (
-                        <div
-                          key={source.uniqueKey}
-                          className="flex items-center justify-between px-1 py-1 mx-1 rounded-lg hover:bg-background-neutral-01"
-                        >
-                          <div className="flex items-center gap-3">
-                            <SourceIcon
-                              sourceType={source.internalName}
-                              iconSize={16}
-                            />
-                            <div>
-                              <div
-                                className={cn(
-                                  "text-sm font-medium",
-                                  isSourceEnabled(source.uniqueKey)
-                                    ? "text-text-04"
-                                    : "text-text-02"
-                                )}
-                              >
-                                {source.displayName}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => toggleSource(source.uniqueKey)}
-                            className={cn(
-                              "relative transition-colors",
-                              isSourceEnabled(source.uniqueKey)
-                                ? "bg-theme-primary-05"
-                                : "bg-background-neutral-02"
-                            )}
-                            style={{
-                              width: "28px",
-                              height: "16px",
-                              borderRadius: "var(--Radius-Round, 1000px)",
-                              transition: "background-color 0.2s ease-in-out",
-                            }}
-                          >
-                            <div
-                              className="absolute transition-transform duration-200 ease-in-out bg-background-neutral-00"
-                              style={{
-                                width: "12px",
-                                height: "12px",
-                                borderRadius: "var(--Radius-Round, 1000px)",
-                                boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
-                                top: "2px",
-                                left: "2px",
-                                transform: isSourceEnabled(source.uniqueKey)
-                                  ? "translateX(12px)"
-                                  : "translateX(0px)",
-                              }}
-                            ></div>
-                          </button>
-                        </div>
-                      ))}
-                    {getConfiguredSources(availableSources).filter((source) => {
-                      if (!sourceSearchTerm) return true;
-                      const searchLower = sourceSearchTerm.toLowerCase();
-                      return source.displayName
-                        .toLowerCase()
-                        .includes(searchLower);
-                    }).length === 0 && (
-                      <div className="text-center py-4 text-text-02">
-                        {sourceSearchTerm
-                          ? "No matching sources found"
-                          : "No configured sources found"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* Fade mask - only when content overflows and not at bottom */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out bg-gradient-to-t from-background-neutral-00 to-transparent"
-                  style={{
-                    opacity: showFadeMask ? 1 : 0,
-                  }}
-                />
-              </>
-            ) : secondaryView?.type === "mcp" ? (
-              <MCPToolsList
-                tools={selectedMcpTools}
-                serverName={selectedMcpServer?.name ?? ""}
-                selectedAssistant={selectedAssistant}
-                onBack={() => {
-                  setSecondaryView(null);
-                }}
-                onShowSourceManagement={() =>
-                  setSecondaryView({ type: "sources" })
-                }
+              <ToggleList
+                items={sourceToggleItems}
+                searchPlaceholder="Search Filters"
+                allDisabled={allSourcesDisabled}
+                onDisableAll={disableAllSources}
+                onEnableAll={enableAllSources}
+                disableAllLabel="Disable All Sources"
+                enableAllLabel="Enable All Sources"
+                noResultsText="No matching sources found"
+                noItemsText="No configured sources found"
+                onBack={() => setSecondaryView(null)}
                 onScrollStateChange={checkScrollState}
                 showTopShadow={showTopShadow}
                 showFadeMask={showFadeMask}
-                showReauthRow={showActiveReauthRow}
-                onReauthenticate={
-                  selectedMcpServer
-                    ? () => handleServerAuthentication(selectedMcpServer)
-                    : undefined
-                }
-                isReauthLoading={selectedMcpServerData?.isLoading ?? false}
+              />
+            ) : secondaryView?.type === "mcp" ? (
+              <ToggleList
+                items={mcpToggleItems}
+                searchPlaceholder={`Search ${
+                  selectedMcpServer?.name ?? "server"
+                } tools`}
+                allDisabled={mcpAllDisabled}
+                onDisableAll={disableAllToolsForSelectedServer}
+                onEnableAll={enableAllToolsForSelectedServer}
+                disableAllLabel="Disable All Tools"
+                enableAllLabel="Enable All Tools"
+                noResultsText="No matching tools found"
+                noItemsText="No tools available"
+                onBack={() => setSecondaryView(null)}
+                onScrollStateChange={checkScrollState}
+                showTopShadow={showTopShadow}
+                showFadeMask={showFadeMask}
+                footer={mcpFooter}
               />
             ) : filteredTools.length === 0 &&
               filteredMCPServers.length === 0 ? (
@@ -1398,39 +988,17 @@ export function ActionToggle({
                 {(isAdmin || isCurator) && (
                   <>
                     <div className="border-b border-border mx-3.5 mt-2" />
-                    <Link href="/admin/actions">
-                      <button
-                        className="
-                        w-full
-                        flex
-                        items-center
-                        justify-between
-                        text-text-400
-                        text-sm
-                        mt-2.5
-                      "
+                    <div className="mx-2 mt-2.5 mb-2">
+                      <Button
+                        defaulted
+                        tertiary
+                        href="/admin/actions"
+                        leftIcon={MoreActionsIcon}
+                        className="w-full justify-start"
                       >
-                        <div
-                          className="
-                          mx-2 
-                          mb-2 
-                          px-2 
-                          py-1.5 
-                          flex 
-                          items-center 
-                          text-text-03
-                          hover:bg-background-neutral-01
-                          hover:text-text-03
-                          transition-colors
-                          rounded-lg
-                          w-full
-                        "
-                        >
-                          <MoreActionsIcon className="text-text-03" />
-                          <div className="ml-2">More Actions</div>
-                        </div>
-                      </button>
-                    </Link>
+                        More Actions
+                      </Button>
+                    </div>
                   </>
                 )}
               </>
