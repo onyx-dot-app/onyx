@@ -75,7 +75,7 @@ export default function ProjectChatSessionList() {
                         if (assistant) {
                           return (
                             <div className="h-full pt-1">
-                              <AgentIcon agent={assistant} />
+                              <AgentIcon agent={assistant} size={18} />
                             </div>
                           );
                         }
