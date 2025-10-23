@@ -118,18 +118,10 @@ def mocked_settings(mocker: MockerFixture) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "builder",
-    [
-        default_build_system_message,
-        default_build_system_message_for_default_assistant_v2,
-    ],
-)
 @pytest.mark.parametrize("has_memories", [True, False])
 @pytest.mark.parametrize("has_company_settings", [True, False])
 @pytest.mark.parametrize("datetime_aware", [True, False])
 def test_system_message_includes_personalization(
-    builder: Callable,
     has_memories: bool,
     has_company_settings: bool,
     datetime_aware: bool,
@@ -149,7 +141,7 @@ def test_system_message_includes_personalization(
     if datetime_aware:
         config = prompt_config.model_copy(update={"datetime_aware": True})
 
-    system_message = builder(
+    system_message = default_build_system_message(
         config,
         llm_config,
         memories_callback if has_memories else None,
@@ -164,9 +156,62 @@ def test_system_message_includes_personalization(
 
     assert ("Developer Advocate" in content) == has_memories
     assert ("Memory 1" in content) == has_memories
-    assert (
-        ("The current day and time" in content) or ("The current date is" in content)
-    ) == datetime_aware
+
+    datestring_pattern = (
+        r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+"
+        r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+"
+        r"\d{1,2},\s+\d{4}\b"
+    )
+    assert (re.search(datestring_pattern, content) is not None) == datetime_aware
+
+
+@pytest.mark.parametrize("has_memories", [True, False])
+@pytest.mark.parametrize("has_company_settings", [True, False])
+@pytest.mark.parametrize(
+    "datetime_aware", [True]
+)  # default assistant is always datetime-aware
+def test_system_message_includes_personalization_for_default_assistant(
+    has_memories: bool,
+    has_company_settings: bool,
+    datetime_aware: bool,
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    memories_callback: Callable[[], list[str]],
+    mocked_settings: None,
+    mocker: MockerFixture,
+) -> None:
+    if not has_company_settings:
+        mocker.patch(
+            "onyx.prompts.prompt_utils.load_settings",
+            side_effect=RuntimeError("missing"),
+        )
+
+    config = prompt_config
+    if datetime_aware:
+        config = prompt_config.model_copy(update={"datetime_aware": True})
+
+    system_message = default_build_system_message_for_default_assistant_v2(
+        config,
+        llm_config,
+        memories_callback if has_memories else None,
+    )
+
+    assert system_message is not None
+    content = cast(str, system_message.content)
+
+    assert ("Acme builds doors." in content) == has_company_settings
+
+    assert ("Acme Corp" in content) == has_company_settings
+
+    assert ("Developer Advocate" in content) == has_memories
+    assert ("Memory 1" in content) == has_memories
+
+    datestring_pattern = (
+        r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+"
+        r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+"
+        r"\d{1,2},\s+\d{4}\b"
+    )
+    assert (re.search(datestring_pattern, content) is not None) == datetime_aware
 
 
 def test_tools_section_present_when_tools_given(

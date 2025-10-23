@@ -100,10 +100,11 @@ def default_build_system_message_for_default_assistant_v2(
                 # TODO: ToolV2 should make this much cleaner
                 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 
-                tag_handled_prompt += (
-                    f"\n## {tools_to_function_tools([tool])[0].name}\n"
-                )
-                tag_handled_prompt += tool.description
+                if tools_to_function_tools([tool]):
+                    tag_handled_prompt += (
+                        f"\n## {tools_to_function_tools([tool])[0].name}\n"
+                    )
+                    tag_handled_prompt += tool.description
 
     return SystemMessage(content=tag_handled_prompt)
 
