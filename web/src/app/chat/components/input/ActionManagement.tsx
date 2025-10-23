@@ -30,16 +30,12 @@ import { getIconForAction } from "../../services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
-import {
-  FiServer,
-  FiChevronRight,
-  FiChevronLeft,
-  FiKey,
-  FiLock,
-  FiCheck,
-  FiLoader,
-  FiSettings,
-} from "react-icons/fi";
+import SvgChevronRight from "@/icons/chevron-right";
+import SvgChevronLeft from "@/icons/chevron-left";
+import SvgLock from "@/icons/lock";
+import SvgCheck from "@/icons/check";
+import SvgServer from "@/icons/server";
+import { FiKey, FiLoader } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -51,6 +47,7 @@ import SvgSliders from "@/icons/sliders";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
+import SvgSettings from "@/icons/settings";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -124,21 +121,10 @@ function ActionItem({
         <TooltipTrigger asChild>
           <div
             data-testid={`tool-option-${toolName}`}
-            className={`
-            group
-            flex
-            items-center
-            justify-between
-            px-2
-            cursor-pointer
-            hover:bg-neutral-100
-            dark:hover:bg-neutral-800
-            dark:text-neutral-300
-            rounded-lg
-            py-2
-            mx-1
-            ${isForced ? "bg-accent-100 hover:bg-accent-200" : ""}
-          `}
+            className={cn(
+              "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
+              isForced ? "bg-accent-100 hover:bg-accent-200" : ""
+            )}
             onClick={() => {
               // If no connectors, don't allow forcing the tool
               if (isSearchToolWithNoConnectors) {
@@ -154,69 +140,59 @@ function ActionItem({
             }}
           >
             <div
-              className={`flex items-center gap-2 flex-1 ${
-                isSearchToolWithNoConnectors || disabled ? "opacity-50" : ""
-              } ${isForced && "text-blue-500"}`}
+              className={cn(
+                "flex items-center gap-2 flex-1",
+                isSearchToolWithNoConnectors || disabled ? "opacity-50" : "",
+                isForced ? "text-action-link-05" : ""
+              )}
             >
               <Icon
                 className={cn(
                   "h-[1rem] w-[1rem] stroke-text-04",
-                  isForced
-                    ? "text-blue-500"
-                    : "text-text-500 dark:text-neutral-400"
+                  isForced ? "text-theme-primary-05" : "text-text-03"
                 )}
               />
-              <span
-                className={`text-sm font-medium select-none ${
+              <Text
+                className={cn(
+                  "text-sm font-medium select-none",
                   isSearchToolWithNoConnectors || disabled ? "line-through" : ""
-                }`}
+                )}
               >
                 {label}
-              </span>
+              </Text>
             </div>
             <div className="flex items-center gap-2">
               {!isSearchToolWithNoConnectors && (
                 <div
-                  className={`
-                    flex
-                    items-center
-                    gap-2
-                    transition-opacity
-                    duration-200
-                    ${
-                      disabled
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100"
-                    }
-                  `}
+                  className={cn(
+                    "flex items-center gap-2 transition-opacity duration-200",
+                    disabled
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100"
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggle();
                   }}
                 >
                   <DisableIcon
-                    className={`transition-colors cursor-pointer ${
+                    className={cn(
+                      "transition-colors cursor-pointer",
                       disabled
-                        ? "text-neutral-900 dark:text-neutral-100 hover:text-neutral-500 dark:hover:text-neutral-400"
-                        : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
-                    }`}
+                        ? "text-text-05 hover:text-text-03"
+                        : "text-text-03 hover:text-text-05"
+                    )}
                   />
                 </div>
               )}
               {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
                 <div
-                  className={`
-                    flex
-                    items-center
-                    gap-2
-                    transition-opacity
-                    duration-200
-                    ${
-                      isSearchToolWithNoConnectors
-                        ? "opacity-0 group-hover:opacity-100"
-                        : ""
-                    }
-                  `}
+                  className={cn(
+                    "flex items-center gap-2 transition-opacity duration-200",
+                    isSearchToolWithNoConnectors
+                      ? "opacity-0 group-hover:opacity-100"
+                      : ""
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (isSearchToolWithNoConnectors) {
@@ -228,14 +204,16 @@ function ActionItem({
                   }}
                 >
                   {isSearchToolWithNoConnectors ? (
-                    <FiSettings
-                      size={16}
-                      className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                    <SvgSettings
+                      width={16}
+                      height={16}
+                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
                     />
                   ) : (
-                    <FiChevronRight
-                      size={16}
-                      className="transition-colors cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+                    <SvgChevronRight
+                      width={16}
+                      height={16}
+                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
                     />
                   )}
                 </div>
@@ -303,15 +281,15 @@ function MCPServerItem({
       return <FiLoader className="animate-spin" />;
     }
     if (isAuthenticated) {
-      return <FiCheck className="text-green-500" />;
+      return <SvgCheck width={14} height={14} className="stroke-green-500" />;
     }
     if (server.auth_type === MCPAuthenticationType.NONE) {
-      return <FiServer />;
+      return <SvgServer width={14} height={14} className="stroke-text-02" />;
     }
     if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
-      return <FiKey className="text-yellow-500" />;
+      return <FiKey width={14} height={14} className="stroke-yellow-500" />;
     }
-    return <FiLock className="text-red-500" />;
+    return <SvgLock width={14} height={14} className="stroke-red-500" />;
   };
 
   const handleClick = (event: React.MouseEvent) => {
@@ -329,44 +307,36 @@ function MCPServerItem({
 
   return (
     <div
-      className={`
-        group
-        flex
-        items-center
-        justify-between
-        px-2
-        cursor-pointer
-        hover:bg-neutral-100
-        dark:hover:bg-neutral-800
-        dark:text-neutral-300
-        rounded-lg
-        py-2
-        mx-1
-        ${isActive ? "bg-accent-100 hover:bg-accent-200" : ""}
-        ${allToolsDisabled ? "opacity-60" : ""}
-      `}
+      className={cn(
+        "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
+        isActive ? "bg-accent-100 hover:bg-accent-200" : "",
+        allToolsDisabled ? "opacity-60" : ""
+      )}
       onClick={handleClick}
       data-mcp-server-id={server.id}
       data-mcp-server-name={server.name}
     >
-      <div className="flex items-center gap-2 flex-1">
+      <div className="flex items-center gap-2 flex-1 min-w-0">
         {getServerIcon()}
-        <span
-          className={`text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle ${
+        <Text
+          className={cn(
+            "text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle",
             allToolsDisabled ? "line-through" : ""
-          }`}
+          )}
           title={server.name}
         >
           {server.name}
-        </span>
+        </Text>
         {isAuthenticated &&
           tools.length > 0 &&
           enabledTools.length > 0 &&
           tools.length !== enabledTools.length && (
-            <span className="text-xs whitespace-nowrap ml-1 text-neutral-400 dark:text-neutral-500">
-              <span className="text-blue-500">{enabledTools.length}</span>
+            <Text className="text-xs whitespace-nowrap ml-1 flex-shrink-0 text-text-04">
+              <Text className="inline text-action-link-05">
+                {enabledTools.length}
+              </Text>
               {` of ${tools.length}`}
-            </span>
+            </Text>
           )}
       </div>
       <div className="flex items-center gap-1">
@@ -377,7 +347,7 @@ function MCPServerItem({
               event.stopPropagation();
               onAuthenticate();
             }}
-            className="p-1 text-neutral-500 hover:text-neutral-900 hover:bg-background-200 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+            className="p-1 text-text-03 hover:text-text-05 hover:bg-background-200 rounded-md transition-colors"
             aria-label="Re-authenticate MCP server"
             title="Re-authenticate"
           >
@@ -385,9 +355,10 @@ function MCPServerItem({
           </button>
         )}
         {isAuthenticated && tools.length > 0 && (
-          <FiChevronRight
-            className={`transition-transform ${isActive ? "rotate-90" : ""}`}
-            size={14}
+          <SvgChevronRight
+            width={14}
+            height={14}
+            className="transition-transform stroke-text-02"
           />
         )}
       </div>
@@ -510,25 +481,18 @@ function MCPToolsList({
               style={{ borderRadius: "8px" }}
               aria-label="Back to action menu"
             >
-              <FiChevronLeft size={16} />
+              <SvgChevronLeft
+                width={16}
+                height={16}
+                className="stroke-text-02"
+              />
             </button>
             <input
               type="text"
               placeholder={`Search ${placeholderName} tools`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="
-                w-full
-                pl-7
-                pr-3
-                py-2
-                bg-transparent
-                rounded-lg
-                text-sm
-                outline-none
-                text-neutral-700 dark:text-neutral-300
-                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-              "
+              className="w-full pl-7 pr-3 py-2 bg-transparent rounded-lg text-sm outline-none text-text-04 placeholder:text-text-02"
               autoFocus
             />
           </div>
@@ -546,19 +510,7 @@ function MCPToolsList({
                   ? enableAllToolsForServer
                   : disableAllToolsForServer
               }
-              className="
-                w-full
-                pl-7
-                pr-9
-                py-2
-                bg-transparent
-                rounded-lg
-                text-sm
-                outline-none
-                text-neutral-700 dark:text-neutral-300
-                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
-                cursor-pointer
-              "
+              className="w-full pl-7 pr-9 py-2 bg-transparent rounded-lg text-sm outline-none text-text-04 placeholder:text-text-02 cursor-pointer"
             />
             <img
               src={allToolsDisabled ? "/plug.svg" : "/unplug.svg"}
@@ -592,7 +544,7 @@ function MCPToolsList({
       >
         <div className="space-y-1.5 pb-2 pt-2">
           {filteredTools.length === 0 ? (
-            <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
+            <div className="text-center py-4 text-text-02">
               No matching tools found
             </div>
           ) : (
@@ -602,22 +554,21 @@ function MCPToolsList({
 
               const label = (
                 <div className="flex flex-col cursor-default">
-                  <span
-                    className={`text-sm font-medium ${
-                      isEnabled
-                        ? "text-neutral-700 dark:text-neutral-200"
-                        : "text-neutral-400 dark:text-neutral-500"
-                    }`}
+                  <Text
+                    className={cn(
+                      "text-sm font-medium",
+                      isEnabled ? "text-text-04" : "text-text-02"
+                    )}
                   >
                     {tool.display_name || tool.name}
-                  </span>
+                  </Text>
                 </div>
               );
 
               return (
                 <div
                   key={tool.id}
-                  className="flex items-center justify-between px-2 py-1.5 mx-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  className="flex items-center justify-between px-2 py-1.5 mx-1 rounded-lg hover:bg-background-neutral-01 transition-colors"
                 >
                   {tool.description ? (
                     <TooltipProvider delayDuration={600}>
@@ -645,11 +596,12 @@ function MCPToolsList({
                         );
                       }
                     }}
-                    className={`relative transition-colors ${
+                    className={cn(
+                      "relative transition-colors",
                       isEnabled
-                        ? "bg-blue-500"
-                        : "bg-neutral-300 dark:bg-neutral-700"
-                    }`}
+                        ? "bg-action-link-05"
+                        : "bg-background-neutral-02"
+                    )}
                     style={{
                       width: "28px",
                       height: "16px",
@@ -659,11 +611,10 @@ function MCPToolsList({
                     aria-label={`Toggle ${tool.display_name || tool.name}`}
                   >
                     <div
-                      className={`absolute top-[2px] left-[2px] h-[12px] w-[12px] rounded-full transition-transform duration-200 ease-in-out ${
-                        isEnabled
-                          ? "translate-x-[12px] bg-white"
-                          : "translate-x-0 bg-white dark:bg-neutral-900"
-                      }`}
+                      className={cn(
+                        "absolute top-[2px] left-[2px] h-[12px] w-[12px] rounded-full transition-transform duration-200 ease-in-out bg-background-neutral-light-00",
+                        isEnabled ? "translate-x-[12px]" : "translate-x-0"
+                      )}
                       style={{
                         boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
                       }}
@@ -675,7 +626,7 @@ function MCPToolsList({
           )}
         </div>
         <div
-          className="sticky w-full pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
+          className="sticky w-full pointer-events-none transition-opacity ease-out bg-gradient-to-t from-background-neutral-00 to-transparent"
           style={{
             bottom: showReauthRow ? "40px" : "0px",
             height: "24px",
@@ -687,42 +638,23 @@ function MCPToolsList({
             <button
               type="button"
               onClick={onReauthenticate}
-              className="
-                w-full
-                flex
-                items-center
-                justify-between
-                px-2
-                py-2.5
-                text-left
-                bg-background-neutral-00
-                hover:bg-neutral-100
-                dark:hover:bg-neutral-800
-                rounded-b-lg
-                hover:rounded-b-lg
-                transition-colors
-              "
+              className="w-full flex items-center justify-between px-2 py-2.5 text-left bg-background-neutral-00 hover:bg-background-neutral-01 rounded-b-lg hover:rounded-b-lg transition-colors"
             >
               <div className="flex items-center gap-2">
                 {isReauthLoading ? (
-                  <FiLoader
-                    className="animate-spin text-text-400 dark:text-neutral-500"
-                    size={14}
-                  />
+                  <FiLoader className="animate-spin text-text-02" size={14} />
                 ) : (
-                  <FiKey
-                    className="text-text-500 dark:text-neutral-300"
-                    size={14}
-                  />
+                  <FiKey className="text-text-03" size={14} />
                 )}
-                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                <Text className="text-sm font-medium text-text-04">
                   Re-Authenticate
-                </span>
+                </Text>
               </div>
               {!isReauthLoading && (
-                <FiChevronRight
-                  size={14}
-                  className="text-neutral-400 dark:text-neutral-500 transition-colors"
+                <SvgChevronRight
+                  width={14}
+                  height={14}
+                  className="stroke-text-02 transition-colors"
                 />
               )}
             </button>
@@ -1071,30 +1003,31 @@ export function ActionToggle({
     return server.name.toLowerCase().includes(searchLower);
   });
 
-  const activeMcpServerId =
+  const selectedMcpServerId =
     secondaryView?.type === "mcp" ? secondaryView.serverId : null;
-  const activeMcpServer = activeMcpServerId
-    ? mcpServers.find((server) => server.id === activeMcpServerId)
+  const selectedMcpServer = selectedMcpServerId
+    ? mcpServers.find((server) => server.id === selectedMcpServerId)
     : undefined;
-  const activeMcpTools =
-    activeMcpServerId !== null
+  const selectedMcpTools =
+    selectedMcpServerId !== null
       ? selectedAssistant.tools.filter(
-          (t) => t.mcp_server_id === Number(activeMcpServerId)
+          (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
-  const activeMcpServerData = activeMcpServer
-    ? mcpServerData[activeMcpServer.id]
+  const selectedMcpServerData = selectedMcpServer
+    ? mcpServerData[selectedMcpServer.id]
     : undefined;
   const isActiveServerAuthenticated =
-    activeMcpServerData?.isAuthenticated ??
+    selectedMcpServerData?.isAuthenticated ??
     !!(
-      activeMcpServer?.user_authenticated || activeMcpServer?.is_authenticated
+      selectedMcpServer?.user_authenticated ||
+      selectedMcpServer?.is_authenticated
     );
   const showActiveReauthRow =
-    !!activeMcpServer &&
-    activeMcpTools.length > 0 &&
-    activeMcpServer.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    activeMcpServer.auth_type !== MCPAuthenticationType.NONE &&
+    !!selectedMcpServer &&
+    selectedMcpTools.length > 0 &&
+    selectedMcpServer.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
     isActiveServerAuthenticated;
 
   // If no tools or MCP servers are available, don't render the component
@@ -1132,14 +1065,14 @@ export function ActionToggle({
           className="
             w-[15.5rem] 
             max-h-[300px]
-            text-neutral-600 dark:text-neutral-400
+            text-text-03
             text-sm 
             p-0 
             overflow-hidden
             flex
             flex-col
-            border border-neutral-200 dark:border-transparent
-            shadow-lg dark:shadow-xl dark:shadow-[0_0_8px_rgba(255,255,255,0.05)]
+            border border-border
+            shadow-lg
           "
           style={{
             borderRadius: "var(--Radius-12, 12px)",
@@ -1174,7 +1107,11 @@ export function ActionToggle({
                         className="absolute left-1 top-1/2 transform -translate-y-1/2 text-text-400 hover:text-text-300 z-10 w-4 h-4 flex items-center justify-center transition-colors"
                         style={{ borderRadius: "8px" }}
                       >
-                        <FiChevronLeft size={16} />
+                        <SvgChevronLeft
+                          width={16}
+                          height={16}
+                          className="stroke-text-02"
+                        />
                       </button>
                       <input
                         type="text"
@@ -1190,8 +1127,8 @@ export function ActionToggle({
                           rounded-lg
                           text-sm
                           outline-none
-                          text-neutral-700 dark:text-neutral-300
-                          placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+                          text-text-04
+                          placeholder:text-text-02
                         "
                       />
                     </div>
@@ -1214,8 +1151,8 @@ export function ActionToggle({
                                 rounded-lg
                                 text-sm
                                 outline-none
-                                text-neutral-700 dark:text-neutral-300
-                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+                                text-text-04
+                                placeholder:text-text-02
                                 cursor-pointer
                               "
                             />
@@ -1250,8 +1187,8 @@ export function ActionToggle({
                                 rounded-lg
                                 text-sm
                                 outline-none
-                                text-neutral-700 dark:text-neutral-300
-                                placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+                                text-text-04
+                                placeholder:text-text-02
                                 cursor-pointer
                               "
                             />
@@ -1304,7 +1241,7 @@ export function ActionToggle({
                       .map((source) => (
                         <div
                           key={source.uniqueKey}
-                          className="flex items-center justify-between px-1 py-1 mx-1 rounded-lg"
+                          className="flex items-center justify-between px-1 py-1 mx-1 rounded-lg hover:bg-background-neutral-01"
                         >
                           <div className="flex items-center gap-3">
                             <SourceIcon
@@ -1313,11 +1250,12 @@ export function ActionToggle({
                             />
                             <div>
                               <div
-                                className={`text-sm font-medium ${
+                                className={cn(
+                                  "text-sm font-medium",
                                   isSourceEnabled(source.uniqueKey)
-                                    ? "text-neutral-700 dark:text-neutral-300"
-                                    : "text-neutral-400 dark:text-neutral-500"
-                                }`}
+                                    ? "text-text-04"
+                                    : "text-text-02"
+                                )}
                               >
                                 {source.displayName}
                               </div>
@@ -1325,11 +1263,12 @@ export function ActionToggle({
                           </div>
                           <button
                             onClick={() => toggleSource(source.uniqueKey)}
-                            className={`relative transition-colors ${
+                            className={cn(
+                              "relative transition-colors",
                               isSourceEnabled(source.uniqueKey)
-                                ? "bg-blue-500"
-                                : "bg-neutral-300 dark:bg-neutral-700"
-                            }`}
+                                ? "bg-theme-primary-05"
+                                : "bg-background-neutral-02"
+                            )}
                             style={{
                               width: "28px",
                               height: "16px",
@@ -1338,11 +1277,7 @@ export function ActionToggle({
                             }}
                           >
                             <div
-                              className={`absolute transition-transform duration-200 ease-in-out ${
-                                isSourceEnabled(source.uniqueKey)
-                                  ? "bg-white"
-                                  : "bg-white dark:bg-neutral-900"
-                              }`}
+                              className="absolute transition-transform duration-200 ease-in-out bg-background-neutral-00"
                               style={{
                                 width: "12px",
                                 height: "12px",
@@ -1365,7 +1300,7 @@ export function ActionToggle({
                         .toLowerCase()
                         .includes(searchLower);
                     }).length === 0 && (
-                      <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
+                      <div className="text-center py-4 text-text-02">
                         {sourceSearchTerm
                           ? "No matching sources found"
                           : "No configured sources found"}
@@ -1375,7 +1310,7 @@ export function ActionToggle({
                 </div>
                 {/* Fade mask - only when content overflows and not at bottom */}
                 <div
-                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out bg-gradient-to-t from-white to-transparent dark:from-neutral-900"
+                  className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity ease-out bg-gradient-to-t from-background-neutral-00 to-transparent"
                   style={{
                     opacity: showFadeMask ? 1 : 0,
                   }}
@@ -1383,8 +1318,8 @@ export function ActionToggle({
               </>
             ) : secondaryView?.type === "mcp" ? (
               <MCPToolsList
-                tools={activeMcpTools}
-                serverName={activeMcpServer?.name ?? ""}
+                tools={selectedMcpTools}
+                serverName={selectedMcpServer?.name ?? ""}
                 selectedAssistant={selectedAssistant}
                 onBack={() => {
                   setSecondaryView(null);
@@ -1397,15 +1332,15 @@ export function ActionToggle({
                 showFadeMask={showFadeMask}
                 showReauthRow={showActiveReauthRow}
                 onReauthenticate={
-                  activeMcpServer
-                    ? () => handleServerAuthentication(activeMcpServer)
+                  selectedMcpServer
+                    ? () => handleServerAuthentication(selectedMcpServer)
                     : undefined
                 }
-                isReauthLoading={activeMcpServerData?.isLoading ?? false}
+                isReauthLoading={selectedMcpServerData?.isLoading ?? false}
               />
             ) : filteredTools.length === 0 &&
               filteredMCPServers.length === 0 ? (
-              <div className="text-center py-1 text-neutral-400 dark:text-neutral-500">
+              <div className="text-center py-1 text-text-02">
                 No matching actions found
               </div>
             ) : (
@@ -1449,7 +1384,7 @@ export function ActionToggle({
                     <MCPServerItem
                       key={server.id}
                       server={server}
-                      isActive={activeMcpServerId === server.id}
+                      isActive={selectedMcpServerId === server.id}
                       tools={serverTools}
                       enabledTools={enabledTools}
                       isAuthenticated={serverData.isAuthenticated}
@@ -1489,17 +1424,15 @@ export function ActionToggle({
                           py-1.5 
                           flex 
                           items-center 
-                          text-text-500
-                          dark:text-neutral-500
-                          dark:hover:bg-neutral-800
-                          hover:bg-neutral-100
-                          hover:text-text-500
+                          text-text-03
+                          hover:bg-background-neutral-01
+                          hover:text-text-03
                           transition-colors
                           rounded-lg
                           w-full
                         "
                         >
-                          <MoreActionsIcon className="text-text-500 dark:text-neutral-200" />
+                          <MoreActionsIcon className="text-text-03" />
                           <div className="ml-2">More Actions</div>
                         </div>
                       </button>
