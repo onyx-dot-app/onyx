@@ -42,10 +42,10 @@ def replace_license(blob, metadata):
         blob.data = MIT_LICENSE
 
 import git_filter_repo as fr
-fr.run(
-    blob_callback=replace_license,
-    force=True
-)
+
+args = fr.FilteringOptions.parse_args(['--force'], error_on_empty=False)
+filter = fr.RepoFilter(args, blob_callback=replace_license)
+filter.run()
 PYEOF
 
 chmod +x /tmp/license_replacer.py
