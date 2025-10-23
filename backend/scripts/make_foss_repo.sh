@@ -2,10 +2,12 @@
 set -euo pipefail
 
 echo "=== Building FOSS mirror ==="
-mkdir -p /tmp/foss
+rm -rf /tmp/foss && mkdir -p /tmp/foss
 git clone --mirror . /tmp/foss/.git
 cd /tmp/foss
 
+# NOTE: intentionally keeping the web/src/app/ee directory
+# for now since there's no clean way to remove it
 echo "=== Removing enterprise directory from history ==="
 git filter-repo --path backend/ee --invert-paths --force
 
@@ -35,5 +37,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
+
+echo "=== Removing enterprise license files ==="
+rm backend/ee/LICENSE
+rm web/src/app/ee/LICENSE
 
 echo "=== Done building FOSS repo ==="

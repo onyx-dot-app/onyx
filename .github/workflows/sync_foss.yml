@@ -18,9 +18,7 @@ jobs:
 
       - name: Install git-filter-repo
         run: |
-          sudo apt-get update && sudo apt-get install -y git
-          curl -L https://raw.githubusercontent.com/newren/git-filter-repo/main/git-filter-repo -o /usr/local/bin/git-filter-repo
-          chmod +x /usr/local/bin/git-filter-repo
+          sudo apt-get update && sudo apt-get install -y git-filter-repo
 
       - name: Configure SSH for deploy key
         env:
