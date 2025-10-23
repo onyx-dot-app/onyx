@@ -667,7 +667,12 @@ export function ActionToggle({
     if (!availableToolIds.includes(tool.id)) return false;
 
     // Filter out internal search tool for non-admin/curator users when there are no connectors
-    if (tool.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors) {
+    if (
+      tool.in_code_tool_id === SEARCH_TOOL_ID &&
+      hasNoConnectors &&
+      !isAdmin &&
+      !isCurator
+    ) {
       return false;
     }
 
