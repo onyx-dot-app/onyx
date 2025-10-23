@@ -32,6 +32,7 @@ EOF
 echo "=== Creating blob callback script ==="
 cat > /tmp/license_replacer.py << 'PYEOF'
 #!/usr/bin/env python3
+import sys
 
 # Read MIT license from file
 with open('/tmp/mit_license.txt', 'rb') as f:
@@ -39,19 +40,29 @@ with open('/tmp/mit_license.txt', 'rb') as f:
 
 import git_filter_repo as fr
 
-# We need to create the new blob and get its ID
-new_license_blob = fr.Blob(MIT_LICENSE)
+replaced_count = 0
 
-def replace_license_in_commits(commit, metadata):
-    """Replace LICENSE file content in all commits"""
-    for change in commit.file_changes:
-        if change.filename == b'LICENSE':
-            # Replace with our new MIT license blob
-            change.blob_id = new_license_blob.original_id
+def replace_license_blob_content(blob, metadata):
+    """Replace LICENSE blob content with MIT license based on content detection"""
+    global replaced_count
+
+    # Check if this blob looks like a license file
+    # We'll replace any blob that contains the old Apache/custom license text
+    if blob.data and len(blob.data) > 100:
+        # Check for license-like content (contains "Copyright" and "License")
+        data_lower = blob.data.lower()
+        if b'copyright' in data_lower and (b'license' in data_lower or b'apache' in data_lower):
+            # Additional check: make sure it's actually a license file, not source code
+            # License files typically don't have common code patterns
+            if b'def ' not in blob.data and b'class ' not in blob.data and b'import ' not in blob.data[:200]:
+                blob.data = MIT_LICENSE
+                replaced_count += 1
 
 args = fr.FilteringOptions.parse_args(['--force'], error_on_empty=False)
-filter = fr.RepoFilter(args, commit_callback=replace_license_in_commits)
-filter.run()
+filter_obj = fr.RepoFilter(args, blob_callback=replace_license_blob_content)
+filter_obj.run()
+
+print(f"Replaced {replaced_count} LICENSE blob(s)", file=sys.stderr)
 PYEOF
 
 chmod +x /tmp/license_replacer.py
