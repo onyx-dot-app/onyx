@@ -4,6 +4,7 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 interface LineItemProps {
   icon?: React.FunctionComponent<SvgProps>;
@@ -35,9 +36,9 @@ export default function LineItem({
           </div>
         )}
         {typeof children === "string" ? (
-          <Text mainUiMuted text04 className="text-left w-full">
+          <Truncated mainUiMuted text04 className="text-left w-full">
             {children}
-          </Text>
+          </Truncated>
         ) : (
           children
         )}
