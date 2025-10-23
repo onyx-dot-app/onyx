@@ -29,6 +29,10 @@ class OAuthConfigUpdate(BaseModel):
 class OAuthConfigSnapshot(BaseModel):
     id: int
     name: str
+    authorization_url: str
+    token_url: str
+    scopes: list[str] | None
+    has_client_credentials: bool  # NEVER expose actual client_id or client_secret
     tool_count: int  # Number of tools using this config
     created_at: datetime
     updated_at: datetime
