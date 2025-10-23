@@ -7,7 +7,7 @@ git clone --mirror . /tmp/foss/.git
 cd /tmp/foss
 
 echo "=== Removing enterprise directory from history ==="
-git filter-repo --path ee --invert-paths --force
+git filter-repo --path backend/ee --invert-paths --force
 
 echo "=== Checking out working tree ==="
 git clone . ../foss_repo
