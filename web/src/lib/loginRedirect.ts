@@ -22,8 +22,7 @@ export const buildLoginRedirectPath = (
   }
 
   const shouldDisable =
-    disableAutoRedirect ||
-    (authType === "saml" && (sessionExpired || disableAutoRedirect));
+    disableAutoRedirect || (authType === "saml" && sessionExpired);
 
   if (shouldDisable) {
     params.set("disableAutoRedirect", "true");
