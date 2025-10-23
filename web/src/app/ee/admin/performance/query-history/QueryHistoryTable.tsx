@@ -30,7 +30,7 @@ import {
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
 import { FeedbackBadge } from "./FeedbackBadge";
-import { KickoffCSVExport } from "./KickoffCSVExport";
+import KickoffCSVExport from "./KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ErrorCallout } from "@/components/ErrorCallout";

@@ -28,6 +28,9 @@ import { deleteApiKey, regenerateApiKey } from "./lib";
 import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
+import Button from "@/refresh-components/buttons/Button";
+import SvgRefreshCw from "@/icons/refresh-cw";
+import SvgEdit from "@/icons/edit";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 
@@ -175,22 +178,13 @@ function Main() {
           {apiKeys.map((apiKey) => (
             <TableRow key={apiKey.api_key_id}>
               <TableCell>
-                <div
-                  className={`
-                  my-auto 
-                  flex 
-                  mb-1 
-                  w-fit 
-                  hover:bg-accent-background-hovered cursor-pointer
-                  p-2 
-                  rounded-lg
-                  border-border
-                  text-sm`}
+                <Button
+                  internal
                   onClick={() => handleEdit(apiKey)}
+                  leftIcon={SvgEdit}
                 >
-                  <FiEdit2 className="my-auto mr-2" />
                   {apiKey.api_key_name || <i>null</i>}
-                </div>
+                </Button>
               </TableCell>
               <TableCell className="max-w-64">
                 {apiKey.api_key_display}
@@ -199,17 +193,9 @@ function Main() {
                 {apiKey.api_key_role.toUpperCase()}
               </TableCell>
               <TableCell>
-                <div
-                  className={`
-                  my-auto 
-                  flex 
-                  mb-1 
-                  w-fit 
-                  hover:bg-accent-background-hovered cursor-pointer
-                  p-2 
-                  rounded-lg
-                  border-border
-                  text-sm`}
+                <Button
+                  internal
+                  leftIcon={SvgRefreshCw}
                   onClick={async () => {
                     setKeyIsGenerating(true);
                     const response = await regenerateApiKey(apiKey);
@@ -227,9 +213,8 @@ function Main() {
                     mutate("/api/admin/api-key");
                   }}
                 >
-                  <FiRefreshCw className="mr-1 my-auto" />
                   Refresh
-                </div>
+                </Button>
               </TableCell>
               <TableCell>
                 <DeleteButton
