@@ -1,0 +1,39 @@
+import type React from "react";
+export type FormFieldState = "idle" | "loading" | "success" | "error";
+
+export interface FieldContextType {
+  baseId: string;
+  name?: string;
+  required?: boolean;
+  state: FormFieldState;
+  message?: string | null;
+  description?: string | null;
+  describedByIds: string[];
+}
+
+export type FormFieldRootProps = React.HTMLAttributes<HTMLDivElement> & {
+  name?: string;
+  state: FormFieldState;
+  message?: string | null;
+  description?: string | null;
+  required?: boolean;
+  id?: string;
+};
+
+export type LabelProps = React.HTMLAttributes<HTMLLabelElement> & {
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+  isOptional?: boolean;
+};
+
+export type ControlProps = React.PropsWithChildren<{
+  asChild?: boolean;
+}>;
+
+export type DescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
+export type MessageByState = Partial<Record<FormFieldState, React.ReactNode>>;
+
+export type MessageProps = React.HTMLAttributes<HTMLDivElement> & {
+  messages?: MessageByState;
+  render?: (state: FormFieldState) => React.ReactNode;
+};

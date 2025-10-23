@@ -51,7 +51,6 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import SvgEye from "@/icons/eye";
 import SvgEyeClosed from "@/icons/eye-closed";
-import Text from "@/refresh-components/Text";
 
 export function SectionHeader({
   children,
