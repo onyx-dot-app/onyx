@@ -134,14 +134,13 @@ def _assert_no_authorization_header(headers: dict[str, str]) -> None:
     ), "Expected no authorization header"
 
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_llm_provider(db_session: Session) -> None:
-    """Ensure default LLM provider is set up once for all tests in this module."""
-    ensure_default_llm_provider(db_session)
-
-
 class TestOAuthToolIntegrationPriority:
     """Tests for OAuth token priority logic in tool_constructor"""
+
+    @pytest.fixture(autouse=True)
+    def setup_llm_provider(self, db_session: Session) -> None:
+        """Ensure default LLM provider is set up for each test."""
+        ensure_default_llm_provider(db_session)
 
     def test_oauth_config_priority_over_passthrough(self, db_session: Session) -> None:
         """
