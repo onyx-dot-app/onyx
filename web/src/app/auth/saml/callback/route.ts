@@ -55,10 +55,15 @@ async function handleSamlCallback(
   const setCookieHeader = response.headers.get("set-cookie");
 
   if (!setCookieHeader) {
-    return NextResponse.redirect(
-      new URL("/auth/error", getDomain(request)),
-      SEE_OTHER_REDIRECT_STATUS
-    );
+    const loginUrl = new URL("/auth/login", getDomain(request));
+    loginUrl.searchParams.set("disableAutoRedirect", "true");
+
+    const nextParam = request.nextUrl.searchParams.get("next") || "/";
+    if (nextParam) {
+      loginUrl.searchParams.set("next", nextParam);
+    }
+
+    return NextResponse.redirect(loginUrl, SEE_OTHER_REDIRECT_STATUS);
   }
 
   const redirectResponse = NextResponse.redirect(
