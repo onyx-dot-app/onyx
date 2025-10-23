@@ -18,6 +18,7 @@ export interface SimpleTooltipProps
 export default function SimpleTooltip({
   tooltip,
   children,
+  side = "right",
   ...rest
 }: SimpleTooltipProps) {
   // Determine hover content based on the logic:
@@ -36,7 +37,7 @@ export default function SimpleTooltip({
         <TooltipTrigger asChild>
           <div>{children}</div>
         </TooltipTrigger>
-        <TooltipContent side="right" {...rest}>
+        <TooltipContent side={side} {...rest}>
           <Text inverted>{hoverContent}</Text>
         </TooltipContent>
       </Tooltip>

@@ -13,7 +13,7 @@ import {
   updateCustomTool,
   validateToolDefinition,
 } from "@/lib/tools/edit";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
@@ -38,6 +38,7 @@ import {
 import { OAuthConfigSelector } from "@/components/oauth/OAuthConfigSelector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { KeyedMutator } from "swr";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -83,7 +84,7 @@ function ActionForm({
     React.Dispatch<React.SetStateAction<MethodSpec[] | null>>,
   ];
   oauthConfigs: OAuthConfig[];
-  setPopup: (spec: any) => void;
+  setPopup: (spec: PopupSpec | null) => void;
   mutateOAuthConfigs: KeyedMutator<OAuthConfig[]>;
 }) {
   const [definitionError, setDefinitionError] = definitionErrorState;
@@ -320,58 +321,44 @@ function ActionForm({
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
                 <div className="flex items-center space-x-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <div
-                          className={
-                            values.customHeaders.some(
-                              (header) =>
-                                header.key.toLowerCase() === "authorization"
-                            ) || values.oauth_config_id !== null
-                              ? "opacity-50"
-                              : ""
-                          }
-                        >
-                          <Checkbox
-                            id="passthrough_auth"
-                            checked={values.passthrough_auth}
-                            disabled={
-                              values.oauth_config_id !== null ||
-                              values.customHeaders.some(
-                                (header) =>
-                                  header.key.toLowerCase() ===
-                                    "authorization" && !values.passthrough_auth
-                              )
-                            }
-                            onCheckedChange={(checked) => {
-                              setFieldValue("passthrough_auth", checked, true);
-                            }}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      {(values.customHeaders.some(
-                        (header) => header.key.toLowerCase() === "authorization"
-                      ) ||
-                        values.oauth_config_id !== null) && (
-                        <TooltipContent side="top" align="center">
-                          <Text className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                            {values.oauth_config_id !== null
-                              ? "Cannot enable passthrough auth when an OAuth configuration is selected"
-                              : "Cannot enable OAuth passthrough when an Authorization header is already set"}
-                          </Text>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <div className="flex flex-col">
-                    <label
-                      htmlFor="passthrough_auth"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  <SimpleTooltip
+                    tooltip={
+                      values.oauth_config_id !== null
+                        ? "Cannot enable passthrough auth when an OAuth configuration is selected"
+                        : "Cannot enable OAuth passthrough when an Authorization header is already set"
+                    }
+                    side="top"
+                  >
+                    <div
+                      className={
+                        values.customHeaders.some(
+                          (header) =>
+                            header.key.toLowerCase() === "authorization"
+                        ) || values.oauth_config_id !== null
+                          ? "opacity-50"
+                          : ""
+                      }
                     >
-                      Pass through user&apos;s OAuth token
-                    </label>
-                    <Text className="text-xs text-subtle mt-1">
+                      <Checkbox
+                        id="passthrough_auth"
+                        checked={values.passthrough_auth}
+                        disabled={
+                          values.oauth_config_id !== null ||
+                          values.customHeaders.some(
+                            (header) =>
+                              header.key.toLowerCase() === "authorization" &&
+                              !values.passthrough_auth
+                          )
+                        }
+                        onCheckedChange={(checked) => {
+                          setFieldValue("passthrough_auth", checked, true);
+                        }}
+                      />
+                    </div>
+                  </SimpleTooltip>
+                  <div className="flex flex-col">
+                    <Text mainUiBody>Pass through user&apos;s OAuth token</Text>
+                    <Text secondaryBody>
                       When enabled, the user&apos;s OAuth token will be passed
                       as the Authorization header for all API calls
                     </Text>

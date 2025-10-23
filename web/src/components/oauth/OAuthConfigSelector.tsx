@@ -6,6 +6,7 @@ import { useState } from "react";
 import { OAuthConfigForm } from "@/app/admin/oauth-configs/OAuthConfigForm";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useFormikContext } from "formik";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 interface OAuthConfigSelectorProps {
   name: string;
@@ -85,14 +86,9 @@ export const OAuthConfigSelector = ({
           }
         }}
       />
-      <Button
-        onClick={() => setShowModal(true)}
-        type="button"
-        secondary
-        leftIcon={SvgPlusCircle}
-      >
+      <CreateButton onClick={() => setShowModal(true)}>
         New OAuth Configuration
-      </Button>
+      </CreateButton>
 
       {showModal && (
         <OAuthConfigForm

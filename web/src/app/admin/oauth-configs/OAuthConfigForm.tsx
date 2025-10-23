@@ -53,11 +53,11 @@ export const OAuthConfigForm = ({
   return (
     <CoreModal onClickOutside={onClose} className="w-[60%] max-h-[80vh]">
       <div className="overflow-y-auto p-6">
-        <h2 className="text-xl font-bold flex mb-4">
+        <Text headingH2 className="mb-4">
           {isUpdate
             ? "Update OAuth Configuration"
             : "Create OAuth Configuration"}
-        </h2>
+        </Text>
 
         <Separator />
 
