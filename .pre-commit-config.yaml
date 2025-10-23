@@ -53,6 +53,15 @@ repos:
         language: system
         files: ^backend/.*\.py$
         pass_filenames: false
+      - id: frontend-type-check
+        name: TypeScript type check (frontend)
+        entry: python3 web/scripts/type-check.py
+        language: system
+        files: ^web/.*\.(ts|tsx)$
+        pass_filenames: false
+        # Note: pass_filenames is false because tsc must check the entire
+        # project, but the files filter ensures this only runs when relevant
+        # files change. Using --incremental for faster subsequent checks.
 
   # We would like to have a mypy pre-commit hook, but due to the fact that
   # pre-commit runs in it's own isolated environment, we would need to install

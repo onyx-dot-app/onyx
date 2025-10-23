@@ -1,0 +1,44 @@
+name: Sync FOSS Repo
+
+on:
+  schedule:
+    # Run daily at 3am PT (11am UTC during PST)
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-foss:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main Onyx repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-filter-repo
+        run: |
+          sudo apt-get update && sudo apt-get install -y git-filter-repo
+
+      - name: Configure SSH for deploy key
+        env:
+          FOSS_REPO_DEPLOY_KEY: ${{ secrets.FOSS_REPO_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$FOSS_REPO_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Build FOSS version
+        run: bash backend/scripts/make_foss_repo.sh
+
+      - name: Push to FOSS repo
+        env:
+          FOSS_REPO_URL: git@github.com:onyx-dot-app/onyx-foss.git
+        run: |
+          cd /tmp/foss_repo
+          git config user.name "onyx-bot"
+          git config user.email "bot@onyx.app"
+          git remote add public "$FOSS_REPO_URL"
+          git push --force public main
