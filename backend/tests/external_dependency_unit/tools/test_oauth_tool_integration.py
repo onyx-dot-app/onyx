@@ -92,7 +92,6 @@ def _create_test_oauth_config(
     """Helper to create a test OAuth config"""
     return create_oauth_config(
         name=name or f"Test OAuth Config {uuid4().hex[:8]}",
-        provider="github",
         authorization_url="https://github.com/login/oauth/authorize",
         token_url="https://github.com/login/oauth/access_token",
         client_id="test_client_id",
