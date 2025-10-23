@@ -7,7 +7,7 @@ import {
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AssistantIcon from "@/refresh-components/AgentIcon";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
@@ -156,13 +156,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-4">
-                {assistant && (
-                  <AssistantIcon
-                    disableToolip
-                    size="large"
-                    assistant={assistant}
-                  />
-                )}
+                {assistant && <AssistantIcon agent={assistant} />}
                 <div>
                   <h3 className="text-lg font-normal">{assistant?.name}</h3>
                   <p className="text-sm text-text-500">

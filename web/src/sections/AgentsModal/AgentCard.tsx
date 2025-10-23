@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverMenu,
 } from "@/components/ui/popover";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/utils";
@@ -83,8 +83,7 @@ export default function AgentCard({
       <div className="w-full h-full p-padding-content bg-background-tint-02 rounded-08">
         {popup}
         <div className="w-full h-full flex flex-row gap-spacing-paragraph">
-          <AssistantIcon assistant={agent} size="large" />
-
+          <AgentIcon agent={agent} />
           <div className="flex-1 flex flex-col gap-padding-button">
             <div className="flex flex-row justify-between items-center">
               <Truncated headingH3 text04>
