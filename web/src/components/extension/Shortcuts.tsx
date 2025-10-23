@@ -224,7 +224,7 @@ export const NewShortCutModal = ({
             {editingShortcut && (
               <Button
                 type="button"
-                variant="destructive"
+                danger
                 onClick={() => onDelete(editingShortcut)}
               >
                 Delete

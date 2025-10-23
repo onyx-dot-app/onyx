@@ -259,7 +259,6 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
                         redirectPath || config.defaultRedirectPath || "/chat";
                       router.push(target);
                     }}
-                    variant="navigate"
                     className="w-full"
                   >
                     {config.backButtonText || "Back to Chat"}

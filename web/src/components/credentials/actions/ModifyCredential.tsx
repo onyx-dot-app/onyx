@@ -205,14 +205,14 @@ export default function ModifyCredential({
             <div className="mt-6 flex gap-x-2 justify-end">
               <Button
                 onClick={async () => {
-                  await onDeleteCredential(confirmDeletionCredential);
+                  onDeleteCredential(confirmDeletionCredential);
                   setConfirmDeletionCredential(null);
                 }}
               >
                 Confirm
               </Button>
               <Button
-                variant="outline"
+                secondary
                 onClick={() => setConfirmDeletionCredential(null)}
               >
                 Cancel
