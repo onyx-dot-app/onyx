@@ -17,7 +17,6 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
-import FixedLogo from "@/components/logo/FixedLogo";
 import Link from "next/link";
 
 function BackToOnyxButton({
