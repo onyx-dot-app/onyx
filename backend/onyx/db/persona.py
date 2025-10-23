@@ -533,9 +533,12 @@ def upsert_persona(
         seen = set()
         for validator in validators:
             if validator.validator_type in seen:
-                raise ValueError(
-                    f"Вы пытаетесь подключить несколько валидаторов "
-                    f"с одинаковой функциональностью ({validator.name})"
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Вы пытаетесь подключить несколько типов валидаторов "
+                        f"с одинаковой функциональностью: {validator.name}"
+                    )
                 )
             seen.add(validator.validator_type)
 
