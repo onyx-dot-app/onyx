@@ -100,6 +100,9 @@ module.exports = {
         "background-neutral-02": "var(--background-neutral-02)",
         "background-neutral-03": "var(--background-neutral-03)",
         "background-neutral-04": "var(--background-neutral-04)",
+        "background-neutral-light-00": "var(--background-neutral-light-00)",
+        "background-neutral-light-03": "var(--background-neutral-light-03)",
+        "background-neutral-dark-03": "var(--background-neutral-dark-03)",
         "background-neutral-inverted-04":
           "var(--background-neutral-inverted-04)",
         "background-neutral-inverted-03":
