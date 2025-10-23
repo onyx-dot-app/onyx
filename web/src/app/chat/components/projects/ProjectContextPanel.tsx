@@ -1,17 +1,13 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePicker from "../files/FilePicker";
-import type {
-  ProjectFile,
-  CategorizedFiles,
-} from "../../projects/projectsService";
+import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
-import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
@@ -26,11 +22,11 @@ import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { useEscape } from "@/hooks/useKeyPress";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/texts/Text";
-import SvgFileText from "@/icons/file-text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/texts/Truncated";
+import FileTypeIcon from "../files/FileTypeIcon";
 
 export function FileCard({
   file,
@@ -96,7 +92,10 @@ export function FileCard({
         {isProcessing || file.status === UserFileStatus.UPLOADING ? (
           <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
         ) : (
-          <SvgFileText className="h-5 w-5 stroke-text-02" />
+          <FileTypeIcon
+            fileName={file.name}
+            className="h-5 w-5 stroke-text-02"
+          />
         )}
       </div>
       <div className="flex flex-col overflow-hidden">

@@ -23,6 +23,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import FileTypeIcon from "./FileTypeIcon";
 
 // Small helper to render an icon + label row
 const Row = ({ children }: { children: React.ReactNode }) => (
@@ -82,7 +83,10 @@ export function FilePickerContents({
                     String(f.status) === UserFileStatus.DELETING ? (
                       <Loader2 className="h-4 w-4 animate-spin text-text-02" />
                     ) : (
-                      <SvgFileText className="h-4 w-4 stroke-text-02" />
+                      <FileTypeIcon
+                        fileName={f.name}
+                        className="h-4 w-4 stroke-text-02"
+                      />
                     )}
                   </div>
                   <div className="flex items-center gap-1 min-w-0">
@@ -128,7 +132,7 @@ export function FilePickerContents({
                           internal
                           icon={SvgTrash}
                           tooltip="Delete file"
-                          className="absolute flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();

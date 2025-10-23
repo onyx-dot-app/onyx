@@ -16,6 +16,7 @@ import { SvgProps } from "@/icons";
 import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
+import FileTypeIcon from "@/app/chat/components/files/FileTypeIcon";
 import SvgTrash from "@/icons/trash";
 import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -273,15 +274,10 @@ export default function UserFilesModalContent({
                           <SvgCheck className="stroke-text-02" />
                         </div>
                       ) : (
-                        (() => {
-                          const ext = getFileExtension(f.name).toLowerCase();
-                          const isImage = isImageExtension(ext);
-                          return isImage ? (
-                            <SvgImage className="h-5 w-5 stroke-text-02" />
-                          ) : (
-                            <SvgFileText className="h-5 w-5 stroke-text-02" />
-                          );
-                        })()
+                        <FileTypeIcon
+                          fileName={f.name}
+                          className="h-5 w-5 stroke-text-02"
+                        />
                       )}
                     </>
                   )}
