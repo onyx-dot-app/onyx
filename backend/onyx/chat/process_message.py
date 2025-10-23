@@ -1114,7 +1114,6 @@ def stream_chat_message_objects(
 
                 # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
                 splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
-                logger.info("\nРазбитый ответ LLM на пакеты OnyxAnswerPiece: %s", splitted_onyx_answer_piece_packets)
 
                 # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
                 other_packets.extend(splitted_onyx_answer_piece_packets)
@@ -1122,7 +1121,6 @@ def stream_chat_message_objects(
             logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
 
         other_packets.extend(stream_stop_info_packets)
-        logger.info("\nОбщий список пакетов после валидации ответа LLM: %s", other_packets)
 
         # reference_db_search_docs = None
         # qa_docs_response = None
