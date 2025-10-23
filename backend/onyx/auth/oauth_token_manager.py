@@ -1,5 +1,6 @@
 import time
 from typing import Any
+from urllib.parse import urlencode
 from uuid import UUID
 
 import requests
@@ -123,8 +124,6 @@ class OAuthTokenManager:
         oauth_config: OAuthConfig, redirect_uri: str, state: str
     ) -> str:
         """Build OAuth authorization URL"""
-        from urllib.parse import urlencode
-
         params: dict[str, Any] = {
             "client_id": oauth_config.client_id,
             "redirect_uri": redirect_uri,
