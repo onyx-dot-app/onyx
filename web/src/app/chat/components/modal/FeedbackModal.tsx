@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
 import Modal from "@/refresh-components/modals/Modal";
 import { FilledLikeIcon } from "@/components/icons/icons";
-import { handleChatFeedback } from "../../services/lib";
 import {
   ModalIds,
   useChatModal,
@@ -30,15 +29,16 @@ const predefinedNegativeFeedbackOptions = process.env
       "Cited source had incorrect information",
     ];
 
-interface FeedbackModalProps {
-  setPopup: (popup: { message: string; type: "success" | "error" }) => void;
-}
-
-export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
+export const FeedbackModal = () => {
   const { isOpen, toggleModal, getModalData } = useChatModal();
   const data = getModalData<{
     feedbackType: FeedbackType;
     messageId: number;
+    handleFeedbackChange?: (
+      newFeedback: FeedbackType | null,
+      feedbackText?: string,
+      predefinedFeedback?: string
+    ) => Promise<void>;
   }>();
   const [predefinedFeedback, setPredefinedFeedback] = useState<
     string | undefined
@@ -51,52 +51,39 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
     }
   }, [isOpen(ModalIds.FeedbackModal)]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
+    if (!data) return;
+    const { feedbackType, handleFeedbackChange } = data;
+
     if (
       (!predefinedFeedback || predefinedFeedback === "") &&
       (!fieldInputRef.current || fieldInputRef.current.value === "")
     )
       return;
 
-    try {
-      const response = await handleChatFeedback(
-        messageId,
-        feedbackType,
-        fieldInputRef.current?.value ?? predefinedFeedback!,
-        predefinedFeedback
-      );
+    const feedbackText =
+      fieldInputRef.current?.value || predefinedFeedback || "";
 
-      if (response.ok) {
-        setPopup({
-          message: "Thanks for your feedback!",
-          type: "success",
-        });
-      } else {
-        const responseJson = await response.json();
-        const errorMsg = responseJson.detail || responseJson.message;
-        setPopup({
-          message: `Failed to submit feedback - ${errorMsg}`,
-          type: "error",
-        });
-      }
-    } catch (error) {
-      setPopup({
-        message: "Failed to submit feedback - network error",
-        type: "error",
-      });
+    if (!handleFeedbackChange) {
+      console.error("handleFeedbackChange is required but not provided");
+      return;
     }
 
+    await handleFeedbackChange(feedbackType, feedbackText, predefinedFeedback);
+
     toggleModal(ModalIds.FeedbackModal, false);
-  };
+  }, [data, predefinedFeedback, toggleModal]);
 
   useEffect(() => {
-    handleSubmit();
-  }, [predefinedFeedback]);
+    if (predefinedFeedback) {
+      handleSubmit();
+    }
+  }, [predefinedFeedback, handleSubmit]);
 
   useKeyPress(handleSubmit, "Enter");
 
   if (!data) return null;
-  const { feedbackType, messageId } = data;
+  const { feedbackType } = data;
 
   const predefinedFeedbackOptions =
     feedbackType === "like"

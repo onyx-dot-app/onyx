@@ -14,6 +14,8 @@ interface BaseMemoizedAIMessageProps {
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   overriddenModel?: string;
   nodeId: number;
+  messageId?: number;
+  currentFeedback?: string | null;
   otherMessagesCanSwitchTo: number[];
   onMessageSelection: (messageId: number) => void;
   llmManager: LlmManager | null;
@@ -23,7 +25,11 @@ interface BaseMemoizedAIMessageProps {
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
   regenerate?: (modelOverride: LlmDescriptor) => Promise<void>;
-  handleFeedback: (feedback: FeedbackType) => void;
+  handleFeedbackChange: (
+    newFeedback: FeedbackType | null,
+    feedbackText?: string,
+    predefinedFeedback?: string
+  ) => Promise<void>;
 }
 
 interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -32,17 +38,19 @@ interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
     parentMessage: Message;
     forceSearch?: boolean;
   }) => (modelOverRide: LlmDescriptor) => Promise<void>;
-  handleFeedbackWithMessageId: (
-    feedback: FeedbackType,
-    messageId: number
-  ) => void;
+  handleFeedbackChange: (
+    messageId: number,
+    newFeedback: FeedbackType | null,
+    feedbackText?: string,
+    predefinedFeedback?: string
+  ) => Promise<void>;
   messageId: number | undefined;
   parentMessage?: Message;
 }
 
 const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
   rawPackets,
-  handleFeedback,
+  handleFeedbackChange,
   assistant,
   docs,
   citations,
@@ -50,27 +58,46 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
   regenerate,
   overriddenModel,
   nodeId,
+  messageId,
+  currentFeedback,
   otherMessagesCanSwitchTo,
   onMessageSelection,
   llmManager,
   projectFiles,
   researchType,
 }: InternalMemoizedAIMessageProps) {
+  const chatState = React.useMemo(
+    () => ({
+      handleFeedbackChange,
+      assistant,
+      docs,
+      userFiles: projectFiles || [],
+      citations,
+      setPresentingDocument,
+      regenerate,
+      overriddenModel,
+      researchType,
+    }),
+    [
+      handleFeedbackChange,
+      assistant,
+      docs,
+      projectFiles,
+      citations,
+      setPresentingDocument,
+      regenerate,
+      overriddenModel,
+      researchType,
+    ]
+  );
+
   return (
     <AIMessage
       rawPackets={rawPackets}
-      chatState={{
-        handleFeedback,
-        assistant,
-        docs,
-        userFiles: projectFiles || [],
-        citations,
-        setPresentingDocument,
-        regenerate,
-        overriddenModel,
-        researchType,
-      }}
+      chatState={chatState}
       nodeId={nodeId}
+      messageId={messageId}
+      currentFeedback={currentFeedback}
       llmManager={llmManager}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
@@ -80,7 +107,7 @@ const _MemoizedAIMessage = React.memo(function _MemoizedAIMessage({
 
 export const MemoizedAIMessage = ({
   rawPackets,
-  handleFeedbackWithMessageId,
+  handleFeedbackChange,
   assistant,
   docs,
   citations,
@@ -89,6 +116,7 @@ export const MemoizedAIMessage = ({
   overriddenModel,
   nodeId,
   messageId,
+  currentFeedback,
   parentMessage,
   otherMessagesCanSwitchTo,
   onMessageSelection,
@@ -113,21 +141,31 @@ export const MemoizedAIMessage = ({
     };
   }, [messageId, parentMessage, createRegenerator]);
 
-  const handleFeedback = useCallback(
-    (feedback: FeedbackType) => {
+  // Wrap handleFeedbackChange to pass messageId
+  const wrappedHandleFeedbackChange = useCallback(
+    async (
+      newFeedback: FeedbackType | null,
+      feedbackText?: string,
+      predefinedFeedback?: string
+    ) => {
       if (messageId === undefined) {
-        console.error("Message has no messageId", nodeId);
+        console.error("Message has no messageId");
         return;
       }
-      handleFeedbackWithMessageId(feedback, messageId!);
+      return handleFeedbackChange(
+        messageId,
+        newFeedback,
+        feedbackText,
+        predefinedFeedback
+      );
     },
-    [handleFeedbackWithMessageId, messageId]
+    [handleFeedbackChange, messageId]
   );
 
   return (
     <_MemoizedAIMessage
       rawPackets={rawPackets}
-      handleFeedback={handleFeedback}
+      handleFeedbackChange={wrappedHandleFeedbackChange}
       assistant={assistant}
       docs={docs}
       citations={citations}
@@ -135,6 +173,8 @@ export const MemoizedAIMessage = ({
       regenerate={regenerate}
       overriddenModel={overriddenModel}
       nodeId={nodeId}
+      messageId={messageId}
+      currentFeedback={currentFeedback}
       otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
       onMessageSelection={onMessageSelection}
       llmManager={llmManager}

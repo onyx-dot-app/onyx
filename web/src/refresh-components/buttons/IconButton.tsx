@@ -30,7 +30,7 @@ const buttonClasses = (active: boolean | undefined) =>
     },
     tertiary: {
       main: [
-        active ? "bg-background-tint-00" : "bg-transparent",
+        active ? "bg-background-tint-02" : "bg-transparent",
         "hover:bg-background-tint-02",
       ],
       disabled: ["bg-background-neutral-02"],
