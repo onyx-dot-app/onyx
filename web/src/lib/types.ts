@@ -457,6 +457,7 @@ export enum ValidSources {
   Productboard = "productboard",
   Slab = "slab",
   Notion = "notion",
+  Joplin = "joplin",
   Guru = "guru",
   Gong = "gong",
   Zulip = "zulip",
