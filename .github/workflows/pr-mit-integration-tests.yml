@@ -151,7 +151,7 @@ jobs:
         env:
           REGISTRY: ${{ env.PRIVATE_REGISTRY }}
           TAG: test-${{ github.run_id }}
-        run: cd backend && docker buildx bake --push integration
+        run: cd backend && docker buildx bake ${{ vars.DOCKER_NO_CACHE == 'true' && ' --no-cache' || '' }} --push integration
 
   integration-tests-mit:
     needs:
