@@ -390,7 +390,7 @@ export function SlackChannelConfigFormFields({
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
                       >
-                        <AgentIcon agent={persona} />
+                        <AgentIcon agent={persona} size={16} />
                         {persona.name}
                       </button>
                     )
