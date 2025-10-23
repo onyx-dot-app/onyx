@@ -305,14 +305,23 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
         return state;
       }
 
-      // Update message feedback directly (we'll create new session object below)
-      message.currentFeedback = feedback as FeedbackType | null;
+      // Create new message object with updated feedback (immutable update)
+      const updatedMessage = {
+        ...message,
+        currentFeedback: feedback as FeedbackType | null,
+      };
 
-      // Create new session object to trigger Zustand/React updates
+      // Create new messageTree Map with updated message
+      const newMessageTree = new Map(session.messageTree);
+      newMessageTree.set(message.nodeId, updatedMessage);
+
+      // Create new session object with new messageTree
       const updatedSession = {
         ...session,
+        messageTree: newMessageTree,
         lastAccessed: new Date(),
       };
+
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
 
