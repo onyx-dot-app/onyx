@@ -36,7 +36,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   if (!authDisabled) {
     if (!user) {
-      const headersList = headers();
+      const headersList = await headers();
       const referrer = headersList.get("referer") || "";
       const fullUrl = headersList.get("x-url");
 

@@ -49,7 +49,7 @@ export default async function Page(props: {
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
-    const headersList = headers();
+    const headersList = await headers();
     const referrer = headersList.get("referer") || "";
     const sessionExpired = !!referrer && !referrer.includes("/auth/login");
 
