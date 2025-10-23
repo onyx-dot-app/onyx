@@ -6,17 +6,8 @@ rm -rf /tmp/foss && mkdir -p /tmp/foss
 git clone --mirror . /tmp/foss/.git
 cd /tmp/foss
 
-# NOTE: intentionally keeping the web/src/app/ee directory
-# for now since there's no clean way to remove it
-echo "=== Removing enterprise directory from history ==="
-git filter-repo --path backend/ee --invert-paths --force
-
-echo "=== Checking out working tree ==="
-git clone . ../foss_repo
-cd ../foss_repo
-
-echo "=== Applying MIT license ==="
-cat > LICENSE << 'EOF'
+echo "=== Creating MIT license file ==="
+cat > /tmp/mit_license.txt << 'EOF'
 Copyright (c) 2023-present DanswerAI, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -38,8 +29,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
 
-echo "=== Removing enterprise license files ==="
-rm backend/ee/LICENSE
-rm web/src/app/ee/LICENSE
+echo "=== Creating blob callback script ==="
+cat > /tmp/license_replacer.py << 'PYEOF'
+#!/usr/bin/env python3
+
+# Read MIT license from file
+with open('/tmp/mit_license.txt', 'rb') as f:
+    MIT_LICENSE = f.read()
+
+def replace_license(blob, metadata):
+    if blob.original_path == b'LICENSE':
+        blob.data = MIT_LICENSE
+
+import git_filter_repo as fr
+fr.run(
+    blob_callback=replace_license,
+    force=True
+)
+PYEOF
+
+chmod +x /tmp/license_replacer.py
+
+# NOTE: intentionally keeping the web/src/app/ee directory
+# for now since there's no clean way to remove it
+echo "=== Removing enterprise directory and licenses from history ==="
+git filter-repo \
+  --path backend/ee --invert-paths \
+  --path backend/ee/LICENSE --invert-paths \
+  --path web/src/app/ee/LICENSE --invert-paths \
+  --force
+
+echo "=== Replacing LICENSE file in all commits ==="
+/tmp/license_replacer.py
+
+echo "=== Checking out working tree ==="
+git clone . ../foss_repo
 
 echo "=== Done building FOSS repo ==="
