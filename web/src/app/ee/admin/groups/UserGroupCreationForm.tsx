@@ -128,7 +128,6 @@ export const UserGroupCreationForm = ({
                 <div className="flex">
                   <Button
                     type="submit"
-                    variant="submit"
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >

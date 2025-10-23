@@ -299,8 +299,7 @@ export const GroupDisplay = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              className={userGroup.is_up_to_date ? "" : "opacity-50"}
-              variant="submit"
+              disabled={!userGroup.is_up_to_date}
               onClick={() => {
                 if (userGroup.is_up_to_date) {
                   setAddMemberFormVisible(true);
@@ -410,8 +409,7 @@ export const GroupDisplay = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              className={userGroup.is_up_to_date ? "" : "opacity-50"}
-              variant="submit"
+              disabled={!userGroup.is_up_to_date}
               onClick={() => {
                 if (userGroup.is_up_to_date) {
                   setAddConnectorFormVisible(true);
@@ -510,7 +508,6 @@ export const GroupDisplay = ({
 
       {isAdmin && (
         <Button
-          variant="submit"
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}
         >

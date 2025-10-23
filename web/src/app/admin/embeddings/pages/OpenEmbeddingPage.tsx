@@ -65,7 +65,7 @@ export default function OpenEmbeddingPage({
         <Button
           onClick={() => setConfigureModel(true)}
           className="mt-4"
-          variant="secondary"
+          secondary
         >
           Configure custom model
         </Button>

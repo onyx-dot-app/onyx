@@ -296,12 +296,7 @@ export function ProviderCreationModal({
                 </Callout>
               )}
 
-              <Button
-                type="submit"
-                variant="submit"
-                className="w-full"
-                disabled={isSubmitting}
-              >
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isProcessing ? (
                   <LoadingAnimation />
                 ) : existingProvider ? (

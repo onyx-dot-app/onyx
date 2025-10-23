@@ -338,7 +338,7 @@ export const GmailJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                variant="destructive"
+                danger
                 type="button"
                 onClick={async () => {
                   const endpoint =
@@ -499,7 +499,7 @@ export const GmailAuthSection = ({
             </div>
           </div>
           <Button
-            variant="destructive"
+            danger
             type="button"
             onClick={async () => {
               handleRevokeAccess(
