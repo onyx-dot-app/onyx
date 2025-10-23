@@ -2,9 +2,9 @@
 set -euo pipefail
 
 echo "=== Building FOSS mirror ==="
-rm -rf /tmp/foss && mkdir -p /tmp/foss
-git clone --mirror . /tmp/foss/.git
-cd /tmp/foss
+rm -rf /tmp/foss_repo && mkdir -p /tmp/foss_repo
+git clone . /tmp/foss_repo
+cd /tmp/foss_repo
 
 echo "=== Creating MIT license file ==="
 cat > /tmp/mit_license.txt << 'EOF'
@@ -29,33 +29,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
 
-echo "=== Creating blob callback script ==="
-cat > /tmp/license_replacer.py << 'PYEOF'
-#!/usr/bin/env python3
-
-# Read MIT license from file
-with open('/tmp/mit_license.txt', 'rb') as f:
-    MIT_LICENSE = f.read()
-
-import git_filter_repo as fr
-
-# We need to create the new blob and get its ID
-new_license_blob = fr.Blob(MIT_LICENSE)
-
-def replace_license_in_commits(commit, metadata):
-    """Replace LICENSE file content in all commits"""
-    for change in commit.file_changes:
-        if change.filename == b'LICENSE':
-            # Replace with our new MIT license blob
-            change.blob_id = new_license_blob.original_id
-
-args = fr.FilteringOptions.parse_args(['--force'], error_on_empty=False)
-filter = fr.RepoFilter(args, commit_callback=replace_license_in_commits)
-filter.run()
-PYEOF
-
-chmod +x /tmp/license_replacer.py
-
 # NOTE: intentionally keeping the web/src/app/ee directory
 # for now since there's no clean way to remove it
 echo "=== Removing enterprise directory and licenses from history ==="
@@ -65,10 +38,49 @@ git filter-repo \
   --path web/src/app/ee/LICENSE --invert-paths \
   --force
 
-echo "=== Replacing LICENSE file in all commits ==="
-/tmp/license_replacer.py
+echo "=== Creating blob callback script ==="
+cat > /tmp/license_replacer.py << 'PYEOF'
+#!/usr/bin/env python3
+import sys
 
-echo "=== Checking out working tree ==="
-git clone . ../foss_repo
+# Read MIT license from file
+with open('/tmp/mit_license.txt', 'rb') as f:
+    MIT_LICENSE = f.read()
+
+import git_filter_repo as fr
+
+replaced_count = 0
+
+def replace_license_blob_content(blob, metadata):
+    """Replace LICENSE blob content with MIT license based on content detection"""
+    global replaced_count
+
+    # Check if this blob looks like a license file
+    # We'll replace any blob that contains the old Apache/custom license text
+    if blob.data and len(blob.data) > 100:
+        # Check for license-like content
+        # Unfortunately, we don't have access to the path, so we can't just check that the path
+        # is `LICENSE`.
+        data_lower = blob.data.lower()
+        if (
+            b'portions of this software are licensed as follows' in data_lower and
+            b'all third party components incorporated into the' in data_lower
+        ):
+            # Additional check: make sure it's actually a license file, not source code
+            # License files typically don't have common code patterns
+            if b'def ' not in blob.data and b'class ' not in blob.data and b'import ' not in blob.data[:200]:
+                blob.data = MIT_LICENSE
+                replaced_count += 1
+
+args = fr.FilteringOptions.parse_args(['--force'], error_on_empty=False)
+filter_obj = fr.RepoFilter(args, blob_callback=replace_license_blob_content)
+filter_obj.run()
+
+print(f"Replaced {replaced_count} LICENSE blob(s)", file=sys.stderr)
+PYEOF
+
+echo "=== Replacing LICENSE file in all commits ==="
+chmod +x /tmp/license_replacer.py
+/tmp/license_replacer.py
 
 echo "=== Done building FOSS repo ==="
