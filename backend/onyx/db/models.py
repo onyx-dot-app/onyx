@@ -184,11 +184,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    theme_preference: Mapped[ThemePreference] = mapped_column(
+    theme_preference: Mapped[ThemePreference | None] = mapped_column(
         Enum(ThemePreference, native_enum=False),
-        nullable=False,
-        default=ThemePreference.SYSTEM,
-        server_default=ThemePreference.SYSTEM.value,
+        nullable=True,
+        default=None,
     )
     # personalization fields are exposed via the chat user settings "Personalization" tab
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)

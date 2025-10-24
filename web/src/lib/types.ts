@@ -28,7 +28,7 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
-  theme_preference: ThemePreference;
+  theme_preference: ThemePreference | null;
 }
 
 export interface UserPersonalization {

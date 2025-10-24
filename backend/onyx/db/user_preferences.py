@@ -9,6 +9,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import ThemePreference
 from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
 from onyx.db.models import Memory
@@ -126,7 +127,7 @@ def update_user_default_model(
 
 def update_user_theme_preference(
     user_id: UUID,
-    theme_preference: str,
+    theme_preference: ThemePreference,
     db_session: Session,
 ) -> None:
     """Update user's theme preference setting."""

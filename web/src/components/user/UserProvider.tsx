@@ -113,22 +113,27 @@ export function UserProvider({
   // Use the custom token refresh hook
   useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
 
-  // Low-priority localStorage migration: sync theme to DB if missing
+  // Low-priority localStorage migration: sync theme to DB if not set
   useEffect(() => {
     if (!upToDateUser?.id) return;
 
-    // If user already has theme in DB, skip migration
-    if (upToDateUser.preferences?.theme_preference) return;
+    // Only migrate if user hasn't explicitly set a theme preference yet (null)
+    if (upToDateUser.preferences?.theme_preference !== null) {
+      return;
+    }
 
     // Check localStorage for existing theme
-    const localTheme = localStorage.getItem("theme") as ThemePreference | null;
-    if (!localTheme) return;
+    const localThemeStr = localStorage.getItem("theme");
+    if (!localThemeStr) return;
 
-    // Validate theme value
-    const validThemes = Object.values(ThemePreference);
-    if (!validThemes.includes(localTheme)) return;
+    // Validate theme value before casting
+    const validThemes = Object.values(ThemePreference) as string[];
+    if (!validThemes.includes(localThemeStr)) return;
 
-    // Silently migrate in background (fire and forget)
+    // Now safe to cast to ThemePreference
+    const localTheme = localThemeStr as ThemePreference;
+
+    // Migrate localStorage theme to DB (fire and forget)
     updateUserThemePreference(localTheme).catch(() => {
       // Fail silently - this is low priority
     });
