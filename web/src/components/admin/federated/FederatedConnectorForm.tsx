@@ -497,9 +497,11 @@ export function FederatedConnectorForm({
           <div className="ml-auto flex gap-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button secondary className="flex" leftIcon={SvgSettings}>
-                  Manage
-                </Button>
+                <div>
+                  <Button secondary className="flex" leftIcon={SvgSettings}>
+                    Manage
+                  </Button>
+                </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItemWithTooltip
