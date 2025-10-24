@@ -41,6 +41,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SvgSlash from "@/icons/slash";
 import { SvgProps } from "@/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -109,9 +110,9 @@ function ActionItem({
 
   return (
     <SimpleTooltip tooltip={tool?.description}>
-      <Button
+      <LineItem
         data-testid={`tool-option-${toolName}`}
-        active={isForced}
+        // active={isForced}
         onClick={() => {
           // If no connectors, don't allow forcing the tool
           if (isSearchToolWithNoConnectors) return;
@@ -119,9 +120,9 @@ function ActionItem({
           if (onToggle && disabled) onToggle();
           onForceToggle();
         }}
-        disabled={isSearchToolWithNoConnectors || disabled}
-        leftIcon={Icon}
-        rightIcon={() => (
+        // disabled={isSearchToolWithNoConnectors || disabled}
+        icon={Icon}
+        rightChildren={
           <div className="flex items-center">
             {!isSearchToolWithNoConnectors && (
               <IconButton
@@ -148,13 +149,14 @@ function ActionItem({
                 icon={
                   isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                 }
+                internal
               />
             )}
           </div>
-        )}
+        }
       >
         {label}
-      </Button>
+      </LineItem>
     </SimpleTooltip>
   );
 }
@@ -232,14 +234,14 @@ function MCPServerItem({
   const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
 
   return (
-    <Button
-      className="group flex items-center justify-between mx-1"
-      disabled={allToolsDisabled}
+    <LineItem
+      // className="group flex items-center justify-between mx-1"
+      // disabled={allToolsDisabled}
       onClick={handleClick}
       data-mcp-server-id={server.id}
       data-mcp-server-name={server.name}
-      leftIcon={getServerIcon}
-      rightIcon={({ className }) => (
+      icon={getServerIcon}
+      rightChildren={
         <div className="flex items-center gap-1">
           {showReauthButton && (
             <IconButton
@@ -247,17 +249,14 @@ function MCPServerItem({
               tertiary
               aria-label="Re-authenticate MCP server"
               title="Re-authenticate"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAuthenticate();
-              }}
+              onClick={noProp(onAuthenticate)}
             />
           )}
-          {isAuthenticated && tools.length > 0 && (
+          {/*{isAuthenticated && tools.length > 0 && (
             <SvgChevronRight className={className} />
-          )}
+          )}*/}
         </div>
-      )}
+      }
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <Text
@@ -278,7 +277,7 @@ function MCPServerItem({
             </Text>
           )}
       </div>
-    </Button>
+    </LineItem>
   );
 }
 
@@ -676,7 +675,7 @@ export function ActionToggle({
 
   const mcpFooter = showActiveReauthRow ? (
     <div className="sticky bottom-0 bg-background-neutral-00 border-t border-border z-[1] rounded-b-lg">
-      <Button
+      <LineItem
         role="button"
         tabIndex={0}
         onClick={handleFooterReauthClick}
@@ -686,7 +685,7 @@ export function ActionToggle({
             handleFooterReauthClick();
           }
         }}
-        leftIcon={
+        icon={
           selectedMcpServerData?.isLoading
             ? SimpleLoader
             : ({ className }) => (
@@ -702,12 +701,12 @@ export function ActionToggle({
                 />
               )
         }
-        rightIcon={
-          selectedMcpServerData?.isLoading ? undefined : SvgChevronRight
+        rightChildren={
+          selectedMcpServerData?.isLoading ? undefined : <SvgChevronRight />
         }
       >
         Re-Authenticate
-      </Button>
+      </LineItem>
     </div>
   ) : undefined;
 
