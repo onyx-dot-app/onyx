@@ -825,6 +825,7 @@ def stream_chat_message_objects(
                 persona=persona,
                 llm_override=(new_msg_req.llm_override or chat_session.llm_override),
                 additional_headers=litellm_additional_headers,
+                timeout=None,  # Will use default timeout logic
             )
             yield from _fast_message_stream(
                 answer,
