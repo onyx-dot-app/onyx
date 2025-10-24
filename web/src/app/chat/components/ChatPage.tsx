@@ -876,7 +876,7 @@ export function ChatPage({
                       className={cn(
                         "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
                         showCenteredHero
-                          ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
+                          ? "h-full grid grid-rows-[1fr_auto_1fr]"
                           : "mb-8"
                       )}
                     >
