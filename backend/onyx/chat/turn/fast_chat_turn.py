@@ -18,6 +18,8 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
+from onyx.chat.turn.context_handler.citation import assign_citation_numbers
+from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
 from onyx.chat.turn.infra.session_sink import save_iteration
@@ -46,12 +48,11 @@ def _run_agent_loop(
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
 ) -> None:
-    from onyx.chat.turn.context_handler import assign_citation_numbers
-    from onyx.chat.turn.context_handler import update_task_prompt
-
     # Split messages into three parts for clear tracking
-    chat_history = messages[:-1] if len(messages) > 1 else []
-    current_user_message = messages[-1] if messages else {}
+    # TODO: Think about terminal tool calls like image gen
+    # in multi turn conversations
+    chat_history = messages[:-1]
+    current_user_message = messages[-1]
     agent_turn_messages: list[dict] = []
 
     last_call_is_final = False
@@ -84,16 +85,12 @@ def _run_agent_loop(
 
         # Apply context handlers in order
         # 1. Citation handler assigns citation numbers to documents
-        agent_turn_messages = assign_citation_numbers(
-            chat_history, current_user_message, agent_turn_messages, ctx
-        )
+        agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
 
         # 2. Task prompt handler updates the task prompt
         agent_turn_messages = update_task_prompt(
-            chat_history,
             current_user_message,
             agent_turn_messages,
-            ctx,
             prompt_config,
             ctx.should_cite_documents,
         )

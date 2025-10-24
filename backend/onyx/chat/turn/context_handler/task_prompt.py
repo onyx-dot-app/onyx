@@ -1,15 +1,12 @@
 """Task prompt context handler for updating task prompts in agent messages."""
 
 from onyx.chat.models import PromptConfig
-from onyx.chat.turn.models import ChatTurnContext
 from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 
 
 def update_task_prompt(
-    chat_history: list[dict],
     current_user_message: dict,
     agent_turn_messages: list[dict],
-    ctx: ChatTurnContext,
     prompt_config: PromptConfig,
     should_cite_documents: bool,
 ) -> list[dict]:
@@ -71,17 +68,4 @@ def _extract_user_query(current_user_message: dict) -> str:
     Returns:
         The user query as a string
     """
-    content = current_user_message.get("content", "")
-
-    # Handle different content formats
-    if isinstance(content, str):
-        return content
-    elif isinstance(content, list):
-        # Extract text from content array (common format)
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                return item.get("text", "")
-        # Fallback: join all string items
-        return " ".join(str(item) for item in content if isinstance(item, str))
-    else:
-        return str(content)
+    return current_user_message["content"][0]["text"]

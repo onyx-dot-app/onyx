@@ -7,8 +7,6 @@ from onyx.chat.turn.models import ChatTurnContext
 
 
 def assign_citation_numbers(
-    chat_history: list[dict],
-    current_user_message: dict,
     agent_turn_messages: list[dict],
     ctx: ChatTurnContext,
 ) -> list[dict]:
