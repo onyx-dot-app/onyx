@@ -91,10 +91,10 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
+from onyx.tracing.braintrust_tracing import with_tenant_metadata
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -686,11 +686,8 @@ def clarifier(
                 system_prompt_to_use = assistant_system_prompt
                 user_prompt_to_use = decision_prompt + assistant_task_prompt
 
-            @traced(
-                name="clarifier stream and process",
-                type="llm",
-                metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
-            )
+            @traced(name="clarifier stream and process", type="llm")
+            @with_tenant_metadata
             def stream_and_process() -> BasicSearchProcessedStreamResults:
                 stream = graph_config.tooling.primary_llm.stream(
                     prompt=create_question_prompt(

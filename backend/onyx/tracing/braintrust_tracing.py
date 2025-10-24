@@ -1,4 +1,5 @@
 import os
+from functools import wraps
 from typing import Any
 
 import braintrust
@@ -64,6 +65,17 @@ class TenantContextTracingProcessor(BraintrustTracingProcessor):
             trace.metadata["tenant_id"] = tenant_id
 
         super().on_trace_start(trace)
+
+
+def with_tenant_metadata(f):
+    @wraps(f)
+    def w(*a, **k):
+        braintrust.current_span().log(
+            metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()}
+        )
+        return f(*a, **k)
+
+    return w
 
 
 def setup_braintrust_if_creds_available() -> None:
