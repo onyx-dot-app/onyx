@@ -167,7 +167,7 @@ function FilePickerContents({
   );
 }
 
-interface FilePickerProps {
+export interface FilePickerPopoverProps {
   onPickRecent?: (file: ProjectFile) => void;
   onUnpickRecent?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
@@ -176,14 +176,14 @@ interface FilePickerProps {
   selectedFileIds?: string[];
 }
 
-export default function FilePicker({
+export default function FilePickerPopover({
   onPickRecent,
   onUnpickRecent,
   onFileClick,
   handleUploadChange,
   trigger,
   selectedFileIds,
-}: FilePickerProps) {
+}: FilePickerPopoverProps) {
   const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
@@ -266,11 +266,7 @@ export default function FilePicker({
     <div className={cn("relative")}>
       {popup}
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <div className="relative cursor-pointer flex items-center group rounded-lg text-input-text px-0 h-8">
-            {trigger}
-          </div>
-        </PopoverTrigger>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent align="start" side="bottom">
           <FilePickerContents
             recentFiles={recentFilesSnapshot}

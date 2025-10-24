@@ -79,7 +79,7 @@ import {
   TrashIcon,
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { debounce, values } from "lodash";
+import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
@@ -114,11 +114,9 @@ import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { FormErrorFocus } from "@/components/FormErrorHelpers";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import FilePicker from "@/app/chat/components/files/FilePicker";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgPlusCircle from "@/icons/plus-circle";
 import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
@@ -1171,7 +1169,7 @@ export function AssistantEditor({
                                   )}
                                 </div>
                               )}
-                              <FilePicker
+                              <FilePickerPopover
                                 trigger={
                                   <CreateButton>Add User Files</CreateButton>
                                 }

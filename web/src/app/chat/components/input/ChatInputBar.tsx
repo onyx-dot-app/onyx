@@ -31,7 +31,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgHourglass from "@/icons/hourglass";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgStop from "@/icons/stop";
-import FilePicker from "@/app/chat/components/files/FilePicker";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
@@ -493,7 +493,7 @@ function ChatInputBarInner({
 
         <div className="flex justify-between items-center w-full p-spacing-interline">
           <div className="flex flex-row items-center gap-spacing-inline">
-            <FilePicker
+            <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
                 // Check if file with same ID already exists

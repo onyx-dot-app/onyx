@@ -5,7 +5,7 @@ import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
-import FilePicker from "../files/FilePicker";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -236,7 +236,7 @@ export default function ProjectContextPanel({
               Chats in this project can access these files.
             </Text>
           </div>
-          <FilePicker
+          <FilePickerPopover
             trigger={
               <CreateButton secondary={undefined} tertiary>
                 Add Files
