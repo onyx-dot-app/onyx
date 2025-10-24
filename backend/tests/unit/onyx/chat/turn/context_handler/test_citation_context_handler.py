@@ -31,13 +31,11 @@ def _create_test_document(document_id: str, document_citation_number: int) -> di
 
 
 def _parse_llm_docs_from_messages(messages: list[dict]) -> list[LlmDoc]:
-    tool_message_contents = [
-        msg["content"] for msg in messages if msg.get("role") == "tool"
+    tool_message_outputs = [
+        msg["output"] for msg in messages if msg.get("type") == "function_call_output"
     ]
     return [
-        LlmDoc(**doc)
-        for content in tool_message_contents
-        for doc in json.loads(content)
+        LlmDoc(**doc) for output in tool_message_outputs for doc in json.loads(output)
     ]
 
 
@@ -52,27 +50,21 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
             "role": "user",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call",
+            "type": "function_call",
+            "id": "__fake_id__",
         },
         {
-            "content": json.dumps(
+            "output": json.dumps(
                 [
                     _create_test_document("first", -1),
                     _create_test_document("second", -1),
                 ]
             ),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "call_id": "call",
+            "type": "function_call_output",
         },
     ]
     context = ChatTurnContext(
@@ -92,12 +84,8 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
     )
     assert num_docs_cited == 2
     assert num_tool_calls_cited == 1
-    # Find the tool message and check citation numbers
-    tool_message = next(msg for msg in new_messages if msg.get("role") == "tool")
-    tool_content_raw = json.loads(tool_message["content"])
 
-    # Parse into LlmDoc objects
-    llm_docs = [LlmDoc.model_validate(doc) for doc in tool_content_raw]
+    llm_docs = _parse_llm_docs_from_messages(new_messages)
 
     # Verify citation numbers were assigned correctly
     assert len(llm_docs) == 2
@@ -118,22 +106,16 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
             "role": "user",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call",
+            "type": "function_call",
+            "id": "__fake_id__",
         },
         {
-            "content": json.dumps([{"document_id": "x"}]),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "output": json.dumps([{"document_id": "x"}]),
+            "call_id": "call",
+            "type": "function_call_output",
         },
     ]
     context = ChatTurnContext(
@@ -168,49 +150,37 @@ def test_assign_citation_numbers_previous_tool_calls(
             "role": "user",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call_1",
+            "type": "function_call",
+            "id": "__fake_id_1__",
         },
         {
-            "content": json.dumps(
+            "output": json.dumps(
                 [
                     _create_test_document("first", -1),
                     _create_test_document("second", -1),
                 ]
             ),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "call_id": "call_1",
+            "type": "function_call_output",
         },
         {
             "content": [{"text": "search internally for cheese again", "type": "text"}],
             "role": "user",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call_2",
+            "type": "function_call",
+            "id": "__fake_id_2__",
         },
         {
-            "content": json.dumps([_create_test_document("third", -1)]),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "output": json.dumps([_create_test_document("third", -1)]),
+            "call_id": "call_2",
+            "type": "function_call_output",
         },
     ]
     context = ChatTurnContext(
@@ -256,45 +226,33 @@ def test_assign_citation_numbers_parallel_tool_calls(
             "role": "user",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call_1",
+            "type": "function_call",
+            "id": "__fake_id_1__",
         },
         {
-            "content": json.dumps(
+            "output": json.dumps(
                 [
                     _create_test_document("a", -1),
                     _create_test_document("b", -1),
                 ]
             ),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "call_id": "call_1",
+            "type": "function_call_output",
         },
         {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "function": {
-                        "arguments": '{"queries":["cheese"]}',
-                        "name": "internal_search",
-                    },
-                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
-                    "type": "function",
-                }
-            ],
+            "arguments": '{"queries":["cheese"]}',
+            "name": "internal_search",
+            "call_id": "call_2",
+            "type": "function_call",
+            "id": "__fake_id_2__",
         },
         {
-            "content": json.dumps([_create_test_document("e", -1)]),
-            "role": "tool",
-            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+            "output": json.dumps([_create_test_document("e", -1)]),
+            "call_id": "call_2",
+            "type": "function_call_output",
         },
     ]
     context = ChatTurnContext(

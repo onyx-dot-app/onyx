@@ -23,10 +23,10 @@ def assign_citation_numbers_recent_tool_calls(
     curr_tool_call_idx = 0
     for message in agent_turn_messages:
         new_message = None
-        if message.get("role") == "tool":
+        if message.get("type") == "function_call_output":
             if curr_tool_call_idx >= tool_calls_cited_so_far:
                 try:
-                    content = message["content"]
+                    content = message["output"]
                     raw_list = json.loads(content)
                     llm_docs = [LlmDoc(**doc) for doc in raw_list]
                 except (json.JSONDecodeError, TypeError, ValidationError):
@@ -42,7 +42,7 @@ def assign_citation_numbers_recent_tool_calls(
                             )
                     if updated_citation_number:
                         new_message = message.copy()
-                        new_message["content"] = json.dumps(
+                        new_message["output"] = json.dumps(
                             [doc.model_dump(mode="json") for doc in llm_docs]
                         )
                         num_tool_calls_cited += 1
