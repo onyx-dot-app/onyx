@@ -186,9 +186,10 @@ describe("Input Prompts CRUD Workflow", () => {
       expect(textareas[1]).toHaveValue("Summarize the document.");
     });
 
-    await user.clear(textareas![1]);
+    expect(textareas![1]).toBeDefined();
+    await user.clear(textareas![1]!);
     await user.type(
-      textareas![1],
+      textareas![1]!,
       "Summarize the document and provide key insights."
     );
 

@@ -161,47 +161,35 @@ def web_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
-    Tool for searching the public internet. Useful for up to date information on PUBLIC knowledge.
-    ---
-    ## Decision boundary
-    - You MUST call this tool to discover sources when the request involves:
-      - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
-      - Recommendations, or any query where the specific sources matter.
-      - Verifiable claims, quotes, or citations.
-    - After ANY successful `web_search` call that yields candidate URLs, you MUST call
-      `open_url` on the selected URLs BEFORE answering. Do NOT answer from snippets.
-
-    ## When NOT to use
-    - Casual chat, rewriting/summarizing user-provided text, or translation.
-    - When the user already provided URLs (go straight to `open_url`).
-
-    ## Usage hints
-    - Batch a list of natural-language queries per call.
-    - Prefer searches for distinct intents; then batch-fetch best URLs.
-    - Deduplicate domains/near-duplicates. Prefer recent, authoritative sources.
-
-    ## Args
-    - queries (list[str]): The search queries.
-
-    ## Returns (JSON string)
-    {
-      "results": [
-        {
-          "tag": "short_ref",
-          "title": "...",
-          "link": "https://...",
-          "author": "...",
-          "published_date": "2025-10-01T12:34:56Z"
-          // intentionally NO full content
-        }
-      ]
-    }
+    Tool for searching the public internet.
     """
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
     response = _web_search_core(run_context, queries, search_provider)
     return response.model_dump_json()
+
+
+# TODO: Make a ToolV2 class to encapsulate all of this
+WEB_SEARCH_LONG_DESCRIPTION = """
+### Decision boundary
+- You MUST call this tool to discover sources when the request involves:
+    - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
+    - Recommendations, or any query where the specific sources matter.
+    - Verifiable claims, quotes, or citations.
+- After ANY successful `web_search` call that yields candidate URLs, you MUST call
+    `open_url` on the selected URLs BEFORE answering. Do NOT answer from snippets.
+
+### When NOT to use
+- Casual chat, rewriting/summarizing user-provided text, or translation.
+- When the user already provided URLs (go straight to `open_url`).
+
+### Usage hints
+- Expand the users's query into a broader list of queries.
+- Batch a list of natural-language queries per call.
+- Prefer searches for distinct intents; then batch-fetch best URLs.
+- Deduplicate domains/near-duplicates. Prefer recent, authoritative sources.
+"""
 
 
 @tool_accounting
@@ -278,40 +266,28 @@ def _open_url_core(
 def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -> str:
     """
     Tool for fetching and extracting full content from web pages.
-
-    ---
-    ## Decision boundary
-    - You MUST use this tool before quoting, citing, or relying on page content.
-    - Use it whenever you already have URLs (from the user or from `web_search`).
-    - Do NOT answer questions based on search snippets alone.
-    - After a web_search call, strong bias towards using this tool to investigate further.
-
-    ## When NOT to use
-    - If you do not yet have URLs (search first).
-
-    ## Usage hints
-    - Avoid many tiny calls; batch URLs (1–20) in one request.
-    - Prefer primary, recent, and reputable sources.
-    - If PDFs/long docs appear, still fetch; you may summarize sections explicitly.
-
-    ## Args
-    - urls (List[str]): Absolute URLs to retrieve.
-
-    ## Returns (JSON string)
-    {
-      "results": [
-        {
-          "tag": "short_ref",
-          "title": "...",
-          "link": "https://...",
-          "full_content": "...",
-          "published_date": "2025-10-01T12:34:56Z"
-        }
-      ]
-    }
     """
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
     response = _open_url_core(run_context, urls, search_provider)
     return response.model_dump_json()
+
+
+# TODO: Make a ToolV2 class to encapsulate all of this
+OPEN_URL_LONG_DESCRIPTION = """
+### Decision boundary
+- You MUST use this tool before quoting, citing, or relying on page content.
+- Use it whenever you already have URLs (from the user or from `web_search`).
+- Do NOT answer questions based on search snippets alone.
+- After a web_search call, strong bias towards using this tool to investigate further.
+
+### When NOT to use
+- If you do not yet have URLs (search first).
+
+### Usage hints
+- If you've just called web_search, be generous with the number of URLs you fetch.
+- Avoid many tiny calls; batch URLs in one request.
+- Prefer primary, recent, and reputable sources.
+- If PDFs/long docs appear, still fetch; you may summarize sections explicitly.
+"""

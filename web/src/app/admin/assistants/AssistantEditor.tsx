@@ -84,7 +84,7 @@ import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
 import { SwitchField } from "@/components/ui/switch";
-import { generateIdenticon } from "@/components/assistants/AssistantIcon";
+import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -343,8 +343,10 @@ export function AssistantEditor({
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
+  const connectorsExist = ccPairs.length > 0;
+
   const canShowKnowledgeSource =
-    ccPairs.length > 0 &&
+    connectorsExist &&
     searchTool &&
     !(user?.role === UserRole.BASIC && documentSets.length === 0);
 
@@ -987,70 +989,78 @@ export function AssistantEditor({
 
                 <div className="w-full max-w-4xl">
                   <div className="flex flex-col">
-                    {searchTool && (
-                      <>
-                        <Separator />
-                        <div className="flex gap-x-2 py-2 flex justify-start">
-                          <div>
-                            <div className="flex items-start gap-x-2">
-                              <p className="block font-medium text-sm">
-                                Knowledge
-                              </p>
-                              <div className="flex items-center">
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div
-                                        className={`${
-                                          ccPairs.length === 0
-                                            ? "opacity-70 cursor-not-allowed"
-                                            : ""
+                    <>
+                      <Separator />
+                      <div className="flex gap-x-2 py-2 flex justify-start">
+                        <div>
+                          <div className="flex items-start gap-x-2">
+                            <p className="block font-medium text-sm">
+                              Knowledge
+                            </p>
+                            <div className="flex items-center">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={`${
+                                        !connectorsExist || !searchTool
+                                          ? "opacity-70 cursor-not-allowed"
+                                          : ""
+                                      }`}
+                                    >
+                                      <FastField
+                                        name={`enabled_tools_map.${
+                                          // -1 is a placeholder -- this section
+                                          // should be disabled anyways if no search tool
+                                          searchTool?.id || -1
                                         }`}
                                       >
-                                        <FastField
-                                          name={`enabled_tools_map.${searchTool.id}`}
-                                        >
-                                          {({ form }: any) => (
-                                            <SwitchField
-                                              size="sm"
-                                              onCheckedChange={(
-                                                checked: boolean
-                                              ) => {
-                                                form.setFieldValue(
-                                                  "num_chunks",
-                                                  null
-                                                );
-                                                toggleToolInValues(
-                                                  searchTool.id
-                                                );
-                                              }}
-                                              name={`enabled_tools_map.${searchTool.id}`}
-                                              disabled={ccPairs.length === 0}
-                                            />
-                                          )}
-                                        </FastField>
-                                      </div>
-                                    </TooltipTrigger>
+                                        {({ form }: any) => (
+                                          <SwitchField
+                                            size="sm"
+                                            onCheckedChange={(
+                                              checked: boolean
+                                            ) => {
+                                              form.setFieldValue(
+                                                "num_chunks",
+                                                null
+                                              );
+                                              toggleToolInValues(
+                                                searchTool?.id || -1
+                                              );
+                                            }}
+                                            name={`enabled_tools_map.${
+                                              searchTool?.id || -1
+                                            }`}
+                                            disabled={
+                                              !connectorsExist || !searchTool
+                                            }
+                                          />
+                                        )}
+                                      </FastField>
+                                    </div>
+                                  </TooltipTrigger>
 
-                                    {ccPairs.length === 0 && (
-                                      <TooltipContent side="top" align="center">
-                                        <Text inverted>
-                                          To use the Knowledge Action, you need
-                                          to have at least one Connector
-                                          configured.
-                                        </Text>
-                                      </TooltipContent>
-                                    )}
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
+                                  {!connectorsExist && (
+                                    <TooltipContent side="top" align="center">
+                                      <Text inverted>
+                                        To use Knowledge, you need to have at
+                                        least one Connector configured. You can
+                                        still upload user files to the agent
+                                        below.
+                                      </Text>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                           </div>
                         </div>
-                      </>
-                    )}
+                      </div>
+                    </>
 
-                    {searchTool && values.enabled_tools_map[searchTool.id] && (
+                    {((searchTool && values.enabled_tools_map[searchTool.id]) ||
+                      !connectorsExist) && (
                       <div>
                         {canShowKnowledgeSource && (
                           <>
@@ -1268,7 +1278,7 @@ export function AssistantEditor({
                           )}
 
                         {values.knowledge_source === "team_knowledge" &&
-                          ccPairs.length > 0 && (
+                          connectorsExist && (
                             <>
                               {canShowKnowledgeSource && (
                                 <div className="mt-4">

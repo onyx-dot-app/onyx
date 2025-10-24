@@ -17,7 +17,6 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
-import FixedLogo from "@/components/logo/FixedLogo";
 import Link from "next/link";
 
 function BackToOnyxButton({
@@ -37,10 +36,10 @@ function BackToOnyxButton({
       <div
         style={{ transition: "width 0.30s ease-out" }}
         className={`
-            flex-none 
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
+            flex-none
+            overflow-y-hidden
+            transition-all
+            duration-300
             ease-in-out
             ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
         `}
@@ -135,7 +134,7 @@ export function SharedChatDisplay({
               <div
                 style={{ transition: "width 0.30s ease-out" }}
                 className={`
-                  flex-none 
+                  flex-none
                   fixed
                   right-0
                   z-[1000]
@@ -258,10 +257,10 @@ export function SharedChatDisplay({
                 <div
                   style={{ transition: "width 0.30s ease-out" }}
                   className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          duration-300 
+                          flex-none
+                          overflow-y-hidden
+                          transition-all
+                          duration-300
                           ease-in-out
                           ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
                       `}
@@ -270,7 +269,6 @@ export function SharedChatDisplay({
             </div>
           </div>
 
-          <FixedLogo backgroundToggled={false} />
           <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
         </div>
       </div>

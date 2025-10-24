@@ -62,6 +62,8 @@ import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/chat/interfaces";
 import { SidebarBody } from "@/sections/sidebar/utils";
+import { useUser } from "@/components/user/UserProvider";
+import SvgSettings from "@/icons/settings";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -322,13 +324,24 @@ function AppSidebarInner() {
     [folded, route, searchParams]
   );
 
+  const { isAdmin, isCurator } = useUser();
+
   const settingsButton = useMemo(
     () => (
       <div className="px-spacing-interline">
+        {(isAdmin || isCurator) && (
+          <SidebarTab
+            href="/admin/indexing/status"
+            leftIcon={SvgSettings}
+            folded={folded}
+          >
+            {isAdmin ? "Admin Panel" : "Curator Panel"}
+          </SidebarTab>
+        )}
         <Settings folded={folded} />
       </div>
     ),
-    [folded]
+    [folded, isAdmin, isCurator]
   );
 
   if (!combinedSettings) {

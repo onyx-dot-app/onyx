@@ -166,11 +166,19 @@ class ToolName(str, Enum):
     IMAGE_GENERATION = "generate_image"
 
 
+class GeneratedImage(BaseModel):
+    file_id: str
+    url: str
+    revised_prompt: str
+    shape: str | None = None
+
+
 class ToolResult(BaseModel):
     tool_name: ToolName
 
     queries: list[str] = Field(default_factory=list)
     documents: list[SavedSearchDoc] = Field(default_factory=list)
+    images: list[GeneratedImage] = Field(default_factory=list)
 
 
 class StreamedResponse(BaseModel):

@@ -350,7 +350,7 @@ export default function AdminSidebar({
                 {`Onyx version: ${combinedSettings.webVersion}`}
               </Text>
             )}
-            <Settings removeAdminPanelLink />
+            <Settings />
           </div>
         }
       >

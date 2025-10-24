@@ -11,6 +11,14 @@ export async function loginAs(
   page: Page,
   userType: "admin" | "user" | "admin2"
 ) {
+  // Skip authentication if SKIP_AUTH environment variable is set
+  if (process.env.SKIP_AUTH === "true") {
+    console.log(
+      `[loginAs] Skipping authentication for ${userType} (SKIP_AUTH=true)`
+    );
+    return;
+  }
+
   const { email, password } =
     userType === "admin"
       ? TEST_ADMIN_CREDENTIALS
@@ -38,7 +46,7 @@ export async function loginAs(
     console.log(
       `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
     );
-  } catch (error) {
+  } catch {
     console.log(`[loginAs] Timeout to /chat. Current URL: ${page.url()}`);
 
     // If redirect to /chat doesn't happen, go to /auth/login
@@ -56,7 +64,7 @@ export async function loginAs(
       console.log(
         `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
       );
-    } catch (error) {
+    } catch {
       console.log(
         `[loginAs] Fallback timeout again. Current URL: ${page.url()}`
       );
@@ -104,6 +112,12 @@ const generateRandomCredentials = () => {
 
 // Function to sign up a new random user
 export async function loginAsRandomUser(page: Page) {
+  // Skip authentication if SKIP_AUTH environment variable is set
+  if (process.env.SKIP_AUTH === "true") {
+    console.log("[loginAsRandomUser] Skipping authentication (SKIP_AUTH=true)");
+    return { email: "skipped@local.test", password: "skipped" };
+  }
+
   const { email, password } = generateRandomCredentials();
 
   await page.goto("http://localhost:3000/auth/signup");
@@ -122,7 +136,7 @@ export async function loginAsRandomUser(page: Page) {
     await page.waitForURL("http://localhost:3000/chat?new_team=true");
     // Wait for the page to be fully loaded after refresh
     await page.waitForLoadState("networkidle");
-  } catch (error) {
+  } catch {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
     throw new Error("Failed to sign up and redirect to chat page");
   }
@@ -172,7 +186,7 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
     } else {
       throw new Error("Failed to update user role to admin");
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error inviting admin2 as admin:", error);
     throw error;
   }

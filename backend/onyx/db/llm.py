@@ -79,11 +79,21 @@ def upsert_llm_provider(
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
+    # Filter out empty strings and None values from custom_config to allow
+    # providers like Bedrock to fall back to IAM roles when credentials are not provided
+    custom_config = llm_provider_upsert_request.custom_config
+    if custom_config:
+        custom_config = {
+            k: v for k, v in custom_config.items() if v is not None and v.strip() != ""
+        }
+        # Set to None if the dict is empty after filtering
+        custom_config = custom_config if custom_config else None
+
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
-    existing_llm_provider.custom_config = llm_provider_upsert_request.custom_config
+    existing_llm_provider.custom_config = custom_config
     existing_llm_provider.default_model_name = (
         llm_provider_upsert_request.default_model_name
     )

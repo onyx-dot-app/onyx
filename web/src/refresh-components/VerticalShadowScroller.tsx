@@ -21,7 +21,7 @@ export default function VerticalShadowScroller({
       <div className={cn("flex flex-col flex-1 overflow-y-scroll", className)}>
         {children}
         {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
-        <div className="min-h-[0.5rem]" />
+        <div className="min-h-[1rem]" />
       </div>
 
       {/* Mask Layer */}

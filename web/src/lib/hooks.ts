@@ -987,11 +987,12 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "us.mistral.pixtral-large-2502-v1:0": "Pixtral Large (US)",
 
   // Ollama cloud models
-  "gpt-oss:20b-cloud": "gpt-oss 20B Cloud",
-  "gpt-oss:120b-cloud": "gpt-oss 120B Cloud",
-  "deepseek-v3.1:671b-cloud": "DeepSeek-v3.1 671B Cloud",
-  "kimi-k2:1t": "Kimi K2 1T Cloud",
-  "qwen3-coder:480b-cloud": "Qwen3-Coder 480B Cloud",
+  "gpt-oss:20b": "gpt-oss 20B",
+  "gpt-oss:120b": "gpt-oss 120B",
+  "deepseek-v3.1:671b": "DeepSeek-v3.1 671B",
+  "kimi-k2:1t": "Kimi K2 1T",
+  "qwen3-coder:480b": "Qwen3-Coder 480B",
+  "glm-4.6": "GLM 4.6",
 
   // Ollama models in litellm map (disjoint from ollama's supported model list)
   // https://models.litellm.ai --> provider ollama

@@ -378,6 +378,16 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
+def _add_prefer_header(request: RequestOptions) -> None:
+    """Add Prefer header to work around Microsoft Graph API ampersand bug.
+    See: https://developer.microsoft.com/en-us/graph/known-issues/?search=18185
+    """
+    if not hasattr(request, "headers") or request.headers is None:
+        request.headers = {}
+    # Add header to handle properly encoded ampersands in filters
+    request.headers["Prefer"] = "legacySearch=false"
+
+
 def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
@@ -385,23 +395,25 @@ def _collect_all_teams(
     teams: list[Team] = []
     next_url: str | None = None
 
-    # Only use OData filter if team names don't have special characters
-    # These chars are known to cause OData/URL encoding issues: &'\"?#%+=/\
-    problematic_chars = "&'\"?#%+=/\\"
-    use_filter = requested and not any(
-        c in name for name in requested for c in problematic_chars
-    )
+    # Build OData filter for requested teams
+    # Only escape single quotes for OData syntax - the library handles URL encoding
     filter = None
+    use_filter = bool(requested)
     if use_filter and requested:
-        escaped_names = [name.replace("'", "''") for name in requested]
-        filter = " or ".join(
-            f"displayName eq '{team_name}'" for team_name in escaped_names
-        )
+        filter_parts = []
+        for name in requested:
+            # Escape single quotes for OData syntax (replace ' with '')
+            # The office365 library will handle URL encoding of the entire filter
+            escaped_name = name.replace("'", "''")
+            filter_parts.append(f"displayName eq '{escaped_name}'")
+        filter = " or ".join(filter_parts)
 
     while True:
         try:
             if filter:
                 query = graph_client.teams.get().filter(filter)
+                # Add header to work around Microsoft Graph API ampersand bug
+                query.before_execute(lambda req: _add_prefer_header(request=req))
             else:
                 query = graph_client.teams.get_all(
                     # explicitly needed because of incorrect type definitions provided by the `office365` library

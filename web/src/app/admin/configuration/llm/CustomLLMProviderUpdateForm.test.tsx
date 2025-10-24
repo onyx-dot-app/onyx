@@ -80,7 +80,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     // Set default model (there are 2 inputs with this placeholder - default and fast)
     // We want the first one (Default Model)
     const defaultModelInputs = screen.getAllByPlaceholderText(/e\.g\. gpt-4/i);
-    await user.type(defaultModelInputs[0], "gpt-4");
+    expect(defaultModelInputs[0]).toBeDefined();
+    await user.type(defaultModelInputs[0]!, "gpt-4");
 
     // Submit the form
     const submitButton = screen.getByRole("button", { name: /enable/i });
@@ -157,7 +158,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Set default model (there are 2 inputs with this placeholder - default and fast)
     const defaultModelInputs = screen.getAllByPlaceholderText(/e\.g\. gpt-4/i);
-    await user.type(defaultModelInputs[0], "gpt-4");
+    expect(defaultModelInputs[0]).toBeDefined();
+    await user.type(defaultModelInputs[0]!, "gpt-4");
 
     // Submit the form
     const submitButton = screen.getByRole("button", { name: /enable/i });
@@ -199,12 +201,20 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       default_model_name: "claude-3-opus",
       fast_default_model_name: null,
       model_configurations: [
-        { name: "claude-3-opus", is_visible: true, max_input_tokens: null },
+        {
+          name: "claude-3-opus",
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: null,
+        },
       ],
       custom_config: {},
       is_public: true,
       groups: [],
       deployment_name: null,
+      is_default_provider: false,
+      default_vision_model: null,
+      is_default_vision_provider: null,
     };
 
     // Mock POST /api/admin/llm/test
@@ -311,7 +321,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Set default model (there are 2 inputs with this placeholder - default and fast)
     const defaultModelInputs = screen.getAllByPlaceholderText(/e\.g\. gpt-4/i);
-    await user.type(defaultModelInputs[0], "gpt-4");
+    expect(defaultModelInputs[0]).toBeDefined();
+    await user.type(defaultModelInputs[0]!, "gpt-4");
 
     // Submit
     const submitButton = screen.getByRole("button", { name: /enable/i });
@@ -366,7 +377,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Set default model (there are 2 inputs with this placeholder - default and fast)
     const defaultModelInputs = screen.getAllByPlaceholderText(/e\.g\. gpt-4/i);
-    await user.type(defaultModelInputs[0], "gpt-4");
+    expect(defaultModelInputs[0]).toBeDefined();
+    await user.type(defaultModelInputs[0]!, "gpt-4");
 
     // Submit
     const submitButton = screen.getByRole("button", { name: /enable/i });
@@ -419,7 +431,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     // The custom config "Add New" appears first
     const addNewButtons = screen.getAllByRole("button", { name: /add new/i });
     const customConfigAddButton = addNewButtons[0]; // First "Add New" is for custom config
-    await user.click(customConfigAddButton);
+    expect(customConfigAddButton).toBeDefined();
+    await user.click(customConfigAddButton!);
 
     // Fill in custom config key-value pair
     const customConfigInputs = screen.getAllByRole("textbox");
@@ -442,7 +455,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Set default model (there are 2 inputs with this placeholder - default and fast)
     const defaultModelInputs = screen.getAllByPlaceholderText(/e\.g\. gpt-4/i);
-    await user.type(defaultModelInputs[0], "@cf/meta/llama-2-7b-chat-int8");
+    expect(defaultModelInputs[0]).toBeDefined();
+    await user.type(defaultModelInputs[0]!, "@cf/meta/llama-2-7b-chat-int8");
 
     // Submit
     const submitButton = screen.getByRole("button", { name: /enable/i });

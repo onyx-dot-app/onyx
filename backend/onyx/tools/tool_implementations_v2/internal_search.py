@@ -160,37 +160,7 @@ def internal_search(
     run_context: RunContextWrapper[ChatTurnContext], queries: list[str]
 ) -> str:
     """
-    Tool for searching over internal knowledge base from the user's connectors.
-    The queries will be searched over a vector database where a hybrid search will be performed.
-    Will return a combination of keyword and semantic search results.
-    ---
-    ## Decision boundary
-    - MUST call this tool if the user's query requires internal information, like
-    if it references "we" or "us" or "our" or "internal" or if it references
-    the organization the user works for.
-    - MUST call this tool if the user's query sounds like the name of a specific internal document,
-    like some keyword that could be a document name.
-
-    ## Usage hints
-    - Batch a list of natural-language queries per call.
-    - Generally try searching with some semantic queries and some keyword queries
-    to give the hybrid search the best chance of finding relevant results.
-
-    ## Args
-    - queries (list[str]): The search queries.
-
-    ## Returns (list of LlmDoc objects as string)
-    Each LlmDoc contains:
-    - document_id: Unique document identifier
-    - content: Full document content (combined from all chunks in the section)
-    - blurb: Text excerpt from the document
-    - semantic_identifier: Human-readable document name
-    - source_type: Type of document source (e.g., web, confluence, etc.)
-    - metadata: Additional document metadata
-    - updated_at: When document was last updated
-    - link: Primary URL to the source (may be None). Used for citations.
-    - source_links: Dictionary of URLs to the source
-    - match_highlights: Highlighted matching text snippets
+    Tool for searching over the user's internal knowledge base.
     """
     search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
     if search_pipeline_instance is None:

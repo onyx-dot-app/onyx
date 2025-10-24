@@ -76,6 +76,10 @@ from onyx.server.features.input_prompt.api import (
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.notifications.api import router as notification_router
+from onyx.server.features.oauth_config.api import (
+    admin_router as admin_oauth_config_router,
+)
+from onyx.server.features.oauth_config.api import router as oauth_config_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
@@ -369,6 +373,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
+    include_router_with_global_prefix_prepended(application, oauth_config_router)
+    include_router_with_global_prefix_prepended(application, admin_oauth_config_router)
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, onyx_api_router)
     include_router_with_global_prefix_prepended(application, gpts_router)
