@@ -35,13 +35,17 @@ const getFileExtension = (fileName: string): string => {
   return ext.toUpperCase();
 };
 
-interface RowProps {
+interface FileLineItemProps {
   projectFile: ProjectFile;
   onPickRecent: (file: ProjectFile) => void;
   onFileClick: (file: ProjectFile) => void;
 }
 
-function Row({ projectFile, onPickRecent, onFileClick }: RowProps) {
+function FileLineItem({
+  projectFile,
+  onPickRecent,
+  onFileClick,
+}: FileLineItemProps) {
   const showLoader = useMemo(
     () =>
       String(projectFile.status) === UserFileStatus.PROCESSING ||
@@ -93,7 +97,7 @@ function Row({ projectFile, onPickRecent, onFileClick }: RowProps) {
   );
 }
 
-interface FilePickerContentsProps {
+interface FilePickerPopoverContentsProps {
   recentFiles: ProjectFile[];
   onPickRecent: (file: ProjectFile) => void;
   onFileClick: (file: ProjectFile) => void;
@@ -101,13 +105,13 @@ interface FilePickerContentsProps {
   setShowRecentFiles: (show: boolean) => void;
 }
 
-function FilePickerContents({
+function FilePickerPopoverContents({
   recentFiles,
   onPickRecent,
   onFileClick,
   triggerUploadPicker,
   setShowRecentFiles,
-}: FilePickerContentsProps) {
+}: FilePickerPopoverContentsProps) {
   // These are the "quick" files that we show. Essentially "speed dial", but for files.
   // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
   const hasFiles = recentFiles.length > 0;
@@ -145,7 +149,7 @@ function FilePickerContents({
 
         // Quick access files
         ...quickAccessFiles.map((projectFile) => (
-          <Row
+          <FileLineItem
             key={projectFile.id}
             projectFile={projectFile}
             onPickRecent={onPickRecent}
@@ -268,7 +272,7 @@ export default function FilePickerPopover({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent align="start" side="bottom">
-          <FilePickerContents
+          <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
               onPickRecent && onPickRecent(file);
