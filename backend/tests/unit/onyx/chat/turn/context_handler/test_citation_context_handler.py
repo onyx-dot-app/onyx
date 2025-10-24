@@ -13,6 +13,23 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 
 
+def _create_test_document(document_id: str, document_citation_number: int) -> dict:
+    """Helper to create a test document with minimal boilerplate."""
+    return {
+        "document_id": document_id,
+        "content": "test content",
+        "blurb": "test blurb",
+        "semantic_identifier": "test_semantic_id",
+        "source_type": "linear",
+        "metadata": {"a": "b"},
+        "updated_at": "2025-08-07T01:01:52Z",
+        "link": "https://test.link",
+        "source_links": {"0": "https://test.link"},
+        "match_highlights": ["test content"],
+        "document_citation_number": document_citation_number,
+    }
+
+
 def _parse_llm_docs_from_messages(messages: list[dict]) -> list[LlmDoc]:
     tool_message_contents = [
         msg["content"] for msg in messages if msg.get("role") == "tool"
@@ -50,32 +67,8 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
         {
             "content": json.dumps(
                 [
-                    {
-                        "document_id": "x",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    },
-                    {
-                        "document_id": "x",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    },
+                    _create_test_document("first", -1),
+                    _create_test_document("second", -1),
                 ]
             ),
             "role": "tool",
@@ -190,32 +183,8 @@ def test_assign_citation_numbers_previous_tool_calls(
         {
             "content": json.dumps(
                 [
-                    {
-                        "document_id": "first",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    },
-                    {
-                        "document_id": "second",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    },
+                    _create_test_document("first", -1),
+                    _create_test_document("second", -1),
                 ]
             ),
             "role": "tool",
@@ -239,23 +208,7 @@ def test_assign_citation_numbers_previous_tool_calls(
             ],
         },
         {
-            "content": json.dumps(
-                [
-                    {
-                        "document_id": "third",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    }
-                ]
-            ),
+            "content": json.dumps([_create_test_document("third", -1)]),
             "role": "tool",
             "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
         },
@@ -318,32 +271,8 @@ def test_assign_citation_numbers_parallel_tool_calls(
         {
             "content": json.dumps(
                 [
-                    {
-                        "document_id": "a",
-                        "content": "a",
-                        "blurb": "a",
-                        "semantic_identifier": "d",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "l",
-                        "source_links": {"0": "l"},
-                        "match_highlights": ["a"],
-                        "document_citation_number": -1,
-                    },
-                    {
-                        "document_id": "b",
-                        "content": "a",
-                        "blurb": "b",
-                        "semantic_identifier": "e",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "m",
-                        "source_links": {"0": "m"},
-                        "match_highlights": ["b"],
-                        "document_citation_number": -1,
-                    },
+                    _create_test_document("a", -1),
+                    _create_test_document("b", -1),
                 ]
             ),
             "role": "tool",
@@ -363,23 +292,7 @@ def test_assign_citation_numbers_parallel_tool_calls(
             ],
         },
         {
-            "content": json.dumps(
-                [
-                    {
-                        "document_id": "e",
-                        "content": "b",
-                        "blurb": "b",
-                        "semantic_identifier": "e",
-                        "source_type": "linear",
-                        "metadata": {"a": "b"},
-                        "updated_at": "2025-08-07T01:01:52Z",
-                        "link": "m",
-                        "source_links": {"0": "m"},
-                        "match_highlights": ["b"],
-                        "document_citation_number": -1,
-                    }
-                ]
-            ),
+            "content": json.dumps([_create_test_document("e", -1)]),
             "role": "tool",
             "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
         },
