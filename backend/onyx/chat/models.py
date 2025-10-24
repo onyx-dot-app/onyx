@@ -46,6 +46,7 @@ class LlmDoc(BaseModel):
     link: str | None
     source_links: dict[int, str] | None
     match_highlights: list[str] | None
+    document_citation_number: int | None = None
 
 
 # First chunk of info for streaming QA

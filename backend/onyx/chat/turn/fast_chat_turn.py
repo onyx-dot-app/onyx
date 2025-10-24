@@ -25,7 +25,6 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
-from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -39,27 +38,6 @@ if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
 
 
-def _remove_last_task_prompt_and_insert_new_one(
-    chat_turn_user_message: str,
-    current_messages: list[dict],
-    prompt_config: PromptConfig,
-    ctx: ChatTurnContext,
-) -> list[dict]:
-    new_task_prompt = build_task_prompt_reminders_v2(
-        chat_turn_user_message,
-        prompt_config,
-        use_language_hint=False,
-        should_cite=ctx.should_cite_documents,
-    )
-    for i in range(len(current_messages) - 1, -1, -1):
-        if current_messages[i].get("role") == "user":
-            current_messages.pop(i)
-            break
-    # TODO: Hide low level message parsing behind an abstraction
-    current_messages = current_messages + [{"role": "user", "content": new_task_prompt}]
-    return current_messages
-
-
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[dict],
@@ -68,7 +46,14 @@ def _run_agent_loop(
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
 ) -> None:
-    current_messages: list[dict] = messages
+    from onyx.chat.turn.context_handler import assign_citation_numbers
+    from onyx.chat.turn.context_handler import update_task_prompt
+
+    # Split messages into three parts for clear tracking
+    chat_history = messages[:-1] if len(messages) > 1 else []
+    current_user_message = messages[-1] if messages else {}
+    agent_turn_messages: list[dict] = []
+
     last_call_is_final = False
     agent = Agent(
         name="Assistant",
@@ -77,7 +62,11 @@ def _run_agent_loop(
         model_settings=dependencies.model_settings,
         tool_use_behavior="stop_on_first_tool",
     )
+
     while not last_call_is_final:
+        # Build full context for agent
+        current_messages = chat_history + [current_user_message] + agent_turn_messages
+
         agent_stream: SyncAgentStream = SyncAgentStream(
             agent=agent,
             input=current_messages,
@@ -86,14 +75,29 @@ def _run_agent_loop(
         streamed, tool_call_events = _process_stream(
             agent_stream, chat_session_id, dependencies, ctx
         )
-        current_messages = cast(list[dict], streamed.to_input_list())
-        current_messages = _remove_last_task_prompt_and_insert_new_one(
-            # TODO: Hide low level message parsing behind an abstraction
-            messages[-1]["content"][0]["text"],
-            current_messages,
-            prompt_config,
-            ctx,
+
+        # Extract new messages from this iteration
+        all_messages_after_stream = cast(list[dict], streamed.to_input_list())
+        # The new messages are everything after chat_history + current_user_message
+        previous_message_count = len(chat_history) + 1
+        agent_turn_messages = all_messages_after_stream[previous_message_count:]
+
+        # Apply context handlers in order
+        # 1. Citation handler assigns citation numbers to documents
+        agent_turn_messages = assign_citation_numbers(
+            chat_history, current_user_message, agent_turn_messages, ctx
         )
+
+        # 2. Task prompt handler updates the task prompt
+        agent_turn_messages = update_task_prompt(
+            chat_history,
+            current_user_message,
+            agent_turn_messages,
+            ctx,
+            prompt_config,
+            ctx.should_cite_documents,
+        )
+
         # TODO: Make this configurable on OnyxAgent level
         stopping_tools = ["image_generation"]
         if len(tool_call_events) == 0 or any(

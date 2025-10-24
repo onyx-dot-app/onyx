@@ -71,3 +71,4 @@ class ChatTurnContext:
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
     should_cite_documents: bool = False
+    documents_cited_count: int = 0
