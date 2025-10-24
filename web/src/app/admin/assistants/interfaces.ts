@@ -41,7 +41,7 @@ export interface Persona {
   labels?: PersonaLabel[];
   owner: MinimalUserSnapshot | null;
   users: MinimalUserSnapshot[];
-  groups: number[];
+  groups: PersonaLabel[];
   document_sets: DocumentSet[];
   knowledge_maps: KnowledgeMapAnswer[];
   llm_model_provider_override?: string;
@@ -57,7 +57,7 @@ export interface FullPersona extends Persona {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: File | null;
-  selectedValidators?: Array<{id: string, name: string}>
+  selectedValidators?: Array<{ id: string; name: string }>;
   validators?: APIKey[];
 }
 

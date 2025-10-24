@@ -319,7 +319,7 @@ export function AssistantEditor({
       existingPersona?.users?.filter(
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
-    selectedGroups: existingPersona?.groups ?? [],
+    selectedGroups: existingPersona?.groups?.map((group) => group.id) ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
 
@@ -394,7 +394,7 @@ export function AssistantEditor({
     "/api/users",
     errorHandlingFetcher
   );
-  
+
   const { data: validators } = useSWR<APIKey[]>(
     "/api/validators",
     errorHandlingFetcher
@@ -644,7 +644,9 @@ export function AssistantEditor({
             num_chunks: numChunks,
             user_file_ids: selectedFiles.map((file) => file.id),
             user_folder_ids: selectedFolders.map((folder) => folder.id),
-            validator_ids: values.selectedValidators.map((validator) => String(validator.id)),
+            validator_ids: values.selectedValidators.map((validator) =>
+              String(validator.id)
+            ),
           };
 
           let personaResponse;
@@ -1847,61 +1849,56 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
-                  
-                  <div className="mt-2">
-                            <Label className="mb-2" small>
-                              Выберите валидаторы
-                            </Label>
 
-                  <SearchMultiSelectDropdown
-                    options={[
-                      ...(Array.isArray(validators) ? validators : [])
-                        .filter(
-                          (u: APIKey) =>
-                            !values.selectedValidators?.some(
-                              (su: APIKey) =>
-                                su.id === u.id
-                            )
-                        )?.map((u: APIKey) => ({
-                          name: u.name,
-                          value: u.id,
-                        })),
-                    ]}
-                    onSelect={(
-                      selected: DropdownOption<string | number>
-                    ) => {
-                      const option = selected as {
-                        name: string;
-                        value: string | number;
-                        type: "user" | "group";
-                      };
-                      setFieldValue("selectedValidators", [
-                        ...values.selectedValidators,
-                        { id: option.value, name: option.name },
-                      ]);
-                    }}
-                  />
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {values.selectedValidators?.map(
-                              (user: APIKey) => (
-                                <SourceChip
-                                  key={user.id}
-                                  onRemove={() => {
-                                    setFieldValue(
-                                      "selectedValidators",
-                                      values.selectedValidators?.filter(
-                                        (u: APIKey) =>
-                                          u.id !== user.id
-                                      )
-                                    );
-                                  }}
-                                  title={user.name}
-                                  icon={<UserIcon size={12} />}
-                                />
+                  <div className="mt-2">
+                    <Label className="mb-2" small>
+                      Выберите валидаторы
+                    </Label>
+
+                    <SearchMultiSelectDropdown
+                      options={[
+                        ...(Array.isArray(validators) ? validators : [])
+                          .filter(
+                            (u: APIKey) =>
+                              !values.selectedValidators?.some(
+                                (su: APIKey) => su.id === u.id
                               )
-                            )}
-                          </div>
+                          )
+                          ?.map((u: APIKey) => ({
+                            name: u.name,
+                            value: u.id,
+                          })),
+                      ]}
+                      onSelect={(selected: DropdownOption<string | number>) => {
+                        const option = selected as {
+                          name: string;
+                          value: string | number;
+                          type: "user" | "group";
+                        };
+                        setFieldValue("selectedValidators", [
+                          ...values.selectedValidators,
+                          { id: option.value, name: option.name },
+                        ]);
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {values.selectedValidators?.map((user: APIKey) => (
+                      <SourceChip
+                        key={user.id}
+                        onRemove={() => {
+                          setFieldValue(
+                            "selectedValidators",
+                            values.selectedValidators?.filter(
+                              (u: APIKey) => u.id !== user.id
+                            )
+                          );
+                        }}
+                        title={user.name}
+                        icon={<UserIcon size={12} />}
+                      />
+                    ))}
+                  </div>
                 </>
               )}
 
