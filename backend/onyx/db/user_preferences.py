@@ -124,6 +124,20 @@ def update_user_default_model(
     db_session.commit()
 
 
+def update_user_theme_preference(
+    user_id: UUID,
+    theme_preference: str,
+    db_session: Session,
+) -> None:
+    """Update user's theme preference setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # type: ignore
+        .values(theme_preference=theme_preference)
+    )
+    db_session.commit()
+
+
 def update_user_personalization(
     user_id: UUID,
     *,

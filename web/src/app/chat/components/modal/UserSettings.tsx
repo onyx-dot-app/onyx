@@ -5,6 +5,7 @@ import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
+import { ThemePreference } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -50,6 +51,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
+    updateUserThemePreference,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
@@ -391,6 +393,11 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 onValueChange={(value) => {
                   setSelectedTheme(value);
                   setTheme(value);
+                  updateUserThemePreference(value as ThemePreference).catch(
+                    () => {
+                      // Theme still applied locally even if DB save fails
+                    }
+                  );
                 }}
               >
                 <SelectTrigger className="w-full mt-2">
@@ -398,15 +405,18 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    value="system"
+                    value={ThemePreference.SYSTEM}
                     icon={<Monitor className="h-4 w-4" />}
                   >
                     System
                   </SelectItem>
-                  <SelectItem value="light" icon={<Sun className="h-4 w-4" />}>
+                  <SelectItem
+                    value={ThemePreference.LIGHT}
+                    icon={<Sun className="h-4 w-4" />}
+                  >
                     Light
                   </SelectItem>
-                  <SelectItem icon={<Moon />} value="dark">
+                  <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
                     Dark
                   </SelectItem>
                 </SelectContent>

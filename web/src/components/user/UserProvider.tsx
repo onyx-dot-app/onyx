@@ -1,7 +1,12 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, UserPersonalization, UserRole } from "@/lib/types";
+import {
+  User,
+  UserPersonalization,
+  UserRole,
+  ThemePreference,
+} from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
@@ -26,6 +31,9 @@ interface UserContextType {
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
   updateUserPersonalization: (
     personalization: UserPersonalization
+  ) => Promise<void>;
+  updateUserThemePreference: (
+    themePreference: ThemePreference
   ) => Promise<void>;
 }
 
@@ -104,6 +112,29 @@ export function UserProvider({
 
   // Use the custom token refresh hook
   useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
+
+  // Low-priority localStorage migration: sync theme to DB if missing
+  useEffect(() => {
+    if (!upToDateUser?.id) return;
+
+    // If user already has theme in DB, skip migration
+    if (upToDateUser.preferences?.theme_preference) return;
+
+    // Check localStorage for existing theme
+    const localTheme = localStorage.getItem("theme") as ThemePreference | null;
+    if (!localTheme) return;
+
+    // Validate theme value
+    const validThemes = Object.values(ThemePreference);
+    if (!validThemes.includes(localTheme)) return;
+
+    // Silently migrate in background (fire and forget)
+    updateUserThemePreference(localTheme).catch(() => {
+      // Fail silently - this is low priority
+    });
+    // Only run on initial user load, not when theme_preference updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upToDateUser?.id]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -285,6 +316,41 @@ export function UserProvider({
     }
   };
 
+  const updateUserThemePreference = async (
+    themePreference: ThemePreference
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              theme_preference: themePreference,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/user/theme-preference`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ theme_preference: themePreference }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update theme preference");
+      }
+    } catch (error) {
+      console.error("Error updating theme preference:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -298,6 +364,7 @@ export function UserProvider({
         updateUserShortcuts,
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
+        updateUserThemePreference,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
