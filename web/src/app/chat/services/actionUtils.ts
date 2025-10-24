@@ -46,7 +46,7 @@ const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
 
 export function getIconForAction(
   action: ToolSnapshot
-): (props: SvgProps) => JSX.Element {
+): React.FunctionComponent<SvgProps> {
   if (isSearchTool(action)) return SvgSearch;
   if (isWebSearchTool(action)) return SvgGlobe;
   if (isImageGenerationTool(action)) return SvgImage;

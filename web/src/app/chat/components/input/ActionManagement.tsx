@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  DisableIcon,
-  IconProps,
-  MoreActionsIcon,
-} from "@/components/icons/icons";
+import { MoreActionsIcon } from "@/components/icons/icons";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -12,12 +8,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ToggleList, ToggleListItem } from "@/components/ui/togglelist";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
@@ -35,7 +25,6 @@ import SvgKey from "@/icons/key";
 import SvgLock from "@/icons/lock";
 import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
-import { FiKey, FiLoader } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -46,8 +35,12 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgSliders from "@/icons/sliders";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import SvgSettings from "@/icons/settings";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SvgSlash from "@/icons/slash";
+import { SvgProps } from "@/icons";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -82,7 +75,7 @@ function getConfiguredSources(
 
 interface ActionItemProps {
   tool?: ToolSnapshot;
-  Icon?: (iconProps: IconProps) => JSX.Element;
+  Icon?: React.FunctionComponent<SvgProps>;
   label?: string;
   disabled: boolean;
   isForced: boolean;
@@ -98,12 +91,11 @@ function ActionItem({
   Icon: ProvidedIcon,
   label: providedLabel,
   disabled,
-  isForced,
   onToggle,
+  isForced,
   onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
-  tooltipSide = "left",
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
@@ -116,118 +108,54 @@ function ActionItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            data-testid={`tool-option-${toolName}`}
-            className={cn(
-              "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
-              isForced ? "bg-accent-100 hover:bg-accent-200" : ""
-            )}
-            onClick={() => {
-              // If no connectors, don't allow forcing the tool
-              if (isSearchToolWithNoConnectors) {
-                return;
-              }
-
-              // If disabled, un-disable the tool
-              if (onToggle && disabled) {
-                onToggle();
-              }
-
-              onForceToggle();
-            }}
-          >
-            <div
-              className={cn(
-                "flex items-center gap-2 flex-1",
-                isSearchToolWithNoConnectors || disabled ? "opacity-50" : "",
-                isForced ? "text-action-link-05" : ""
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-[1rem] w-[1rem] stroke-text-04",
-                  isForced ? "text-action-link-05" : "text-text-03"
-                )}
+    <SimpleTooltip tooltip={tool?.description}>
+      <Button
+        data-testid={`tool-option-${toolName}`}
+        active={isForced}
+        onClick={() => {
+          // If no connectors, don't allow forcing the tool
+          if (isSearchToolWithNoConnectors) return;
+          // If disabled, un-disable the tool
+          if (onToggle && disabled) onToggle();
+          onForceToggle();
+        }}
+        disabled={isSearchToolWithNoConnectors || disabled}
+        leftIcon={Icon}
+        rightIcon={() => (
+          <div className="flex items-center">
+            {!isSearchToolWithNoConnectors && (
+              <IconButton
+                onClick={noProp(() => onToggle())}
+                icon={SvgSlash}
+                internal
+                active={disabled}
               />
-              <Text
+            )}
+            {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+              <IconButton
                 className={cn(
-                  "text-sm font-medium select-none",
-                  isSearchToolWithNoConnectors || disabled ? "line-through" : ""
+                  isSearchToolWithNoConnectors &&
+                    "opacity-0 group-hover:opacity-100"
                 )}
-              >
-                {label}
-              </Text>
-            </div>
-            <div className="flex items-center gap-2">
-              {!isSearchToolWithNoConnectors && (
-                <div
-                  className={cn(
-                    "flex items-center gap-2 transition-opacity duration-200",
-                    disabled
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle();
-                  }}
-                >
-                  <DisableIcon
-                    className={cn(
-                      "transition-colors cursor-pointer",
-                      disabled
-                        ? "text-text-05 hover:text-text-03"
-                        : "text-text-03 hover:text-text-05"
-                    )}
-                  />
-                </div>
-              )}
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
-                <div
-                  className={cn(
-                    "flex items-center gap-2 transition-opacity duration-200",
-                    isSearchToolWithNoConnectors
-                      ? "opacity-0 group-hover:opacity-100"
-                      : ""
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isSearchToolWithNoConnectors) {
-                      // Navigate to add connector page
-                      window.location.href = "/admin/add-connector";
-                    } else {
-                      onSourceManagementOpen?.();
-                    }
-                  }}
-                >
-                  {isSearchToolWithNoConnectors ? (
-                    <SvgSettings
-                      width={16}
-                      height={16}
-                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-                    />
-                  ) : (
-                    <SvgChevronRight
-                      width={16}
-                      height={16}
-                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
+                onClick={noProp(() => {
+                  if (isSearchToolWithNoConnectors) {
+                    // Navigate to add connector page
+                    window.location.href = "/admin/add-connector";
+                  } else {
+                    onSourceManagementOpen?.();
+                  }
+                })}
+                icon={
+                  isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                }
+              />
+            )}
           </div>
-        </TooltipTrigger>
-        {tool?.description && (
-          <TooltipContent side={tooltipSide} width="max-w-xs">
-            <Text inverted>{tool.description}</Text>
-          </TooltipContent>
         )}
-      </Tooltip>
-    </TooltipProvider>
+      >
+        {label}
+      </Button>
+    </SimpleTooltip>
   );
 }
 
@@ -277,9 +205,7 @@ function MCPServerItem({
     showAuthTrigger && isAuthenticated && !showInlineReauth;
 
   const getServerIcon = () => {
-    if (isLoading) {
-      return <FiLoader className="animate-spin" />;
-    }
+    if (isLoading) return <SimpleLoader />;
     if (isAuthenticated) {
       return <SvgCheck width={14} height={14} className="stroke-green-500" />;
     }
@@ -287,7 +213,7 @@ function MCPServerItem({
       return <SvgServer width={14} height={14} className="stroke-text-02" />;
     }
     if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
-      return <FiKey width={14} height={14} className="stroke-yellow-500" />;
+      return <SvgKey width={14} height={14} className="stroke-yellow-500" />;
     }
     return <SvgLock width={14} height={14} className="stroke-red-500" />;
   };
@@ -306,23 +232,36 @@ function MCPServerItem({
   const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
 
   return (
-    <div
-      className={cn(
-        "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
-        isActive ? "bg-accent-100 hover:bg-accent-200" : "",
-        allToolsDisabled ? "opacity-60" : ""
-      )}
+    <Button
+      className="group flex items-center justify-between mx-1"
+      disabled={allToolsDisabled}
       onClick={handleClick}
       data-mcp-server-id={server.id}
       data-mcp-server-name={server.name}
+      leftIcon={getServerIcon}
+      rightIcon={({ className }) => (
+        <div className="flex items-center gap-1">
+          {showReauthButton && (
+            <IconButton
+              icon={SvgKey}
+              tertiary
+              aria-label="Re-authenticate MCP server"
+              title="Re-authenticate"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAuthenticate();
+              }}
+            />
+          )}
+          {isAuthenticated && tools.length > 0 && (
+            <SvgChevronRight className={className} />
+          )}
+        </div>
+      )}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        {getServerIcon()}
         <Text
-          className={cn(
-            "text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle",
-            allToolsDisabled ? "line-through" : ""
-          )}
+          className={cn(allToolsDisabled && "line-through")}
           title={server.name}
         >
           {server.name}
@@ -331,7 +270,7 @@ function MCPServerItem({
           tools.length > 0 &&
           enabledTools.length > 0 &&
           tools.length !== enabledTools.length && (
-            <Text className="text-xs whitespace-nowrap ml-1 flex-shrink-0 text-text-04">
+            <Text className="whitespace-nowrap ml-1 flex-shrink-0" text04>
               <Text className="inline text-action-link-05">
                 {enabledTools.length}
               </Text>
@@ -339,28 +278,7 @@ function MCPServerItem({
             </Text>
           )}
       </div>
-      <div className="flex items-center gap-1">
-        {showReauthButton && (
-          <IconButton
-            icon={SvgKey}
-            tertiary
-            aria-label="Re-authenticate MCP server"
-            title="Re-authenticate"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAuthenticate();
-            }}
-          />
-        )}
-        {isAuthenticated && tools.length > 0 && (
-          <SvgChevronRight
-            width={14}
-            height={14}
-            className="transition-transform stroke-text-02"
-          />
-        )}
-      </div>
-    </div>
+    </Button>
   );
 }
 
@@ -752,24 +670,9 @@ export function ActionToggle({
 
   const mcpFooter = showActiveReauthRow ? (
     <div className="sticky bottom-0 bg-background-neutral-00 border-t border-border z-[1] rounded-b-lg">
-      <div
+      <Button
         role="button"
         tabIndex={0}
-        className="
-          w-full
-          flex
-          items-center
-          justify-between
-          px-2
-          py-2.5
-          text-left
-          bg-background-neutral-00
-          hover:bg-background-neutral-01
-          rounded-b-lg
-          hover:rounded-b-lg
-          transition-colors
-          cursor-pointer
-        "
         onClick={handleFooterReauthClick}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -777,33 +680,28 @@ export function ActionToggle({
             handleFooterReauthClick();
           }
         }}
+        leftIcon={
+          selectedMcpServerData?.isLoading
+            ? SimpleLoader
+            : ({ className }) => (
+                <IconButton
+                  icon={SvgKey}
+                  internal
+                  aria-label="Re-Authenticate"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleFooterReauthClick();
+                  }}
+                  className={className}
+                />
+              )
+        }
+        rightIcon={
+          selectedMcpServerData?.isLoading ? undefined : SvgChevronRight
+        }
       >
-        <div className="flex items-center gap-2">
-          {selectedMcpServerData?.isLoading ? (
-            <FiLoader className="animate-spin text-text-02" size={14} />
-          ) : (
-            <IconButton
-              icon={SvgKey}
-              internal
-              aria-label="Re-Authenticate"
-              onClick={(event) => {
-                event.stopPropagation();
-                handleFooterReauthClick();
-              }}
-            />
-          )}
-          <span className="text-sm font-medium text-text-04">
-            Re-Authenticate
-          </span>
-        </div>
-        {!selectedMcpServerData?.isLoading && (
-          <SvgChevronRight
-            width={14}
-            height={14}
-            className="stroke-text-02 transition-colors"
-          />
-        )}
-      </div>
+        Re-Authenticate
+      </Button>
     </div>
   ) : undefined;
 
@@ -827,6 +725,7 @@ export function ActionToggle({
   if (displayTools.length === 0 && mcpServers.length === 0) {
     return null;
   }
+
   return (
     <>
       <Popover
@@ -857,11 +756,11 @@ export function ActionToggle({
           side="top"
           align="start"
           className="
-            w-[15.5rem] 
+            w-[15.5rem]
             max-h-[300px]
             text-text-03
-            text-sm 
-            p-0 
+            text-sm
+            p-0
             overflow-hidden
             flex
             flex-col
@@ -924,9 +823,9 @@ export function ActionToggle({
               />
             ) : filteredTools.length === 0 &&
               filteredMCPServers.length === 0 ? (
-              <div className="text-center py-1 text-text-02">
+              <Text text02 className="text-center py-1">
                 No matching actions found
-              </div>
+              </Text>
             ) : (
               <>
                 {/* Regular Tools */}
@@ -990,7 +889,6 @@ export function ActionToggle({
                     <div className="border-b border-border mx-3.5 mt-2" />
                     <div className="mx-2 mt-2.5 mb-2">
                       <Button
-                        defaulted
                         tertiary
                         href="/admin/actions"
                         leftIcon={MoreActionsIcon}
