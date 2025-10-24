@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -18,7 +19,6 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
-from onyx.chat.turn.context_handler.citation import assign_citation_numbers
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
@@ -53,7 +53,7 @@ def _run_agent_loop(
     # in multi turn conversations
     chat_history = messages[:-1]
     current_user_message = messages[-1]
-    agent_turn_messages: list[dict] = []
+    agent_turn_messages: Sequence[dict] = []
 
     last_call_is_final = False
     agent = Agent(
@@ -77,12 +77,12 @@ def _run_agent_loop(
             agent_stream, chat_session_id, dependencies, ctx
         )
 
-        all_messages_after_stream = cast(list[dict], streamed.to_input_list())
+        all_messages_after_stream = streamed.to_input_list()
         # The new messages are everything after chat_history + current_user_message
         previous_message_count = len(chat_history) + 1
         agent_turn_messages = all_messages_after_stream[previous_message_count:]
 
-        agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
+        # agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
         agent_turn_messages = update_task_prompt(
             current_user_message,
             agent_turn_messages,

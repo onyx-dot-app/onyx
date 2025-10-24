@@ -1,3 +1,4 @@
+import json
 from typing import cast
 
 from agents import function_tool
@@ -21,7 +22,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
+from onyx.tools.tool_implementations.search.search_utils import (
+    section_to_llm_doc_with_empty_doc_citation_number,
+)
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
@@ -90,7 +93,8 @@ def _internal_search_core(
 
                     # Convert InferenceSections to LlmDocs for return value
                     retrieved_llm_docs_for_query = [
-                        section_to_llm_doc(section) for section in retrieved_sections
+                        section_to_llm_doc_with_empty_doc_citation_number(section)
+                        for section in retrieved_sections
                     ]
 
                     run_context.context.run_dependencies.emitter.emit(
@@ -171,4 +175,4 @@ def internal_search(
         run_context, queries, search_pipeline_instance
     )
 
-    return str(retrieved_docs)
+    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])

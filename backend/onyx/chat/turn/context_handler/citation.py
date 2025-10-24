@@ -1,29 +1,16 @@
 """Citation context handler for assigning sequential citation numbers to documents."""
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from onyx.chat.turn.models import ChatTurnContext
 
 
 def assign_citation_numbers(
-    agent_turn_messages: list[dict],
+    agent_turn_messages: Sequence[dict[str, Any]],
     ctx: ChatTurnContext,
-) -> list[dict]:
-    """Assign citation numbers to LlmDoc objects in agent_turn_messages.
-
-    Iterates through tool response messages and assigns sequential citation numbers
-    to any LlmDoc objects that don't already have one.
-
-    Args:
-        chat_history: Messages before the current user message (immutable)
-        current_user_message: The user message just inputted (immutable)
-        agent_turn_messages: Messages generated during this agent turn
-        ctx: Chat turn context for tracking citation count
-
-    Returns:
-        Updated agent_turn_messages with citation numbers assigned
-    """
+) -> Sequence[dict[str, Any]]:
     updated_messages = []
 
     for message in agent_turn_messages:

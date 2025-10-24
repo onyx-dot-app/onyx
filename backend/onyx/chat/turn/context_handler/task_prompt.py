@@ -24,7 +24,7 @@ def update_task_prompt(
         default=-1,
     )
     return [m for i, m in enumerate(agent_turn_messages) if i != last_user_idx] + [
-        {"role": "user", "content": [{"type": "text", "text": new_task_prompt}]}
+        {"type": "text", "text": new_task_prompt}
     ]
 
 
