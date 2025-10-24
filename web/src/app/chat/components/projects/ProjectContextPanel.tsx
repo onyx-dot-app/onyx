@@ -31,6 +31,8 @@ import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/texts/Truncated";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { isUndefined } from "swr/dist/_internal";
 
 export function FileCard({
   file,
@@ -154,7 +156,6 @@ export default function ProjectContextPanel({
     currentProjectId,
     unlinkFileFromProject,
     linkFileToProject,
-    allRecentFiles,
     allCurrentProjectFiles,
     beginUpload,
     projects,
@@ -221,15 +222,11 @@ export default function ProjectContextPanel({
           )}
         </div>
         <Button
+          leftIcon={SvgAddLines}
           onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
           tertiary
         >
-          <div className="flex flex-row gap-1 items-center">
-            <SvgAddLines className="h-4 w-4 stroke-text-03" />
-            <Text text03 mainUiAction className="whitespace-nowrap">
-              Set Instructions
-            </Text>
-          </div>
+          Set Instructions
         </Button>
       </div>
       <div
@@ -248,13 +245,10 @@ export default function ProjectContextPanel({
           </div>
           <FilePicker
             trigger={
-              <LineItem icon={SvgPlusCircle}>
-                <Text text03 mainUiAction>
-                  Add Files
-                </Text>
-              </LineItem>
+              <CreateButton secondary={undefined} tertiary>
+                Add Files
+              </CreateButton>
             }
-            recentFiles={allRecentFiles}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
@@ -266,7 +260,6 @@ export default function ProjectContextPanel({
               await unlinkFileFromProject(currentProjectId, file.id);
             }}
             handleUploadChange={handleUploadChange}
-            className="mr-1.5"
             selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
           />
         </div>
