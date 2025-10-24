@@ -40,7 +40,9 @@
 
   /* BACKDROP BLUR */
   :root {
-    --backdrop-blur-modal: 1px;
+    --backdrop-blur-01: 2px;
+    --backdrop-blur-02: 1px;
+    --backdrop-blur-03: 1px;
   }
 
   * {
@@ -587,7 +589,7 @@ code[class*="language-"] {
 
 /* MASKING */
 
-/* 
+/*
 TODO: add correct class
 .mask-01 {
   background: linear-gradient(to top, var(--mask-01), transparent);

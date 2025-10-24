@@ -278,7 +278,9 @@ module.exports = {
         "padding-section": "var(--padding-section)",
       },
       backdropBlur: {
-        modal: "var(--backdrop-blur-modal)",
+        "01": "var(--backdrop-blur-01)",
+        "02": "var(--backdrop-blur-02)",
+        "03": "var(--backdrop-blur-03)",
       },
       calendar: {
         // Light mode
