@@ -2,7 +2,7 @@
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import { AgentIcon } from "@/refresh-components/AgentIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
 import Text from "@/refresh-components/texts/Text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useMemo } from "react";

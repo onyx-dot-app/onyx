@@ -42,8 +42,9 @@ git filter-repo \
 # locally will need to hard reset if they want to pull in more stuff.
 echo "=== Recreating empty enterprise directory ==="
 mkdir -p backend/ee
+touch backend/ee/__init__.py
 git add backend/ee
-git commit -m "Add empty enterprise directory" --allow-empty
+git commit -m "Add enterprise directory and __init__.py"
 
 echo "=== Creating blob callback script ==="
 cat > /tmp/license_replacer.py << 'PYEOF'
