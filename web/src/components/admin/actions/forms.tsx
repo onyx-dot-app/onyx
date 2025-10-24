@@ -3,6 +3,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect } from "react";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Text from "@/refresh-components/texts/Text";
 
 interface PerUserAuthTemplateConfigProps {
   values: any;
@@ -268,7 +270,7 @@ export function OAuthConfig({
       <div className="space-y-4">
         <div>
           <Label htmlFor="oauth_client_id">Client ID (Optional)</Label>
-          <Input
+          <InputTypeIn
             id="oauth_client_id"
             type="text"
             placeholder="Enter your OAuth client ID"
@@ -285,7 +287,7 @@ export function OAuthConfig({
 
         <div>
           <Label htmlFor="oauth_client_secret">Client Secret (Optional)</Label>
-          <Input
+          <InputTypeIn
             id="oauth_client_secret"
             type="password"
             placeholder="Enter your OAuth client secret"
