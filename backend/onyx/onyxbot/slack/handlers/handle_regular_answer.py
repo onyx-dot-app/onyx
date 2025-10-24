@@ -28,6 +28,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import persona_has_search_tool
 from onyx.db.users import get_user_by_email
+from onyx.llm.models import PreviousMessage
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.handlers.utils import slackify_message_thread
@@ -155,6 +156,28 @@ def handle_regular_answer(
     history_messages = messages[:-1]
     single_message_history = slackify_message_thread(history_messages) or None
 
+    # Convert ThreadMessage objects to PreviousMessage for query rephrasing
+    thread_previous_messages: list[PreviousMessage] | None = None
+    if history_messages:
+        thread_previous_messages = []
+        for thread_msg in history_messages:
+            # Estimate token count (rough approximation: ~2 tokens per word)
+            token_count = len(thread_msg.message.split()) * 2
+            thread_previous_messages.append(
+                PreviousMessage(
+                    message=thread_msg.message,
+                    token_count=token_count,
+                    message_type=thread_msg.role,
+                    files=[],
+                    tool_call=None,
+                    refined_answer_improvement=None,
+                    research_answer_purpose=None,
+                )
+            )
+        logger.info(
+            f"Converted {len(thread_previous_messages)} thread messages for query rephrasing"
+        )
+
     # Always check for ACL permissions, also for documnt sets that were explicitly added
     # to the Bot by the Administrator. (Change relative to earlier behavior where all documents
     # in an attached document set were available to all users in the channel.)
@@ -184,6 +207,7 @@ def handle_regular_answer(
                 db_session=db_session,
                 bypass_acl=bypass_acl,
                 single_message_history=single_message_history,
+                thread_message_history=thread_previous_messages,
             )
             answer = gather_stream(packets)
 
