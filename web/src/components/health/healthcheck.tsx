@@ -11,14 +11,22 @@ import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "../ui/button";
 import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuthType } from "@/lib/hooks";
 export const HealthCheckBanner = () => {
   const router = useRouter();
-  const { error } = useSWR("/api/health", errorHandlingFetcher);
+  const { error: healthError } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
   const [showLoggedOutModal, setShowLoggedOutModal] = useState(false);
   const pathname = usePathname();
   const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
+  const authType = useAuthType();
+  const authTypeRef = useRef(authType);
+  const hasHandledSessionRef = useRef(false);
+
+  useEffect(() => {
+    authTypeRef.current = authType;
+  }, [authType]);
 
   // Reduce revalidation frequency with dedicated SWR config
   const {
@@ -30,17 +38,6 @@ export const HealthCheckBanner = () => {
     revalidateOnReconnect: false,
     dedupingInterval: 30000, // 30 seconds
   });
-
-  // Handle 403 errors from the /api/me endpoint
-  useEffect(() => {
-    if (userError && userError.status === 403) {
-      logout().then(() => {
-        if (!pathname?.includes("/auth")) {
-          setShowLoggedOutModal(true);
-        }
-      });
-    }
-  }, [userError, pathname]);
 
   // Function to handle the "Log in" button click
   const handleLogin = () => {
@@ -60,13 +57,9 @@ export const HealthCheckBanner = () => {
       const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
-
-        if (!pathname?.includes("/auth")) {
-          setShowLoggedOutModal(true);
-        }
       }, timeUntilExpire);
     },
-    [pathname]
+    []
   );
 
   // Clean up any timeouts/intervals when component unmounts
@@ -180,6 +173,60 @@ export const HealthCheckBanner = () => {
     }
   }, [user, setupExpirationTimeout, mutateUser]);
 
+  const redirectToLogin = useCallback(() => {
+    const basePath = "/auth/login";
+
+    if (typeof window === "undefined") {
+      router.replace(
+        `${basePath}?disableAutoRedirect=true&sessionExpired=true`
+      );
+      return;
+    }
+
+    const loginUrl = new URL(basePath, window.location.origin);
+    loginUrl.searchParams.set("disableAutoRedirect", "true");
+    loginUrl.searchParams.set("sessionExpired", "true");
+
+    const nextPath =
+      window.location.pathname + window.location.search + window.location.hash;
+    if (nextPath) {
+      loginUrl.searchParams.set("next", nextPath);
+    }
+
+    router.replace(`${loginUrl.pathname}${loginUrl.search}`);
+  }, [router]);
+
+  useEffect(() => {
+    const forbidden =
+      (userError && userError.status === 403) ||
+      healthError instanceof RedirectError;
+    const shouldHandle = !pathname?.includes("/auth") && (forbidden || expired);
+
+    if (!shouldHandle || hasHandledSessionRef.current) {
+      return;
+    }
+
+    hasHandledSessionRef.current = true;
+
+    const finalize = () => {
+      if (authTypeRef.current === "saml") {
+        redirectToLogin();
+      } else {
+        setShowLoggedOutModal(true);
+      }
+    };
+
+    if (forbidden) {
+      logout()
+        .catch((error) => {
+          console.error("Error logging out after session issue:", error);
+        })
+        .finally(finalize);
+    } else {
+      finalize();
+    }
+  }, [userError, healthError, expired, pathname, redirectToLogin]);
+
   // Logged out modal
   if (showLoggedOutModal) {
     return (
@@ -200,14 +247,11 @@ export const HealthCheckBanner = () => {
     );
   }
 
-  if (!error && !expired) {
+  if (!healthError && !expired) {
     return null;
   }
 
-  if (error instanceof RedirectError || expired) {
-    if (!pathname?.includes("/auth")) {
-      setShowLoggedOutModal(true);
-    }
+  if (healthError instanceof RedirectError || expired) {
     return null;
   } else {
     return (
