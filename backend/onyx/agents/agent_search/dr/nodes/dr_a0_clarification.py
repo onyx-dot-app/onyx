@@ -689,7 +689,7 @@ def clarifier(
             @traced(
                 name="clarifier stream and process",
                 type="llm",
-                metadata=lambda: {"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
+                metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
             )
             def stream_and_process() -> BasicSearchProcessedStreamResults:
                 stream = graph_config.tooling.primary_llm.stream(

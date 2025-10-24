@@ -32,7 +32,7 @@ JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 @traced(
     name="stream llm",
     type="llm",
-    metadata=lambda: {"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
+    metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
 )
 def stream_llm_answer(
     llm: LLM,

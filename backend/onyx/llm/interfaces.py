@@ -91,7 +91,7 @@ class LLM(abc.ABC):
     @traced(
         name="invoke llm",
         type="llm",
-        metadata=lambda: {"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
+        metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
     )
     def invoke(
         self,
