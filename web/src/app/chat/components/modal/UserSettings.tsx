@@ -92,6 +92,13 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     }
   }, [defaultModel, currentDefaultModel]);
 
+  // Sync selectedTheme with current theme from next-themes
+  useEffect(() => {
+    if (theme) {
+      setSelectedTheme(theme);
+    }
+  }, [theme]);
+
   // Use currentDefaultModel for display, falling back to defaultModel
   const displayModel = currentDefaultModel ?? defaultModel;
 

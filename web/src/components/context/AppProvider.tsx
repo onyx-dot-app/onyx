@@ -10,6 +10,7 @@ import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { AgentsProvider } from "@/refresh-components/contexts/AgentsContext";
 import { AppSidebarProvider } from "@/refresh-components/contexts/AppSidebarContext";
+import { ThemeSync } from "@/components/theme/ThemeSync";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -42,6 +43,7 @@ export default function AppProvider({
               pinnedAgentIds={user?.preferences.pinned_assistants || []}
             >
               <AppSidebarProvider folded={!!folded}>
+                <ThemeSync />
                 {children}
               </AppSidebarProvider>
             </AgentsProvider>

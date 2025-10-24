@@ -113,34 +113,6 @@ export function UserProvider({
   // Use the custom token refresh hook
   useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
 
-  // Low-priority localStorage migration: sync theme to DB if not set
-  useEffect(() => {
-    if (!upToDateUser?.id) return;
-
-    // Only migrate if user hasn't explicitly set a theme preference yet (null)
-    if (upToDateUser.preferences?.theme_preference !== null) {
-      return;
-    }
-
-    // Check localStorage for existing theme
-    const localThemeStr = localStorage.getItem("theme");
-    if (!localThemeStr) return;
-
-    // Validate theme value before casting
-    const validThemes = Object.values(ThemePreference) as string[];
-    if (!validThemes.includes(localThemeStr)) return;
-
-    // Now safe to cast to ThemePreference
-    const localTheme = localThemeStr as ThemePreference;
-
-    // Migrate localStorage theme to DB (fire and forget)
-    updateUserThemePreference(localTheme).catch(() => {
-      // Fail silently - this is low priority
-    });
-    // Only run on initial user load, not when theme_preference updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upToDateUser?.id]);
-
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {
