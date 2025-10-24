@@ -2,9 +2,14 @@ import useSWR from "swr";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
-export function useLLMProviders() {
+export function useLLMProviders(personaId?: number) {
+  const url =
+    personaId !== undefined
+      ? `/api/llm/persona/${personaId}/providers`
+      : "/api/llm/provider";
+
   const { data, error, mutate } = useSWR<LLMProviderDescriptor[]>(
-    "/api/llm/provider",
+    url,
     errorHandlingFetcher
   );
 

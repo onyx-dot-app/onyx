@@ -31,6 +31,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import add_chats_to_session_from_slack_thread
 from onyx.db.chat import create_chat_session
@@ -568,9 +569,16 @@ def get_max_document_tokens(
     except ValueError:
         raise HTTPException(status_code=404, detail="Persona not found")
 
+    # For anonymous users, we need a User object to compute max tokens
+    # If user is None, we cannot compute persona-specific max tokens
+    if user is None:
+        # Return a conservative default for anonymous users
+        return MaxSelectedDocumentTokens(max_tokens=GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
+
     return MaxSelectedDocumentTokens(
         max_tokens=compute_max_document_tokens_for_persona(
             persona=persona,
+            user=user,
         ),
     )
 
@@ -586,10 +594,16 @@ def get_available_context_tokens_for_session(
     db_session: Session = Depends(get_session),
 ) -> AvailableContextTokensResponse:
     """Return available context tokens for a chat session based on its persona."""
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to access LLM provider information",
+        )
+
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=session_id,
-            user_id=user.id if user is not None else None,
+            user_id=user.id,
             db_session=db_session,
             is_shared=False,
             include_deleted=False,
@@ -602,6 +616,7 @@ def get_available_context_tokens_for_session(
 
     available = compute_max_document_tokens_for_persona(
         persona=chat_session.persona,
+        user=user,
     )
 
     return AvailableContextTokensResponse(available_tokens=available)
@@ -632,9 +647,15 @@ class ChatSeedResponse(BaseModel):
 def seed_chat(
     chat_seed_request: ChatSeedRequest,
     # NOTE: realistically, this will be an API key not an actual user
-    _: User | None = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSeedResponse:
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to seed chat sessions",
+        )
+
     try:
         new_chat_session = create_chat_session(
             db_session=db_session,
@@ -652,7 +673,10 @@ def seed_chat(
         root_message = get_or_create_root_message(
             chat_session_id=new_chat_session.id, db_session=db_session
         )
-        llm, fast_llm = get_llms_for_persona(persona=new_chat_session.persona)
+        llm, _fast_llm = get_llms_for_persona(
+            persona=new_chat_session.persona,
+            user=user,
+        )
 
         tokenizer = get_tokenizer(
             model_name=llm.config.model_name,

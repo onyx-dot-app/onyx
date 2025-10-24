@@ -11,6 +11,7 @@ import LLMPopover from "@/refresh-components/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
@@ -207,12 +208,32 @@ function ChatInputBarInner({
   );
 
   const {
-    llmProviders,
+    llmProviders: contextLlmProviders,
     inputPrompts,
     ccPairs,
     availableSources,
     documentSets,
   } = useChatContext();
+
+  // Client-side refetch of LLM providers filtered by selected assistant
+  // This ensures the model selector only shows models the assistant can access
+  const {
+    llmProviders: personaFilteredProviders,
+    isLoading: isLoadingPersonaProviders,
+  } = useLLMProviders(selectedAssistant?.id);
+
+  // Use persona-filtered providers when:
+  // 1. We have a selected assistant AND
+  // 2. The persona-filtered providers have loaded AND
+  // 3. We actually got providers back (not empty array which could mean no access)
+  // Otherwise use the context providers (from server-side fetch)
+  const llmProviders =
+    selectedAssistant?.id &&
+    !isLoadingPersonaProviders &&
+    personaFilteredProviders.length > 0
+      ? personaFilteredProviders
+      : contextLlmProviders;
+
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
@@ -583,6 +604,7 @@ function ChatInputBarInner({
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
+                llmProviders={llmProviders}
               />
             </div>
             <IconButton

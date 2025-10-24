@@ -420,10 +420,10 @@ def stream_chat_message_objects(
             raise RuntimeError(
                 "Must specify a set of documents for chat or specify search options"
             )
-
         try:
             llm, fast_llm = get_llms_for_persona(
                 persona=persona,
+                user=user,
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
@@ -534,6 +534,11 @@ def stream_chat_message_objects(
         # Load in user files into memory and create search tool override kwargs if needed
         # if we have enough tokens, we don't need to use search
         # we can just pass them into the prompt directly
+        if (user_file_ids or chat_session.project_id) and user is None:
+            raise ValueError(
+                "User is required when processing user files or project files for LLM provider access control"
+            )
+
         (
             in_memory_user_files,
             user_file_models,
@@ -544,7 +549,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             persona=persona,
             actual_user_input=message_text,
-            user_id=user_id,
+            user=user,
         )
         if not search_tool_override_kwargs_for_user_files:
             latest_query_files.extend(in_memory_user_files)
@@ -801,6 +806,7 @@ def stream_chat_message_objects(
                 or get_main_llm_from_tuple(
                     get_llms_for_persona(
                         persona=persona,
+                        user=user,
                         llm_override=(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),

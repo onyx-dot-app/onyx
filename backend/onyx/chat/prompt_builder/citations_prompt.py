@@ -6,6 +6,7 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
+from onyx.db.models import User
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.factory import get_llms_for_persona
@@ -88,12 +89,15 @@ def compute_max_document_tokens(
 
 def compute_max_document_tokens_for_persona(
     persona: Persona,
+    user: User | None,
     actual_user_input: str | None = None,
 ) -> int:
     # Use the persona directly since prompts are now embedded
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(persona),
-        llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
+        llm_config=get_main_llm_from_tuple(
+            get_llms_for_persona(persona=persona, user=user)
+        ).config,
         actual_user_input=actual_user_input,
     )
 

@@ -18,6 +18,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
@@ -212,8 +213,22 @@ export function ChatPage({
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
+  // Fetch persona-filtered providers for the llmManager
+  const {
+    llmProviders: personaFilteredProviders,
+    isLoading: isLoadingPersonaProviders,
+  } = useLLMProviders(liveAssistant?.id);
+
+  // Use persona-filtered providers when loaded and not empty, otherwise use context providers
+  const llmManagerProviders =
+    liveAssistant?.id &&
+    !isLoadingPersonaProviders &&
+    personaFilteredProviders.length > 0
+      ? personaFilteredProviders
+      : llmProviders;
+
   const llmManager = useLlmManager(
-    llmProviders,
+    llmManagerProviders,
     selectedChatSession,
     liveAssistant
   );

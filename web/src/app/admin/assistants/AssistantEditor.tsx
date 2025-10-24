@@ -1368,7 +1368,7 @@ export function AssistantEditor({
                                 <BooleanFormField
                                   name={`enabled_tools_map.${imageGenerationTool.id}`}
                                   label={imageGenerationTool.display_name}
-                                  subtext="Generate and manipulate images using AI-powered tools"
+                                  subtext="Generate and manipulate images using AI-powered tools. If selected, only models that support image generation will be displayed."
                                   disabled={!currentLLMSupportsImageOutput}
                                   disabledTooltip={
                                     !currentLLMSupportsImageOutput
