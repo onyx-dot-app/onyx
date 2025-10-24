@@ -45,14 +45,6 @@ services:
         max-file: "6"
     volumes:
       - api_server_logs:/var/log
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '512M'
-        reservations:
-          cpus: '0.1'
-          memory: '256M'
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -108,14 +100,6 @@ services:
     # volumes:
     #   # Maps to the CA_CERT_PATH environment variable in the Dockerfile
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '512M'
-        reservations:
-          cpus: '0.1'
-          memory: '256M'
 
   telegram_bot:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -154,14 +138,6 @@ services:
         max-file: "6"
     volumes:
       - telegram_bot_logs:/var/log
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
-          memory: '256M'
-        reservations:
-          cpus: '0.05'
-          memory: '128M'
 
   web_server:
     image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
@@ -192,14 +168,6 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
-          memory: '256M'
-        reservations:
-          cpus: '0.05'
-          memory: '128M'
 
   relational_db:
     image: postgres:15.2-alpine
@@ -216,14 +184,6 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '512M'
-        reservations:
-          cpus: '0.1'
-          memory: '256M'
 
   inference_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
@@ -252,15 +212,7 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: '2G'
-        reservations:
-          cpus: '0.2'
-          memory: '1G'
-
+  
   indexing_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
@@ -290,14 +242,6 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '1G'
-        reservations:
-          cpus: '0.1'
-          memory: '512M'
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
@@ -310,14 +254,6 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '1G'
-        reservations:
-          cpus: '0.1'
-          memory: '512M'
 
   nginx:
     image: nginx:1.23.4-alpine
@@ -353,14 +289,6 @@ services:
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
     env_file:
       - .env.nginx
-    deploy:
-      resources:
-        limits:
-          cpus: '0.2'
-          memory: '128M'
-        reservations:
-          cpus: '0.05'
-          memory: '64M'
 
   # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
   certbot:
@@ -375,14 +303,6 @@ services:
         max-size: "50m"
         max-file: "6"
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: '64M'
-        reservations:
-          cpus: '0.02'
-          memory: '32M'
 
   cache:
     image: eqalpha/keydb
@@ -395,15 +315,6 @@ services:
       timeout: 10s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
-          memory: '256M'
-        reservations:
-          cpus: '0.05'
-          memory: '128M'
-
 
   minio:
     image: minio/minio:latest
@@ -422,14 +333,6 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
-          memory: '256M'
-        reservations:
-          cpus: '0.05'
-          memory: '128M'
 
   langflow:
     build: .
@@ -463,27 +366,11 @@ services:
       options:
         max-size: "200m"
         max-file: "3"  
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '1G'
-        reservations:
-          cpus: '0.1'
-          memory: '512M'
-
+  
   unoconv:
     image: ghcr.io/unoconv/unoserver-docker
     volumes:
       - /tmp/downloads:/data
-    deploy:
-      resources:
-        limits:
-          cpus: '0.2'
-          memory: '128M'
-        reservations:
-          cpus: '0.05'
-          memory: '64M'
 
 
   flowise:
@@ -520,14 +407,6 @@ services:
       - REACT_APP_FLOWISE_URL=${REACT_APP_FLOWISE_URL:-https://duc-smartsearch.ru:444/}
     volumes:
       - ~/.flowise:/root/.flowise
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: '1G'
-        reservations:
-          cpus: '0.1'
-          memory: '512M'
 
 volumes:
   db_volume:
