@@ -506,8 +506,8 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div className="flex justify-between items-center w-full p-spacing-inline">
-          <div className="flex flex-row items-center gap-spacing-inline">
+        <div className="flex justify-between items-center w-full p-1">
+          <div className="flex flex-row items-center gap-1">
             <FilePicker
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
