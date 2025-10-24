@@ -38,6 +38,11 @@
     --width-outer-shell: 90rem;
   }
 
+  /* BACKDROP BLUR */
+  :root {
+    --backdrop-blur-modal: 1px;
+  }
+
   * {
     @apply border-border;
   }
