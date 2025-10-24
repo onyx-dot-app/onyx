@@ -30,6 +30,16 @@ def _create_test_document(document_id: str, document_citation_number: int) -> di
     }
 
 
+def _create_dummy_function_call() -> dict:
+    return {
+        "arguments": '{"queries":["cheese"]}',
+        "name": "internal_search",
+        "call_id": "call",
+        "type": "function_call",
+        "id": "__fake_id__",
+    }
+
+
 def _parse_llm_docs_from_messages(messages: list[dict]) -> list[LlmDoc]:
     tool_message_outputs = [
         msg["output"] for msg in messages if msg.get("type") == "function_call_output"
@@ -49,13 +59,7 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
             "content": [{"text": "search internally for cheese", "type": "text"}],
             "role": "user",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call",
-            "type": "function_call",
-            "id": "__fake_id__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps(
                 [
@@ -105,13 +109,7 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
             "content": [{"text": "search internally for cheese", "type": "text"}],
             "role": "user",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call",
-            "type": "function_call",
-            "id": "__fake_id__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps([{"document_id": "x"}]),
             "call_id": "call",
@@ -149,13 +147,7 @@ def test_assign_citation_numbers_previous_tool_calls(
             "content": [{"text": "search internally for cheese", "type": "text"}],
             "role": "user",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call_1",
-            "type": "function_call",
-            "id": "__fake_id_1__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps(
                 [
@@ -170,13 +162,7 @@ def test_assign_citation_numbers_previous_tool_calls(
             "content": [{"text": "search internally for cheese again", "type": "text"}],
             "role": "user",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call_2",
-            "type": "function_call",
-            "id": "__fake_id_2__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps([_create_test_document("third", -1)]),
             "call_id": "call_2",
@@ -225,13 +211,7 @@ def test_assign_citation_numbers_parallel_tool_calls(
             "content": [{"text": "search internally for cheese", "type": "text"}],
             "role": "user",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call_1",
-            "type": "function_call",
-            "id": "__fake_id_1__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps(
                 [
@@ -242,13 +222,7 @@ def test_assign_citation_numbers_parallel_tool_calls(
             "call_id": "call_1",
             "type": "function_call_output",
         },
-        {
-            "arguments": '{"queries":["cheese"]}',
-            "name": "internal_search",
-            "call_id": "call_2",
-            "type": "function_call",
-            "id": "__fake_id_2__",
-        },
+        _create_dummy_function_call(),
         {
             "output": json.dumps([_create_test_document("e", -1)]),
             "call_id": "call_2",
