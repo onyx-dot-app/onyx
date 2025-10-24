@@ -77,17 +77,12 @@ def _run_agent_loop(
             agent_stream, chat_session_id, dependencies, ctx
         )
 
-        # Extract new messages from this iteration
         all_messages_after_stream = cast(list[dict], streamed.to_input_list())
         # The new messages are everything after chat_history + current_user_message
         previous_message_count = len(chat_history) + 1
         agent_turn_messages = all_messages_after_stream[previous_message_count:]
 
-        # Apply context handlers in order
-        # 1. Citation handler assigns citation numbers to documents
         agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
-
-        # 2. Task prompt handler updates the task prompt
         agent_turn_messages = update_task_prompt(
             current_user_message,
             agent_turn_messages,
