@@ -3,7 +3,6 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
@@ -20,6 +19,7 @@ import { isImageExtension } from "@/app/chat/components/files/files_utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -186,7 +186,7 @@ export default function UserFilesModalContent({
                       UserFileStatus.UPLOADING ||
                     String((f as ProjectFile).status) ===
                       UserFileStatus.DELETING ? (
-                      <Loader2 className="h-5 w-5 text-text-02 animate-spin" />
+                      <SimpleLoader />
                     ) : (
                       <>
                         {onPickRecent && selectedIds.has(f.id) ? (
