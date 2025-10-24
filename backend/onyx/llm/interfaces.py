@@ -12,6 +12,7 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 logger = setup_logger()
@@ -87,7 +88,11 @@ class LLM(abc.ABC):
         if LOG_ONYX_MODEL_INTERACTIONS:
             log_prompt(prompt)
 
-    @traced(name="invoke llm", type="llm")
+    @traced(
+        name="invoke llm",
+        type="llm",
+        metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
+    )
     def invoke(
         self,
         prompt: LanguageModelInput,

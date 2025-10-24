@@ -34,6 +34,7 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
@@ -141,7 +142,7 @@ def _fast_chat_turn_core(
         message_id=message_id,
         research_type=research_type,
     )
-    with trace("fast_chat_turn"):
+    with trace("fast_chat_turn", metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()}):
         _run_agent_loop(
             messages=messages,
             dependencies=dependencies,
