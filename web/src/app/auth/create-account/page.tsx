@@ -1,6 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import SvgImport from "@/icons/import";
 import { REGISTRATION_URL } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
 import Link from "next/link";
@@ -21,7 +22,11 @@ export default function Page() {
           <li>Create a new Onyx team</li>
         </ul>
         <div className="flex justify-center">
-          <Button href={`${REGISTRATION_URL}/register`} className="w-full">
+          <Button
+            href={`${REGISTRATION_URL}/register`}
+            className="w-full"
+            leftIcon={SvgImport}
+          >
             Create New Organization
           </Button>
         </div>
