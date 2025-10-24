@@ -12,7 +12,10 @@ from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.guardrails.core.schemas_validator import ValidatorResponse
 from onyx.server.features.tool.models import ToolSnapshot
-from onyx.server.models import MinimalUserSnapshot
+from onyx.server.models import (
+    MinimalUserSnapshot,
+    MinimalUserGroupSnapshot,
+)
 from onyx.utils.logger import setup_logger
 
 
@@ -112,7 +115,7 @@ class PersonaSnapshot(BaseModel):
     labels: list["PersonaLabelSnapshot"] = Field(default_factory=list)
     owner: MinimalUserSnapshot | None = None
     users: list[MinimalUserSnapshot] = Field(default_factory=list)
-    groups: list[int] = Field(default_factory=list)
+    groups: list[MinimalUserGroupSnapshot] = Field(default_factory=list)
     document_sets: list[DocumentSet] = Field(default_factory=list)
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
@@ -149,7 +152,11 @@ class PersonaSnapshot(BaseModel):
                 MinimalUserSnapshot(id=user.id, email=user.email)
                 for user in persona.users
             ],
-            groups=[user_group.id for user_group in persona.groups],
+            # groups=[user_group.id for user_group in persona.groups],
+            groups=[
+                MinimalUserGroupSnapshot(id=user_group.id, name=user_group.name)
+                for user_group in persona.groups
+            ],
             document_sets=[
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
@@ -202,6 +209,14 @@ class FullPersonaSnapshot(PersonaSnapshot):
             starter_messages=persona.starter_messages,
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            users=[
+                MinimalUserSnapshot(id=user.id, email=user.email)
+                for user in persona.users
+            ],
+            groups=[
+                MinimalUserGroupSnapshot(id=user_group.id, name=user_group.name)
+                for user_group in persona.groups
+            ],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user
