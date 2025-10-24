@@ -79,6 +79,7 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
+import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -895,6 +896,11 @@ export function ChatPage({
                             setPresentingDocument={setPresentingDocument}
                           />
                         )}
+
+                        <UnconfiguredLlmProviderText
+                          showConfigureAPIKey={handleShowApiKeyModal}
+                        />
+
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -903,7 +909,6 @@ export function ChatPage({
                           llmManager={llmManager}
                           removeDocs={() => setSelectedDocuments([])}
                           retrievalEnabled={retrievalEnabled}
-                          showConfigureAPIKey={handleShowApiKeyModal}
                           selectedDocuments={selectedDocuments}
                           message={message}
                           setMessage={setMessage}

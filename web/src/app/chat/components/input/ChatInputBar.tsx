@@ -20,7 +20,6 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
 import {
@@ -83,7 +82,6 @@ export function SourceChip({
 
 export interface ChatInputBarProps {
   removeDocs: () => void;
-  showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
   message: string;
   setMessage: (message: string) => void;
@@ -112,7 +110,6 @@ function ChatInputBarInner({
   removeDocs,
   toggleDocumentSidebar,
   filterManager,
-  showConfigureAPIKey,
   selectedDocuments,
   message,
   setMessage,
@@ -401,8 +398,6 @@ function ChatInputBarInner({
           </div>
         </div>
       )}
-
-      <UnconfiguredLlmProviderText showConfigureAPIKey={showConfigureAPIKey} />
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
