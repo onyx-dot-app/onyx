@@ -35,6 +35,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import SvgLoader from "@/icons/loader";
 import { cn } from "@/lib/utils";
+import SvgSettings from "@/icons/settings";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -494,9 +497,8 @@ export function FederatedConnectorForm({
           <div className="ml-auto flex gap-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button secondary className="flex items-center gap-x-1">
-                  <FiSettings className="h-4 w-4" />
-                  <span className="text-sm ml-1">Manage</span>
+                <Button secondary className="flex" leftIcon={SvgSettings}>
+                  Manage
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -547,32 +549,24 @@ export function FederatedConnectorForm({
                 secondary
                 onClick={handleValidateCredentials}
                 disabled={isValidating || !formState.schema}
-                className="flex items-center gap-2 self-center ml-auto"
-                leftIcon={
-                  isValidating
-                    ? ({ className }) => (
-                        <SvgLoader className={cn(className, "animate-spin")} />
-                      )
-                    : undefined
-                }
+                className="flex ml-auto"
+                leftIcon={isValidating ? SimpleTooltip : undefined}
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
-                className="flex items-center gap-2 self-center"
+                className="flex"
+                leftIcon={isSubmitting ? SimpleLoader : undefined}
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {isEditMode ? "Updating..." : "Creating..."}
-                  </>
-                ) : isEditMode ? (
-                  "Update"
-                ) : (
-                  "Create"
-                )}
+                {isSubmitting
+                  ? isEditMode
+                    ? "Updating..."
+                    : "Creating..."
+                  : isEditMode
+                    ? "Update"
+                    : "Create"}
               </Button>
             </div>
           </form>
