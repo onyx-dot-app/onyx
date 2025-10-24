@@ -231,17 +231,16 @@ export default function ProjectContextPanel({
             <Text headingH3 text04>
               Files
             </Text>
-
             <Text text02 secondaryBody>
               Chats in this project can access these files.
             </Text>
           </div>
           <FilePickerPopover
-            trigger={
-              <CreateButton secondary={undefined} tertiary>
+            trigger={(open) => (
+              <CreateButton secondary={undefined} tertiary active={open}>
                 Add Files
               </CreateButton>
-            }
+            )}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;

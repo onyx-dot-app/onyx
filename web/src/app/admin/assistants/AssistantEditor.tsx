@@ -1170,9 +1170,11 @@ export function AssistantEditor({
                                 </div>
                               )}
                               <FilePickerPopover
-                                trigger={
-                                  <CreateButton>Add User Files</CreateButton>
-                                }
+                                trigger={(open) => (
+                                  <CreateButton active={open}>
+                                    Add User Files
+                                  </CreateButton>
+                                )}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
                                     document_id: `project_file__${file.file_id}`,

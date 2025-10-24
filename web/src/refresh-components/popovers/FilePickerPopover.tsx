@@ -176,7 +176,7 @@ export interface FilePickerPopoverProps {
   onUnpickRecent?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  trigger?: React.ReactNode;
+  trigger?: React.ReactNode | ((open: boolean) => React.ReactNode);
   selectedFileIds?: string[];
 }
 
@@ -270,7 +270,9 @@ export default function FilePickerPopover({
     <div className={cn("relative")}>
       {popup}
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverTrigger asChild>
+          {typeof trigger === "function" ? trigger(open) : trigger}
+        </PopoverTrigger>
         <PopoverContent align="start" side="bottom">
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}

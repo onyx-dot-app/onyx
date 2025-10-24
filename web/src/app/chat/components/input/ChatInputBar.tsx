@@ -513,13 +513,14 @@ function ChatInputBarInner({
                 );
               }}
               handleUploadChange={handleUploadChange}
-              trigger={
+              trigger={(open) => (
                 <IconButton
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
+                  active={open}
                 />
-              }
+              )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
