@@ -168,26 +168,23 @@ function FilePickerContents({
 }
 
 interface FilePickerProps {
-  className?: string;
   onPickRecent?: (file: ProjectFile) => void;
   onUnpickRecent?: (file: ProjectFile) => void;
   onFileClick?: (file: ProjectFile) => void;
-  recentFiles: ProjectFile[];
   handleUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   trigger?: React.ReactNode;
   selectedFileIds?: string[];
 }
 
 export default function FilePicker({
-  className,
   onPickRecent,
   onUnpickRecent,
   onFileClick,
-  recentFiles,
   handleUploadChange,
   trigger,
   selectedFileIds,
 }: FilePickerProps) {
+  const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [open, setOpen] = useState(false);
@@ -203,9 +200,9 @@ export default function FilePicker({
 
   useEffect(() => {
     setRecentFilesSnapshot(
-      recentFiles.slice().filter((f) => !deletedFileIds.includes(f.id))
+      allRecentFiles.slice().filter((f) => !deletedFileIds.includes(f.id))
     );
-  }, [recentFiles]);
+  }, [allRecentFiles]);
 
   const handleDeleteFile = (file: ProjectFile) => {
     const lastStatus = file.status;
@@ -266,7 +263,7 @@ export default function FilePicker({
   };
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative")}>
       {popup}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

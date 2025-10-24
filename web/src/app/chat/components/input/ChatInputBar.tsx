@@ -134,12 +134,7 @@ function ChatInputBarInner({
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const {
-    currentMessageFiles,
-    setCurrentMessageFiles,
-    recentFiles,
-    allRecentFiles,
-  } = useProjectsContext();
+  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -517,7 +512,6 @@ function ChatInputBarInner({
                   )
                 );
               }}
-              recentFiles={allRecentFiles}
               handleUploadChange={handleUploadChange}
               trigger={
                 <IconButton

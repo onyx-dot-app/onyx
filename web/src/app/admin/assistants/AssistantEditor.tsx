@@ -1175,7 +1175,6 @@ export function AssistantEditor({
                                 trigger={
                                   <CreateButton>Add User Files</CreateButton>
                                 }
-                                recentFiles={allRecentFiles}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
                                     document_id: `project_file__${file.file_id}`,
