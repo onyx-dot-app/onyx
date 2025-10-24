@@ -424,11 +424,9 @@ function ChatInputBarInner({
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",
-            // NOTE: need custom padding for textarea specifically to get to the 44px desired
-            // total height
-            "px-[12px]",
-            "pb-[8px]",
-            "pt-[12px]"
+            "px-3",
+            "pb-2",
+            "pt-3"
           )}
           autoFocus
           style={{ scrollbarWidth: "thin" }}
