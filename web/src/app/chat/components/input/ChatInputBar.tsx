@@ -173,7 +173,7 @@ function ChatInputBarInner({
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
-      textarea.style.height = "0px";
+      textarea.style.height = "0px"; // this is necessary in order to "reset" the scrollHeight
       textarea.style.height = `${Math.min(
         textarea.scrollHeight,
         MAX_INPUT_HEIGHT
@@ -206,13 +206,7 @@ function ChatInputBarInner({
     [setCurrentMessageFiles]
   );
 
-  const {
-    llmProviders,
-    inputPrompts,
-    ccPairs,
-    availableSources,
-    documentSets,
-  } = useChatContext();
+  const { inputPrompts, ccPairs } = useChatContext();
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
@@ -421,7 +415,20 @@ function ChatInputBarInner({
           ref={textAreaRef}
           id="onyx-chat-input-textarea"
           className={cn(
-            "w-full outline-none bg-transparent resize-none placeholder:text-text-03 whitespace-normal break-word overscroll-contain overflow-y-auto p-spacing-paragraph"
+            "w-full",
+            "outline-none",
+            "bg-transparent",
+            "resize-none",
+            "placeholder:text-text-03",
+            "whitespace-normal",
+            "break-word",
+            "overscroll-contain",
+            "overflow-y-auto",
+            // NOTE: need custom padding for textarea specifically to get to the 44px desired
+            // total height
+            "px-[12px]",
+            "pb-[8px]",
+            "pt-[12px]"
           )}
           autoFocus
           style={{ scrollbarWidth: "thin" }}
@@ -501,7 +508,7 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div className="flex justify-between items-center w-full p-spacing-interline">
+        <div className="flex justify-between items-center w-full p-spacing-inline">
           <div className="flex flex-row items-center gap-spacing-inline">
             <FilePicker
               onFileClick={handleFileClick}
