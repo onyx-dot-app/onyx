@@ -81,6 +81,17 @@ export default function UserFilesModalContent({
 
   return (
     <>
+      {/* Hidden file input */}
+      {handleUploadChange && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={handleUploadChange}
+        />
+      )}
+
       {/* Title section */}
       <div className="flex flex-col gap-spacing-inline px-spacing-paragraph pt-spacing-paragraph">
         <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
