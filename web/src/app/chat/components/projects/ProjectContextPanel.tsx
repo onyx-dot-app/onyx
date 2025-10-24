@@ -1,22 +1,16 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePicker from "../files/FilePicker";
-import type {
-  ProjectFile,
-  CategorizedFiles,
-} from "../../projects/projectsService";
+import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
-import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   useChatModal,
   ModalIds,
@@ -32,7 +26,6 @@ import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/texts/Truncated";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { isUndefined } from "swr/dist/_internal";
 
 export function FileCard({
   file,
