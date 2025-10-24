@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 
-interface LineItemProps {
+interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   children?: string | React.ReactNode;
