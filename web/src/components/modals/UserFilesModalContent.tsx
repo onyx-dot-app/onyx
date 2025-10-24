@@ -3,7 +3,7 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { cn } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
@@ -14,12 +14,12 @@ import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgTrash from "@/icons/trash";
 import SvgCheck from "@/icons/check";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { isImageExtension } from "@/app/chat/components/files/files_utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -142,16 +142,10 @@ export default function UserFilesModalContent({
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="px-spacing-paragraph max-h-[30rem]">
+          <VerticalShadowScroller className="px-spacing-aragraph max-h-[30rem]">
             {filtered.map((f) => (
-              <div
-                role="button"
-                tabIndex={0}
+              <LineItem
                 key={f.id}
-                className={cn(
-                  "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group",
-                  onPickRecent && "hover:bg-background-tint-02"
-                )}
                 onClick={() => {
                   if (!onPickRecent) return;
                   const isSelected = selectedIds.has(f.id);
@@ -177,43 +171,51 @@ export default function UserFilesModalContent({
                     e.currentTarget.click();
                   }
                 }}
-              >
-                <div className="flex items-center p-spacing-inline flex-1 min-w-0">
-                  <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
-                    {String((f as ProjectFile).status) ===
-                      UserFileStatus.PROCESSING ||
-                    String((f as ProjectFile).status) ===
-                      UserFileStatus.UPLOADING ||
-                    String((f as ProjectFile).status) ===
-                      UserFileStatus.DELETING ? (
-                      <SimpleLoader />
-                    ) : (
-                      <>
-                        {onPickRecent && selectedIds.has(f.id) ? (
-                          <div className="w-4 h-4 flex items-center justify-center rounded-04 border border-border-01 bg-background-neutral-00 p-spacing-inline-mini">
-                            <SvgCheck className="stroke-text-02" />
-                          </div>
-                        ) : (
-                          (() => {
-                            const ext = getFileExtension(f.name).toLowerCase();
-                            const isImage = isImageExtension(ext);
-                            return isImage ? (
-                              <SvgImage className="h-5 w-5 stroke-text-02" />
-                            ) : (
-                              <SvgFileText className="h-5 w-5 stroke-text-02" />
-                            );
-                          })()
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <div className="p-spacing-inline-mini flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="max-w-[250px] min-w-0 flex-none">
-                        <Truncated text04 secondaryAction nowrap>
-                          {f.name}
-                        </Truncated>
-                      </div>
+                icon={({ className }) =>
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.PROCESSING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.UPLOADING ||
+                  String((f as ProjectFile).status) ===
+                    UserFileStatus.DELETING ? (
+                    <SimpleLoader className={className} />
+                  ) : (
+                    <>
+                      {onPickRecent && selectedIds.has(f.id) ? (
+                        <SvgCheck className={className} />
+                      ) : (
+                        (() => {
+                          const ext = getFileExtension(f.name).toLowerCase();
+                          const isImage = isImageExtension(ext);
+                          return isImage ? (
+                            <SvgImage className={className} />
+                          ) : (
+                            <SvgFileText className={className} />
+                          );
+                        })()
+                      )}
+                    </>
+                  )
+                }
+                description={(() => {
+                  const s = String(f.status || "");
+                  const typeLabel = getFileExtension(f.name);
+                  if (s === UserFileStatus.PROCESSING) return "Processing...";
+                  if (s === UserFileStatus.UPLOADING) return "Uploading...";
+                  if (s === UserFileStatus.DELETING) return "Deleting...";
+                  if (s === UserFileStatus.COMPLETED) return typeLabel;
+                  return f.status ? f.status : typeLabel;
+                })()}
+                rightChildren={
+                  <div className="flex flex-col justify-center">
+                    <div className="group-hover/LineItem:hidden">
+                      {f.last_accessed_at && (
+                        <Text text03 secondaryBody nowrap>
+                          {formatRelativeTime(f.last_accessed_at)}
+                        </Text>
+                      )}
+                    </div>
+                    <div className="hidden group-hover/LineItem:flex flex-row">
                       {onFileClick &&
                         String(f.status) !== UserFileStatus.PROCESSING &&
                         String(f.status) !== UserFileStatus.UPLOADING &&
@@ -222,54 +224,28 @@ export default function UserFilesModalContent({
                             internal
                             icon={SvgExternalLink}
                             tooltip="View file"
-                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0  shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
+                            onClick={noProp((event) => {
+                              event.preventDefault();
                               onFileClick(f);
-                            }}
+                            })}
+                          />
+                        )}
+                      {showRemove &&
+                        String(f.status) !== UserFileStatus.UPLOADING &&
+                        String(f.status) !== UserFileStatus.DELETING && (
+                          <IconButton
+                            internal
+                            icon={SvgTrash}
+                            tooltip="Remove from project"
+                            onClick={noProp(() => onRemove?.(f))}
                           />
                         )}
                     </div>
-
-                    <Text text03 secondaryBody>
-                      {(() => {
-                        const s = String(f.status || "");
-                        const typeLabel = getFileExtension(f.name);
-                        if (s === UserFileStatus.PROCESSING)
-                          return "Processing...";
-                        if (s === UserFileStatus.UPLOADING)
-                          return "Uploading...";
-                        if (s === UserFileStatus.DELETING) return "Deleting...";
-                        if (s === UserFileStatus.COMPLETED) return typeLabel;
-                        return f.status ? f.status : typeLabel;
-                      })()}
-                    </Text>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {f.last_accessed_at && (
-                    <Text text03 secondaryBody nowrap>
-                      {formatRelativeTime(f.last_accessed_at)}
-                    </Text>
-                  )}
-                  {!showRemove && <div className="p-spacing-inline"></div>}
-                  {showRemove &&
-                    String(f.status) !== UserFileStatus.UPLOADING &&
-                    String(f.status) !== UserFileStatus.DELETING && (
-                      <IconButton
-                        internal
-                        icon={SvgTrash}
-                        tooltip="Remove from project"
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemove && onRemove(f);
-                        }}
-                      />
-                    )}
-                </div>
-              </div>
+                }
+              >
+                {f.name}
+              </LineItem>
             ))}
           </VerticalShadowScroller>
         )}
