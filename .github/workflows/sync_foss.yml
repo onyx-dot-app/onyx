@@ -32,8 +32,8 @@ jobs:
 
       - name: Set Git config
         run: |
-          git config user.name "onyx-bot"
-          git config user.email "bot@onyx.app"
+          git config --global user.name "onyx-bot"
+          git config --global user.email "bot@onyx.app"
 
       - name: Build FOSS version
         run: bash backend/scripts/make_foss_repo.sh
