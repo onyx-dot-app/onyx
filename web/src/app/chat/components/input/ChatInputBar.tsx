@@ -172,7 +172,7 @@ function ChatInputBarInner({
     [handleFileUpload]
   );
 
-  const settings = useContext(SettingsContext);
+  const combinedSettings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -310,9 +310,18 @@ function ChatInputBarInner({
   ]);
 
   // Check if the assistant has search tools available (internal search or web search)
+  // AND if deep research is globally enabled in admin settings
   const showDeepResearch = useMemo(() => {
-    return hasSearchToolsAvailable(selectedAssistant.tools);
-  }, [selectedAssistant.tools]);
+    const deepResearchGloballyEnabled =
+      combinedSettings?.settings?.deep_research_enabled ?? true;
+    return (
+      deepResearchGloballyEnabled &&
+      hasSearchToolsAvailable(selectedAssistant.tools)
+    );
+  }, [
+    selectedAssistant.tools,
+    combinedSettings?.settings?.deep_research_enabled,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
@@ -426,7 +435,8 @@ function ChatInputBarInner({
           placeholder={
             selectedAssistant.id === 0
               ? `How can ${
-                  settings?.enterpriseSettings?.application_name || "Onyx"
+                  combinedSettings?.enterpriseSettings?.application_name ||
+                  "Onyx"
                 } help you today`
               : `How can ${selectedAssistant.name} help you today`
           }
