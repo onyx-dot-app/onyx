@@ -91,6 +91,12 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
+          cache-from: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test:cache
+          cache-to: |
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:cache,mode=max
+            type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test:cache,mode=max
           outputs: type=registry
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -119,6 +125,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
+          cache-from: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache
+          cache-to: type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:cache,mode=max
           outputs: type=registry
           provenance: false
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
@@ -148,10 +156,18 @@ jobs:
         uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push integration test image with Docker Bake
-        env:
-          REGISTRY: ${{ env.PRIVATE_REGISTRY }}
-          TAG: test-${{ github.run_id }}
-        run: cd backend && docker buildx bake ${{ vars.DOCKER_NO_CACHE == 'true' && ' --no-cache' || '' }} --push integration
+        uses: docker/bake-action@v5
+        with:
+          files: ./backend/docker-bake.hcl
+          targets: integration
+          push: true
+          set: |
+            REGISTRY=${{ env.PRIVATE_REGISTRY }}
+            TAG=test-${{ github.run_id }}
+            *.platform=linux/arm64
+            *.cache-from=type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test:cache
+            *.cache-to=type=registry,ref=${{ env.PRIVATE_REGISTRY }}/integration-test:cache,mode=max
+            ${{ vars.DOCKER_NO_CACHE == 'true' && '*.no-cache=true' || '' }}
 
   integration-tests-mit:
     needs:
