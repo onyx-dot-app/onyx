@@ -8,7 +8,7 @@ import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
 import { refreshToken } from "./refreshUtils";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
-import { Button } from "../ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 export const HealthCheckBanner = () => {

@@ -1,7 +1,7 @@
 import React from "react";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
 import {
   CloudEmbeddingProvider,
@@ -33,10 +33,10 @@ export function DeleteCredentialsModal({
         </Text>
         <Callout type="danger" title="Point of No Return" className="mt-4" />
         <div className="flex mt-8 justify-between">
-          <Button variant="secondary" onClick={onCancel}>
+          <Button secondary onClick={onCancel}>
             Keep Credentials
           </Button>
-          <Button variant="destructive" onClick={onConfirm}>
+          <Button danger onClick={onConfirm}>
             Delete Credentials
           </Button>
         </div>

@@ -3,7 +3,7 @@
 import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import { useContext, useState } from "react";
@@ -72,12 +72,12 @@ export function CustomAnalyticsUpdateForm() {
           </Text>
           <textarea
             className={`
-              border 
-              border-border 
-              rounded 
-              w-full 
-              py-2 
-              px-3 
+              border
+              border-border
+              rounded
+              w-full
+              py-2
+              px-3
               mt-1
               h-28`}
             value={newCustomAnalyticsScript}
@@ -96,12 +96,12 @@ export function CustomAnalyticsUpdateForm() {
         </SubLabel>
         <input
           className={`
-            border 
-            border-border 
-            rounded 
-            w-full 
-            py-2 
-            px-3 
+            border
+            border-border
+            rounded
+            w-full
+            py-2
+            px-3
             mt-1`}
           type="password"
           value={secretKey}

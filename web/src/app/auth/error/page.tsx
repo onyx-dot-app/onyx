@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Link from "next/link";
 import { FiLogIn } from "react-icons/fi";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -37,9 +37,7 @@ const Page = () => {
         </div>
 
         <Link href="/auth/login" className="w-full">
-          <Button size="lg" icon={FiLogIn} className="w-full">
-            Return to Login Page
-          </Button>
+          <Button className="w-full">Return to Login Page</Button>
         </Link>
         <p className="text-sm text-text-500 text-center">
           We recommend trying again. If you continue to experience problems,

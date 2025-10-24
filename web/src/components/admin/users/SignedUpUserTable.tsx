@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useUser } from "@/components/user/UserProvider";
 import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -46,6 +46,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
+import SvgKey from "@/icons/key";
 
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
@@ -259,18 +262,15 @@ const SignedUpUserTable = ({
     invitedUsersMutate,
     handleResetPassword,
   }) => {
-    const buttonClassName = "w-full justify-start";
+    const buttonClassName = "w-full";
 
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu</span>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
+          <IconButton secondary icon={SvgMoreHorizontal} />
         </PopoverTrigger>
         <PopoverContent className="w-48">
-          <div className="grid gap-2">
+          <div className="grid gap-spacing-inline">
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton
                 user={user}
@@ -301,19 +301,18 @@ const SignedUpUserTable = ({
                   mutate={refresh}
                   className={buttonClassName}
                 >
-                  <UserX className="mr-2 h-4 w-4" />
-                  <span>{user.is_active ? "Deactivate" : "Activate"} User</span>
+                  {/*<UserX className="mr-2 h-4 w-4" />*/}
+                  {user.is_active ? "Deactivate User" : "Activate User"}
                 </DeactivateUserButton>
               </>
             )}
             {user.password_configured && (
               <Button
-                variant="ghost"
                 className={buttonClassName}
                 onClick={() => handleResetPassword(user)}
+                leftIcon={SvgKey}
               >
-                <KeyRound className="mr-2 h-4 w-4" />
-                <span>Reset Password</span>
+                Reset Password
               </Button>
             )}
           </div>

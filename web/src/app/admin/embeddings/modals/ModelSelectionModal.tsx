@@ -1,7 +1,7 @@
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
 import { Callout } from "@/components/ui/callout";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { HostedEmbeddingModel } from "../../../../components/embedding/interfaces";
 
 export function ModelSelectionConfirmationModal({
@@ -53,7 +53,7 @@ export function ModelSelectionConfirmationModal({
 
           <div className="flex mt-8 gap-x-2 justify-end">
             <Button onClick={onConfirm}>Confirm</Button>
-            <Button variant="outline" onClick={onCancel}>
+            <Button secondary onClick={onCancel}>
               Cancel
             </Button>
           </div>

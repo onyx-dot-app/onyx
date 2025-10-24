@@ -2,7 +2,7 @@
 
 import { Modal } from "@/components/Modal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -74,16 +74,11 @@ export function ChatPopup() {
 
         <div className="flex w-full justify-center gap-4 mt-4">
           {isConsentScreen && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setShowConsentError(true)}
-            >
+            <Button danger onClick={() => setShowConsentError(true)}>
               Cancel
             </Button>
           )}
           <Button
-            size="sm"
             onClick={() => {
               localStorage.setItem(
                 ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED,

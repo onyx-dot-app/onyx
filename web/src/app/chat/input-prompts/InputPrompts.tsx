@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PlusIcon } from "@/components/icons/icons";
-import { MoreVertical, XIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
@@ -21,6 +20,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SourceChip } from "../components/input/ChatInputBar";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -201,7 +203,7 @@ export default function InputPrompts() {
           />
           <div className="flex space-x-2">
             <Button onClick={handleCreate}>Create</Button>
-            <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
+            <Button internal onClick={() => setIsCreatingNew(false)}>
               Cancel
             </Button>
           </div>
@@ -263,15 +265,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
       {isEditing ? (
         <>
           <div className="absolute top-2 right-2">
-            <Button
-              variant="ghost"
-              size="sm"
+            <IconButton
+              internal
               onClick={() => {
                 onEdit(0);
               }}
-            >
-              <XIcon size={14} />
-            </Button>
+              icon={SvgX}
+            />
           </div>
           <div className="flex">
             <div className="flex-grow mr-4">
@@ -316,13 +316,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
           <div className="absolute top-2 right-2">
             <DropdownMenu>
               <DropdownMenuTrigger className="hover:bg-transparent" asChild>
-                <Button
-                  className="!hover:bg-transparent"
-                  variant="ghost"
-                  size="sm"
-                >
-                  <MoreVertical size={14} />
-                </Button>
+                <IconButton internal icon={SvgMoreHorizontal} />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (

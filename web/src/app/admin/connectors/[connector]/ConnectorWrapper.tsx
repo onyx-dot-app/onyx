@@ -5,7 +5,7 @@ import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
 import Sidebar from "../../../../sections/sidebar/CreateConnectorSidebar";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import { useSearchParams } from "next/navigation";

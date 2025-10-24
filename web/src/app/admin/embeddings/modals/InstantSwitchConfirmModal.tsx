@@ -1,5 +1,5 @@
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 interface InstantSwitchConfirmModalProps {
   onClose: () => void;
@@ -27,7 +27,7 @@ export const InstantSwitchConfirmModal = ({
         </div>
         <div className="flex mt-4 gap-x-2 justify-end">
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button variant="outline" onClick={onClose}>
+          <Button secondary onClick={onClose}>
             Cancel
           </Button>
         </div>
