@@ -4,11 +4,13 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
 
-interface LineItemProps {
+interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   children?: string | React.ReactNode;
+  rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
 }
 
@@ -16,13 +18,14 @@ export default function LineItem({
   icon: Icon,
   description,
   children,
+  rightChildren,
   onClick,
 }: LineItemProps) {
   return (
     <button
       type="button"
       className={cn(
-        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08"
+        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08 group/LineItem"
       )}
       onClick={onClick}
     >
@@ -33,12 +36,13 @@ export default function LineItem({
           </div>
         )}
         {typeof children === "string" ? (
-          <Text mainUiMuted text04 className="text-left w-full">
+          <Truncated mainUiMuted text04 className="text-left w-full">
             {children}
-          </Text>
+          </Truncated>
         ) : (
           children
         )}
+        {rightChildren}
       </div>
       {description && (
         <div className="flex flex-row">
@@ -49,7 +53,7 @@ export default function LineItem({
             </>
           )}
 
-          <Text secondaryBody text03 className="">
+          <Text secondaryBody text03>
             {description}
           </Text>
         </div>

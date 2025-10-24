@@ -40,7 +40,7 @@ export default function CoreModal({
       <div
         ref={modalRef}
         className={cn(
-          "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00",
+          "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00 overflow-hidden",
           className
         )}
         onMouseOver={() => (insideModal.current = true)}

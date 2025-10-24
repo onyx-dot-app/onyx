@@ -1,22 +1,16 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
-import FilePicker from "../files/FilePicker";
-import type {
-  ProjectFile,
-  CategorizedFiles,
-} from "../../projects/projectsService";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
+import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
-import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   useChatModal,
   ModalIds,
@@ -31,6 +25,7 @@ import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/texts/Truncated";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 export function FileCard({
   file,
@@ -154,7 +149,6 @@ export default function ProjectContextPanel({
     currentProjectId,
     unlinkFileFromProject,
     linkFileToProject,
-    allRecentFiles,
     allCurrentProjectFiles,
     beginUpload,
     projects,
@@ -221,15 +215,11 @@ export default function ProjectContextPanel({
           )}
         </div>
         <Button
+          leftIcon={SvgAddLines}
           onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
           tertiary
         >
-          <div className="flex flex-row gap-1 items-center">
-            <SvgAddLines className="h-4 w-4 stroke-text-03" />
-            <Text text03 mainUiAction className="whitespace-nowrap">
-              Set Instructions
-            </Text>
-          </div>
+          Set Instructions
         </Button>
       </div>
       <div
@@ -241,20 +231,16 @@ export default function ProjectContextPanel({
             <Text headingH3 text04>
               Files
             </Text>
-
             <Text text02 secondaryBody>
               Chats in this project can access these files.
             </Text>
           </div>
-          <FilePicker
-            trigger={
-              <LineItem icon={SvgPlusCircle}>
-                <Text text03 mainUiAction>
-                  Add Files
-                </Text>
-              </LineItem>
-            }
-            recentFiles={allRecentFiles}
+          <FilePickerPopover
+            trigger={(open) => (
+              <CreateButton secondary={undefined} tertiary active={open}>
+                Add Files
+              </CreateButton>
+            )}
             onFileClick={handleFileClick}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
@@ -266,7 +252,6 @@ export default function ProjectContextPanel({
               await unlinkFileFromProject(currentProjectId, file.id);
             }}
             handleUploadChange={handleUploadChange}
-            className="mr-1.5"
             selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
           />
         </div>
