@@ -19,6 +19,9 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
+from onyx.chat.turn.context_handler.citation import (
+    assign_citation_numbers_recent_tool_calls,
+)
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
@@ -89,6 +92,11 @@ def _run_agent_loop(
             prompt_config,
             ctx.should_cite_documents,
         )
+        agent_turn_messages, num_docs_cited, num_tool_calls_cited = (
+            assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
+        )
+        ctx.documents_cited_count += num_docs_cited
+        ctx.tool_calls_cited_count += num_tool_calls_cited
 
         # TODO: Make this configurable on OnyxAgent level
         stopping_tools = ["image_generation"]

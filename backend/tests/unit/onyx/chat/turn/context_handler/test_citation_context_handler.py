@@ -1,407 +1,414 @@
 """Unit tests for assign_citation_numbers handler."""
 
 import json
+from uuid import uuid4
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
-from onyx.chat.turn.context_handler import assign_citation_numbers
+from onyx.chat.models import LlmDoc
+from onyx.chat.turn.context_handler.citation import (
+    assign_citation_numbers_recent_tool_calls,
+)
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.chat.turn.models import ChatTurnDependencies
 
 
-def test_citation_handler_assigns_sequential_numbers() -> None:
-    """Test that citation handler assigns sequential numbers to documents."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    # Create tool response with LlmDoc objects
-    llm_doc1 = {
-        "document_id": "doc1",
-        "content": "Content 1",
-        "semantic_identifier": "Doc 1",
-        "source_type": "web",
-        "blurb": "Blurb 1",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,
-    }
-    llm_doc2 = {
-        "document_id": "doc2",
-        "content": "Content 2",
-        "semantic_identifier": "Doc 2",
-        "source_type": "web",
-        "blurb": "Blurb 2",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,
-    }
-
-    agent_turn_messages = [
-        {
-            "role": "tool",
-            "content": json.dumps({"search_results": [llm_doc1, llm_doc2]}),
-            "tool_call_id": "call_1",
-        }
+def _parse_llm_docs_from_messages(messages: list[dict]) -> list[LlmDoc]:
+    tool_message_contents = [
+        msg["content"] for msg in messages if msg.get("role") == "tool"
+    ]
+    return [
+        LlmDoc(**doc)
+        for content in tool_message_contents
+        for doc in json.loads(content)
     ]
 
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
-        message_id=1,
-        research_type=ResearchType.FAST,
-        run_dependencies={},
-        aggregated_context=AggregatedDRContext(
-            context="test",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=0,
-    )
 
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
-    )
-
-    # Verify
-    assert len(result) == 1
-    assert result[0]["role"] == "tool"
-
-    # Parse the updated content
-    updated_content = json.loads(result[0]["content"])
-    search_results = updated_content["search_results"]
-
-    assert search_results[0]["document_citation_number"] == 1
-    assert search_results[1]["document_citation_number"] == 2
-    assert ctx.documents_cited_count == 2
-
-
-def test_citation_handler_skips_already_numbered_documents() -> None:
-    """Test that citation handler skips documents that already have citation numbers."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    llm_doc1 = {
-        "document_id": "doc1",
-        "content": "Content 1",
-        "semantic_identifier": "Doc 1",
-        "source_type": "web",
-        "blurb": "Blurb 1",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": 5,  # Already numbered
-    }
-    llm_doc2 = {
-        "document_id": "doc2",
-        "content": "Content 2",
-        "semantic_identifier": "Doc 2",
-        "source_type": "web",
-        "blurb": "Blurb 2",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,  # Needs numbering
-    }
-
-    agent_turn_messages = [
+def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependencies):
+    messages = [
         {
-            "role": "tool",
-            "content": json.dumps([llm_doc1, llm_doc2]),
-            "tool_call_id": "call_1",
-        }
-    ]
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
-        message_id=1,
-        research_type=ResearchType.FAST,
-        run_dependencies={},
-        aggregated_context=AggregatedDRContext(
-            context="test",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=10,  # Start at 10
-    )
-
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
-    )
-
-    # Verify
-    updated_content = json.loads(result[0]["content"])
-
-    assert updated_content[0]["document_citation_number"] == 5  # Unchanged
-    assert updated_content[1]["document_citation_number"] == 11  # New number
-    assert ctx.documents_cited_count == 11
-
-
-def test_citation_handler_with_parallel_tool_calls() -> None:
-    """Test citation handler with multiple tool responses (parallel calls)."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    llm_doc1 = {
-        "document_id": "doc1",
-        "content": "Content 1",
-        "semantic_identifier": "Doc 1",
-        "source_type": "web",
-        "blurb": "Blurb 1",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,
-    }
-    llm_doc2 = {
-        "document_id": "doc2",
-        "content": "Content 2",
-        "semantic_identifier": "Doc 2",
-        "source_type": "web",
-        "blurb": "Blurb 2",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,
-    }
-
-    agent_turn_messages = [
-        {
-            "role": "tool",
-            "content": json.dumps([llm_doc1]),
-            "tool_call_id": "call_1",
+            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
+            "role": "system",
         },
         {
+            "content": [{"text": "search internally for cheese", "type": "text"}],
+            "role": "user",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps(
+                [
+                    {
+                        "document_id": "x",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    },
+                    {
+                        "document_id": "x",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    },
+                ]
+            ),
             "role": "tool",
-            "content": json.dumps([llm_doc2]),
-            "tool_call_id": "call_2",
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
         },
     ]
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
+    context = ChatTurnContext(
+        chat_session_id=uuid4(),
         message_id=1,
         research_type=ResearchType.FAST,
-        run_dependencies={},
+        run_dependencies=chat_turn_dependencies,
         aggregated_context=AggregatedDRContext(
-            context="test",
+            context="",
             cited_documents=[],
             is_internet_marker_dict={},
             global_iteration_responses=[],
         ),
-        documents_cited_count=0,
     )
-
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
+    new_messages, num_docs_cited, num_tool_calls_cited = (
+        assign_citation_numbers_recent_tool_calls(messages, context)
     )
+    assert num_docs_cited == 2
+    assert num_tool_calls_cited == 1
+    # Find the tool message and check citation numbers
+    tool_message = next(msg for msg in new_messages if msg.get("role") == "tool")
+    tool_content_raw = json.loads(tool_message["content"])
 
-    # Verify
-    assert len(result) == 2
+    # Parse into LlmDoc objects
+    llm_docs = [LlmDoc.model_validate(doc) for doc in tool_content_raw]
 
-    doc1_updated = json.loads(result[0]["content"])[0]
-    doc2_updated = json.loads(result[1]["content"])[0]
-
-    assert doc1_updated["document_citation_number"] == 1
-    assert doc2_updated["document_citation_number"] == 2
-    assert ctx.documents_cited_count == 2
-
-
-def test_citation_handler_with_empty_agent_messages() -> None:
-    """Test citation handler with empty agent_turn_messages."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-    agent_turn_messages: list[dict] = []
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
-        message_id=1,
-        research_type=ResearchType.FAST,
-        run_dependencies={},
-        aggregated_context=AggregatedDRContext(
-            context="test",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=0,
-    )
-
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
-    )
-
-    # Verify
-    assert len(result) == 0
-    assert ctx.documents_cited_count == 0
+    # Verify citation numbers were assigned correctly
+    assert len(llm_docs) == 2
+    assert llm_docs[0].document_citation_number == 1
+    assert llm_docs[1].document_citation_number == 2
 
 
-def test_citation_handler_with_non_tool_messages() -> None:
-    """Test that citation handler ignores non-tool messages."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    agent_turn_messages = [
-        {"role": "assistant", "content": "Regular assistant message"},
-        {"role": "user", "content": "User message"},
-    ]
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
-        message_id=1,
-        research_type=ResearchType.FAST,
-        run_dependencies={},
-        aggregated_context=AggregatedDRContext(
-            context="test",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=0,
-    )
-
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
-    )
-
-    # Verify
-    assert len(result) == 2
-    assert result[0]["content"] == "Regular assistant message"
-    assert result[1]["content"] == "User message"
-    assert ctx.documents_cited_count == 0
-
-
-def test_citation_handler_with_non_json_tool_content() -> None:
-    """Test that citation handler handles non-JSON tool content gracefully."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    agent_turn_messages = [
+def test_assign_citation_numbers_no_relevant_tool_calls(
+    chat_turn_dependencies: ChatTurnDependencies,
+):
+    messages = [
         {
+            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
+            "role": "system",
+        },
+        {
+            "content": [{"text": "search internally for cheese", "type": "text"}],
+            "role": "user",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps([{"document_id": "x"}]),
             "role": "tool",
-            "content": "Plain text response, not JSON",
-            "tool_call_id": "call_1",
-        }
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+        },
     ]
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
+    context = ChatTurnContext(
+        chat_session_id=uuid4(),
         message_id=1,
         research_type=ResearchType.FAST,
-        run_dependencies={},
+        run_dependencies=chat_turn_dependencies,
         aggregated_context=AggregatedDRContext(
-            context="test",
+            context="",
+            cited_documents=[],
+            is_internet_marker_dict={},
+            global_iteration_responses=[],
+        ),
+    )
+    _, num_docs_cited, num_tool_calls_cited = assign_citation_numbers_recent_tool_calls(
+        messages, context
+    )
+    assert num_docs_cited == 0
+    assert num_tool_calls_cited == 0
+
+
+def test_assign_citation_numbers_previous_tool_calls(
+    chat_turn_dependencies: ChatTurnDependencies,
+):
+    messages = [
+        {
+            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
+            "role": "system",
+        },
+        {
+            "content": [{"text": "search internally for cheese", "type": "text"}],
+            "role": "user",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps(
+                [
+                    {
+                        "document_id": "first",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    },
+                    {
+                        "document_id": "second",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    },
+                ]
+            ),
+            "role": "tool",
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+        },
+        {
+            "content": [{"text": "search internally for cheese again", "type": "text"}],
+            "role": "user",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps(
+                [
+                    {
+                        "document_id": "third",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    }
+                ]
+            ),
+            "role": "tool",
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+        },
+    ]
+    context = ChatTurnContext(
+        chat_session_id=uuid4(),
+        message_id=1,
+        research_type=ResearchType.FAST,
+        run_dependencies=chat_turn_dependencies,
+        aggregated_context=AggregatedDRContext(
+            context="",
+            cited_documents=[],
+            is_internet_marker_dict={},
+            global_iteration_responses=[],
+        ),
+        documents_cited_count=2,
+        tool_calls_cited_count=1,
+    )
+    new_messages, num_docs_cited, num_tool_calls_cited = (
+        assign_citation_numbers_recent_tool_calls(messages, context)
+    )
+    assert num_tool_calls_cited == 1
+    assert num_docs_cited == 1
+    llm_docs = _parse_llm_docs_from_messages(new_messages)
+
+    # Verify citation numbers were assigned correctly
+    assert len(llm_docs) == 3
+    # these two should be unchanged
+    assert llm_docs[0].document_citation_number == -1
+    assert llm_docs[1].document_citation_number == -1
+    # this one should be assigned
+    assert llm_docs[2].document_citation_number == 3
+
+
+def test_assign_citation_numbers_parallel_tool_calls(
+    chat_turn_dependencies: ChatTurnDependencies,
+):
+    messages = [
+        {
+            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
+            "role": "system",
+        },
+        {
+            "content": [{"text": "search internally for cheese", "type": "text"}],
+            "role": "user",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps(
+                [
+                    {
+                        "document_id": "a",
+                        "content": "a",
+                        "blurb": "a",
+                        "semantic_identifier": "d",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "l",
+                        "source_links": {"0": "l"},
+                        "match_highlights": ["a"],
+                        "document_citation_number": -1,
+                    },
+                    {
+                        "document_id": "b",
+                        "content": "a",
+                        "blurb": "b",
+                        "semantic_identifier": "e",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "m",
+                        "source_links": {"0": "m"},
+                        "match_highlights": ["b"],
+                        "document_citation_number": -1,
+                    },
+                ]
+            ),
+            "role": "tool",
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "function": {
+                        "arguments": '{"queries":["cheese"]}',
+                        "name": "internal_search",
+                    },
+                    "id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+                    "type": "function",
+                }
+            ],
+        },
+        {
+            "content": json.dumps(
+                [
+                    {
+                        "document_id": "e",
+                        "content": "b",
+                        "blurb": "b",
+                        "semantic_identifier": "e",
+                        "source_type": "linear",
+                        "metadata": {"a": "b"},
+                        "updated_at": "2025-08-07T01:01:52Z",
+                        "link": "m",
+                        "source_links": {"0": "m"},
+                        "match_highlights": ["b"],
+                        "document_citation_number": -1,
+                    }
+                ]
+            ),
+            "role": "tool",
+            "tool_call_id": "call_lvChvFY5Xs0aw478tZlj2nNd",
+        },
+    ]
+    context = ChatTurnContext(
+        chat_session_id=uuid4(),
+        message_id=1,
+        research_type=ResearchType.FAST,
+        run_dependencies=chat_turn_dependencies,
+        aggregated_context=AggregatedDRContext(
+            context="",
             cited_documents=[],
             is_internet_marker_dict={},
             global_iteration_responses=[],
         ),
         documents_cited_count=0,
+        tool_calls_cited_count=0,
     )
-
-    # Execute
-    result = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages, ctx
+    new_messages, num_docs_cited, num_tool_calls_cited = (
+        assign_citation_numbers_recent_tool_calls(messages, context)
     )
+    assert num_docs_cited == 3
+    assert num_tool_calls_cited == 2
+    # Find the tool message and check citation numbers
+    llm_docs = _parse_llm_docs_from_messages(new_messages)
 
-    # Verify - should return unchanged
-    assert len(result) == 1
-    assert result[0]["content"] == "Plain text response, not JSON"
-    assert ctx.documents_cited_count == 0
-
-
-def test_citation_handler_counter_increments_correctly() -> None:
-    """Test that the citation counter increments correctly across multiple calls."""
-    # Setup
-
-    chat_history = []
-    current_user_message = {"role": "user", "content": "Query"}
-
-    ctx = ChatTurnContext(
-        chat_session_id="test-session",
-        message_id=1,
-        research_type=ResearchType.FAST,
-        run_dependencies={},
-        aggregated_context=AggregatedDRContext(
-            context="test",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=0,
-    )
-
-    # First call with 2 documents
-    llm_doc1 = {
-        "document_id": "doc1",
-        "content": "Content 1",
-        "semantic_identifier": "Doc 1",
-        "source_type": "web",
-        "blurb": "Blurb 1",
-        "metadata": {},
-        "updated_at": None,
-        "link": None,
-        "source_links": None,
-        "match_highlights": None,
-        "document_citation_number": None,
-    }
-
-    agent_turn_messages1 = [
-        {
-            "role": "tool",
-            "content": json.dumps([llm_doc1, llm_doc1.copy()]),
-            "tool_call_id": "call_1",
-        }
-    ]
-
-    assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages1, ctx
-    )
-    assert ctx.documents_cited_count == 2
-
-    # Second call with 1 more document
-    agent_turn_messages2 = [
-        {
-            "role": "tool",
-            "content": json.dumps([llm_doc1.copy()]),
-            "tool_call_id": "call_2",
-        }
-    ]
-
-    result2 = assign_citation_numbers(
-        chat_history, current_user_message, agent_turn_messages2, ctx
-    )
-
-    # Verify counter continued from where it left off
-    doc_from_second_call = json.loads(result2[0]["content"])[0]
-    assert doc_from_second_call["document_citation_number"] == 3
-    assert ctx.documents_cited_count == 3
+    # Verify citation numbers were assigned correctly
+    assert len(llm_docs) == 3
+    # these two should be unchanged
+    assert llm_docs[0].document_citation_number == 1
+    assert llm_docs[1].document_citation_number == 2
+    assert llm_docs[2].document_citation_number == 3
