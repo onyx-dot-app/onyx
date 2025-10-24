@@ -84,7 +84,7 @@ def detect_sensitive_topic(
     try:
         guard.validate(text)
     except Exception as e:
-        text = "К сожалению, я не могу ответить на ваш запрос."
-        return text, True
+        rejection_message = config.get("rejection_message")
+        return rejection_message, True
 
     return text, False

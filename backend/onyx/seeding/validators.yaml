@@ -35,6 +35,10 @@ validators:
         name: "sensitive_topics"
         label: "Список запретных тем"
         values:
+      - type: "text"
+        name: "rejection_message"
+        label: "Сообщение при обнаружении запретной темы в ответе от LLM"
+        values: "К сожалению, я не могу ответить на ваш запрос."
     include_llm: true
   - id: -4
     name: "Валидатор стиля общения"
