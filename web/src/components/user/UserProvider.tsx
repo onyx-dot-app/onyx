@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import {
   User,
   UserPersonalization,
@@ -14,6 +20,7 @@ import { SettingsContext } from "../settings/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { updateUserPersonalization as persistPersonalization } from "@/lib/users/UserSettings";
+import { useTheme } from "next-themes";
 
 interface UserContextType {
   user: User | null;
@@ -112,6 +119,34 @@ export function UserProvider({
 
   // Use the custom token refresh hook
   useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
+
+  // Sync user's theme preference from DB to next-themes on load
+  const { setTheme, theme } = useTheme();
+  const hasSyncedThemeRef = useRef(false);
+
+  useEffect(() => {
+    // Only sync once per session
+    if (hasSyncedThemeRef.current) return;
+
+    // Wait for next-themes to initialize
+    if (!theme) return;
+
+    // Wait for user data to load
+    if (!upToDateUser?.id) return;
+
+    // Only sync if user has a saved preference
+    const savedTheme = upToDateUser?.preferences?.theme_preference;
+    if (!savedTheme) return;
+
+    // Sync DB theme to localStorage
+    setTheme(savedTheme);
+    hasSyncedThemeRef.current = true;
+  }, [
+    upToDateUser?.id,
+    upToDateUser?.preferences?.theme_preference,
+    theme,
+    setTheme,
+  ]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {

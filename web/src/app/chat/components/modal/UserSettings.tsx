@@ -58,7 +58,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -91,13 +90,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       setCurrentDefaultModel(defaultModel);
     }
   }, [defaultModel, currentDefaultModel]);
-
-  // Sync selectedTheme with current theme from next-themes
-  useEffect(() => {
-    if (theme) {
-      setSelectedTheme(theme);
-    }
-  }, [theme]);
 
   // Use currentDefaultModel for display, falling back to defaultModel
   const displayModel = currentDefaultModel ?? defaultModel;
@@ -396,15 +388,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
             <div>
               <h3 className="text-lg font-medium">Theme</h3>
               <Select
-                value={selectedTheme}
+                value={theme}
                 onValueChange={(value) => {
-                  setSelectedTheme(value);
                   setTheme(value);
-                  updateUserThemePreference(value as ThemePreference).catch(
-                    () => {
-                      // Theme still applied locally even if DB save fails
-                    }
-                  );
+                  updateUserThemePreference(value as ThemePreference);
                 }}
               >
                 <SelectTrigger className="w-full mt-2">
