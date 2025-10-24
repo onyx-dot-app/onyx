@@ -25,39 +25,42 @@ export default function LineItem({
     <button
       type="button"
       className={cn(
-        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08 group/LineItem"
+        "flex flex-row w-full justify-center items-center p-spacing-interline hover:bg-background-tint-02 rounded-08 group/LineItem"
       )}
       onClick={onClick}
     >
-      <div className="flex flex-row items-center justify-start w-full gap-spacing-interline">
-        {Icon && (
-          <div className="h-[1rem] w-[1rem]">
-            <Icon className="h-[1rem] w-[1rem] stroke-text-03" />
+      <div className="flex flex-col justify-center items-start w-full">
+        <div className="flex flex-row items-center justify-start w-full gap-spacing-interline">
+          {Icon && (
+            <div className="h-[1rem] w-[1rem]">
+              <Icon className="h-[1rem] w-[1rem] stroke-text-03" />
+            </div>
+          )}
+          {typeof children === "string" ? (
+            <Truncated mainUiMuted text04 className="text-left w-full">
+              {children}
+            </Truncated>
+          ) : (
+            children
+          )}
+          {/*{rightChildren}*/}
+        </div>
+        {description && (
+          <div className="flex flex-row">
+            {Icon && (
+              <>
+                <div className="w-[1rem]" />
+                <div className="w-spacing-interline" />
+              </>
+            )}
+
+            <Text secondaryBody text03>
+              {description}
+            </Text>
           </div>
         )}
-        {typeof children === "string" ? (
-          <Truncated mainUiMuted text04 className="text-left w-full">
-            {children}
-          </Truncated>
-        ) : (
-          children
-        )}
-        {rightChildren}
       </div>
-      {description && (
-        <div className="flex flex-row">
-          {Icon && (
-            <>
-              <div className="w-[1rem]" />
-              <div className="w-spacing-interline" />
-            </>
-          )}
-
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        </div>
-      )}
+      {rightChildren}
     </button>
   );
 }
