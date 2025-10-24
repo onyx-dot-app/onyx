@@ -19,6 +19,8 @@ import { APIKey } from "./types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -34,6 +36,11 @@ export const OnyxApiKeyForm = ({
   const { t } = useTranslation();
   const { data: templates } = useSWR<any[]>(
     "/api/validators/templates",
+    errorHandlingFetcher
+  );
+
+  const { data: llmProviders } = useSWR<LLMProviderView[]>(
+    "/admin/llm/provider",
     errorHandlingFetcher
   );
 
@@ -70,6 +77,7 @@ export const OnyxApiKeyForm = ({
             ...(apiKey?.config || {}),
             template: initialTemplateId,
             validator_type: apiKey?.validator_type,
+            llm_provider_id: apiKey?.llm_provider_id || "",
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -113,6 +121,9 @@ export const OnyxApiKeyForm = ({
               description: values.description,
               config: configObject,
               validator_type: values.validator_type,
+              llm_provider_id: values.llm_provider_id
+                ? Number(values.llm_provider_id)
+                : undefined,
             };
 
             let response;
@@ -166,6 +177,10 @@ export const OnyxApiKeyForm = ({
                   const tpl = Array.isArray(templates)
                     ? templates.find((t) => String(t?.id) === selectedId)
                     : undefined;
+
+                  // Reset LLM provider selection when template changes
+                  setFieldValue("llm_provider_id", "");
+
                   // Initialize dynamic fields from template schema and set validator_type
                   if (tpl && Array.isArray(tpl.config)) {
                     try {
@@ -217,6 +232,79 @@ export const OnyxApiKeyForm = ({
                 placeholder={t(k.VALIDATOR_DESCRIPTION_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
               />
+
+              {/* LLM Provider Selection */}
+              {(() => {
+                const selectedTemplate = Array.isArray(templates)
+                  ? templates.find(
+                      (t) =>
+                        String(t?.id) === (values.template as unknown as string)
+                    )
+                  : undefined;
+
+                // Check if the template includes LLM support
+                const includeLlm = selectedTemplate?.include_llm;
+
+                if (
+                  !includeLlm ||
+                  !Array.isArray(llmProviders) ||
+                  llmProviders.length === 0
+                ) {
+                  return null;
+                }
+
+                const llmOptions = llmProviders.map((provider) => ({
+                  value: String(provider.id),
+                  name: provider.name,
+                }));
+
+                const selectedProvider = llmProviders.find(
+                  (p) => String(p.id) === String(values.llm_provider_id)
+                );
+
+                return (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium text-text-700">
+                      LLM Provider
+                    </label>
+                    <SelectorFormField
+                      name="llm_provider_id"
+                      label=""
+                      options={llmOptions}
+                      defaultValue=""
+                      onSelect={(selected) => {
+                        setFieldValue("llm_provider_id", selected);
+                      }}
+                    />
+                    {selectedProvider && (
+                      <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
+                        {getProviderIcon(
+                          selectedProvider.provider,
+                          selectedProvider.default_model_name
+                        )({ size: 16 })}
+                        <span className="text-sm text-gray-600">
+                          {selectedProvider.name} -{" "}
+                          {selectedProvider.default_model_name}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Show connected LLM provider info if editing existing validator */}
+                    {isUpdate && apiKey?.llm_provider && !selectedProvider && (
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+                        {getProviderIcon(
+                          apiKey.llm_provider.provider,
+                          apiKey.llm_provider.default_model_name
+                        )({ size: 16 })}
+                        <span className="text-sm text-blue-600">
+                          Connected: {apiKey.llm_provider.name} -{" "}
+                          {apiKey.llm_provider.default_model_name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Dynamic fields rendered from selected template schema */}
               {(() => {
