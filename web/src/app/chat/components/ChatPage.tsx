@@ -56,6 +56,11 @@ import {
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
+  handleChatFeedback,
+  removeChatFeedback,
+} from "@/app/chat/services/lib";
+import { getMessageByMessageId } from "@/app/chat/services/messageTree";
+import {
   useCurrentChatState,
   useSubmittedMessage,
   useLoadingError,
@@ -275,9 +280,77 @@ export function ChatPage({
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
-  const [currentFeedback, setCurrentFeedback] = useState<
-    [FeedbackType, number] | null
-  >(null);
+  // Get the store action for updating message feedback
+  const updateCurrentMessageFeedback = useChatSessionStore(
+    (state) => state.updateCurrentMessageFeedback
+  );
+
+  // Optimistic feedback handler
+  const handleFeedbackChange = useCallback(
+    async (
+      messageId: number,
+      newFeedback: FeedbackType | null,
+      feedbackText?: string,
+      predefinedFeedback?: string
+    ) => {
+      // Get current feedback state for rollback on error
+      const { currentSessionId, sessions } = useChatSessionStore.getState();
+      const messageTree = currentSessionId
+        ? sessions.get(currentSessionId)?.messageTree
+        : undefined;
+      const previousFeedback = messageTree
+        ? getMessageByMessageId(messageTree, messageId)?.currentFeedback ?? null
+        : null;
+
+      // Optimistically update the UI
+      updateCurrentMessageFeedback(messageId, newFeedback);
+
+      try {
+        if (newFeedback === null) {
+          // Remove feedback
+          const response = await removeChatFeedback(messageId);
+          if (!response.ok) {
+            // Rollback on error
+            updateCurrentMessageFeedback(messageId, previousFeedback);
+            const errorData = await response.json();
+            setPopup({
+              message: `Failed to remove feedback - ${
+                errorData.detail || errorData.message
+              }`,
+              type: "error",
+            });
+          }
+        } else {
+          // Add/update feedback
+          const response = await handleChatFeedback(
+            messageId,
+            newFeedback,
+            feedbackText || "",
+            predefinedFeedback
+          );
+          if (!response.ok) {
+            // Rollback on error
+            updateCurrentMessageFeedback(messageId, previousFeedback);
+            const errorData = await response.json();
+            setPopup({
+              message: `Failed to submit feedback - ${
+                errorData.detail || errorData.message
+              }`,
+              type: "error",
+            });
+          }
+        }
+      } catch (error) {
+        // Rollback on network error
+        updateCurrentMessageFeedback(messageId, previousFeedback);
+        setPopup({
+          message: "Failed to submit feedback - network error",
+          type: "error",
+        });
+      }
+    },
+    [updateCurrentMessageFeedback, setPopup]
+  );
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -753,7 +826,7 @@ export function ChatPage({
 
       <ChatPopup />
 
-      <FeedbackModal setPopup={setPopup} />
+      <FeedbackModal />
 
       <ChatSearchModal
         open={isChatSearchModalOpen}
@@ -832,7 +905,7 @@ export function ChatPage({
                       deepResearchEnabled={deepResearchEnabled}
                       currentMessageFiles={currentMessageFiles}
                       setPresentingDocument={setPresentingDocument}
-                      setCurrentFeedback={setCurrentFeedback}
+                      handleFeedbackChange={handleFeedbackChange}
                       onSubmit={onSubmit}
                       onMessageSelection={onMessageSelection}
                       stopGenerating={stopGenerating}

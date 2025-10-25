@@ -51,6 +51,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
+from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import check_project_ownership
@@ -524,6 +525,21 @@ def create_chat_feedback(
         feedback_text=feedback.feedback_text,
         predefined_feedback=feedback.predefined_feedback,
         chat_message_id=feedback.chat_message_id,
+        user_id=user_id,
+        db_session=db_session,
+    )
+
+
+@router.delete("/remove-chat-message-feedback")
+def remove_chat_feedback(
+    chat_message_id: int,
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    user_id = user.id if user else None
+
+    remove_chat_message_feedback(
+        chat_message_id=chat_message_id,
         user_id=user_id,
         db_session=db_session,
     )

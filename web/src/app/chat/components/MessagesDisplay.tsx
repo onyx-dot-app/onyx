@@ -19,7 +19,12 @@ interface MessagesDisplayProps {
   deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
-  setCurrentFeedback: (feedback: [FeedbackType, number] | null) => void;
+  handleFeedbackChange: (
+    messageId: number,
+    newFeedback: FeedbackType | null,
+    feedbackText?: string,
+    predefinedFeedback?: string
+  ) => Promise<void>;
   onSubmit: (args: {
     message: string;
     messageIdToResend?: number;
@@ -59,7 +64,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   deepResearchEnabled,
   currentMessageFiles,
   setPresentingDocument,
-  setCurrentFeedback,
+  handleFeedbackChange,
   onSubmit,
   onMessageSelection,
   stopGenerating,
@@ -97,13 +102,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       };
     },
     [onSubmit, deepResearchEnabled, currentMessageFiles]
-  );
-
-  const handleFeedback = useCallback(
-    (feedback: FeedbackType, messageId: number) => {
-      setCurrentFeedback([feedback, messageId!]);
-    },
-    [setCurrentFeedback]
   );
 
   const handleEditWithMessageId = useCallback(
@@ -189,7 +187,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             >
               <MemoizedAIMessage
                 rawPackets={message.packets}
-                handleFeedbackWithMessageId={handleFeedback}
+                handleFeedbackChange={handleFeedbackChange}
                 assistant={liveAssistant}
                 docs={message.documents ?? emptyDocs}
                 citations={message.citations}
@@ -197,6 +195,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 createRegenerator={createRegenerator}
                 parentMessage={previousMessage!}
                 messageId={message.messageId}
+                currentFeedback={message.currentFeedback}
                 overriddenModel={llmManager.currentLlm?.modelName}
                 nodeId={message.nodeId}
                 llmManager={llmManager}

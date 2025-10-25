@@ -266,6 +266,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
     error: str | None = None
+    current_feedback: str | None = None  # "like" | "dislike" | null
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

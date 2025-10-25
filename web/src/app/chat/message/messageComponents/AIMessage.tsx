@@ -9,7 +9,7 @@ import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -45,6 +45,8 @@ export interface AIMessageProps {
   rawPackets: Packet[];
   chatState: FullChatState;
   nodeId: number;
+  messageId?: number;
+  currentFeedback?: string | null;
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
@@ -54,6 +56,8 @@ export default function AIMessage({
   rawPackets,
   chatState,
   nodeId,
+  messageId,
+  currentFeedback,
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
@@ -61,6 +65,45 @@ export default function AIMessage({
   const markdownRef = useRef<HTMLDivElement>(null);
 
   const { toggleModal } = useChatModal();
+
+  // Handler for feedback button clicks with toggle logic
+  const handleFeedbackClick = useCallback(
+    async (clickedFeedback: "like" | "dislike") => {
+      if (!messageId) {
+        console.error("Cannot provide feedback - message has no messageId");
+        return;
+      }
+
+      // Toggle logic
+      if (currentFeedback === clickedFeedback) {
+        // Clicking same button - remove feedback
+        await chatState.handleFeedbackChange(null);
+      } else if (clickedFeedback === "like") {
+        // Clicking like - check if we need modal for positive feedback
+        const predefinedOptions =
+          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
+        if (predefinedOptions && predefinedOptions.trim()) {
+          // Open modal for positive feedback
+          toggleModal(ModalIds.FeedbackModal, true, {
+            feedbackType: "like",
+            messageId,
+            handleFeedbackChange: chatState.handleFeedbackChange,
+          });
+        } else {
+          // No modal needed - just submit like
+          await chatState.handleFeedbackChange("like");
+        }
+      } else {
+        // Clicking dislike - always open modal
+        toggleModal(ModalIds.FeedbackModal, true, {
+          feedbackType: "dislike",
+          messageId,
+          handleFeedbackChange: chatState.handleFeedbackChange,
+        });
+      }
+    },
+    [messageId, currentFeedback, chatState, toggleModal]
+  );
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -371,26 +414,26 @@ export default function AIMessage({
                           />
                           <IconButton
                             icon={SvgThumbsUp}
-                            onClick={() =>
-                              toggleModal(ModalIds.FeedbackModal, true, {
-                                feedbackType: "like",
-                                messageId: nodeId,
-                              })
-                            }
+                            onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            tooltip="Good Response"
+                            active={currentFeedback === "like"}
+                            tooltip={
+                              currentFeedback === "like"
+                                ? "Remove Like"
+                                : "Good Response"
+                            }
                             data-testid="AIMessage/like-button"
                           />
                           <IconButton
                             icon={SvgThumbsDown}
-                            onClick={() =>
-                              toggleModal(ModalIds.FeedbackModal, true, {
-                                feedbackType: "dislike",
-                                messageId: nodeId,
-                              })
-                            }
+                            onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            tooltip="Bad Response"
+                            active={currentFeedback === "dislike"}
+                            tooltip={
+                              currentFeedback === "dislike"
+                                ? "Remove Dislike"
+                                : "Bad Response"
+                            }
                             data-testid="AIMessage/dislike-button"
                           />
 

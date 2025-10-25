@@ -5,9 +5,11 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  FeedbackType,
 } from "../interfaces";
 import {
   getLatestMessageChain,
+  getMessageByMessageId,
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
@@ -72,6 +74,15 @@ interface ChatSessionStore {
   ) => void;
   updateCanContinue: (sessionId: string, canContinue: boolean) => void;
   updateSubmittedMessage: (sessionId: string, message: string) => void;
+  updateMessageFeedback: (
+    sessionId: string,
+    messageId: number,
+    feedback: string | null
+  ) => void;
+  updateCurrentMessageFeedback: (
+    messageId: number,
+    feedback: string | null
+  ) => void;
   updateSelectedNodeForDocDisplay: (
     sessionId: string,
     selectedMessageForDocDisplay: number | null
@@ -274,6 +285,58 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
   updateSubmittedMessage: (sessionId: string, submittedMessage: string) => {
     get().updateSessionData(sessionId, { submittedMessage });
+  },
+
+  updateMessageFeedback: (
+    sessionId: string,
+    messageId: number,
+    feedback: string | null
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) {
+        console.warn(`Session ${sessionId} not found`);
+        return state;
+      }
+
+      const message = getMessageByMessageId(session.messageTree, messageId);
+      if (!message) {
+        console.warn(`Message ${messageId} not found in session ${sessionId}`);
+        return state;
+      }
+
+      // Create new message object with updated feedback (immutable update)
+      const updatedMessage = {
+        ...message,
+        currentFeedback: feedback as FeedbackType | null,
+      };
+
+      // Create new messageTree Map with updated message
+      const newMessageTree = new Map(session.messageTree);
+      newMessageTree.set(message.nodeId, updatedMessage);
+
+      // Create new session object with new messageTree
+      const updatedSession = {
+        ...session,
+        messageTree: newMessageTree,
+        lastAccessed: new Date(),
+      };
+
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { sessions: newSessions };
+    });
+  },
+
+  updateCurrentMessageFeedback: (
+    messageId: number,
+    feedback: string | null
+  ) => {
+    const { currentSessionId } = get();
+    if (currentSessionId) {
+      get().updateMessageFeedback(currentSessionId, messageId, feedback);
+    }
   },
 
   updateSelectedNodeForDocDisplay: (
