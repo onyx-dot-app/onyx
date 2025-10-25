@@ -11,13 +11,12 @@ import {
 import React, { useId, useMemo } from "react";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
+import Text from "../texts/Text";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
   name,
   state = "idle",
-  message = null,
-  description = null,
   required,
   className,
   children,
@@ -27,19 +26,14 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   const baseId = id ?? `field_${reactId}`;
 
   const describedByIds = useMemo(() => {
-    const ids: string[] = [];
-    if (description) ids.push(`${baseId}-desc`);
-    if (message) ids.push(`${baseId}-msg`);
-    return ids;
-  }, [description, message, baseId]);
+    return [`${baseId}-desc`, `${baseId}-msg`];
+  }, [baseId]);
 
   const contextValue: FieldContextType = {
     baseId,
     name,
     required,
     state,
-    message,
-    description,
     describedByIds,
   };
 
@@ -47,7 +41,7 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
     <FieldContext.Provider value={contextValue}>
       <div
         id={baseId}
-        className={cn("flex flex-col gap-y-2", className)}
+        className={cn("flex flex-col gap-y-spacing-inline", className)}
         {...props}
       >
         {children}
@@ -59,7 +53,7 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
 export const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
-  isOptional,
+  optional,
   className,
   children,
   ...props
@@ -69,21 +63,18 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
     <label
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
-      className={cn("block text-sm font-medium leading-6", className)}
+      className={cn(
+        "ml-spacing-inline-mini text-text-04 font-main-ui-action flex flex-row",
+        className
+      )}
       {...props}
     >
-      <span className="inline-flex items-center gap-2">
-        {leftIcon}
-        <span>
-          {children}
-          {isOptional ? (
-            <span className="ml-2 text-xs text-muted-foreground">
-              ({isOptional ? "Optional" : ""})
-            </span>
-          ) : null}
-        </span>
-        {rightIcon}
-      </span>
+      {children}
+      {optional ? (
+        <Text text03 mainUiMuted className="mx-spacing-inline-mini">
+          {"(Optional)"}
+        </Text>
+      ) : null}
     </label>
   );
 };
@@ -120,17 +111,19 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
   children,
   ...props
 }) => {
-  const { baseId, description } = useFieldContext();
-  const content = description ?? children;
+  const { baseId } = useFieldContext();
+  const content = children;
   if (!content) return null;
   return (
-    <p
+    <Text
       id={`${baseId}-desc`}
-      className={cn("text-sm text-muted-foreground", className)}
+      text03
+      secondaryBody
+      className={cn("ml-spacing-inline-mini", className)}
       {...props}
     >
       {content}
-    </p>
+    </Text>
   );
 };
 
@@ -141,13 +134,8 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
   children,
   ...props
 }) => {
-  const { baseId, state, message } = useFieldContext();
-  const content =
-    (messages && messages[state]) ??
-    (render && render(state)) ??
-    message ??
-    children;
-
+  const { baseId, state } = useFieldContext();
+  const content = children;
   if (!content) return null;
 
   const stateClass =

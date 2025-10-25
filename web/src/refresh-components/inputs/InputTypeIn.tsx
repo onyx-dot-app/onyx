@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import { useBoundingBox } from "@/hooks/useBoundingBox";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -27,7 +27,8 @@ const inputClasses = (active?: boolean) =>
     disabled: ["text-text-02"],
   }) as const;
 
-interface InputTypeInProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputTypeInProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
   // Input states:
   active?: boolean;
   internal?: boolean;
@@ -36,7 +37,13 @@ interface InputTypeInProps extends React.InputHTMLAttributes<HTMLInputElement> {
   // Stylings:
   leftSearchIcon?: boolean;
 
+  // Right section of the input, e.g. password toggle icon
+  rightSection?: React.ReactNode;
+
   placeholder: string;
+
+  // Optional callback invoked when the clear icon is clicked for Formik compatibility
+  onClear?: () => void;
 }
 
 function InputTypeInInner(
@@ -51,6 +58,9 @@ function InputTypeInInner(
     className,
     value,
     onChange,
+    onClear,
+    rightSection,
+    type,
     ...props
   }: InputTypeInProps,
   ref: React.ForwardedRef<HTMLInputElement>
@@ -58,6 +68,8 @@ function InputTypeInInner(
   const { ref: boundingBoxRef, inside: hovered } = useBoundingBox();
   const [localActive, setLocalActive] = useState(active);
   const localRef = useRef<HTMLInputElement>(null);
+
+  const effectiveType = type || "text";
 
   // Use forwarded ref if provided, otherwise use local ref
   const inputRef = ref || localRef;
@@ -76,6 +88,11 @@ function InputTypeInInner(
   }, [hovered]);
 
   function handleClear() {
+    if (onClear) {
+      onClear();
+      return;
+    }
+
     onChange?.({
       target: { value: "" },
       currentTarget: { value: "" },
@@ -112,27 +129,36 @@ function InputTypeInInner(
 
       <input
         ref={inputRef}
-        type="text"
+        type={effectiveType}
         placeholder={placeholder}
         disabled={disabled}
         value={value}
         onChange={onChange}
-        onFocus={() => setLocalActive(true)}
-        onBlur={() => setLocalActive(false)}
         className={cn(
           "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none",
           inputClasses(localActive)[state]
         )}
         {...props}
+        // Override the onFocus and onBlur props to set the local active state
+        onFocus={(e) => {
+          setLocalActive(true);
+          props.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setLocalActive(false);
+          props.onBlur?.(e);
+        }}
       />
       {value && (
         <IconButton
           icon={SvgX}
           disabled={disabled}
-          onClick={handleClear}
+          onClick={noProp(handleClear)}
+          type="button"
           internal
         />
       )}
+      {rightSection}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;

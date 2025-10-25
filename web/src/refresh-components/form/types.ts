@@ -6,16 +6,12 @@ export interface FieldContextType {
   name?: string;
   required?: boolean;
   state: FormFieldState;
-  message?: string | null;
-  description?: string | null;
   describedByIds: string[];
 }
 
 export type FormFieldRootProps = React.HTMLAttributes<HTMLDivElement> & {
   name?: string;
   state: FormFieldState;
-  message?: string | null;
-  description?: string | null;
   required?: boolean;
   id?: string;
 };
@@ -23,7 +19,7 @@ export type FormFieldRootProps = React.HTMLAttributes<HTMLDivElement> & {
 export type LabelProps = React.HTMLAttributes<HTMLLabelElement> & {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
-  isOptional?: boolean;
+  optional?: boolean;
 };
 
 export type ControlProps = React.PropsWithChildren<{

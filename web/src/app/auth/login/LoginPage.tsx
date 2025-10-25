@@ -69,11 +69,11 @@ export default function LoginPage({
       )}
 
       {authTypeMetadata?.authType === "basic" && (
-        <>
+        <div className="flex flex-col w-full gap-padding-content">
           <LoginText />
+
           <EmailPasswordForm nextUrl={nextUrl} />
-          <div className="flex flex-col gap-y-2 items-center"></div>
-        </>
+        </div>
       )}
 
       {!hidePageRedirect && (
