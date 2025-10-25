@@ -35,7 +35,7 @@ import SvgKey from "@/icons/key";
 import SvgLock from "@/icons/lock";
 import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
-import { FiCheck, FiKey, FiLoader } from "react-icons/fi";
+import { FiKey, FiLoader } from "react-icons/fi";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -185,21 +185,17 @@ function ActionItem({
                   }}
                 >
                   {!toolAuthStatus.hasToken || toolAuthStatus.isTokenExpired ? (
-                    <FiKey
-                      size={16}
-                      className="transition-colors cursor-pointer text-yellow-500 hover:text-yellow-600"
-                      title={
-                        toolAuthStatus.isTokenExpired
-                          ? "OAuth token expired - click to re-authenticate"
-                          : "Click to authenticate"
-                      }
+                    <SvgKey
+                      className={cn(
+                        "h-[1rem] w-[1rem]",
+                        "transition-colors",
+                        "cursor-pointer",
+                        "stroke-yellow-500",
+                        "hover:stroke-yellow-600"
+                      )}
                     />
                   ) : (
-                    <FiCheck
-                      size={16}
-                      className="text-green-500"
-                      title="Authenticated"
-                    />
+                    <SvgCheck className="stroke-status-text-success-05 h-[1rem] w-[1rem]" />
                   )}
                 </div>
               )}
