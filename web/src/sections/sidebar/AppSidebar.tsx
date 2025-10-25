@@ -470,20 +470,23 @@ function AppSidebarInner() {
                         }
                       />
                     }
+                    actionOnHover
                   >
                     {projects.map((project) => (
                       <ProjectFolderButton key={project.id} project={project} />
                     ))}
 
-                    <SidebarTab
-                      leftIcon={SvgFolderPlus}
-                      onClick={() =>
-                        toggleModal(ModalIds.CreateProjectModal, true)
-                      }
-                      lowlight
-                    >
-                      New Project
-                    </SidebarTab>
+                    {projects.length < 1 && (
+                      <SidebarTab
+                        leftIcon={SvgFolderPlus}
+                        onClick={() =>
+                          toggleModal(ModalIds.CreateProjectModal, true)
+                        }
+                        lowlight
+                      >
+                        New Project
+                      </SidebarTab>
+                    )}
                   </SidebarSection>
 
                   {/* Recents */}
