@@ -7,6 +7,8 @@ import { OAuthConfigForm } from "@/app/admin/oauth-configs/OAuthConfigForm";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useFormikContext } from "formik";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { KeyedMutator } from "swr";
+import SvgEdit from "@/icons/edit";
 
 interface OAuthConfigSelectorProps {
   name: string;
@@ -15,6 +17,7 @@ interface OAuthConfigSelectorProps {
   onSelect?: (configId: number | null) => void;
   onConfigCreated?: (config: OAuthConfig) => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
+  mutateOAuthConfigs?: KeyedMutator<OAuthConfig[]>;
 }
 
 export const OAuthConfigSelector = ({
@@ -24,9 +27,14 @@ export const OAuthConfigSelector = ({
   onSelect,
   onConfigCreated,
   setPopup,
+  mutateOAuthConfigs,
 }: OAuthConfigSelectorProps) => {
   const [showModal, setShowModal] = useState(false);
-  const { setFieldValue } = useFormikContext();
+  const [editingConfig, setEditingConfig] = useState<OAuthConfig | null>(null);
+  const { setFieldValue, values } = useFormikContext<any>();
+
+  // Get the currently selected config ID
+  const selectedConfigId = values[name];
 
   const options = [
     { name: "None", value: -1 },
@@ -36,28 +44,57 @@ export const OAuthConfigSelector = ({
     })),
   ];
 
-  const handleConfigCreated = (createdConfig: OAuthConfig) => {
-    // First, update the parent with the new config so it's added to the list
-    if (onConfigCreated) {
-      onConfigCreated(createdConfig);
+  const handleConfigSaved = (savedConfig: OAuthConfig) => {
+    const isCreating = !editingConfig;
+
+    // Refresh the OAuth configs list
+    if (mutateOAuthConfigs) {
+      mutateOAuthConfigs();
     }
 
-    // Wait a moment for the options list to update before setting the field value
-    // This ensures the new config is in the options when the selector tries to find it
-    setTimeout(() => {
-      // Now set the newly created config as selected
-      setFieldValue(name, createdConfig.id.toString(), true);
+    // If creating a new config, also call the onConfigCreated callback
+    // and select the new config
+    if (isCreating && onConfigCreated) {
+      onConfigCreated(savedConfig);
 
-      // Call the onSelect callback if provided
-      if (onSelect) {
-        onSelect(createdConfig.id);
-      }
-    }, 100);
+      // Wait a moment for the options list to update before setting the field value
+      // This ensures the new config is in the options when the selector tries to find it
+      setTimeout(() => {
+        // Now set the newly created config as selected
+        setFieldValue(name, savedConfig.id.toString(), true);
+
+        // Call the onSelect callback if provided
+        if (onSelect) {
+          onSelect(savedConfig.id);
+        }
+      }, 100);
+    }
   };
 
   const handleModalClose = () => {
     setShowModal(false);
+    setEditingConfig(null);
   };
+
+  const handleEditClick = () => {
+    // Find the selected config
+    const configId =
+      typeof selectedConfigId === "string"
+        ? parseInt(selectedConfigId)
+        : selectedConfigId;
+    const config = oauthConfigs.find((c) => c.id === configId);
+    if (config) {
+      setEditingConfig(config);
+      setShowModal(true);
+    }
+  };
+
+  // Check if a valid config is selected (not null and not "None")
+  const hasValidSelection =
+    selectedConfigId &&
+    selectedConfigId !== -1 &&
+    selectedConfigId !== "-1" &&
+    selectedConfigId !== "null";
 
   return (
     <div className="space-y-2">
@@ -86,15 +123,28 @@ export const OAuthConfigSelector = ({
           }
         }}
       />
-      <CreateButton onClick={() => setShowModal(true)}>
-        New OAuth Configuration
-      </CreateButton>
+      <div className="flex gap-2">
+        <CreateButton onClick={() => setShowModal(true)}>
+          New OAuth Configuration
+        </CreateButton>
+        {hasValidSelection && (
+          <Button
+            onClick={handleEditClick}
+            secondary
+            leftIcon={SvgEdit}
+            type="button"
+          >
+            Edit Configuration
+          </Button>
+        )}
+      </div>
 
       {showModal && (
         <OAuthConfigForm
           onClose={handleModalClose}
           setPopup={setPopup}
-          onConfigCreated={handleConfigCreated}
+          config={editingConfig || undefined}
+          onConfigSubmitted={handleConfigSaved}
         />
       )}
     </div>

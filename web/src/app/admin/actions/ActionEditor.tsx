@@ -305,6 +305,7 @@ function ActionForm({
                   }
                 }}
                 setPopup={setPopup}
+                mutateOAuthConfigs={mutateOAuthConfigs}
                 onConfigCreated={(createdConfig) => {
                   // Optimistically add the new config to the list
                   mutateOAuthConfigs(

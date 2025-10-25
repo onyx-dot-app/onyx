@@ -18,7 +18,7 @@ interface OAuthConfigFormProps {
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
   config?: OAuthConfig;
-  onConfigCreated?: (config: OAuthConfig) => void;
+  onConfigSubmitted?: (config: OAuthConfig) => void;
 }
 
 const OAuthConfigSchema = Yup.object().shape({
@@ -46,7 +46,7 @@ export const OAuthConfigForm = ({
   onClose,
   setPopup,
   config,
-  onConfigCreated,
+  onConfigSubmitted,
 }: OAuthConfigFormProps) => {
   const isUpdate = config !== undefined;
 
@@ -99,11 +99,19 @@ export const OAuthConfigForm = ({
                   updatePayload.client_secret = values.client_secret;
                 }
 
-                await updateOAuthConfig(config.id, updatePayload);
+                const updatedConfig = await updateOAuthConfig(
+                  config.id,
+                  updatePayload
+                );
                 setPopup({
                   message: "Successfully updated OAuth configuration!",
                   type: "success",
                 });
+
+                // Call the callback to refresh the list
+                if (onConfigSubmitted) {
+                  onConfigSubmitted(updatedConfig);
+                }
               } else {
                 // Create new config
                 const createPayload: OAuthConfigCreate = {
@@ -122,8 +130,8 @@ export const OAuthConfigForm = ({
                 });
 
                 // Call the callback with the created config
-                if (onConfigCreated && createdConfig) {
-                  onConfigCreated(createdConfig);
+                if (onConfigSubmitted && createdConfig) {
+                  onConfigSubmitted(createdConfig);
                 }
               }
               onClose();
