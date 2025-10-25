@@ -85,6 +85,7 @@ import ollamaIcon from "../../../public/Ollama.png";
 import openAISVG from "../../../public/Openai.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import outlinePNG from "../../../public/Outline.png";
+import pylonIcon from "../../../public/Pylon.png";
 import qwenSVG from "../../../public/Qwen.svg";
 import r2Icon from "../../../public/r2.png";
 import s3Icon from "../../../public/S3.png";
@@ -2934,6 +2935,7 @@ export const OutlineIcon = createLogoIcon(outlinePNG, {
   classNameAddition: "-m-0.5",
 });
 export const ProductboardIcon = createLogoIcon(productboardIcon);
+export const PylonIcon = createLogoIcon(pylonIcon);
 export const QwenIcon = createLogoIcon(qwenSVG);
 export const R2Icon = createLogoIcon(r2Icon);
 export const S3Icon = createLogoIcon(s3Icon);

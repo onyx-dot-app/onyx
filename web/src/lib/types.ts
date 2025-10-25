@@ -501,6 +501,7 @@ export enum ValidSources {
   Highspot = "highspot",
   Imap = "imap",
   Bitbucket = "bitbucket",
+  Pylon = "pylon",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
