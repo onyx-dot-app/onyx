@@ -48,7 +48,10 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
 import SvgSettings from "@/icons/settings";
-import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
+import {
+  ToolAuthStatus,
+  useToolOAuthStatus,
+} from "@/lib/hooks/useToolOAuthStatus";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -92,10 +95,7 @@ interface ActionItemProps {
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
   tooltipSide?: "top" | "right" | "bottom" | "left";
-  oauthStatus?: {
-    has_token: boolean;
-    is_expired: boolean;
-  };
+  toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
 }
 
@@ -110,7 +110,7 @@ function ActionItem({
   onSourceManagementOpen,
   hasNoConnectors = false,
   tooltipSide = "left",
-  oauthStatus,
+  toolAuthStatus,
   onOAuthAuthenticate,
 }: ActionItemProps) {
   // If a tool is provided, derive the icon and label from it
@@ -171,22 +171,25 @@ function ActionItem({
             </div>
             <div className="flex items-center gap-2">
               {/* OAuth Authentication Indicator */}
-              {tool?.oauth_config_id && oauthStatus && (
+              {tool?.oauth_config_id && toolAuthStatus && (
                 <div
                   className="flex items-center gap-2 transition-opacity duration-200 opacity-0 group-hover:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!oauthStatus.has_token || oauthStatus.is_expired) {
+                    if (
+                      !toolAuthStatus.hasToken ||
+                      toolAuthStatus.isTokenExpired
+                    ) {
                       onOAuthAuthenticate?.();
                     }
                   }}
                 >
-                  {!oauthStatus.has_token || oauthStatus.is_expired ? (
+                  {!toolAuthStatus.hasToken || toolAuthStatus.isTokenExpired ? (
                     <FiKey
                       size={16}
                       className="transition-colors cursor-pointer text-yellow-500 hover:text-yellow-600"
                       title={
-                        oauthStatus.is_expired
+                        toolAuthStatus.isTokenExpired
                           ? "OAuth token expired - click to re-authenticate"
                           : "Click to authenticate"
                       }
@@ -424,7 +427,7 @@ export function ActionToggle({
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
 
   // Use the OAuth hook
-  const { getOAuthStatusForTool, authenticateTool } = useToolOAuthStatus(
+  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
     selectedAssistant.id
   );
 
@@ -994,7 +997,7 @@ export function ActionToggle({
                       setSecondaryView({ type: "sources" })
                     }
                     hasNoConnectors={hasNoConnectors}
-                    oauthStatus={getOAuthStatusForTool(tool)}
+                    toolAuthStatus={getToolAuthStatus(tool)}
                     onOAuthAuthenticate={() => authenticateTool(tool)}
                   />
                 ))}

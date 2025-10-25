@@ -125,8 +125,8 @@ export async function handleOAuthCallback(
   return await response.json();
 }
 
-export async function getOAuthTokenStatus(): Promise<OAuthTokenStatus[]> {
-  const response = await fetch("/api/oauth-config/status");
+export async function getUserOAuthTokenStatus(): Promise<OAuthTokenStatus[]> {
+  const response = await fetch("/api/user-oauth-token/status");
 
   if (!response.ok) {
     throw new Error(

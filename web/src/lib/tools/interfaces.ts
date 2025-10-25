@@ -106,8 +106,6 @@ export interface OAuthConfigUpdate {
 
 export interface OAuthTokenStatus {
   oauth_config_id: number;
-  oauth_config_name: string;
-  has_token: boolean;
   expires_at: number | null;
   is_expired: boolean;
 }

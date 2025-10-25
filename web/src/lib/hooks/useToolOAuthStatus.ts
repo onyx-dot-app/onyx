@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { getOAuthTokenStatus, initiateOAuthFlow } from "@/lib/oauth/api";
+import { getUserOAuthTokenStatus, initiateOAuthFlow } from "@/lib/oauth/api";
 import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/interfaces";
 
-interface ToolOAuthStatus {
-  has_token: boolean;
-  is_expired: boolean;
+export interface ToolAuthStatus {
+  // whether or not the user has EVER auth'd
+  hasToken: boolean;
+  // whether or not the user's current token is expired
+  isTokenExpired: boolean;
 }
 
 export function useToolOAuthStatus(assistantId?: number) {
@@ -18,7 +20,7 @@ export function useToolOAuthStatus(assistantId?: number) {
     try {
       setLoading(true);
       setError(null);
-      const statuses = await getOAuthTokenStatus();
+      const statuses = await getUserOAuthTokenStatus();
       setOauthTokenStatuses(statuses);
     } catch (err) {
       console.error("Error fetching OAuth token statuses:", err);
@@ -35,19 +37,23 @@ export function useToolOAuthStatus(assistantId?: number) {
   /**
    * Get OAuth status for a specific tool
    */
-  const getOAuthStatusForTool = useCallback(
-    (tool: ToolSnapshot): ToolOAuthStatus | undefined => {
+  const getToolAuthStatus = useCallback(
+    (tool: ToolSnapshot): ToolAuthStatus | undefined => {
       if (!tool.oauth_config_id) return undefined;
 
       const status = oauthTokenStatuses.find(
         (s) => s.oauth_config_id === tool.oauth_config_id
       );
 
-      if (!status) return undefined;
+      if (!status)
+        return {
+          hasToken: false,
+          isTokenExpired: false,
+        };
 
       return {
-        has_token: status.has_token,
-        is_expired: status.is_expired,
+        hasToken: true,
+        isTokenExpired: status.is_expired,
       };
     },
     [oauthTokenStatuses]
@@ -76,34 +82,21 @@ export function useToolOAuthStatus(assistantId?: number) {
   );
 
   /**
-   * Check if a tool needs authentication
-   */
-  const needsAuthentication = useCallback(
-    (tool: ToolSnapshot): boolean => {
-      const status = getOAuthStatusForTool(tool);
-      if (!status) return false;
-      return !status.has_token || status.is_expired;
-    },
-    [getOAuthStatusForTool]
-  );
-
-  /**
    * Get all tools that need authentication from a list
    */
   const getToolsNeedingAuth = useCallback(
     (tools: ToolSnapshot[]): ToolSnapshot[] => {
-      return tools.filter((tool) => needsAuthentication(tool));
+      return tools.filter((tool) => !getToolAuthStatus(tool));
     },
-    [needsAuthentication]
+    [getToolAuthStatus]
   );
 
   return {
     oauthTokenStatuses,
     loading,
     error,
-    getOAuthStatusForTool,
+    getToolAuthStatus,
     authenticateTool,
-    needsAuthentication,
     getToolsNeedingAuth,
     refetch: fetchOAuthStatus,
   };
