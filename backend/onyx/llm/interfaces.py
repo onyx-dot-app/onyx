@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.tracing.braintrust_tracing import with_tenant_metadata
 from onyx.utils.logger import setup_logger
 
 
@@ -88,6 +89,7 @@ class LLM(abc.ABC):
             log_prompt(prompt)
 
     @traced(name="invoke llm", type="llm")
+    @with_tenant_metadata
     def invoke(
         self,
         prompt: LanguageModelInput,
