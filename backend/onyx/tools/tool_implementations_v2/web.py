@@ -1,3 +1,4 @@
+import json
 from typing import List
 from typing import Optional
 
@@ -22,7 +23,10 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     truncate_search_result_content,
 )
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.configs.constants import DocumentSource
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -35,7 +39,6 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
 class WebSearchResult(BaseModel):
-    tag: str
     title: str
     link: str
     snippet: str
@@ -45,22 +48,6 @@ class WebSearchResult(BaseModel):
 
 class WebSearchResponse(BaseModel):
     results: List[WebSearchResult]
-
-
-class OpenUrlResult(BaseModel):
-    tag: str
-    title: str
-    link: str
-    truncated_content: str
-    published_date: Optional[str] = None
-
-
-class OpenUrlResponse(BaseModel):
-    results: List[OpenUrlResult]
-
-
-def short_tag(link: str, i: int) -> str:
-    return f"{i+1}"
 
 
 @tool_accounting
@@ -106,7 +93,7 @@ def _web_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_hits = []
+    all_hits: list[WebSearchResult] = []
     for result_id in search_results_dict:
         hits = search_results_dict[result_id]
         if hits:
@@ -114,10 +101,9 @@ def _web_search_core(
 
     # Convert hits to WebSearchResult objects
     results = []
-    for i, r in enumerate(all_hits):
+    for _, r in enumerate(all_hits):
         results.append(
             WebSearchResult(
-                tag=short_tag(r.link, i),
                 title=r.title,
                 link=r.link,
                 snippet=r.snippet or "",
@@ -196,7 +182,7 @@ def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: List[str],
     search_provider: WebSearchProvider,
-) -> OpenUrlResponse:
+) -> list[LlmDoc]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -212,17 +198,21 @@ def _open_url_core(
     )
 
     docs = search_provider.contents(urls)
-    out = []
-    for i, d in enumerate(docs):
-        out.append(
-            OpenUrlResult(
-                tag=short_tag(d.link, i),
-                title=d.title,
+    llm_docs = []
+    for _, d in enumerate(docs):
+        llm_docs.append(
+            LlmDoc(
+                document_id=d.link,
+                content=truncate_search_result_content(d.full_content),
+                blurb=d.link,
+                semantic_identifier=d.link,
+                source_type=DocumentSource.WEB,
+                metadata={},
                 link=d.link,
-                truncated_content=truncate_search_result_content(d.full_content),
-                published_date=(
-                    d.published_date.isoformat() if d.published_date else None
-                ),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                updated_at=d.published_date,
+                source_links={},
+                match_highlights=[],
             )
         )
     run_context.context.iteration_instructions.append(
@@ -233,7 +223,7 @@ def _open_url_core(
             reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
         )
     )
-    run_context.context.raw_fetched_documents.extend(
+    run_context.context.unordered_fetched_inference_sections.extend(
         [dummy_inference_section_from_internet_content(d) for d in docs]
     )
     run_context.context.aggregated_context.global_iteration_responses.append(
@@ -260,7 +250,7 @@ def _open_url_core(
     # Set flag to include citation requirements since we fetched documents
     run_context.context.should_cite_documents = True
 
-    return OpenUrlResponse(results=out)
+    return llm_docs
 
 
 @function_tool
@@ -271,8 +261,8 @@ def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
-    response = _open_url_core(run_context, urls, search_provider)
-    return response.model_dump_json()
+    retrieved_docs = _open_url_core(run_context, urls, search_provider)
+    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])
 
 
 # TODO: Make a ToolV2 class to encapsulate all of this

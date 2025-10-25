@@ -74,14 +74,10 @@ class ChatTurnContext:
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
     should_cite_documents: bool = False
-    # TODO: These don't actually have to be in this context
-    # Since tool calls don't need to reference them
     documents_cited_count: int = 0
     tool_calls_cited_count: int = 0
-    raw_fetched_documents: list[InferenceSection] = dataclasses.field(
+    unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
         default_factory=list
     )
-    fetched_documents_postprocessed: list[LlmDoc] = dataclasses.field(
-        default_factory=list
-    )
+    ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
     collected_citations: list[CitationInfo] = dataclasses.field(default_factory=list)

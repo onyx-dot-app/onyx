@@ -96,7 +96,9 @@ def _internal_search_core(
                         section_to_llm_doc_with_empty_doc_citation_number(section)
                         for section in retrieved_sections
                     ]
-                    run_context.context.raw_fetched_documents.extend(retrieved_sections)
+                    run_context.context.unordered_fetched_inference_sections.extend(
+                        retrieved_sections
+                    )
                     run_context.context.run_dependencies.emitter.emit(
                         Packet(
                             ind=index,

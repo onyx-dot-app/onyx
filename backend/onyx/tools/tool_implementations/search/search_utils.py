@@ -1,3 +1,4 @@
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.prompt_utils import clean_up_source
@@ -54,7 +55,7 @@ def section_to_llm_doc_with_empty_doc_citation_number(
         link=link,
         source_links=section.center_chunk.source_links,
         match_highlights=section.center_chunk.match_highlights,
-        document_citation_number=-1,
+        document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
     )
 
 

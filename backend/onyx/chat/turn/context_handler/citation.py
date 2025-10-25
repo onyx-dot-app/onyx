@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
 
@@ -35,7 +36,10 @@ def assign_citation_numbers_recent_tool_calls(
                 if llm_docs:
                     updated_citation_number = False
                     for doc in llm_docs:
-                        if doc.document_citation_number == -1:
+                        if (
+                            doc.document_citation_number
+                            == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                        ):
                             num_docs_cited += 1  # add 1 first so it's 1-indexed
                             updated_citation_number = True
                             doc.document_citation_number = (

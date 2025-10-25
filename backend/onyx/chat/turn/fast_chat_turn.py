@@ -96,7 +96,7 @@ def _run_agent_loop(
         agent_turn_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs = (
             assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
         )
-        ctx.fetched_documents_postprocessed.extend(new_llm_docs)
+        ctx.ordered_fetched_documents.extend(new_llm_docs)
         ctx.documents_cited_count += num_docs_cited
         ctx.tool_calls_cited_count += num_tool_calls_cited
 
@@ -169,8 +169,8 @@ def _fast_chat_turn_core(
         research_type=research_type,
         ctx=ctx,
         final_answer=final_answer,
-        raw_fetched_documents=ctx.raw_fetched_documents,
-        postprocessed_fetched_documents=ctx.fetched_documents_postprocessed,
+        raw_fetched_documents=ctx.unordered_fetched_inference_sections,
+        postprocessed_fetched_documents=ctx.ordered_fetched_documents,
     )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
@@ -206,10 +206,10 @@ def _process_stream(
 ) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
     from litellm import ResponseFunctionToolCall
 
-    mapping = map_document_id_order_v2(ctx.fetched_documents_postprocessed)
-    if ctx.fetched_documents_postprocessed:
+    mapping = map_document_id_order_v2(ctx.ordered_fetched_documents)
+    if ctx.ordered_fetched_documents:
         processor = CitationProcessor(
-            context_docs=ctx.fetched_documents_postprocessed,
+            context_docs=ctx.ordered_fetched_documents,
             final_doc_id_to_rank_map=mapping,
             display_doc_id_to_rank_map=mapping,
             stop_stream=None,
@@ -257,26 +257,6 @@ def _emit_clean_up_packets(
     )
 
 
-def _gather_context_docs_from_iteration_answers(
-    iteration_answers: list[IterationAnswer],
-) -> list[InferenceSection]:
-    """Gather cited documents from iteration answers for citation processing."""
-    context_docs: list[InferenceSection] = []
-
-    for iteration_answer in iteration_answers:
-        # Extract cited documents from this iteration
-        for inference_section in iteration_answer.cited_documents.values():
-            # Avoid duplicates by checking document_id
-            if not any(
-                doc.center_chunk.document_id
-                == inference_section.center_chunk.document_id
-                for doc in context_docs
-            ):
-                context_docs.append(inference_section)
-
-    return context_docs
-
-
 def _emit_citations_for_final_answer(
     dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
@@ -301,7 +281,7 @@ def _default_packet_translation(
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
-                ctx.fetched_documents_postprocessed
+                ctx.ordered_fetched_documents
             )
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs

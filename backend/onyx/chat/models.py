@@ -33,6 +33,10 @@ if TYPE_CHECKING:
     from onyx.db.models import Persona
 
 
+# We need this value to be a constant instead of None to avoid JSON serialization issues
+DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
+
+
 class LlmDoc(BaseModel):
     """This contains the minimal set information for the LLM portion including citations"""
 
@@ -46,7 +50,7 @@ class LlmDoc(BaseModel):
     link: str | None
     source_links: dict[int, str] | None
     match_highlights: list[str] | None
-    document_citation_number: int | None = None
+    document_citation_number: int | None = DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 
 
 # First chunk of info for streaming QA

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
@@ -193,8 +194,8 @@ def test_assign_citation_numbers_previous_tool_calls(
     # Verify citation numbers were assigned correctly
     assert len(llm_docs) == 3
     # these two should be unchanged
-    assert llm_docs[0].document_citation_number == -1
-    assert llm_docs[1].document_citation_number == -1
+    assert llm_docs[0].document_citation_number == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+    assert llm_docs[1].document_citation_number == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
     # this one should be assigned
     assert llm_docs[2].document_citation_number == 2
 
