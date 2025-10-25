@@ -20,6 +20,11 @@ class OptionalSearchSetting(str, Enum):
     AUTO = "auto"
 
 
+class QueryType(str, Enum):
+    KEYWORD = "keyword"
+    SEMANTIC = "semantic"
+
+
 class SearchType(str, Enum):
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
