@@ -29,7 +29,6 @@ class PassThroughAnswerResponseHandler(AnswerResponseHandler):
     def handle_response_part(
         self,
         response_item: BaseMessage | str | None,
-        previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         content = _message_to_str(response_item)
         yield OnyxAnswerPiece(answer_piece=content)
@@ -39,7 +38,6 @@ class DummyAnswerResponseHandler(AnswerResponseHandler):
     def handle_response_part(
         self,
         response_item: BaseMessage | str | None,
-        previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         # This is a dummy handler that returns nothing
         yield from []
@@ -49,6 +47,8 @@ class CitationResponseHandler(AnswerResponseHandler):
     def __init__(
         self,
         context_docs: list[LlmDoc],
+        # TODO: Right now these are always the same at runtime in prod
+        # one of them should be removed
         final_doc_id_to_rank_map: DocumentIdOrderMapping,
         display_doc_id_to_rank_map: DocumentIdOrderMapping,
     ):
@@ -69,7 +69,6 @@ class CitationResponseHandler(AnswerResponseHandler):
     def handle_response_part(
         self,
         response_item: BaseMessage | str | None,
-        previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         if response_item is None:
             return

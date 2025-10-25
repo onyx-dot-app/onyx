@@ -132,7 +132,6 @@ def _web_search_core(
     inference_sections = [
         dummy_inference_section_from_internet_search_result(r) for r in all_hits
     ]
-    run_context.context.aggregated_context.cited_documents.extend(inference_sections)
 
     run_context.context.aggregated_context.global_iteration_responses.append(
         IterationAnswer(

@@ -13,12 +13,18 @@ from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.chat_utils import llm_doc_from_inference_section
+from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
+from onyx.chat.stream_processing.answer_response_handler import CitationResponseHandler
+from onyx.chat.stream_processing.answer_response_handler import (
+    PassThroughAnswerResponseHandler,
+)
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
+from onyx.chat.stream_processing.utils import map_document_id_order
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
@@ -92,9 +98,10 @@ def _run_agent_loop(
             prompt_config,
             ctx.should_cite_documents,
         )
-        agent_turn_messages, num_docs_cited, num_tool_calls_cited = (
+        agent_turn_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs = (
             assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
         )
+        ctx.real_cited_documents.extend(new_llm_docs)
         ctx.documents_cited_count += num_docs_cited
         ctx.tool_calls_cited_count += num_tool_calls_cited
 
@@ -323,17 +330,29 @@ def _process_citations_for_final_answer(
 
 
 def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj | None:
+    if ctx.real_cited_documents:
+        final_search_results = ctx.real_cited_documents
+        answer_handler: AnswerResponseHandler = CitationResponseHandler(
+            context_docs=final_search_results,
+            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
+            display_doc_id_to_rank_map=map_document_id_order(final_search_results),
+        )
+    else:
+        answer_handler = PassThroughAnswerResponseHandler()
     if isinstance(ev, RawResponsesStreamEvent):
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
-            retrieved_search_docs = convert_inference_sections_to_search_docs(
-                ctx.aggregated_context.cited_documents
+            retrieved_search_docs = saved_search_docs_from_llm_docs(
+                ctx.real_cited_documents
             )
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs
             )
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
-            obj = MessageDelta(type="message_delta", content=ev.data.delta)
+            for response_part in answer_handler.handle_response_part(ev.data.delta):
+                obj = MessageDelta(
+                    type="message_delta", content=response_part.answer_piece
+                )
         elif ev.data.type == "response.content_part.done":
             obj = SectionEnd(type="section_end")
         return obj

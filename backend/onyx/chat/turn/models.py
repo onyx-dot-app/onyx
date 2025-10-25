@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.llm.interfaces import LLM
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -71,5 +72,8 @@ class ChatTurnContext:
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
     should_cite_documents: bool = False
+    # TODO: These don't actually have to be in this context
+    # Since tool calls don't need to reference them
     documents_cited_count: int = 0
     tool_calls_cited_count: int = 0
+    real_cited_documents: list[LlmDoc] = dataclasses.field(default_factory=list)

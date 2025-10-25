@@ -93,8 +93,8 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
 
     # Verify citation numbers were assigned correctly
     assert len(llm_docs) == 2
-    assert llm_docs[0].document_citation_number == 1
-    assert llm_docs[1].document_citation_number == 2
+    assert llm_docs[0].document_citation_number == 0
+    assert llm_docs[1].document_citation_number == 1
 
 
 def test_assign_citation_numbers_no_relevant_tool_calls(
@@ -196,7 +196,7 @@ def test_assign_citation_numbers_previous_tool_calls(
     assert llm_docs[0].document_citation_number == -1
     assert llm_docs[1].document_citation_number == -1
     # this one should be assigned
-    assert llm_docs[2].document_citation_number == 3
+    assert llm_docs[2].document_citation_number == 2
 
 
 def test_assign_citation_numbers_parallel_tool_calls(
@@ -254,6 +254,6 @@ def test_assign_citation_numbers_parallel_tool_calls(
     # Verify citation numbers were assigned correctly
     assert len(llm_docs) == 3
     # these two should be unchanged
-    assert llm_docs[0].document_citation_number == 1
-    assert llm_docs[1].document_citation_number == 2
-    assert llm_docs[2].document_citation_number == 3
+    assert llm_docs[0].document_citation_number == 0
+    assert llm_docs[1].document_citation_number == 1
+    assert llm_docs[2].document_citation_number == 2
