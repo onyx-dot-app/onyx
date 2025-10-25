@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
@@ -67,9 +68,9 @@ class TenantContextTracingProcessor(BraintrustTracingProcessor):
         super().on_trace_start(trace)
 
 
-def with_tenant_metadata(f):
+def with_tenant_metadata(f) -> Callable:
     @wraps(f)
-    def w(*a, **k):
+    def w(*a, **k) -> Any:
         braintrust.current_span().log(
             metadata={"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()}
         )
