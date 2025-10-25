@@ -4,7 +4,6 @@ import { loginAs } from "../../utils/auth";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
-const getProviderInput = (page: Page) => page.locator('input[name="provider"]');
 const getAuthorizationUrlInput = (page: Page) =>
   page.locator('input[name="authorization_url"]');
 const getTokenUrlInput = (page: Page) =>
@@ -103,9 +102,9 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   // Verify OAuth Config Selector is visible
   await expect(page.getByText("OAuth Configuration:")).toBeVisible();
 
-  // Click "Create New OAuth Config" button
+  // Click "New OAuth Configuration" button
   const createNewOAuthButton = page.getByRole("button", {
-    name: "Create New OAuth Config",
+    name: "New OAuth Configuration",
   });
   await createNewOAuthButton.click();
 
@@ -114,7 +113,6 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
 
   // Fill in OAuth config details
   await getNameInput(page).fill(configName);
-  await getProviderInput(page).fill(provider);
   await getAuthorizationUrlInput(page).fill(authorizationUrl);
   await getTokenUrlInput(page).fill(tokenUrl);
   await getClientIdInput(page).fill(clientId);
