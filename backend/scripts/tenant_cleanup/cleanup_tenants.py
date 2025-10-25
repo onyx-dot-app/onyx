@@ -36,26 +36,8 @@ from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
 
 
-# Global variable to track active subprocess
-_active_process = None
-
-
 def signal_handler(signum: int, frame: object) -> None:
     """Handle termination signals by killing active subprocess."""
-    global _active_process
-    if _active_process:
-        print(
-            "\n\n⚠ Received interrupt signal. Terminating active subprocess...",
-            file=sys.stderr,
-        )
-        try:
-            _active_process.terminate()
-            _active_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            print("  Subprocess didn't terminate, killing it...", file=sys.stderr)
-            _active_process.kill()
-            _active_process.wait()
-        print("  Subprocess terminated.", file=sys.stderr)
     sys.exit(1)
 
 

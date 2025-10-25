@@ -6,6 +6,7 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -54,7 +55,7 @@ class ChatSessionManager:
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
-        file_descriptors: list[FileDescriptor] = [],
+        file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -64,6 +65,7 @@ class ChatSessionManager:
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
         use_agentic_search: bool = False,
+        chat_session: DATestChatSession | None = None,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -97,7 +99,25 @@ class ChatSessionManager:
             cookies=cookies,
         )
 
-        return ChatSessionManager.analyze_response(response)
+        streamed_response = ChatSessionManager.analyze_response(response)
+
+        if not chat_session:
+            return streamed_response
+
+        chat_history = ChatSessionManager.get_chat_history(
+            chat_session=chat_session,
+            user_performing_action=user_performing_action,
+        )
+
+        for message_obj in chat_history:
+            if message_obj.message_type == MessageType.ASSISTANT:
+                streamed_response.research_answer_purpose = (
+                    message_obj.research_answer_purpose
+                )
+                streamed_response.assistant_message_id = message_obj.id
+                break
+
+        return streamed_response
 
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
@@ -122,10 +142,14 @@ class ChatSessionManager:
                 continue
 
             if packet_type == "message_start":
-                analyzed.top_documents = [
-                    SavedSearchDoc(**doc) for doc in data_obj["final_documents"]
-                ]
-                analyzed.full_message = data_obj["content"]
+                final_docs = data_obj.get("final_documents")
+                if isinstance(final_docs, list):
+                    analyzed.top_documents = [
+                        SavedSearchDoc(**doc) for doc in final_docs
+                    ]
+                else:
+                    analyzed.top_documents = None
+                analyzed.full_message = data_obj.get("content", "")
                 continue
 
             if packet_type == "message_delta":
@@ -136,14 +160,14 @@ class ChatSessionManager:
                 continue
 
             if packet_type == "internal_search_tool_start":
-                if data_obj.get("is_internet_search", False):
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.INTERNET_SEARCH,
-                    )
-                else:
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.INTERNAL_SEARCH,
-                    )
+                tool_name = (
+                    ToolName.INTERNET_SEARCH
+                    if data_obj.get("is_internet_search", False)
+                    else ToolName.INTERNAL_SEARCH
+                )
+                ind_to_tool_use[ind] = ToolResult(
+                    tool_name=tool_name,
+                )
                 continue
 
             if packet_type == "image_generation_tool_start":
@@ -200,6 +224,8 @@ class ChatSessionManager:
                 chat_session_id=chat_session.id,
                 parent_message_id=msg.get("parent_message"),
                 message=msg["message"],
+                research_answer_purpose=msg.get("research_answer_purpose"),
+                message_type=msg.get("message_type"),
             )
             for msg in response.json()["messages"]
         ]
