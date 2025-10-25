@@ -21,12 +21,10 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    truncate_search_result_content,
+    llm_doc_from_web_content,
 )
-from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.configs.constants import DocumentSource
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -198,23 +196,7 @@ def _open_url_core(
     )
 
     docs = search_provider.contents(urls)
-    llm_docs = []
-    for _, d in enumerate(docs):
-        llm_docs.append(
-            LlmDoc(
-                document_id=d.link,
-                content=truncate_search_result_content(d.full_content),
-                blurb=d.link,
-                semantic_identifier=d.link,
-                source_type=DocumentSource.WEB,
-                metadata={},
-                link=d.link,
-                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                updated_at=d.published_date,
-                source_links={},
-                match_highlights=[],
-            )
-        )
+    llm_docs = [llm_doc_from_web_content(d) for d in docs]
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
