@@ -36,11 +36,11 @@ def assign_citation_numbers_recent_tool_calls(
                     updated_citation_number = False
                     for doc in llm_docs:
                         if doc.document_citation_number == -1:
+                            num_docs_cited += 1  # add 1 first so it's 1-indexed
                             updated_citation_number = True
                             doc.document_citation_number = (
                                 docs_cited_so_far + num_docs_cited
                             )
-                            num_docs_cited += 1
                     if updated_citation_number:
                         new_message = message.copy()
                         new_message["output"] = json.dumps(

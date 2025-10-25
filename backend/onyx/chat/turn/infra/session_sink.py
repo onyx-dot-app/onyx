@@ -59,7 +59,7 @@ def save_iteration(
     cited_doc_nrs = _extract_citation_numbers(final_answer)
     if search_docs:
         for cited_doc_nr in cited_doc_nrs:
-            citation_dict[cited_doc_nr] = search_docs[cited_doc_nr - 1].id
+            citation_dict[cited_doc_nr] = search_docs[cited_doc_nr].id
     llm_tokenizer = get_tokenizer(
         model_name=ctx.run_dependencies.llm.config.model_name,
         provider_type=ctx.run_dependencies.llm.config.model_provider,

@@ -13,30 +13,23 @@ from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
-from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
-from onyx.chat.stream_processing.answer_response_handler import CitationResponseHandler
-from onyx.chat.stream_processing.answer_response_handler import (
-    PassThroughAnswerResponseHandler,
-)
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
-from onyx.chat.stream_processing.utils import map_document_id_order
+from onyx.chat.stream_processing.utils import map_document_id_order_v2
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
-from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
-from onyx.chat.turn.infra.session_sink import save_iteration
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.context.search.models import InferenceSection
 from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -101,7 +94,7 @@ def _run_agent_loop(
         agent_turn_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs = (
             assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
         )
-        ctx.real_cited_documents.extend(new_llm_docs)
+        ctx.fetched_documents.extend(new_llm_docs)
         ctx.documents_cited_count += num_docs_cited
         ctx.tool_calls_cited_count += num_tool_calls_cited
 
@@ -160,33 +153,22 @@ def _fast_chat_turn_core(
             ctx=ctx,
             prompt_config=prompt_config,
         )
-    final_answer = extract_final_answer_from_packets(
-        dependencies.emitter.packet_history
-    )
-
-    all_cited_documents = []
-    if ctx.aggregated_context.global_iteration_responses:
-        context_docs = _gather_context_docs_from_iteration_answers(
-            ctx.aggregated_context.global_iteration_responses
-        )
-        all_cited_documents = context_docs
-        if context_docs and final_answer:
-            _process_citations_for_final_answer(
-                final_answer=final_answer,
-                context_docs=context_docs,
-                dependencies=dependencies,
-                ctx=ctx,
-            )
-
-    save_iteration(
-        db_session=dependencies.db_session,
-        message_id=message_id,
-        chat_session_id=chat_session_id,
-        research_type=research_type,
+    _emit_citations_for_final_answer(
+        dependencies=dependencies,
         ctx=ctx,
-        final_answer=final_answer,
-        all_cited_documents=all_cited_documents,
     )
+    # final_answer = extract_final_answer_from_packets(
+    #     dependencies.emitter.packet_history
+    # )
+    # save_iteration(
+    #     db_session=dependencies.db_session,
+    #     message_id=message_id,
+    #     chat_session_id=chat_session_id,
+    #     research_type=research_type,
+    #     ctx=ctx,
+    #     final_answer=final_answer,
+    #     all_cited_documents=ctx.fetched_documents,
+    # )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
     )
@@ -218,10 +200,19 @@ def _process_stream(
     chat_session_id: UUID,
     dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
-    emit_message_to_user: bool = True,
 ) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
     from litellm import ResponseFunctionToolCall
 
+    mapping = map_document_id_order_v2(ctx.fetched_documents)
+    if ctx.fetched_documents:
+        processor = CitationProcessor(
+            context_docs=ctx.fetched_documents,
+            final_doc_id_to_rank_map=mapping,
+            display_doc_id_to_rank_map=mapping,
+            stop_stream=None,
+        )
+    else:
+        processor = None
     tool_call_events: list[ResponseFunctionToolCall] = []
     for ev in agent_stream:
         connected = is_connected(
@@ -232,10 +223,9 @@ def _process_stream(
             _emit_clean_up_packets(dependencies, ctx)
             agent_stream.cancel()
             break
-        if emit_message_to_user:
-            obj = _default_packet_translation(ev, ctx)
-            if obj:
-                dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        obj = _default_packet_translation(ev, ctx, processor)
+        if obj:
+            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
         if isinstance(getattr(ev, "item", None), ToolCallItem):
             tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
@@ -284,75 +274,46 @@ def _gather_context_docs_from_iteration_answers(
     return context_docs
 
 
-def _process_citations_for_final_answer(
-    final_answer: str,
-    context_docs: list[InferenceSection],
+def _emit_citations_for_final_answer(
     dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
 ) -> None:
     index = ctx.current_run_step + 1
-    """Process citations in the final answer and emit citation events."""
-    from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
-
-    # Convert InferenceSection objects to LlmDoc objects for citation processing
-    llm_docs = [llm_doc_from_inference_section(section) for section in context_docs]
-
-    # Create document ID to rank mappings (simple 1-based indexing)
-    final_doc_id_to_rank_map = DocumentIdOrderMapping(
-        order_mapping={doc.document_id: i + 1 for i, doc in enumerate(llm_docs)}
-    )
-    display_doc_id_to_rank_map = final_doc_id_to_rank_map  # Same mapping for display
-
-    # Initialize citation processor
-    citation_processor = CitationProcessor(
-        context_docs=llm_docs,
-        final_doc_id_to_rank_map=final_doc_id_to_rank_map,
-        display_doc_id_to_rank_map=display_doc_id_to_rank_map,
-    )
-
-    # Process the final answer through citation processor
-    collected_citations: list = []
-    for response_part in citation_processor.process_token(final_answer):
-        if hasattr(response_part, "citation_num"):  # It's a CitationInfo
-            collected_citations.append(response_part)
-
-    # Emit citation events if we found any citations
-    if collected_citations:
+    if ctx.collected_citations:
         dependencies.emitter.emit(Packet(ind=index, obj=CitationStart()))
         dependencies.emitter.emit(
             Packet(
                 ind=index,
-                obj=CitationDelta(citations=collected_citations),  # type: ignore[arg-type]
+                obj=CitationDelta(citations=ctx.collected_citations),  # type: ignore[arg-type]
             )
         )
         dependencies.emitter.emit(Packet(ind=index, obj=SectionEnd(type="section_end")))
     ctx.current_run_step = index
 
 
-def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj | None:
-    if ctx.real_cited_documents:
-        final_search_results = ctx.real_cited_documents
-        answer_handler: AnswerResponseHandler = CitationResponseHandler(
-            context_docs=final_search_results,
-            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
-            display_doc_id_to_rank_map=map_document_id_order(final_search_results),
-        )
-    else:
-        answer_handler = PassThroughAnswerResponseHandler()
+def _default_packet_translation(
+    ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
+) -> PacketObj | None:
     if isinstance(ev, RawResponsesStreamEvent):
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
-                ctx.real_cited_documents
+                ctx.fetched_documents
             )
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs
             )
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
-            for response_part in answer_handler.handle_response_part(ev.data.delta):
-                obj = MessageDelta(
-                    type="message_delta", content=response_part.answer_piece
-                )
+            if processor:
+                final_answer_piece = ""
+                for response_part in processor.process_token(ev.data.delta):
+                    if isinstance(response_part, CitationInfo):
+                        ctx.collected_citations.append(response_part)
+                    else:
+                        final_answer_piece += response_part.answer_piece or ""
+                obj = MessageDelta(type="message_delta", content=final_answer_piece)
+            else:
+                obj = MessageDelta(type="message_delta", content=ev.data.delta)
         elif ev.data.type == "response.content_part.done":
             obj = SectionEnd(type="section_end")
         return obj
