@@ -1,6 +1,7 @@
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
+import { jwtDecode } from "jwt-decode";
 
 export const GET = async (request: NextRequest) => {
   // Wrapper around the FastAPI endpoint /auth/oauth/callback,
@@ -22,8 +23,26 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.redirect(new URL("/auth/error", getDomain(request)));
   }
 
+  let destination = "/";
+  let state = request.nextUrl.searchParams.get("state");
+
+  if (state) {
+    try {
+      const decodedState = jwtDecode(state);
+
+      if (
+        typeof (decodedState as any).next_url === "string" &&
+        !decodedState.next_url.includes("://")
+      ) {
+        destination = decodedState.next_url || "/";
+      }
+    } catch (e) {
+      console.error("Failed to decode JWT state", e);
+    }
+  }
+
   // Get the redirect URL from the backend's 'Location' header, or default to '/'
-  const redirectUrl = response.headers.get("location") || "/";
+  const redirectUrl = response.headers.get("location") || destination;
 
   const redirectResponse = NextResponse.redirect(
     new URL(redirectUrl, getDomain(request))
