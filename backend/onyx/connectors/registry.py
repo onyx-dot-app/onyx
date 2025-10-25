@@ -200,6 +200,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.bitbucket.connector",
         class_name="BitbucketConnector",
     ),
+    DocumentSource.PYLON: ConnectorMapping(
+        module_path="onyx.connectors.pylon.connector",
+        class_name="PylonConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
