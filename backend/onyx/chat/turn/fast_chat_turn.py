@@ -24,6 +24,8 @@ from onyx.chat.turn.context_handler.citation import (
 )
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
+from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
+from onyx.chat.turn.infra.session_sink import save_iteration
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -94,7 +96,7 @@ def _run_agent_loop(
         agent_turn_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs = (
             assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
         )
-        ctx.fetched_documents.extend(new_llm_docs)
+        ctx.fetched_documents_postprocessed.extend(new_llm_docs)
         ctx.documents_cited_count += num_docs_cited
         ctx.tool_calls_cited_count += num_tool_calls_cited
 
@@ -157,18 +159,19 @@ def _fast_chat_turn_core(
         dependencies=dependencies,
         ctx=ctx,
     )
-    # final_answer = extract_final_answer_from_packets(
-    #     dependencies.emitter.packet_history
-    # )
-    # save_iteration(
-    #     db_session=dependencies.db_session,
-    #     message_id=message_id,
-    #     chat_session_id=chat_session_id,
-    #     research_type=research_type,
-    #     ctx=ctx,
-    #     final_answer=final_answer,
-    #     all_cited_documents=ctx.fetched_documents,
-    # )
+    final_answer = extract_final_answer_from_packets(
+        dependencies.emitter.packet_history
+    )
+    save_iteration(
+        db_session=dependencies.db_session,
+        message_id=message_id,
+        chat_session_id=chat_session_id,
+        research_type=research_type,
+        ctx=ctx,
+        final_answer=final_answer,
+        raw_fetched_documents=ctx.raw_fetched_documents,
+        postprocessed_fetched_documents=ctx.fetched_documents_postprocessed,
+    )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
     )
@@ -203,10 +206,10 @@ def _process_stream(
 ) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
     from litellm import ResponseFunctionToolCall
 
-    mapping = map_document_id_order_v2(ctx.fetched_documents)
-    if ctx.fetched_documents:
+    mapping = map_document_id_order_v2(ctx.fetched_documents_postprocessed)
+    if ctx.fetched_documents_postprocessed:
         processor = CitationProcessor(
-            context_docs=ctx.fetched_documents,
+            context_docs=ctx.fetched_documents_postprocessed,
             final_doc_id_to_rank_map=mapping,
             display_doc_id_to_rank_map=mapping,
             stop_stream=None,
@@ -298,7 +301,7 @@ def _default_packet_translation(
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
-                ctx.fetched_documents
+                ctx.fetched_documents_postprocessed
             )
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs

@@ -477,6 +477,9 @@ def translate_db_message_to_packets_simple(
 
             step_nr += 1
 
+        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
+        step_nr += 1
+
     return EndStepPacketList(packet_list=packet_list, end_step_nr=step_nr)
 
 

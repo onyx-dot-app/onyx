@@ -21,6 +21,7 @@ from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
+from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -77,5 +78,10 @@ class ChatTurnContext:
     # Since tool calls don't need to reference them
     documents_cited_count: int = 0
     tool_calls_cited_count: int = 0
-    fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
+    raw_fetched_documents: list[InferenceSection] = dataclasses.field(
+        default_factory=list
+    )
+    fetched_documents_postprocessed: list[LlmDoc] = dataclasses.field(
+        default_factory=list
+    )
     collected_citations: list[CitationInfo] = dataclasses.field(default_factory=list)

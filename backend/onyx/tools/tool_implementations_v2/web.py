@@ -233,7 +233,9 @@ def _open_url_core(
             reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
         )
     )
-
+    run_context.context.raw_fetched_documents.extend(
+        [dummy_inference_section_from_internet_content(d) for d in docs]
+    )
     run_context.context.aggregated_context.global_iteration_responses.append(
         IterationAnswer(
             # TODO: For now, we're using the web_search_tool_name since the web_fetch_tool_name is not a built-in tool
