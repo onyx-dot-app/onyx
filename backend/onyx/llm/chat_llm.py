@@ -8,6 +8,7 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
+from braintrust import current_span
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -417,6 +418,8 @@ class DefaultMultiLLM(LLM):
                 tool_choice=tool_choice if tools else None,
                 # streaming choice
                 stream=stream,
+                # include token usage in streaming responses where supported (OpenAI/Azure OpenAI)
+                stream_options={"include_usage": True},
                 # model params
                 temperature=(
                     1
@@ -518,6 +521,18 @@ class DefaultMultiLLM(LLM):
                 max_tokens=max_tokens,
             ),
         )
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                current_span().log(
+                    metrics={
+                        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                        "completion_tokens": getattr(usage, "completion_tokens", None),
+                        "total_tokens": getattr(usage, "total_tokens", None),
+                    },
+                )
+        except Exception:
+            pass
         choice = response.choices[0]
         if hasattr(choice, "message"):
             output = _convert_litellm_message_to_langchain_message(choice.message)
@@ -553,6 +568,7 @@ class DefaultMultiLLM(LLM):
             return
 
         output = None
+        usage_info: dict[str, Any] | None = None
         response = cast(
             CustomStreamWrapper,
             self._completion(
@@ -567,7 +583,10 @@ class DefaultMultiLLM(LLM):
         )
         try:
             for part in response:
-                if not part["choices"]:
+                if "usage" in part and part["usage"] is not None:
+                    usage_info = part["usage"]
+
+                if "choices" not in part or not part["choices"]:
                     continue
 
                 choice = part["choices"][0]
@@ -613,3 +632,28 @@ class DefaultMultiLLM(LLM):
                 logger.debug(f"Raw Model Output:\n{log_msg}")
             else:
                 logger.debug(f"Raw Model Output:\n{content}")
+        try:
+            usage = usage_info or getattr(response, "usage", None)
+            if usage is not None:
+                current_span().log(
+                    metrics={
+                        "prompt_tokens": (
+                            getattr(usage, "prompt_tokens", None)
+                            if hasattr(usage, "prompt_tokens")
+                            else usage.get("prompt_tokens")
+                        ),
+                        "completion_tokens": (
+                            getattr(usage, "completion_tokens", None)
+                            if hasattr(usage, "completion_tokens")
+                            else usage.get("completion_tokens")
+                        ),
+                        "total_tokens": (
+                            getattr(usage, "total_tokens", None)
+                            if hasattr(usage, "total_tokens")
+                            else usage.get("total_tokens")
+                        ),
+                    }
+                )
+        except Exception:
+            # Never fail request path for logging issues
+            pass

@@ -149,6 +149,7 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             tools=tools,
             tool_choice=None,
             stream=False,
+            stream_options={"include_usage": True},
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             parallel_tool_calls=False,
@@ -294,6 +295,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
             tools=tools,
             tool_choice=None,
             stream=True,
+            stream_options={"include_usage": True},
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             parallel_tool_calls=False,
