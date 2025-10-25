@@ -60,7 +60,7 @@ export const ModalProvider: React.FC<{
           {showUserSettingsModal && (
             <CoreModal
               onClickOutside={() => setShowUserSettingsModal(false)}
-              className="w-full max-w-lg"
+              className="w-full max-w-xl mx-4"
             >
               <UserSettings onClose={() => setShowUserSettingsModal(false)} />
             </CoreModal>
@@ -76,7 +76,7 @@ export const ModalProvider: React.FC<{
         {showUserSettingsModal && (
           <CoreModal
             onClickOutside={() => setShowUserSettingsModal(false)}
-            className="w-full max-w-lg"
+            className="w-full max-w-xl mx-4"
           >
             <UserSettings onClose={() => setShowUserSettingsModal(false)} />
           </CoreModal>
