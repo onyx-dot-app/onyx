@@ -58,7 +58,10 @@ export const ModalProvider: React.FC<{
       return (
         <>
           {showUserSettingsModal && (
-            <CoreModal onClickOutside={() => setShowUserSettingsModal(false)}>
+            <CoreModal
+              onClickOutside={() => setShowUserSettingsModal(false)}
+              className="w-full max-w-xl mx-4"
+            >
               <UserSettings onClose={() => setShowUserSettingsModal(false)} />
             </CoreModal>
           )}
@@ -71,7 +74,10 @@ export const ModalProvider: React.FC<{
         <NewTeamModal />
 
         {showUserSettingsModal && (
-          <CoreModal onClickOutside={() => setShowUserSettingsModal(false)}>
+          <CoreModal
+            onClickOutside={() => setShowUserSettingsModal(false)}
+            className="w-full max-w-xl mx-4"
+          >
             <UserSettings onClose={() => setShowUserSettingsModal(false)} />
           </CoreModal>
         )}
