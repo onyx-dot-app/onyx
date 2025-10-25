@@ -1,6 +1,5 @@
 import json
-from typing import List
-from typing import Optional
+from collections.abc import Sequence
 
 from agents import function_tool
 from agents import RunContextWrapper
@@ -8,6 +7,7 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebSearchResult
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
@@ -36,16 +36,8 @@ from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
-class WebSearchResult(BaseModel):
-    title: str
-    link: str
-    snippet: str
-    author: Optional[str] = None
-    published_date: Optional[str] = None
-
-
 class WebSearchResponse(BaseModel):
-    results: List[WebSearchResult]
+    results: Sequence[WebSearchResult]
 
 
 @tool_accounting
@@ -106,9 +98,7 @@ def _web_search_core(
                 link=r.link,
                 snippet=r.snippet or "",
                 author=r.author,
-                published_date=(
-                    r.published_date.isoformat() if r.published_date else None
-                ),
+                published_date=r.published_date,
             )
         )
 
@@ -178,7 +168,7 @@ WEB_SEARCH_LONG_DESCRIPTION = """
 @tool_accounting
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
-    urls: List[str],
+    urls: Sequence[str],
     search_provider: WebSearchProvider,
 ) -> list[LlmDoc]:
     # TODO: Find better way to track index that isn't so implicit
@@ -236,7 +226,9 @@ def _open_url_core(
 
 
 @function_tool
-def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -> str:
+def open_url(
+    run_context: RunContextWrapper[ChatTurnContext], urls: Sequence[str]
+) -> str:
     """
     Tool for fetching and extracting full content from web pages.
     """

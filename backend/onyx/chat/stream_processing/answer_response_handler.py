@@ -20,7 +20,6 @@ class AnswerResponseHandler(abc.ABC):
     def handle_response_part(
         self,
         response_item: BaseMessage | str | None,
-        previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         raise NotImplementedError
 

@@ -1,6 +1,7 @@
 """Unit tests for assign_citation_numbers handler."""
 
 import json
+from collections.abc import Sequence
 from uuid import uuid4
 
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -41,7 +42,7 @@ def _create_dummy_function_call() -> dict:
     }
 
 
-def _parse_llm_docs_from_messages(messages: list[dict]) -> list[LlmDoc]:
+def _parse_llm_docs_from_messages(messages: Sequence[dict]) -> list[LlmDoc]:
     tool_message_outputs = [
         msg["output"] for msg in messages if msg.get("type") == "function_call_output"
     ]

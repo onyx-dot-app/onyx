@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -57,7 +56,7 @@ def _run_agent_loop(
     # in multi turn conversations
     chat_history = messages[:-1]
     current_user_message = messages[-1]
-    agent_turn_messages: Sequence[dict] = []
+    agent_turn_messages: list[dict] = []
 
     last_call_is_final = False
     agent = Agent(
