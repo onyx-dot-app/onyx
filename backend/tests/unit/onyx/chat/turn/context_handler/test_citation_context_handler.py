@@ -84,18 +84,17 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
             global_iteration_responses=[],
         ),
     )
-    new_messages, num_docs_cited, num_tool_calls_cited = (
-        assign_citation_numbers_recent_tool_calls(messages, context)
-    )
-    assert num_docs_cited == 2
-    assert num_tool_calls_cited == 1
+    result = assign_citation_numbers_recent_tool_calls(messages, context)
+    assert result.num_docs_cited == 2
+    assert result.num_tool_calls_cited == 1
 
-    llm_docs = _parse_llm_docs_from_messages(new_messages)
+    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
 
     # Verify citation numbers were assigned correctly
-    assert len(llm_docs) == 2
-    assert llm_docs[0].document_citation_number == 0
-    assert llm_docs[1].document_citation_number == 1
+    assert len(result.new_llm_docs) == 2  # all two documents were cited
+    assert len(message_llm_docs) == 2
+    assert message_llm_docs[0].document_citation_number == 1
+    assert message_llm_docs[1].document_citation_number == 2
 
 
 def test_assign_citation_numbers_no_relevant_tool_calls(
@@ -129,11 +128,10 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
             global_iteration_responses=[],
         ),
     )
-    _, num_docs_cited, num_tool_calls_cited = assign_citation_numbers_recent_tool_calls(
-        messages, context
-    )
-    assert num_docs_cited == 0
-    assert num_tool_calls_cited == 0
+    result = assign_citation_numbers_recent_tool_calls(messages, context)
+    assert result.num_docs_cited == 0
+    assert result.num_tool_calls_cited == 0
+    assert len(result.new_llm_docs) == 0
 
 
 def test_assign_citation_numbers_previous_tool_calls(
@@ -184,20 +182,25 @@ def test_assign_citation_numbers_previous_tool_calls(
         documents_cited_count=2,
         tool_calls_cited_count=1,
     )
-    new_messages, num_docs_cited, num_tool_calls_cited = (
-        assign_citation_numbers_recent_tool_calls(messages, context)
-    )
-    assert num_tool_calls_cited == 1
-    assert num_docs_cited == 1
-    llm_docs = _parse_llm_docs_from_messages(new_messages)
+    result = assign_citation_numbers_recent_tool_calls(messages, context)
+    assert len(result.new_llm_docs) == 1  # only one new document was cited
+    assert result.num_tool_calls_cited == 1
+    assert result.num_docs_cited == 1
+    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
 
     # Verify citation numbers were assigned correctly
-    assert len(llm_docs) == 3
+    assert len(message_llm_docs) == 3
     # these two should be unchanged
-    assert llm_docs[0].document_citation_number == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-    assert llm_docs[1].document_citation_number == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+    assert (
+        message_llm_docs[0].document_citation_number
+        == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+    )
+    assert (
+        message_llm_docs[1].document_citation_number
+        == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+    )
     # this one should be assigned
-    assert llm_docs[2].document_citation_number == 2
+    assert message_llm_docs[2].document_citation_number == 3
 
 
 def test_assign_citation_numbers_parallel_tool_calls(
@@ -244,17 +247,16 @@ def test_assign_citation_numbers_parallel_tool_calls(
         documents_cited_count=0,
         tool_calls_cited_count=0,
     )
-    new_messages, num_docs_cited, num_tool_calls_cited = (
-        assign_citation_numbers_recent_tool_calls(messages, context)
-    )
-    assert num_docs_cited == 3
-    assert num_tool_calls_cited == 2
+    result = assign_citation_numbers_recent_tool_calls(messages, context)
+    assert result.num_docs_cited == 3
+    assert result.num_tool_calls_cited == 2
     # Find the tool message and check citation numbers
-    llm_docs = _parse_llm_docs_from_messages(new_messages)
+    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
 
     # Verify citation numbers were assigned correctly
-    assert len(llm_docs) == 3
+    assert len(result.new_llm_docs) == 3  # all three documents were cited
+    assert len(message_llm_docs) == 3
     # these two should be unchanged
-    assert llm_docs[0].document_citation_number == 0
-    assert llm_docs[1].document_citation_number == 1
-    assert llm_docs[2].document_citation_number == 2
+    assert message_llm_docs[0].document_citation_number == 1
+    assert message_llm_docs[1].document_citation_number == 2
+    assert message_llm_docs[2].document_citation_number == 3

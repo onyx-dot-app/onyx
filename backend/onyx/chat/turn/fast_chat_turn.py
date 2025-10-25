@@ -93,12 +93,13 @@ def _run_agent_loop(
             prompt_config,
             ctx.should_cite_documents,
         )
-        agent_turn_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs = (
-            assign_citation_numbers_recent_tool_calls(agent_turn_messages, ctx)
+        citation_result = assign_citation_numbers_recent_tool_calls(
+            agent_turn_messages, ctx
         )
-        ctx.ordered_fetched_documents.extend(new_llm_docs)
-        ctx.documents_cited_count += num_docs_cited
-        ctx.tool_calls_cited_count += num_tool_calls_cited
+        agent_turn_messages = citation_result.updated_messages
+        ctx.ordered_fetched_documents.extend(citation_result.new_llm_docs)
+        ctx.documents_cited_count += citation_result.num_docs_cited
+        ctx.tool_calls_cited_count += citation_result.num_tool_calls_cited
 
         # TODO: Make this configurable on OnyxAgent level
         stopping_tools = ["image_generation"]

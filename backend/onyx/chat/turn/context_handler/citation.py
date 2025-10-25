@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+from pydantic import BaseModel
 from pydantic import ValidationError
 
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -11,11 +12,19 @@ from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
 
 
-# TODO: Only run this for recently added tool calls
+class CitationAssignmentResult(BaseModel):
+    """Result of assigning citation numbers to recent tool calls."""
+
+    updated_messages: Sequence[dict[str, Any]]
+    num_docs_cited: int
+    num_tool_calls_cited: int
+    new_llm_docs: list[LlmDoc]
+
+
 def assign_citation_numbers_recent_tool_calls(
     agent_turn_messages: Sequence[dict[str, Any]],
     ctx: ChatTurnContext,
-) -> tuple[Sequence[dict[str, Any]], int, int, list[LlmDoc]]:
+) -> CitationAssignmentResult:
     updated_messages = []
     docs_cited_so_far = ctx.documents_cited_count
     tool_calls_cited_so_far = ctx.tool_calls_cited_count
@@ -58,4 +67,9 @@ def assign_citation_numbers_recent_tool_calls(
         else:
             updated_messages.append(message)
 
-    return updated_messages, num_docs_cited, num_tool_calls_cited, new_llm_docs
+    return CitationAssignmentResult(
+        updated_messages=updated_messages,
+        num_docs_cited=num_docs_cited,
+        num_tool_calls_cited=num_tool_calls_cited,
+        new_llm_docs=new_llm_docs,
+    )
