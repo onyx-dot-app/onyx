@@ -6,6 +6,7 @@ from agents.models.interface import Model
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
+from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
@@ -23,6 +24,7 @@ from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -120,6 +122,7 @@ def get_llm_model_and_settings_for_persona(
     persona: Persona,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
+    timeout: int | None = None,
 ) -> tuple[Model, ModelSettings]:
     """Get LitellmModel and settings for a persona.
 
@@ -160,6 +163,7 @@ def get_llm_model_and_settings_for_persona(
         api_version=llm_provider.api_version,
         custom_config=llm_provider.custom_config,
         temperature=temperature_override,
+        timeout=timeout,
         additional_headers=additional_headers,
     )
 
@@ -378,6 +382,7 @@ def get_llm_model_and_settings(
     api_version: str | None = None,
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
+    timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     model_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Model, ModelSettings]:
@@ -385,6 +390,13 @@ def get_llm_model_and_settings(
 
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+
+    # Configure timeout following the same pattern as DefaultMultiLLM
+    if timeout is None:
+        if model_is_reasoning_model(model, provider):
+            timeout = QA_TIMEOUT * 10  # Reasoning models are slow
+        else:
+            timeout = QA_TIMEOUT
 
     extra_headers = build_llm_extra_headers(additional_headers)
 
@@ -414,6 +426,8 @@ def get_llm_model_and_settings(
                 continue
     if api_version:
         model_kwargs["api_version"] = api_version
+    # Add timeout to model_kwargs so it gets passed to litellm
+    model_kwargs["timeout"] = timeout
     # Build the full model name in provider/model format
     model_name = f"{provider}/{deployment_name or model}"
 

@@ -19,8 +19,11 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
+from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -71,3 +74,10 @@ class ChatTurnContext:
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
     should_cite_documents: bool = False
+    documents_cited_count: int = 0
+    tool_calls_cited_count: int = 0
+    unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
+        default_factory=list
+    )
+    ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
+    collected_citations: list[CitationInfo] = dataclasses.field(default_factory=list)

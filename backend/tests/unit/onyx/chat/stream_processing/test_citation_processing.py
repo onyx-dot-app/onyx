@@ -93,6 +93,13 @@ def process_text(
     return final_answer_text, citations
 
 
+def test_citation_extraction_v2(mock_data: tuple[list[LlmDoc], dict[str, int]]) -> None:
+    input_tokens = ["Hi", "[", "1", "].\n\n"]
+    final_answer_text, citations = process_text(input_tokens, mock_data)
+    print(final_answer_text)
+    print(citations)
+
+
 @pytest.mark.parametrize(
     "test_name, input_tokens, expected_text, expected_citations",
     [

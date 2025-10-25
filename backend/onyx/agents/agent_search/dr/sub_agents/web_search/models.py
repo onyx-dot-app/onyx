@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 
@@ -31,9 +32,9 @@ class WebContent(BaseModel):
 
 class WebSearchProvider(ABC):
     @abstractmethod
-    def search(self, query: str) -> list[WebSearchResult]:
+    def search(self, query: str) -> Sequence[WebSearchResult]:
         pass
 
     @abstractmethod
-    def contents(self, urls: list[str]) -> list[WebContent]:
+    def contents(self, urls: Sequence[str]) -> list[WebContent]:
         pass

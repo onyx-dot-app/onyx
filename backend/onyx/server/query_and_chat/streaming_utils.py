@@ -263,7 +263,6 @@ def create_search_packets(
 def translate_db_message_to_packets_simple(
     chat_message: ChatMessage,
     db_session: Session,
-    remove_doc_content: bool = False,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
     """
@@ -477,13 +476,15 @@ def translate_db_message_to_packets_simple(
 
             step_nr += 1
 
+        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
+        step_nr += 1
+
     return EndStepPacketList(packet_list=packet_list, end_step_nr=step_nr)
 
 
 def translate_db_message_to_packets(
     chat_message: ChatMessage,
     db_session: Session,
-    remove_doc_content: bool = False,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
     use_simple_translation = False
@@ -501,7 +502,6 @@ def translate_db_message_to_packets(
         return translate_db_message_to_packets_simple(
             chat_message=chat_message,
             db_session=db_session,
-            remove_doc_content=remove_doc_content,
             start_step_nr=start_step_nr,
         )
 
