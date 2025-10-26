@@ -1,6 +1,6 @@
 /* Light mode syntax highlighting (Atom One Light) */
 .hljs {
-  color: #383a42;
+  color: #383a42 !important;
   background: #fafafa !important;
 }
 
@@ -76,7 +76,7 @@
 
 /* Dark mode syntax highlighting (Atom One Dark) */
 .dark .hljs {
-  color: #abb2bf;
+  color: #e2e6eb !important;
   background: #151617 !important;
 }
 
