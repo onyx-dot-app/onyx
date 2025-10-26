@@ -80,6 +80,7 @@ import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSe
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
+import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -900,6 +901,8 @@ export function ChatPage({
                         <UnconfiguredLlmProviderText
                           showConfigureAPIKey={handleShowApiKeyModal}
                         />
+
+                        <OnboardingFlow />
 
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
