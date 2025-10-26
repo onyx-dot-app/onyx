@@ -36,7 +36,7 @@ export default function Tag({
     <button
       type="button"
       className={cn(
-        "p-spacing-interline-mini rounded-08 group w-fit flex items-center gap-1 transition-all duration-200 ease-in-out",
+        "p-1.5 rounded-08 group w-fit flex items-center gap-1 transition-all duration-200 ease-in-out",
         getVariantClasses(active),
         className
       )}

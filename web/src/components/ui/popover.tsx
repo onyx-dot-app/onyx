@@ -60,7 +60,7 @@ export function PopoverMenu({ className, children }: PopoverMenuProps) {
             <></>
           ) : child === null ? (
             // Render `null`s as separator lines
-            <div className="border-b mx-padding-button" />
+            <div className="border-b mx-3" />
           ) : (
             child
           )}

@@ -41,7 +41,7 @@ export default function MenuButton({
       className="flex flex-row justify-center items-center p-1 gap-1 rounded-08 cursor-pointer hover:bg-background-tint-03 group/NavigationTab w-full select-none bg-transparent"
       onClick={href ? undefined : onClick}
     >
-      <div className="flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-spacing-interline justify-start">
+      <div className="flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start">
         <div className="w-[1rem] h-[1rem]">
           <Icon className={cn("h-[1rem]", "w-[1rem]", iconClasses[variant])} />
         </div>

@@ -129,7 +129,7 @@ export default function SelectButton({
       <button
         className={cn(
           baseClassNames(active)[state],
-          "group/SelectButton flex items-center px-spacing-interline py-spacing-interline-mini rounded-12 h-fit w-fit",
+          "group/SelectButton flex items-center px-2 py-1.5 rounded-12 h-fit w-fit",
           className
         )}
         onClick={disabled ? undefined : onClick}

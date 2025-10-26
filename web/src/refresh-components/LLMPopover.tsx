@@ -149,7 +149,7 @@ export default function LLMPopover({
           )}
         </div>
         {user?.preferences?.temperature_override_enabled && (
-          <div className="flex flex-col w-full py-padding-button px-spacing-interline gap-spacing-interline">
+          <div className="flex flex-col w-full py-3 px-2 gap-2">
             <Slider
               value={[localTemperature]}
               max={llmManager.maxTemperature}

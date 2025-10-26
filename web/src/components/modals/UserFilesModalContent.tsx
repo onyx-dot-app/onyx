@@ -154,7 +154,7 @@ export default function UserFilesModalContent({
   return (
     <>
       <div className="shadow-01 rounded-t-12 relative z-20">
-        <div className="flex flex-col gap-1 px-spacing-paragraph pt-spacing-paragraph">
+        <div className="flex flex-col gap-1 px-4 pt-4">
           <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
             <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
             {onClose && <IconButton icon={SvgX} internal onClick={onClose} />}
@@ -170,7 +170,7 @@ export default function UserFilesModalContent({
             e.stopPropagation();
           }}
         >
-          <div className="flex items-center gap-2 p-spacing-interline">
+          <div className="flex items-center gap-2 p-2">
             <div className="relative flex-1">
               <InputTypeIn
                 placeholder="Search files..."
@@ -220,7 +220,7 @@ export default function UserFilesModalContent({
       >
         <ScrollArea
           ref={scrollAreaRef}
-          className="flex flex-col h-full bg-background-tint-01 px-spacing-paragraph rounded-b-12"
+          className="flex flex-col h-full bg-background-tint-01 px-4 rounded-b-12"
         >
           {filtered.map((f) => (
             <div
@@ -258,7 +258,7 @@ export default function UserFilesModalContent({
               }}
             >
               <div className="flex items-center p-1 flex-1 min-w-0">
-                <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
+                <div className="flex h-9 w-9 items-center justify-center p-2 bg-background-tint-01 rounded-08">
                   {String((f as ProjectFile).status) ===
                     UserFileStatus.PROCESSING ||
                   String((f as ProjectFile).status) ===

@@ -22,11 +22,11 @@ export default function LineItem({
     <button
       type="button"
       className={cn(
-        "flex flex-col w-full justify-center items-start p-spacing-interline hover:bg-background-tint-02 rounded-08"
+        "flex flex-col w-full justify-center items-start p-2 hover:bg-background-tint-02 rounded-08"
       )}
       onClick={onClick}
     >
-      <div className="flex flex-row items-center justify-start w-full gap-spacing-interline">
+      <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
           <div className="h-[1rem] w-[1rem]">
             <Icon className="h-[1rem] w-[1rem] stroke-text-03" />
@@ -45,7 +45,7 @@ export default function LineItem({
           {Icon && (
             <>
               <div className="w-[1rem]" />
-              <div className="w-spacing-interline" />
+              <div className="w-2" />
             </>
           )}
 

@@ -252,20 +252,6 @@ module.exports = {
       fontStyle: {
         "token-italic": "italic",
       },
-      spacing: {
-        "spacing-interline-mini": "var(--spacing-interline-mini)",
-        "spacing-interline": "var(--spacing-interline)",
-        "spacing-paragraph": "var(--spacing-paragraph)",
-        "spacing-headline": "var(--spacing-headline)",
-        "spacing-headline-large": "var(--spacing-headline-large)",
-        "spacing-block": "var(--spacing-block)",
-        "spacing-section": "var(--spacing-section)",
-        "padding-button": "var(--padding-button)",
-        "padding-content": "var(--padding-content)",
-        "padding-block-end": "var(--padding-block-end)",
-        "padding-body-main": "var(--padding-body-main)",
-        "padding-section": "var(--padding-section)",
-      },
       calendar: {
         // Light mode
         "bg-selected": "var(--calendar-bg-selected)",

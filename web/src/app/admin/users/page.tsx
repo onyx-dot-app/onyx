@@ -258,7 +258,7 @@ const SearchableTables = () => {
       {isDownloadingUsers && <Spinner />}
       {popup}
       <div className="flex flex-col gap-y-4">
-        <div className="flex flex-row items-center gap-spacing-interline">
+        <div className="flex flex-row items-center gap-2">
           <InputTypeIn
             placeholder="Search"
             value={query}
@@ -349,7 +349,7 @@ const AddUserButton = ({
           title="Bulk Add Users"
           onOutsideClick={() => setBulkAddUsersModal(false)}
         >
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Text>
               Add the email addresses to import, separated by whitespaces.
               Invited users will be able to login to this domain with their

@@ -18,24 +18,6 @@
     --border-radius-full: 64rem;
   }
 
-  /* SPACINGS + PADDINGS */
-  :root {
-    --spacing-interline-mini: 0.38rem;
-    --spacing-interline: 0.5rem;
-    --spacing-paragraph: 1rem;
-    --spacing-headline: 1.5rem;
-    --spacing-headline-large: 2rem;
-    --spacing-block: 2.5rem;
-    --spacing-section: 9rem;
-
-    --padding-button: 0.75rem;
-    --padding-content: 1.5rem;
-    --padding-block-end: 2rem;
-    --padding-body-main: 2rem;
-    --padding-section: 4.5rem;
-    --width-outer-shell: 90rem;
-  }
-
   * {
     @apply border-border;
   }
