@@ -8,6 +8,9 @@ from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
 
+from onyx.agents.agent_sdk.monkey_patches import (
+    monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
+)
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -68,6 +71,7 @@ def _run_agent_loop(
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
 ) -> None:
+    monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
     current_messages: list[dict] = messages
     last_call_is_final = False
     agent = Agent(
