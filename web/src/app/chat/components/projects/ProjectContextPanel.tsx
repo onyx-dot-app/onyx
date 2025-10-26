@@ -47,6 +47,27 @@ export function FileCard({
     return name.slice(lastDotIndex + 1).toUpperCase();
   }, [file.name]);
 
+  const isImage = useMemo(() => {
+    const imageExtensions = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".webp",
+      ".svg",
+    ];
+    const fileName = String(file.name || "").toLowerCase();
+    return imageExtensions.some((ext) => fileName.endsWith(ext));
+  }, [file.name]);
+
+  const imageUrl = useMemo(() => {
+    if (isImage && file.file_id) {
+      return `/api/chat/file/${file.file_id}`;
+    }
+    return null;
+  }, [isImage, file.file_id]);
+
   const isActuallyProcessing =
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.PROCESSING;
@@ -90,6 +111,27 @@ export function FileCard({
       >
         {isProcessing || file.status === UserFileStatus.UPLOADING ? (
           <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
+        ) : isImage && imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={file.name}
+            className="h-full w-full object-cover rounded-08"
+            onError={(e) => {
+              // Fallback to file icon if image fails to load
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+              const parent = target.parentElement;
+              if (parent) {
+                parent.classList.add(
+                  "bg-background-tint-01",
+                  "p-spacing-interline"
+                );
+                const icon = document.createElement("div");
+                icon.innerHTML = '<svg class="h-5 w-5 stroke-text-02" />';
+                parent.appendChild(icon);
+              }
+            }}
+          />
         ) : (
           <SvgFileText className="h-5 w-5 stroke-text-02" />
         )}
