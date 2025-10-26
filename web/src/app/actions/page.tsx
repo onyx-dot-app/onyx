@@ -70,12 +70,8 @@ export default async function Page() {
 
         <Title>Create Actions</Title>
         <div className="flex gap-4 mt-2 items-center">
-          <CreateButton href="/admin/actions/new">
-            From OpenAPI schema
-          </CreateButton>
-          <CreateButton href="/admin/actions/edit-mcp">
-            From MCP server
-          </CreateButton>
+          <CreateButton href="/actions/new">From OpenAPI schema</CreateButton>
+          <CreateButton href="/actions/edit-mcp">From MCP server</CreateButton>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
