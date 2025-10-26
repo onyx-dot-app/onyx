@@ -71,13 +71,17 @@ function buildVisibleAgents(
   pinnedAgents: MinimalPersonaSnapshot[],
   currentAgent: MinimalPersonaSnapshot | null
 ): [MinimalPersonaSnapshot[], boolean] {
-  if (!currentAgent) return [pinnedAgents, false];
+  /* NOTE: The unified agent (id = 0) is not visible in the sidebar, 
+  so we filter it out. */
+  if (!currentAgent)
+    return [pinnedAgents.filter((agent) => agent.id !== 0), false];
   const currentAgentIsPinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === currentAgent.id
   );
-  const visibleAgents = currentAgentIsPinned
-    ? pinnedAgents
-    : [...pinnedAgents, currentAgent];
+  const visibleAgents = (
+    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
+  ).filter((agent) => agent.id !== 0);
+
   return [visibleAgents, currentAgentIsPinned];
 }
 
