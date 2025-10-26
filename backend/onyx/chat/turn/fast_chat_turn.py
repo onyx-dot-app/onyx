@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -37,6 +38,9 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
+from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+from onyx.tools.force import ForceUseTool
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
@@ -70,18 +74,28 @@ def _run_agent_loop(
     chat_session_id: UUID,
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
 ) -> None:
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
     current_messages: list[dict] = messages
     last_call_is_final = False
-    agent = Agent(
-        name="Assistant",
-        model=dependencies.llm_model,
-        tools=cast(list[AgentToolType], dependencies.tools),
-        model_settings=dependencies.model_settings,
-        tool_use_behavior="stop_on_first_tool",
-    )
+    first_iteration = True
     while not last_call_is_final:
+        tool_choice = (
+            force_use_tool_to_function_tool_names(force_use_tool, dependencies.tools)
+            if first_iteration and force_use_tool
+            else None
+        ) or "auto"
+        model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
+        agent = Agent(
+            name="Assistant",
+            model=dependencies.llm_model,
+            tools=cast(
+                list[AgentToolType], tools_to_function_tools(dependencies.tools)
+            ),
+            model_settings=model_settings,
+            tool_use_behavior="stop_on_first_tool",
+        )
         agent_stream: SyncAgentStream = SyncAgentStream(
             agent=agent,
             input=current_messages,
@@ -104,6 +118,7 @@ def _run_agent_loop(
             tool.name in stopping_tools for tool in tool_call_events
         ):
             last_call_is_final = True
+        first_iteration = False
 
 
 def _fast_chat_turn_core(
@@ -113,6 +128,7 @@ def _fast_chat_turn_core(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
     # Dependency injectable arguments for testing
     starter_global_iteration_responses: list[IterationAnswer] | None = None,
     starter_cited_documents: list[InferenceSection] | None = None,
@@ -152,6 +168,7 @@ def _fast_chat_turn_core(
             chat_session_id=chat_session_id,
             ctx=ctx,
             prompt_config=prompt_config,
+            force_use_tool=force_use_tool,
         )
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
@@ -193,6 +210,7 @@ def fast_chat_turn(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -202,7 +220,7 @@ def fast_chat_turn(
         message_id,
         research_type,
         prompt_config,
-        starter_global_iteration_responses=None,
+        force_use_tool=force_use_tool,
     )
 
 

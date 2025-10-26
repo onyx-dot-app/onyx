@@ -11,7 +11,9 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
 from onyx.tools.adapter_v1_to_v2 import custom_or_mcp_tool_to_function_tool
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+from onyx.tools.force import ForceUseTool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
@@ -660,3 +662,53 @@ def test_tools_to_function_tools_comprehensive(
         assert tool.name is not None
         assert tool.description is not None
         assert tool.on_invoke_tool is not None
+
+
+def test_force_use_tool_to_function_tool_names_with_force_use_true(
+    image_generation_tool: ImageGenerationTool,
+    web_search_tool: WebSearchTool,
+) -> None:
+    """
+    Test force_use_tool_to_function_tool_names when force_use is True.
+    Should return the function tool name for the forced tool.
+    """
+    # Create a force use tool for image generation (using the actual tool instance name)
+    force_use_tool = ForceUseTool(
+        force_use=True,
+        tool_name=image_generation_tool.name,  # "run_image_generation"
+        args=None,
+    )
+
+    # Create a list of tools
+    tools = [image_generation_tool, web_search_tool]
+
+    # Convert to function tool names
+    result = force_use_tool_to_function_tool_names(force_use_tool, tools)
+
+    # Should return the function tool name for ImageGenerationTool
+    assert result == "image_generation"
+
+
+def test_force_use_tool_to_function_tool_names_with_force_use_false(
+    image_generation_tool: ImageGenerationTool,
+    web_search_tool: WebSearchTool,
+) -> None:
+    """
+    Test force_use_tool_to_function_tool_names when force_use is False.
+    Should return None.
+    """
+    # Create a force use tool with force_use=False (tool_name doesn't matter when force_use is False)
+    force_use_tool = ForceUseTool(
+        force_use=False,
+        tool_name=image_generation_tool.name,
+        args=None,
+    )
+
+    # Create a list of tools
+    tools = [image_generation_tool, web_search_tool]
+
+    # Convert to function tool names
+    result = force_use_tool_to_function_tool_names(force_use_tool, tools)
+
+    # Should return None
+    assert result is None

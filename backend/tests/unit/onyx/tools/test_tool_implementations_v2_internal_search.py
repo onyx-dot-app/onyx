@@ -65,9 +65,6 @@ def create_fake_run_dependencies(redis_client: Any = None) -> ChatTurnDependenci
         tools=[],  # Empty tools list for testing
         redis_client=redis_client or MagicMock(),
         emitter=emitter,
-        search_pipeline=None,
-        image_generation_tool=None,
-        okta_profile_tool=None,
     )
 
 

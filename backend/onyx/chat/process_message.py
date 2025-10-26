@@ -101,7 +101,6 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
-from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
@@ -891,20 +890,6 @@ def _fast_message_stream(
     llm_model: Model,
     model_settings: ModelSettings,
 ) -> Generator[Packet, None, None]:
-    from onyx.tools.tool_implementations.images.image_generation_tool import (
-        ImageGenerationTool,
-    )
-    from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-        OktaProfileTool,
-    )
-
-    image_generation_tool_instance = None
-    okta_profile_tool_instance = None
-    for tool in tools:
-        if isinstance(tool, ImageGenerationTool):
-            image_generation_tool_instance = tool
-        elif isinstance(tool, OktaProfileTool):
-            okta_profile_tool_instance = tool
     messages = base_messages_to_agent_sdk_msgs(
         answer.graph_inputs.prompt_builder.build()
     )
@@ -916,10 +901,7 @@ def _fast_message_stream(
             llm_model=llm_model,
             model_settings=model_settings,
             llm=answer.graph_tooling.primary_llm,
-            tools=tools_to_function_tools(tools),
-            search_pipeline=answer.graph_tooling.search_tool,
-            image_generation_tool=image_generation_tool_instance,
-            okta_profile_tool=okta_profile_tool_instance,
+            tools=tools,
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
@@ -928,6 +910,7 @@ def _fast_message_stream(
         message_id=reserved_message_id,
         research_type=answer.graph_config.behavior.research_type,
         prompt_config=prompt_config,
+        force_use_tool=answer.graph_tooling.force_use_tool,
     )
 
 
