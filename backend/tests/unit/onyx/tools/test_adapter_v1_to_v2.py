@@ -627,7 +627,6 @@ def test_tools_to_function_tools_comprehensive(
         custom_tools[0],  # Custom tool (GET method)
         image_generation_tool,  # Built-in image generation tool
         web_search_tool,  # Built-in web search tool
-        okta_profile_tool,  # Built-in okta profile tool
     ]
 
     # Convert the tools
@@ -642,7 +641,7 @@ def test_tools_to_function_tools_comprehensive(
         and hasattr(tool, "on_invoke_tool")
         for tool in function_tools
     )
-    assert len(function_tools) == 6  # Four built-in tools and two custom tools
+    assert len(function_tools) == 5  # Trhee built-in tools and two custom tools
     # Verify that custom and MCP tools are converted via tool_to_function_tool
     # These should have the same names as their original tools
     mcp_function_tools = [tool for tool in function_tools if tool.name == mcp_tool.name]

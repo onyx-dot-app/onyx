@@ -30,6 +30,7 @@ def test_force_tool_use(
         web_search_tool = db_session.execute(
             select(Tool).where(Tool.in_code_tool_id == "WebSearchTool")
         ).scalar_one_or_none()
+        assert web_search_tool is not None, "WebSearchTool must exist"
         web_search_tool_id = web_search_tool.id
 
     # Create a chat session

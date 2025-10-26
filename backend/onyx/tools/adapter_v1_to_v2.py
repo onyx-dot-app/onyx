@@ -115,10 +115,10 @@ def tools_to_function_tools(tools: Sequence[Tool]) -> Sequence[FunctionTool]:
         for tool in tools
         if type(tool).__name__ in BUILT_IN_TOOL_MAP_V2
     ]
-    flattened_builtin_tools: Sequence[FunctionTool] = [
+    flattened_builtin_tools: list[FunctionTool] = [
         onyx_tool for sublist in onyx_tools for onyx_tool in sublist
     ]
-    custom_and_mcp_tools: Sequence[FunctionTool] = [
+    custom_and_mcp_tools: list[FunctionTool] = [
         custom_or_mcp_tool_to_function_tool(tool)
         for tool in tools
         if is_custom_or_mcp_tool(tool)
