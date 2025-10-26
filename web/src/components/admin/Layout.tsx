@@ -20,8 +20,8 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   const { user } = authResult;
 
-  // Pass user to fetchChatData to skip redundant auth check
-  const data = await fetchChatData({}, { user });
+  // Fetch chat data (will verify auth again - defense in depth)
+  const data = await fetchChatData({});
   if ("redirect" in data) {
     redirect(data.redirect);
   }

@@ -46,66 +46,46 @@ interface FetchChatDataResult {
   projects: Project[];
 }
 
-export async function fetchChatData(
-  searchParams: {
-    [key: string]: string;
-  },
-  options?: {
-    // If auth has already been verified by the caller (e.g., admin Layout),
-    // pass the user to skip redundant auth check
-    user?: User | null;
-  }
-): Promise<FetchChatDataResult | { redirect: string }> {
+export async function fetchChatData(searchParams: {
+  [key: string]: string;
+}): Promise<FetchChatDataResult | { redirect: string }> {
   const requestCookies = await cookies();
 
   // STEP 1: Check authentication FIRST (before any protected resources)
-  // Skip if auth already verified by caller
-  let user: User | null;
-  let authTypeMetadata;
+  const authResult = await requireAuth();
+  const { user, authTypeMetadata } = authResult;
+  const authDisabled = authTypeMetadata?.authType === "disabled";
 
-  if (options?.user !== undefined) {
-    // Auth already checked by caller, use provided user
-    user = options.user;
-    authTypeMetadata = null; // Not needed when auth pre-verified
-  } else {
-    // Need to check auth
-    const authResult = await requireAuth();
-    user = authResult.user;
-    authTypeMetadata = authResult.authTypeMetadata;
+  // STEP 2: Handle authentication redirects with special cases
+  if (authResult.redirect && !authDisabled) {
+    // Special handling for chrome extension mode and login loop prevention
+    const headersList = await headers();
+    const fullUrl = headersList.get("x-url") || "/chat";
 
-    const authDisabled = authTypeMetadata?.authType === "disabled";
+    // Check the referrer to prevent redirect loops
+    const referrer = headersList.get("referer") || "";
+    const isComingFromLogin = referrer.includes("/auth/login");
 
-    // STEP 2: Handle authentication redirects with special cases
-    if (authResult.redirect && !authDisabled) {
-      // Special handling for chrome extension mode and login loop prevention
-      const headersList = await headers();
-      const fullUrl = headersList.get("x-url") || "/chat";
+    // Also check for the from=login query parameter
+    const isRedirectedFromLogin = searchParams["from"] === "login";
 
-      // Check the referrer to prevent redirect loops
-      const referrer = headersList.get("referer") || "";
-      const isComingFromLogin = referrer.includes("/auth/login");
-
-      // Also check for the from=login query parameter
-      const isRedirectedFromLogin = searchParams["from"] === "login";
-
-      // Only redirect if we're not already coming from the login page
-      // and chrome extension mode is not enabled
-      if (
-        !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
-        !isComingFromLogin &&
-        !isRedirectedFromLogin
-      ) {
-        // Build redirect URL with search params preserved
-        const searchParamsString = new URLSearchParams(
-          searchParams as unknown as Record<string, string>
-        ).toString();
-        const redirectUrl = searchParamsString
-          ? `${fullUrl}?${searchParamsString}`
-          : fullUrl;
-        return {
-          redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
-        };
-      }
+    // Only redirect if we're not already coming from the login page
+    // and chrome extension mode is not enabled
+    if (
+      !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
+      !isComingFromLogin &&
+      !isRedirectedFromLogin
+    ) {
+      // Build redirect URL with search params preserved
+      const searchParamsString = new URLSearchParams(
+        searchParams as unknown as Record<string, string>
+      ).toString();
+      const redirectUrl = searchParamsString
+        ? `${fullUrl}?${searchParamsString}`
+        : fullUrl;
+      return {
+        redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
+      };
     }
   }
 
