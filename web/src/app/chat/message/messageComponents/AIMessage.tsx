@@ -31,6 +31,7 @@ import { RendererComponent } from "@/app/chat/message/messageComponents/renderMe
 import AgentIcon from "@/refresh-components/AgentIcon";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgCopy from "@/icons/copy";
+import SvgCheck from "@/icons/check";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import {
@@ -59,8 +60,10 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { toggleModal } = useChatModal();
+  const [copied, setCopied] = useState(false);
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -111,6 +114,16 @@ export default function AIMessage({
   };
   useEffect(() => {
     resetState();
+  }, [nodeId]);
+
+  // Clean up copy timeout on unmount or when switching messages
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
   }, [nodeId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
@@ -363,10 +376,19 @@ export default function AIMessage({
                           )}
 
                           <IconButton
-                            icon={SvgCopy}
-                            onClick={() => copyAll(getTextContent(rawPackets))}
+                            icon={copied ? SvgCheck : SvgCopy}
+                            onClick={() => {
+                              copyAll(getTextContent(rawPackets));
+                              setCopied(true);
+                              if (copyTimeoutRef.current) {
+                                clearTimeout(copyTimeoutRef.current);
+                              }
+                              copyTimeoutRef.current = setTimeout(() => {
+                                setCopied(false);
+                              }, 3000);
+                            }}
                             tertiary
-                            tooltip="Copy"
+                            tooltip={copied ? "Copied!" : "Copy"}
                             data-testid="AIMessage/copy-button"
                           />
                           <IconButton
