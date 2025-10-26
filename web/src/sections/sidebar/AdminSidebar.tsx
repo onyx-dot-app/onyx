@@ -77,7 +77,8 @@ const document_management_items = () => [
 
 const custom_assistants_items = (
   isCurator: boolean,
-  enableEnterprise: boolean
+  enableEnterprise: boolean,
+  settings: CombinedSettings | null
 ) => {
   const items = [
     {
@@ -86,7 +87,7 @@ const custom_assistants_items = (
       link: "/admin/assistants",
     },
   ];
-
+  // todo: checking if action creation is allowed. if not, hide the actions section
   if (!isCurator) {
     items.push(
       {
@@ -100,7 +101,7 @@ const custom_assistants_items = (
         link: "/admin/actions",
       }
     );
-  } else {
+  } else if (settings?.settings.all_users_actions_creation_enabled) {
     items.push({
       name: "Actions",
       icon: ToolIconSkeleton,
@@ -137,7 +138,7 @@ const collections = (
   },
   {
     name: "Custom Assistants",
-    items: custom_assistants_items(isCurator, enableEnterprise),
+    items: custom_assistants_items(isCurator, enableEnterprise, settings),
   },
   ...(isCurator
     ? [
