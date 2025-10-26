@@ -261,6 +261,10 @@ export function useChatController({
 
   const handleNewSessionNaming = async (chatSessionId: string) => {
     // Wait 200ms before naming (gives backend time to process)
+    // There is some delay here since we might get a "finished" response from the backend
+    // before the ChatSession is written to the database.
+    // TODO: remove this delay once we have a way to know when the ChatSession
+    // is written to the database.
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     try {
@@ -274,9 +278,6 @@ export function useChatController({
         fetchProjects();
         return;
       }
-
-      // Wait a bit for the backend to commit the name change
-      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       console.error("Failed to name chat session:", error);
     } finally {
