@@ -210,18 +210,6 @@ module.exports = {
         foreground: "var(--background-tint-inverted-01)",
         border: "var(--border-01)",
         text: "var(--text-04)",
-
-        // (OLD) code styling
-        "code-bg": "#000",
-        "code-text": "var(--code-text)",
-        "token-comment": "var(--token-comment)",
-        "token-punctuation": "var(--token-punctuation)",
-        "token-property": "var(--token-property)",
-        "token-selector": "var(--token-selector)",
-        "token-atrule": "var(--token-atrule)",
-        "token-function": "var(--token-function)",
-        "token-regex": "var(--token-regex)",
-        "token-attr-name": "var(--token-attr-name)",
       },
       boxShadow: {
         "01": "0px 2px 8px 0px var(--shadow-01)",
