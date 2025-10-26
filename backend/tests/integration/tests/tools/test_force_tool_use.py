@@ -45,7 +45,6 @@ def test_force_tool_use(
         user_performing_action=basic_user,
         forced_tool_ids=[web_search_tool_id],
     )
-    print(analyzed_response)
 
     internet_search_used = any(
         tool.tool_name == ToolName.INTERNET_SEARCH
