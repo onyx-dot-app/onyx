@@ -115,11 +115,9 @@ function ChatButtonInner({
   const route = useAppRouter();
   const params = useAppParams();
   const [mounted, setMounted] = useState(false);
-  const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
   const [displayName, setDisplayName] = useState(
     chatSession.name || UNNAMED_CHAT
   );
-  const [isTyping, setIsTyping] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
@@ -162,13 +160,10 @@ function ChatButtonInner({
   // Sync local name state when chatSession.name changes (e.g., after auto-naming)
   useEffect(() => {
     const newName = chatSession.name || UNNAMED_CHAT;
-    const oldName = name;
+    const oldName = displayName;
 
     // Only animate if transitioning from UNNAMED_CHAT to a real name
     if (oldName === UNNAMED_CHAT && newName !== UNNAMED_CHAT && mounted) {
-      setName(newName);
-      setIsTyping(true);
-
       // Type out the name character by character
       let currentIndex = 0;
       const typingInterval = setInterval(() => {
@@ -177,14 +172,12 @@ function ChatButtonInner({
 
         if (currentIndex >= newName.length) {
           clearInterval(typingInterval);
-          setIsTyping(false);
         }
       }, 30); // 30ms per character
 
       return () => clearInterval(typingInterval);
     } else {
       // No animation for other changes (manual rename, initial load, etc.)
-      setName(newName);
       setDisplayName(newName);
     }
   }, [chatSession.name, mounted]);
