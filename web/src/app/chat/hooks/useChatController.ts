@@ -253,7 +253,7 @@ export function useChatController({
       router.push(newUrl, { scroll: false });
     }
 
-    // Refresh sidebar so chat appears (will show as "Unnamed Chat" initially)
+    // Refresh sidebar so chat appears (will show as "New Chat" initially)
     // Will be updated again after naming completes
     refreshChatSessions();
     fetchProjects();
