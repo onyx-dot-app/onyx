@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "./lib/constants";
 
 // Authentication cookie name (matches backend: FASTAPI_USERS_AUTH_COOKIE_NAME)
-const AUTH_COOKIE_NAME = "fastapiusersauth";
+const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
 
 // Protected route prefixes (require authentication)
 const PROTECTED_ROUTES = ["/chat", "/admin", "/assistants", "/connector"];
@@ -61,11 +61,13 @@ export async function middleware(request: NextRequest) {
   );
 
   if (isProtectedRoute && !isPublicRoute) {
-    const authCookie = request.cookies.get(AUTH_COOKIE_NAME);
+    const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
 
     if (!authCookie) {
       const loginUrl = new URL("/auth/login", request.url);
-      loginUrl.searchParams.set("next", pathname);
+      // Preserve full URL including query params and hash for deep linking
+      const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
+      loginUrl.searchParams.set("next", fullPath);
       return NextResponse.redirect(loginUrl);
     }
   }
