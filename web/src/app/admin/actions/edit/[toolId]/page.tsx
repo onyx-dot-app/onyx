@@ -2,7 +2,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
-import { ActionEditor } from "@/app/admin/actions/ActionEditor";
+import { ActionEditor } from "@/app/actions/actions/ActionEditor";
 import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
 import { AdminPageTitle } from "@/components/admin/Title";

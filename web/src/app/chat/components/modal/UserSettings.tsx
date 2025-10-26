@@ -37,7 +37,8 @@ type SettingsSection =
   | "settings"
   | "password"
   | "connectors"
-  | "personalization";
+  | "personalization"
+  | "actions";
 
 interface UserSettingsProps {
   onClose: () => void;
@@ -133,6 +134,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
     if (hasConnectors) {
       visibleSections.push({ id: "connectors", label: "Connectors" });
+    }
+
+    if (true) {
+      visibleSections.push({ id: "actions", label: "Actions" });
     }
 
     return visibleSections;
@@ -833,6 +838,25 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {activeSection === "actions" && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium mb-2">Action</h3>
+            <Button
+              onClick={() =>
+                (window.location.href = "http://localhost:3000/admin/actions")
+              }
+            >
+              Create
+            </Button>
+            <div className="flex justify-center items-center p-4 border border-border rounded-lg bg-muted/30">
+              <img
+                src="/path/to/diagram.png"
+                alt="Action Diagram"
+                className="max-w-full rounded-md"
+              />
             </div>
           </div>
         )}

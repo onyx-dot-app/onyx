@@ -76,7 +76,7 @@ export async function deleteOAuthConfig(id: number): Promise<void> {
 
 export async function initiateOAuthFlow(
   oauthConfigId: number,
-  returnPath: string = "/chat"
+  returnPath: string = "/chat12"
 ): Promise<void> {
   const response = await fetch("/api/oauth-config/initiate", {
     method: "POST",

@@ -5,7 +5,7 @@ export default function OAuthConfigCallbackPage() {
     <OAuthCallbackPage
       config={{
         callbackApiUrl: "/api/oauth-config/callback",
-        defaultRedirectPath: "/chat",
+        defaultRedirectPath: "/chat5",
         processingMessage: "Completing Authorization...",
         processingDetails:
           "Please wait while we securely store your credentials.",
