@@ -267,7 +267,6 @@ function ChatButtonInner({
   ]);
 
   async function handleRename(newName: string) {
-    setName(newName);
     setDisplayName(newName);
     await renameChatSession(chatSession.id, newName);
     await refreshChatSessions();
