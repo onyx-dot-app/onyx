@@ -1,7 +1,5 @@
 "use client";
 
-import Prism from "prismjs";
-
 import { humanReadableFormat } from "@/lib/time";
 import { BackendChatSession } from "../../interfaces";
 import { processRawChatHistory } from "../../services/lib";
@@ -62,7 +60,6 @@ export function SharedChatDisplay({
     useState<MinimalOnyxDocument | null>(null);
 
   useEffect(() => {
-    Prism.highlightAll();
     setIsReady(true);
   }, []);
   if (!chatSession) {

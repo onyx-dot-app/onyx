@@ -8,7 +8,7 @@ pre[class*="language-"] {
   padding: 0px; /* Override padding */
   margin: 0px;
 
-  /* Override scrollbar style to match prism-tomorrow */
+  /* Override scrollbar style to match highlight.js theme */
   ::-webkit-scrollbar {
     width: 8px; /* Vertical scrollbar width */
     height: 8px; /* Horizontal scrollbar height */

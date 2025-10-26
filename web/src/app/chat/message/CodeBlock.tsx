@@ -1,8 +1,6 @@
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { FiCheck, FiCopy } from "react-icons/fi";
 
-const CODE_BLOCK_PADDING = { padding: "1rem" };
-
 interface CodeBlockProps {
   className?: string;
   children?: ReactNode;
@@ -60,15 +58,13 @@ export const CodeBlock = memo(function CodeBlock({
       <span
         className={`
           font-mono 
-          text-text-800 
+          text-text-05 
           bg-background-50 
           border 
           border-background-300 
           rounded 
           align-bottom
-          px-1
-          py-[3px]
-          text-xs 
+          text-xs
           inline-block
           whitespace-pre-wrap 
           break-words 
@@ -83,7 +79,7 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre style={CODE_BLOCK_PADDING}>
+        <pre className="!p-2">
           <code className={`text-sm ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
@@ -96,7 +92,7 @@ export const CodeBlock = memo(function CodeBlock({
     }
 
     return (
-      <pre className="overflow-x-scroll" style={CODE_BLOCK_PADDING}>
+      <pre className="!p-2">
         <code className="text-xs overflow-x-auto">
           {Array.isArray(children)
             ? children.map((child, index) => (
@@ -109,9 +105,9 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <div className="overflow-x-hidden">
+    <div className="overflow-x-hidden bg-background-tint-00 px-1 pb-1 rounded-12">
       {language && (
-        <div className="flex mx-3 py-2 text-xs">
+        <div className="flex p-2 text-xs text-text-04">
           {language}
           {codeText && <CopyButton />}
         </div>

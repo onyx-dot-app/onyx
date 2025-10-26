@@ -59,7 +59,6 @@ import {
   useSearchParams,
 } from "next/navigation";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import Prism from "prismjs";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -1024,9 +1023,8 @@ export function useChatController({
     llmManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
-  // highlight code blocks and set isReady once that's done
+  // set isReady once component is mounted
   useEffect(() => {
-    Prism.highlightAll();
     const currentSessionId = getCurrentSessionId();
     if (currentSessionId) {
       setIsReady(currentSessionId, true);
