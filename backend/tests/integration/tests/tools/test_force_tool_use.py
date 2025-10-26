@@ -28,7 +28,7 @@ def test_force_tool_use(
     """
     with get_session_with_current_tenant() as db_session:
         web_search_tool = db_session.execute(
-            select(Tool).where(Tool.in_code_tool_id == "run_web_search")
+            select(Tool).where(Tool.in_code_tool_id == "WebSearchTool")
         ).scalar_one_or_none()
         web_search_tool_id = web_search_tool.id
 
