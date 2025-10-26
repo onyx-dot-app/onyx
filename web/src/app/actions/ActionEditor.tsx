@@ -181,7 +181,7 @@ function ActionForm({
       />
       <div className="mt-4 rounded-md border border-border bg-background-50 p-4">
         <Link
-          href="https://docs.onyx.app/admin/actions/overview"
+          href="https://docs.onyx.app/actions/overview"
           className="flex items-center group"
           target="_blank"
           rel="noopener noreferrer"
@@ -490,7 +490,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             });
             return;
           }
-          router.push(`/admin/actions?u=${Date.now()}`);
+          router.push(`/actions?u=${Date.now()}`);
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => {

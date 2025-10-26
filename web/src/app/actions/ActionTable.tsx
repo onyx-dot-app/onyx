@@ -65,9 +65,7 @@ export function ActionsTable({
                       icon={SvgEdit}
                       tertiary
                       onClick={() => {
-                        router.push(
-                          `/admin/actions/edit-mcp?server_id=${server.id}`
-                        );
+                        router.push(`/actions/edit-mcp?server_id=${server.id}`);
                       }}
                     />
                   ) : null}
@@ -139,7 +137,7 @@ export function ActionsTable({
                         tertiary
                         onClick={() => {
                           router.push(
-                            `/admin/actions/edit/${tool.id}?u=${Date.now()}`
+                            `/actions/edit/${tool.id}?u=${Date.now()}`
                           );
                         }}
                       />

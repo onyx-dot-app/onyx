@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionEditor } from "@/app/actions/actions/ActionEditor";
+import { ActionEditor } from "@/app/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
