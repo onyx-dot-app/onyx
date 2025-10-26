@@ -64,6 +64,7 @@ class ChatSessionManager:
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
         use_agentic_search: bool = False,
+        forced_tool_ids: list[int] | None = None,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -80,6 +81,7 @@ class ChatSessionManager:
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
             use_agentic_search=use_agentic_search,
+            forced_tool_ids=forced_tool_ids,
         )
 
         headers = (
