@@ -1,3 +1,4 @@
+from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -56,7 +57,10 @@ def _run_agent_loop(
     # in multi turn conversations
     chat_history = messages[:-1]
     current_user_message = messages[-1]
-    agent_turn_messages: list[dict] = []
+    # TODO: Figure out proper typing for agent_turn_messages that
+    # conforms to what is returned by SDK but still is compatible
+    # with our transformations
+    agent_turn_messages: list[Any] = []
 
     last_call_is_final = False
     agent = Agent(
@@ -83,19 +87,22 @@ def _run_agent_loop(
         all_messages_after_stream = streamed.to_input_list()
         # The new messages are everything after chat_history + current_user_message
         previous_message_count = len(chat_history) + 1
-        agent_turn_messages = all_messages_after_stream[previous_message_count:]
+        # Convert to list to avoid Sequence type issues
+        agent_turn_messages = list(all_messages_after_stream[previous_message_count:])
 
         # agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
-        agent_turn_messages = update_task_prompt(
-            current_user_message,
-            agent_turn_messages,
-            prompt_config,
-            ctx.should_cite_documents,
+        agent_turn_messages = list(
+            update_task_prompt(
+                current_user_message,
+                agent_turn_messages,
+                prompt_config,
+                ctx.should_cite_documents,
+            )
         )
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )
-        agent_turn_messages = citation_result.updated_messages
+        agent_turn_messages = list(citation_result.updated_messages)
         ctx.ordered_fetched_documents.extend(citation_result.new_llm_docs)
         ctx.documents_cited_count += citation_result.num_docs_cited
         ctx.tool_calls_cited_count += citation_result.num_tool_calls_cited

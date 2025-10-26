@@ -51,7 +51,9 @@ def _parse_llm_docs_from_messages(messages: Sequence[dict]) -> list[LlmDoc]:
     ]
 
 
-def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependencies):
+def test_assign_citation_numbers_basic(
+    chat_turn_dependencies: ChatTurnDependencies,
+) -> None:
     messages = [
         {
             "content": [{"text": "\nYou are an assistant.", "type": "text"}],
@@ -100,7 +102,7 @@ def test_assign_citation_numbers_basic(chat_turn_dependencies: ChatTurnDependenc
 
 def test_assign_citation_numbers_no_relevant_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
-):
+) -> None:
     messages = [
         {
             "content": [{"text": "\nYou are an assistant.", "type": "text"}],
@@ -137,7 +139,7 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
 
 def test_assign_citation_numbers_previous_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
-):
+) -> None:
     messages = [
         {
             "content": [{"text": "\nYou are an assistant.", "type": "text"}],
@@ -206,7 +208,7 @@ def test_assign_citation_numbers_previous_tool_calls(
 
 def test_assign_citation_numbers_parallel_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
-):
+) -> None:
     messages = [
         {
             "content": [{"text": "\nYou are an assistant.", "type": "text"}],

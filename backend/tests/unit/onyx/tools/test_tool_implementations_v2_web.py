@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 from typing import List
@@ -56,7 +57,7 @@ class MockWebSearchProvider(WebSearchProvider):
             raise Exception("Test exception from search provider")
         return self.search_results
 
-    def contents(self, urls: List[str]) -> List[WebContent]:
+    def contents(self, urls: Sequence[str]) -> List[WebContent]:
         if self.should_raise_exception:
             raise Exception("Test exception from search provider")
         return self.content_results
@@ -358,7 +359,7 @@ def test_web_search_core_multiple_queries() -> None:
                 ]
             return []
 
-        def contents(self, urls: List[str]) -> List[WebContent]:
+        def contents(self, urls: Sequence[str]) -> List[WebContent]:
             return []
 
     test_provider = MultiQueryMockProvider()
