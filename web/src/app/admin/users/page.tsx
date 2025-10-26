@@ -40,8 +40,7 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
       : value.toLocaleString();
 
   return (
-    // <div className="flex items-center gap-spacing-inline-mini">
-    <div className="flex items-center gap-spacing-inline px-spacing-inline py-spacing-interline-mini rounded-06">
+    <div className="flex items-center gap-1 px-1 py-0.5 rounded-06">
       <Text mainUiMuted text03>
         {label}
       </Text>
@@ -160,7 +159,7 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center gap-spacing-inline">
+            <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
               <Button
                 leftIcon={SvgDownloadCloud}
@@ -198,7 +197,7 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center gap-spacing-inline">
+            <div className="flex justify-between items-center gap-1">
               <CardTitle>Invited Users</CardTitle>
               <CountDisplay
                 label="Total invited"
@@ -223,7 +222,7 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center gap-spacing-inline">
+              <div className="flex justify-between items-center gap-1">
                 <CardTitle>Pending Users</CardTitle>
                 <CountDisplay
                   label="Total pending"

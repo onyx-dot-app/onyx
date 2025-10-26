@@ -94,7 +94,7 @@ export default function AgentCard({
                 <Popover open={kebabMenuOpen} onOpenChange={setKebabMenuOpen}>
                   <PopoverTrigger>
                     <div
-                      className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-spacing-inline flex flex-col justify-center items-center"
+                      className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-1 flex flex-col justify-center items-center"
                       data-testid="AgentCard/more"
                     >
                       <SvgMoreHorizontal className="w-[1rem] min-h-[1rem] stroke-text-04" />

@@ -1119,7 +1119,7 @@ export function AssistantEditor({
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
-                                <div className="flex gap-spacing-inline">
+                                <div className="flex gap-1">
                                   {values.user_file_ids
                                     .slice(0, 4)
                                     .map((userFileId: string) => {

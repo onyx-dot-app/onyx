@@ -72,7 +72,7 @@ function ChatDocumentDisplayWrapper({
   children,
 }: ChatDocumentDisplayWrapperProps) {
   return (
-    <div className="flex flex-col gap-spacing-inline items-center justify-center">
+    <div className="flex flex-col gap-1 items-center justify-center">
       {children}
     </div>
   );

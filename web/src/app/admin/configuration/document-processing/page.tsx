@@ -10,6 +10,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Text from "@/refresh-components/texts/Text";
 import SvgLock from "@/icons/lock";
+import { cn } from "@/lib/utils";
 
 function Main() {
   const {
@@ -91,7 +92,19 @@ function Main() {
             </Text>
             <div className="pt-spacing-interline-mini">
               {isApiKeySet ? (
-                <div className="flex items-center gap-spacing-inline-mini rounded-08 border border-border-01 bg-background-neutral-01 px-spacing-interline py-spacing-interline-mini">
+                <div
+                  className={cn(
+                    "flex",
+                    "items-center",
+                    "gap-0.5",
+                    "rounded-08",
+                    "border",
+                    "border-border-01",
+                    "bg-background-neutral-01",
+                    "px-spacing-interline",
+                    "py-spacing-interline-mini"
+                  )}
+                >
                   <Text
                     mainUiMuted
                     text03

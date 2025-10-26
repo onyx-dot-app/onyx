@@ -120,7 +120,7 @@ function InputTypeInInner(
         onFocus={() => setLocalActive(true)}
         onBlur={() => setLocalActive(false)}
         className={cn(
-          "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none",
+          "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
           inputClasses(localActive)[state]
         )}
         {...props}

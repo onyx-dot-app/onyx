@@ -118,7 +118,7 @@ export default function LLMPopover({
       <PopoverContent
         side="top"
         align="start"
-        className="max-h-[20rem] w-[15rem] p-spacing-inline border rounded-08 shadow-lg flex flex-col"
+        className="max-h-[20rem] w-[15rem] p-1 border rounded-08 shadow-lg flex flex-col"
       >
         <div className="overflow-y-scroll">
           {llmOptionsToChooseFrom.map(

@@ -18,7 +18,7 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0 gap-spacing-paragraph",
+        "flex flex-row items-center px-spacing-paragraph py-1 flex-shrink-0 gap-spacing-paragraph",
         folded ? "justify-center" : "justify-between"
       )}
     >

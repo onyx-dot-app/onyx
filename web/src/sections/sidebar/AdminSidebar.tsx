@@ -342,11 +342,7 @@ export default function AdminSidebar({
         footer={
           <div className="flex flex-col px-spacing-interline gap-spacing-interline">
             {combinedSettings.webVersion && (
-              <Text
-                text02
-                secondaryBody
-                className="px-spacing-interline pt-spacing-inline"
-              >
+              <Text text02 secondaryBody className="px-spacing-interline pt-1">
                 {`Onyx version: ${combinedSettings.webVersion}`}
               </Text>
             )}

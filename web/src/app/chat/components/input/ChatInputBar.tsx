@@ -395,7 +395,7 @@ function ChatInputBarInner({
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="p-spacing-inline rounded-t-16 flex flex-wrap gap-spacing-interline">
+          <div className="p-1 rounded-t-16 flex flex-wrap gap-spacing-interline">
             {currentMessageFiles.map((file) => (
               <FileCard
                 key={file.id}
@@ -583,7 +583,7 @@ function ChatInputBarInner({
               })}
           </div>
 
-          <div className="flex flex-row items-center gap-spacing-inline">
+          <div className="flex flex-row items-center gap-1">
             <div data-testid="ChatInputBar/llm-popover-trigger">
               <LLMPopover
                 llmManager={llmManager}

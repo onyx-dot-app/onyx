@@ -262,7 +262,7 @@ export default function HumanMessage({
                       isHovered &&
                       !isEditing &&
                       (!files || files.length === 0) ? (
-                        <div className="flex flex-row items-center justify-center gap-spacing-inline">
+                        <div className="flex flex-row items-center justify-center gap-1">
                           <IconButton
                             icon={SvgCopy}
                             tertiary

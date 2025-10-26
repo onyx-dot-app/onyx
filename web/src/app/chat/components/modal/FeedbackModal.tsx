@@ -113,7 +113,7 @@ export const FeedbackModal = ({ setPopup }: FeedbackModalProps) => {
       xs
     >
       {predefinedFeedbackOptions.length > 0 && (
-        <div className="flex flex-col p-spacing-paragraph gap-spacing-inline">
+        <div className="flex flex-col p-spacing-paragraph gap-1">
           {predefinedFeedbackOptions.map((feedback, index) => (
             <LineItem
               key={index}

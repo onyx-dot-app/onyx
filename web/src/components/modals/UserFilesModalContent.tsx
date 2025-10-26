@@ -154,7 +154,7 @@ export default function UserFilesModalContent({
   return (
     <>
       <div className="shadow-01 rounded-t-12 relative z-20">
-        <div className="flex flex-col gap-spacing-inline px-spacing-paragraph pt-spacing-paragraph">
+        <div className="flex flex-col gap-1 px-spacing-paragraph pt-spacing-paragraph">
           <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
             <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
             {onClose && <IconButton icon={SvgX} internal onClick={onClose} />}
@@ -228,7 +228,7 @@ export default function UserFilesModalContent({
               tabIndex={0}
               key={f.id}
               className={cn(
-                "flex items-center justify-between gap-3 text-left p-spacing-inline rounded-12 bg-background-tint-00 w-full my-spacing-inline group",
+                "flex items-center justify-between gap-3 text-left p-1 rounded-12 bg-background-tint-00 w-full my-1 group",
                 onPickRecent && "hover:bg-background-tint-02"
               )}
               onClick={() => {
@@ -257,7 +257,7 @@ export default function UserFilesModalContent({
                 }
               }}
             >
-              <div className="flex items-center p-spacing-inline flex-1 min-w-0">
+              <div className="flex items-center p-1 flex-1 min-w-0">
                 <div className="flex h-9 w-9 items-center justify-center p-spacing-interline bg-background-tint-01 rounded-08">
                   {String((f as ProjectFile).status) ===
                     UserFileStatus.PROCESSING ||
@@ -269,7 +269,7 @@ export default function UserFilesModalContent({
                   ) : (
                     <>
                       {onPickRecent && selectedIds.has(f.id) ? (
-                        <div className="w-4 h-4 flex items-center justify-center rounded-04 border border-border-01 bg-background-neutral-00 p-spacing-inline-mini">
+                        <div className="w-4 h-4 flex items-center justify-center rounded-04 border border-border-01 bg-background-neutral-00 p-0.5">
                           <SvgCheck className="stroke-text-02" />
                         </div>
                       ) : (
@@ -286,7 +286,7 @@ export default function UserFilesModalContent({
                     </>
                   )}
                 </div>
-                <div className="p-spacing-inline-mini flex-1 min-w-0">
+                <div className="p-0.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="max-w-[250px] min-w-0 flex-none">
                       <Truncated text04 secondaryAction nowrap>
@@ -331,7 +331,7 @@ export default function UserFilesModalContent({
                     {formatRelativeTime(f.last_accessed_at)}
                   </Text>
                 )}
-                {!showRemove && <div className="p-spacing-inline"></div>}
+                {!showRemove && <div className="p-1"></div>}
                 {showRemove &&
                   String(f.status) !== UserFileStatus.UPLOADING &&
                   String(f.status) !== UserFileStatus.DELETING && (

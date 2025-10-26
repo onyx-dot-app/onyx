@@ -149,7 +149,7 @@ export default function SelectButton({
         {/* Animation component */}
         <div
           className={cn(
-            "flex items-center transition-all duration-300 ease-in-out overflow-hidden py-spacing-inline-mini",
+            "flex items-center transition-all duration-300 ease-in-out overflow-hidden py-0.5",
             folded
               ? active || hovered
                 ? "opacity-100"

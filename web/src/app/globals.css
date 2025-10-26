@@ -20,8 +20,6 @@
 
   /* SPACINGS + PADDINGS */
   :root {
-    --spacing-inline-mini: 0.12rem;
-    --spacing-inline: 0.25rem;
     --spacing-interline-mini: 0.38rem;
     --spacing-interline: 0.5rem;
     --spacing-paragraph: 1rem;

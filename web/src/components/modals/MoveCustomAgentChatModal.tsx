@@ -35,7 +35,7 @@ export default function MoveCustomAgentChatModal({
           will not override the agent&apos;s prompt or knowledge configurations.
           This should only be used for organization purposes.
         </Text>
-        <div className="flex items-center gap-spacing-inline">
+        <div className="flex items-center gap-1">
           <Checkbox
             id="move-custom-agent-do-not-show"
             checked={doNotShowAgain}
