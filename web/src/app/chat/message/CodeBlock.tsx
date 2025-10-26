@@ -1,6 +1,7 @@
 import SvgCheck from "@/icons/check";
 import SvgCode from "@/icons/code";
 import SvgCopy from "@/icons/copy";
+import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 
@@ -56,23 +57,23 @@ export const CodeBlock = memo(function CodeBlock({
     </div>
   );
 
-  if (typeof children === "string") {
+  if (typeof children === "string" && !language) {
     return (
       <span
-        className={`
-          font-mono 
-          text-text-05 
-          bg-background-50 
-          border 
-          border-background-300 
-          rounded 
-          align-bottom
-          text-xs
-          inline-block
-          whitespace-pre-wrap 
-          break-words 
-          ${className}
-        `}
+        className={cn(
+          "font-mono",
+          "text-text-05",
+          "bg-background-tint-00",
+          "rounded",
+          "align-bottom",
+          "text-xs",
+          "inline-block",
+          "whitespace-pre-wrap",
+          "break-words",
+          "py-0.5",
+          "px-1",
+          className
+        )}
       >
         {children}
       </span>
