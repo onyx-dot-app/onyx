@@ -166,7 +166,7 @@ def internal_search(
         (
             tool
             for tool in run_context.context.run_dependencies.tools
-            if tool.name == "run_search"
+            if tool.name == SearchTool._NAME
         ),
         None,
     )
@@ -175,7 +175,7 @@ def internal_search(
 
     # Call the core function
     retrieved_docs = _internal_search_core(
-        run_context, queries, search_pipeline_instance
+        run_context, queries, cast(SearchTool, search_pipeline_instance)
     )
 
     return str(retrieved_docs)

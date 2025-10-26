@@ -157,7 +157,7 @@ def image_generation(
         (
             tool
             for tool in run_context.context.run_dependencies.tools
-            if tool.name == "run_image_generation"
+            if tool.name == ImageGenerationTool._NAME
         ),
         None,
     )
@@ -165,7 +165,10 @@ def image_generation(
         raise ValueError("Image generation tool not found")
 
     generated_images: list[GeneratedImage] = _image_generation_core(
-        run_context, prompt, shape, image_generation_tool_instance
+        run_context,
+        prompt,
+        shape,
+        cast(ImageGenerationTool, image_generation_tool_instance),
     )
 
     # We should stop after this tool is called, so it doesn't matter what it returns
