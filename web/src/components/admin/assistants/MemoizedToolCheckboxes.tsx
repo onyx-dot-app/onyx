@@ -12,7 +12,7 @@ const MAX_DESCRIPTION_LENGTH = 300;
 const MemoizedToolCheckbox = memo(function MemoizedToolCheckbox({
   toolId,
   displayName,
-  description
+  description,
 }: {
   toolId: number;
   displayName: string;
@@ -21,7 +21,7 @@ const MemoizedToolCheckbox = memo(function MemoizedToolCheckbox({
 
   return (
     <FastField name={`enabled_tools_map.${toolId}`}>
-      {({ field, form }: any) => (
+      {() => (
         <BooleanFormField
           name={`enabled_tools_map.${toolId}`}
           label={displayName}
