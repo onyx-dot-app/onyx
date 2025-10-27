@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import verify_actions_creation_enabled
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -1486,6 +1487,7 @@ async def get_mcp_servers_for_admin(
     user = await current_curator_or_admin_user(
         user=user, skip_role_check=skip_role_check
     )
+
     email = user.email if user else ""
     try:
         db_mcp_servers = get_all_mcp_servers(db)
@@ -1508,6 +1510,7 @@ def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
     user: User | None = Depends(current_user),
+    _: User | None = Depends(verify_actions_creation_enabled),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info(f"Getting database tools for MCP server: {server_id}")

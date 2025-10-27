@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_user
+from onyx.auth.users import verify_actions_creation_enabled
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -79,10 +80,11 @@ def _get_editable_custom_tool(
 
 
 @admin_router.post("/custom")
-def create_custom_tool(
+async def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
+    _: User | None = Depends(verify_actions_creation_enabled),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -107,6 +109,7 @@ def update_custom_tool(
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
+    _: User | None = Depends(verify_actions_creation_enabled),
 ) -> ToolSnapshot:
     existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
@@ -131,6 +134,7 @@ def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
+    _: User | None = Depends(verify_actions_creation_enabled),
 ) -> None:
     _ = _get_editable_custom_tool(tool_id, db_session, user)
     try:
@@ -155,6 +159,7 @@ class ValidateToolResponse(BaseModel):
 def validate_tool(
     tool_data: ValidateToolRequest,
     user: User | None = Depends(current_user),
+    _: User | None = Depends(verify_actions_creation_enabled),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)
