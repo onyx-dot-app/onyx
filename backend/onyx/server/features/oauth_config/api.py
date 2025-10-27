@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
@@ -83,11 +84,15 @@ def create_oauth_config_endpoint(
 
 
 @admin_router.get("")
-def list_oauth_configs(
+async def list_oauth_configs(
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
+    skip_role_check: bool = Query(
+        False, description="Skip curator/admin role check (for internal use only)"
+    ),
 ) -> list[OAuthConfigSnapshot]:
     """List all OAuth configurations (admin only)."""
+    user = await current_curator_or_admin_user(user=user, skip_role_check=skip_role_check)
     oauth_configs = get_oauth_configs(db_session)
     return [_oauth_config_to_snapshot(config, db_session) for config in oauth_configs]
 
