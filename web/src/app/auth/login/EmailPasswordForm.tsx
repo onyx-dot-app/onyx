@@ -56,9 +56,10 @@ export default function EmailPasswordForm({
             .email()
             .required()
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required(),
+          password: Yup.string()
+            .min(8, "Password must be at least 8 characters")
+            .required(),
         })}
-        validateOnMount
         onSubmit={async (values: { email: string; password: string }) => {
           // Ensure email is lowercase
           const email: string = values.email.toLowerCase();
@@ -170,9 +171,19 @@ export default function EmailPasswordForm({
                       data-testid="password"
                     />
                   </FormField.Control>
-                  <FormField.Description>
-                    Password must be at least 8 characters
-                  </FormField.Description>
+                  {isSignup && (
+                    <FormField.Description>
+                      Password must be at least 8 characters
+                    </FormField.Description>
+                  )}
+                  {!isSignup && (
+                    <FormField.Message
+                      messages={{
+                        error: meta.error,
+                        success: "Password must be at least 8 characters",
+                      }}
+                    />
+                  )}
                 </FormField>
               )}
             />

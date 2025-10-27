@@ -17,15 +17,15 @@ export default function AuthFlowContainer({
         <div className="w-full mt-3">{children}</div>
       </div>
       {authState === "login" && (
-        <div className="text-sm mt-4 text-center w-full text-text-04 font-medium mx-auto">
+        <div className="text-sm mt-spacing-headline text-center w-full text-text-03 mainUiBody mx-auto">
           {footerContent ?? (
             <>
-              Don&apos;t have an account?{" "}
+              New to Onyx?{" "}
               <Link
                 href="/auth/signup"
-                className="text-action-link-05 underline transition-colors duration-200"
+                className="text-text-05 mainUiAction underline transition-colors duration-200"
               >
-                Create one
+                Create an Account
               </Link>
             </>
           )}

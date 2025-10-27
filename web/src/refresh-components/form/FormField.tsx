@@ -12,6 +12,7 @@ import React, { useId, useMemo } from "react";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
+import SvgCheckCircle from "@/icons/check-circle";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
@@ -131,33 +132,28 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
   className,
   messages,
   render,
-  children,
-  ...props
 }) => {
   const { baseId, state } = useFieldContext();
-  const content = children;
-  if (!content) return null;
-
-  const stateClass =
-    state === "error"
-      ? "text-destructive"
-      : state === "success"
-        ? "text-emerald-600"
-        : state === "loading"
-          ? "text-muted-foreground"
-          : "text-muted-foreground";
-
-  return (
-    <div
-      id={`${baseId}-msg`}
-      role={state === "error" ? "alert" : undefined}
-      aria-live={state === "error" ? "assertive" : "polite"}
-      className={cn("text-sm", stateClass, className)}
-      {...props}
-    >
-      {content}
+  const content = messages?.[state];
+  const iconMap = {
+    error: null,
+    success: <SvgCheckCircle className="h-4 w-4" />,
+    idle: null,
+    loading: null,
+  };
+  return content ? (
+    <div className="flex flex-row items-center gap-x-spacing-inline-mini">
+      {iconMap[state]}
+      <Text
+        id={`${baseId}-msg`}
+        text03
+        secondaryBody
+        className={cn("ml-spacing-inline-mini", className)}
+      >
+        {content}
+      </Text>
     </div>
-  );
+  ) : null;
 };
 
 export const FormField = Object.assign(FormFieldRoot, {

@@ -20,6 +20,7 @@ export type LabelProps = React.HTMLAttributes<HTMLLabelElement> & {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   optional?: boolean;
+  rightAction?: React.ReactNode;
 };
 
 export type ControlProps = React.PropsWithChildren<{
@@ -27,7 +28,7 @@ export type ControlProps = React.PropsWithChildren<{
 }>;
 
 export type DescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
-export type MessageByState = Partial<Record<FormFieldState, React.ReactNode>>;
+export type MessageByState = Partial<Record<FormFieldState, string>>;
 
 export type MessageProps = React.HTMLAttributes<HTMLDivElement> & {
   messages?: MessageByState;

@@ -13,6 +13,7 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -71,10 +72,15 @@ const Page = async (props: {
 
       <>
         <div className="absolute top-10x w-full"></div>
-        <div className="flex w-full flex-col justify-start">
+        <div
+          className={cn(
+            "flex w-full flex-col justify-start",
+            cloud ? "" : "gap-padding-content"
+          )}
+        >
           <div className="w-full">
             <Text headingH2 text05>
-              {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
+              {cloud ? "Complete your sign up" : "Create account"}
             </Text>
             <Text text03>Get started with Onyx</Text>
           </div>
