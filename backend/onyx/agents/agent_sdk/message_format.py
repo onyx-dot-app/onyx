@@ -5,8 +5,9 @@ from langchain.schema.messages import BaseMessage
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import ImageContent
+from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import OutputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
-from onyx.agents.agent_sdk.message_types import TextContent
 from onyx.agents.agent_sdk.message_types import UserMessage
 
 
@@ -29,73 +30,104 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
 
     # Convert content to Agent SDK format
     content = msg.content
-    structured_content: list[TextContent | ImageContent] = []
 
     if isinstance(content, str):
-        # Convert string to structured text format
-        text_item: TextContent = {
-            "type": "input_text",
-            "text": content,
-        }
-        structured_content = [text_item]
-    elif isinstance(content, list):
-        # Content is already a list, process each item
-        for item in content:
-            if isinstance(item, str):
-                text_item_from_str: TextContent = {
-                    "type": "input_text",
-                    "text": item,
+        # For system/user messages, use InputTextContent; for assistant, use OutputTextContent
+        if role in ("system", "user"):
+            input_text_content: list[InputTextContent | ImageContent] = [
+                InputTextContent(type="input_text", text=content)
+            ]
+            if role == "system":
+                # SystemMessage only accepts InputTextContent
+                system_msg: SystemMessage = {
+                    "role": "system",
+                    "content": [InputTextContent(type="input_text", text=content)],
                 }
-                structured_content.append(text_item_from_str)
-            elif isinstance(item, dict):
-                # Handle different item types
-                item_type = item.get("type")
-
-                if item_type == "text":
-                    # Convert text type to input_text
-                    text_item_from_dict: TextContent = {
-                        "type": "input_text",
-                        "text": item.get("text", ""),
-                    }
-                    structured_content.append(text_item_from_dict)
-                elif item_type == "image_url":
-                    # Convert image_url to input_image format
-                    image_url = item.get("image_url", {})
-                    if isinstance(image_url, dict):
-                        url = image_url.get("url", "")
+                return system_msg
+            else:  # user
+                user_msg: UserMessage = {
+                    "role": "user",
+                    "content": input_text_content,
+                }
+                return user_msg
+        else:  # assistant
+            assistant_msg: AssistantMessageWithContent = {
+                "role": "assistant",
+                "content": [OutputTextContent(type="output_text", text=content)],
+            }
+            return assistant_msg
+    elif isinstance(content, list):
+        # For lists, we need to process based on the role
+        if role == "assistant":
+            # Assistant messages use OutputTextContent
+            output_content: list[OutputTextContent] = []
+            for item in content:
+                if isinstance(item, str):
+                    output_content.append(
+                        OutputTextContent(type="output_text", text=item)
+                    )
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    output_content.append(
+                        OutputTextContent(type="output_text", text=item.get("text", ""))
+                    )
+                else:
+                    raise ValueError(
+                        f"Unexpected item type for assistant message: {type(item)}. Item: {item}"
+                    )
+            assistant_msg_list: AssistantMessageWithContent = {
+                "role": "assistant",
+                "content": output_content,
+            }
+            return assistant_msg_list
+        else:  # system or user - use InputTextContent
+            input_content: list[InputTextContent | ImageContent] = []
+            for item in content:
+                if isinstance(item, str):
+                    input_content.append(InputTextContent(type="input_text", text=item))
+                elif isinstance(item, dict):
+                    item_type = item.get("type")
+                    if item_type == "text":
+                        input_content.append(
+                            InputTextContent(
+                                type="input_text", text=item.get("text", "")
+                            )
+                        )
+                    elif item_type == "image_url":
+                        # Convert image_url to input_image format
+                        image_url = item.get("image_url", {})
+                        if isinstance(image_url, dict):
+                            url = image_url.get("url", "")
+                        else:
+                            url = image_url
+                        input_content.append(
+                            ImageContent(
+                                type="input_image", image_url=url, detail="auto"
+                            )
+                        )
                     else:
-                        url = image_url
-                    image_item: ImageContent = {
-                        "type": "input_image",
-                        "image_url": url,
-                        "detail": "auto",
-                    }
-                    structured_content.append(image_item)
-            else:
-                raise ValueError(f"Unexpected item type: {type(item)}. Item: {item}")
+                        raise ValueError(f"Unexpected item type: {item_type}")
+                else:
+                    raise ValueError(
+                        f"Unexpected item type: {type(item)}. Item: {item}"
+                    )
+
+            if role == "system":
+                # SystemMessage only accepts InputTextContent (no images)
+                text_only_content = [
+                    c for c in input_content if c["type"] == "input_text"
+                ]
+                system_msg_list: SystemMessage = {
+                    "role": "system",
+                    "content": text_only_content,  # type: ignore[typeddict-item]
+                }
+                return system_msg_list
+            else:  # user
+                user_msg_list: UserMessage = {
+                    "role": "user",
+                    "content": input_content,
+                }
+                return user_msg_list
     else:
         raise ValueError(
             f"Unexpected content type: {type(content)}. Content: {content}"
         )
-
-    # Construct the appropriate message type based on role
-    if role == "system":
-        system_msg: SystemMessage = {
-            "role": "system",
-            "content": structured_content,  # type: ignore
-        }
-        return system_msg
-    elif role == "user":
-        user_msg: UserMessage = {
-            "role": "user",
-            "content": structured_content,
-        }
-        return user_msg
-    elif role == "assistant":
-        assistant_msg: AssistantMessageWithContent = {
-            "role": "assistant",
-            "content": structured_content,  # type: ignore
-        }
-        return assistant_msg
-    else:
-        raise ValueError(f"Unexpected role: {role}")

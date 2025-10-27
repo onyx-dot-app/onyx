@@ -12,7 +12,6 @@ from uuid import UUID
 
 import pytest
 from agents import AgentOutputSchemaBase
-from agents import FunctionTool
 from agents import Handoff
 from agents import Model
 from agents import ModelResponse
@@ -36,6 +35,7 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.tools.tool import Tool as OnyxTool
 
 
 # =============================================================================
@@ -597,7 +597,7 @@ def fake_redis_client() -> FakeRedis:
 
 
 @pytest.fixture
-def fake_tools() -> list[FunctionTool]:
+def fake_tools() -> list[OnyxTool]:
     """Fixture providing a list of fake tools."""
     return []
 
@@ -607,7 +607,7 @@ def chat_turn_dependencies(
     fake_llm: LLM,
     fake_model: Model,
     fake_db_session: FakeSession,
-    fake_tools: list[FunctionTool],
+    fake_tools: list[OnyxTool],
     fake_redis_client: FakeRedis,
 ) -> ChatTurnDependencies:
     """Fixture providing a complete ChatTurnDependencies object with fake implementations."""
