@@ -26,7 +26,7 @@ import {
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { getIconForAction } from "../../services/actionUtils";
+import { getIconForAction } from "../../app/chat/services/actionUtils";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -401,13 +401,13 @@ function MCPServerItem({
   );
 }
 
-interface ActionToggleProps {
+export interface ActionToggleProps {
   selectedAssistant: MinimalPersonaSnapshot;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
 }
 
-export function ActionToggle({
+export default function ActionsPopover({
   selectedAssistant,
   filterManager,
   availableSources = [],
@@ -905,11 +905,11 @@ export function ActionToggle({
           side="top"
           align="start"
           className="
-            w-[15.5rem] 
+            w-[15.5rem]
             max-h-[300px]
             text-text-03
-            text-sm 
-            p-0 
+            text-sm
+            p-0
             overflow-hidden
             flex
             flex-col

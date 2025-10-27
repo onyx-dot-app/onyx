@@ -31,7 +31,7 @@ import SvgHourglass from "@/icons/hourglass";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgStop from "@/icons/stop";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
+import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
 import {
@@ -534,7 +534,7 @@ function ChatInputBarInner({
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
-              <ActionToggle
+              <ActionsPopover
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
