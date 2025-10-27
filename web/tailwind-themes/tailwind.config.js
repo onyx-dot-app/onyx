@@ -252,6 +252,11 @@ module.exports = {
       fontStyle: {
         "token-italic": "italic",
       },
+      backdropBlur: {
+        "01": "var(--backdrop-blur-01)",
+        "02": "var(--backdrop-blur-02)",
+        "03": "var(--backdrop-blur-03)",
+      },
       calendar: {
         // Light mode
         "bg-selected": "var(--calendar-bg-selected)",

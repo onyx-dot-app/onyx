@@ -238,6 +238,55 @@ export function useChatController({
     setCurrentSession(newSessionId);
   };
 
+  const handleNewSessionNavigation = (chatSessionId: string) => {
+    // Build URL with skip-reload parameter
+    const newUrl = buildChatUrl(
+      searchParams,
+      chatSessionId,
+      null,
+      false,
+      true // skipReload
+    );
+
+    // Navigate immediately if still on chat page
+    if (pathname === "/chat" && !navigatingAway.current) {
+      router.push(newUrl, { scroll: false });
+    }
+
+    // Refresh sidebar so chat appears (will show as "New Chat" initially)
+    // Will be updated again after naming completes
+    refreshChatSessions();
+    fetchProjects();
+  };
+
+  const handleNewSessionNaming = async (chatSessionId: string) => {
+    // Wait 200ms before naming (gives backend time to process)
+    // There is some delay here since we might get a "finished" response from the backend
+    // before the ChatSession is written to the database.
+    // TODO: remove this delay once we have a way to know when the ChatSession
+    // is written to the database.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    try {
+      // Name chat based on AI response
+      const response = await nameChatSession(chatSessionId);
+
+      if (!response.ok) {
+        console.error("Failed to name chat session, status:", response.status);
+        // Still refresh to show the unnamed chat in sidebar
+        refreshChatSessions();
+        fetchProjects();
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to name chat session:", error);
+    } finally {
+      // Refresh sidebar to show new name
+      await refreshChatSessions();
+      await fetchProjects();
+    }
+  };
+
   const upsertToCompleteMessageTree = ({
     messages,
     completeMessageTreeOverride,
@@ -481,6 +530,11 @@ export function useChatController({
 
       // mark the session as the current session
       updateStatesWithNewSessionId(currChatSessionId);
+
+      // Navigate immediately for new sessions (before streaming starts)
+      if (isNewSession) {
+        handleNewSessionNavigation(currChatSessionId);
+      }
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -841,34 +895,9 @@ export function useChatController({
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      if (isNewSession) {
-        if (!searchParamBasedChatSessionName) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          await nameChatSession(currChatSessionId);
-          refreshChatSessions();
-          fetchProjects();
-        }
-
-        // NOTE: don't switch pages if the user has navigated away from the chat
-        if (
-          currChatSessionId === frozenSessionId ||
-          existingChatSessionId === null
-        ) {
-          const newUrl = buildChatUrl(
-            searchParams,
-            currChatSessionId,
-            null,
-            false,
-            true
-          );
-          // newUrl is like /chat?chatId=10
-          // current page is like /chat
-
-          if (pathname == "/chat" && !navigatingAway.current) {
-            router.push(newUrl, { scroll: false });
-            fetchProjects();
-          }
-        }
+      // Name the chat now that we have AI response (navigation already happened before streaming)
+      if (isNewSession && !searchParamBasedChatSessionName) {
+        handleNewSessionNaming(currChatSessionId);
       }
     },
     [

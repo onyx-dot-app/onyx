@@ -18,6 +18,13 @@
     --border-radius-full: 64rem;
   }
 
+  /* BACKDROP BLUR */
+  :root {
+    --backdrop-blur-01: 2px;
+    --backdrop-blur-02: 1px;
+    --backdrop-blur-03: 1px;
+  }
+
   * {
     @apply border-border;
   }
