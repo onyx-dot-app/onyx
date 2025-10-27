@@ -5,6 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
+import Link from "next/link";
 
 interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.FunctionComponent<SvgProps>;
@@ -12,6 +13,7 @@ interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children?: string | React.ReactNode;
   rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  href?: string;
 }
 
 export default function LineItem({
@@ -20,8 +22,9 @@ export default function LineItem({
   children,
   rightChildren,
   onClick,
+  href,
 }: LineItemProps) {
-  return (
+  const content = (
     <button
       type="button"
       className={cn(
@@ -60,4 +63,7 @@ export default function LineItem({
       )}
     </button>
   );
+
+  if (!href) return content;
+  return <Link href={href}>{content}</Link>;
 }

@@ -345,6 +345,5 @@ export default function Button({
   );
 
   if (!href) return content;
-
   return <Link href={href}>{content}</Link>;
 }
