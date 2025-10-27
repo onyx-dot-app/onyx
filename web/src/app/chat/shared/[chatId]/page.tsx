@@ -21,14 +21,14 @@ export default async function Page(props: {
 }) {
   const params = await props.params;
 
-  // Check authentication first
   const authResult = await requireAuth();
   if (authResult.redirect) {
     return redirect(authResult.redirect);
   }
 
-  // Fetch shared chat data
-  const chatSession = await getSharedChat(params.chatId);
+  // Catch cases where backend is completely unreachable
+  // Allows render instead of throwing an exception and crashing
+  const chatSession = await getSharedChat(params.chatId).catch(() => null);
 
   const persona: Persona = constructMiniFiedPersona(
     chatSession?.persona_icon_color ?? null,
