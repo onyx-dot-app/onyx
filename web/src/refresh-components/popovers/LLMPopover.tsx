@@ -116,7 +116,7 @@ export default function LLMPopover({
       <PopoverTrigger asChild>
         <div data-testid="llm-popover-trigger">{triggerContent}</div>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start">
+      <PopoverContent side="bottom" align="start">
         <PopoverMenu
           medium
           footer={
