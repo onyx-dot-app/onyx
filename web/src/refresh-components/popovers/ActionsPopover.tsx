@@ -875,6 +875,7 @@ export default function ActionsPopover({
   if (displayTools.length === 0 && mcpServers.length === 0) {
     return null;
   }
+
   return (
     <>
       <Popover
@@ -894,6 +895,7 @@ export default function ActionsPopover({
           <div>
             <IconButton
               icon={SvgSliders}
+              active={open}
               tertiary
               data-testid="action-management-toggle"
               tooltip="Manage Actions"
