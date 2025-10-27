@@ -28,9 +28,12 @@ const buttonClasses = (active: boolean | undefined) =>
       ],
       disabled: ["bg-background-neutral-03"],
     },
+    // NOTE: active here does not mean "activated/visted" state
+    // @duo will specify visited colors, and then TODO can be addressed
+    // TODO: bg-background-tint-02 should be changed backed to tint-00
     tertiary: {
       main: [
-        active ? "bg-background-tint-00" : "bg-transparent",
+        active ? "bg-background-tint-02" : "bg-transparent",
         "hover:bg-background-tint-02",
       ],
       disabled: ["bg-background-neutral-02"],

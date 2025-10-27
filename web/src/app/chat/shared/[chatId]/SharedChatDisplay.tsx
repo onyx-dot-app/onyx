@@ -211,7 +211,7 @@ export function SharedChatDisplay({
                             key={message.messageId}
                             rawPackets={message.packets}
                             chatState={{
-                              handleFeedback: () => {}, // No feedback in shared chat
+                              handleFeedbackChange: async () => {}, // No feedback in shared chat
                               assistant: persona,
                               docs: message.documents,
                               userFiles: [],
