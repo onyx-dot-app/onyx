@@ -35,8 +35,15 @@ export function ActionsTable({
 
   const isAdmin = user?.role === UserRole.ADMIN;
 
-  const sortedTools = [...tools];
-  sortedTools.sort((a, b) => a.id - b.id);
+  const sortedTools = [...tools]
+    .filter(
+      (tool) =>
+        tool.in_code_tool_id !== null ||
+        tool.is_public === true ||
+        tool.user_id === user?.id ||
+        isAdmin
+    )
+    .sort((a, b) => a.id - b.id);
 
   const sortedMcpServers = [...mcpServers];
   sortedMcpServers.sort((a, b) => a.id - b.id);

@@ -2541,6 +2541,8 @@ class Tool(Base):
         "MCPServer", back_populates="current_actions"
     )
 
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
 
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""

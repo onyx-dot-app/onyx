@@ -52,20 +52,28 @@ export const MemoizedToolList = memo(function MemoizedToolList({
 }) {
   return (
     <>
-      {tools.map((tool) => (
-        <MemoizedToolCheckbox
-          key={tool.id}
-          toolId={tool.id}
-          displayName={tool.display_name}
-          description={
-            tool.description && tool.description.length > MAX_DESCRIPTION_LENGTH
-              ? tool.description.slice(0, MAX_DESCRIPTION_LENGTH) + "…"
-              : tool.description
-          }
-          isOwner={tool.user_id === user?.id}
-          isAdmin={user?.role === UserRole.ADMIN}
-        />
-      ))}
+      {tools
+        .filter(
+          (tool) =>
+            tool.is_public === true ||
+            user?.role === UserRole.ADMIN ||
+            tool.user_id === user?.id
+        )
+        .map((tool) => (
+          <MemoizedToolCheckbox
+            key={tool.id}
+            toolId={tool.id}
+            displayName={tool.display_name}
+            description={
+              tool.description &&
+              tool.description.length > MAX_DESCRIPTION_LENGTH
+                ? tool.description.slice(0, MAX_DESCRIPTION_LENGTH) + "…"
+                : tool.description
+            }
+            isOwner={tool.user_id === user?.id}
+            isAdmin={user?.role === UserRole.ADMIN}
+          />
+        ))}
     </>
   );
 });

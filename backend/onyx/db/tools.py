@@ -66,6 +66,7 @@ def create_tool__no_commit(
     mcp_server_id: int | None = None,
     oauth_config_id: int | None = None,
     enabled: bool = True,
+    is_public: bool = False,
 ) -> Tool:
     new_tool = Tool(
         name=name,
@@ -80,6 +81,7 @@ def create_tool__no_commit(
         mcp_server_id=mcp_server_id,
         oauth_config_id=oauth_config_id,
         enabled=enabled,
+        is_public=is_public,
     )
     db_session.add(new_tool)
     db_session.flush()  # Don't commit yet, let caller decide when to commit
@@ -96,6 +98,7 @@ def update_tool(
     db_session: Session,
     passthrough_auth: bool | None,
     oauth_config_id: int | None | UnsetType = UNSET,
+    is_public: bool | None = None,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -117,6 +120,9 @@ def update_tool(
         tool.passthrough_auth = passthrough_auth
     if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id
+
+    if is_public is not None:
+        tool.is_public = is_public
     db_session.commit()
 
     return tool
