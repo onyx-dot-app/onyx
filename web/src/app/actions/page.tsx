@@ -20,7 +20,7 @@ export default async function Page() {
   // Fetch both tools and MCP servers
   const [toolResponse, mcpResponse] = await Promise.all([
     fetchSS("/tool"),
-    fetchSS("/admin/mcp/servers"),
+    fetchSS("/admin/mcp/servers?skip_role_check=true"),
   ]);
 
   if (!toolResponse.ok) {
@@ -70,10 +70,10 @@ export default async function Page() {
 
         <Title>Create Actions</Title>
         <div className="flex gap-4 mt-2 items-center">
-          <CreateButton href="/admin/actions/new">
+          <CreateButton href="/actions/new">
             From OpenAPI schema
           </CreateButton>
-          <CreateButton href="/admin/actions/edit-mcp">
+          <CreateButton href="/actions/edit-mcp">
             From MCP server
           </CreateButton>
           <TooltipProvider>

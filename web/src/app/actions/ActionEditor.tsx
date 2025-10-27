@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { User, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
@@ -39,6 +40,7 @@ import { OAuthConfigSelector } from "@/components/oauth/OAuthConfigSelector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { KeyedMutator } from "swr";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useUser } from "@/components/user/UserProvider";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -181,7 +183,7 @@ function ActionForm({
       />
       <div className="mt-4 rounded-md border border-border bg-background-50 p-4">
         <Link
-          href="https://docs.onyx.app/admin/actions/overview"
+          href="https://docs.onyx.app/actions/overview"
           className="flex items-center group"
           target="_blank"
           rel="noopener noreferrer"
@@ -413,6 +415,7 @@ const ToolSchema = Yup.object().shape({
 
 export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   const router = useRouter();
+  const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
@@ -420,7 +423,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   // Fetch OAuth configurations
   const { data: oauthConfigs, mutate: mutateOAuthConfigs } = useSWR<
     OAuthConfig[]
-  >("/api/admin/oauth-config", errorHandlingFetcher, { fallbackData: [] });
+  >("/api/admin/oauth-config?skip_role_check=true", errorHandlingFetcher, { fallbackData: [] });
 
   const prettifiedDefinition = tool?.definition
     ? prettifyDefinition(tool.definition)
@@ -476,6 +479,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             custom_headers: values.customHeaders,
             passthrough_auth: values.passthrough_auth,
             oauth_config_id: values.oauth_config_id,
+            is_public: user?.role === UserRole.ADMIN ? false : true,
           };
           let response;
           if (tool) {
@@ -490,7 +494,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             });
             return;
           }
-          router.push(`/admin/actions?u=${Date.now()}`);
+          router.push(`/actions?u=${Date.now()}`);
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => {

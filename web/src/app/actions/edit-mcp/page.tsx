@@ -126,7 +126,7 @@ export default function NewMCPToolPage() {
         setOauthConnected(true);
 
         // Update URL to include the server ID
-        router.push(`/admin/actions/edit-mcp?server_id=${returnServerId}`);
+        router.push(`/actions/edit-mcp?server_id=${returnServerId}`);
       } catch (error) {
         console.error("Failed to restore OAuth state:", error);
       }
@@ -218,7 +218,7 @@ export default function NewMCPToolPage() {
 
       const currServerId = (await createResponse.json()).server_id;
       // Update the URL immediately so subsequent interactions use the server id.
-      router.replace(`/admin/actions/edit-mcp?server_id=${currServerId}`);
+      router.replace(`/actions/edit-mcp?server_id=${currServerId}`);
 
       // Initiate OAuth flow
       const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
@@ -231,7 +231,7 @@ export default function NewMCPToolPage() {
           oauth_client_id: values.oauth_client_id,
           oauth_client_secret: values.oauth_client_secret,
           return_path:
-            "/admin/actions/edit-mcp?server_id=" + currServerId.toString(),
+            "/actions/edit-mcp?server_id=" + currServerId.toString(),
           include_resource_param: true,
         }),
       });
@@ -270,7 +270,7 @@ export default function NewMCPToolPage() {
   return (
     <div className="mx-auto container">
       {popup}
-      <BackButton routerOverride="/admin/actions" />
+      <BackButton routerOverride="/actions" />
 
       <AdminPageTitle
         title={verbRoot + "e MCP Server Actions"}
