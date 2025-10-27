@@ -11,6 +11,7 @@ interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   children?: string | React.ReactNode;
+  strikethrough?: boolean;
   rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   href?: string;
@@ -20,6 +21,7 @@ export default function LineItem({
   icon: Icon,
   description,
   children,
+  strikethrough,
   rightChildren,
   onClick,
   href,
@@ -39,7 +41,14 @@ export default function LineItem({
           </div>
         )}
         {typeof children === "string" ? (
-          <Truncated mainUiMuted text04 className="text-left w-full">
+          <Truncated
+            mainUiMuted
+            text04
+            className={cn(
+              "text-left w-full",
+              strikethrough && "line-through decoration-[1.5px]"
+            )}
+          >
             {children}
           </Truncated>
         ) : (
