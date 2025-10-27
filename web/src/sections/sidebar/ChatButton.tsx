@@ -115,7 +115,9 @@ function ChatButtonInner({
   const route = useAppRouter();
   const params = useAppParams();
   const [mounted, setMounted] = useState(false);
-  const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
+  const [displayName, setDisplayName] = useState(
+    chatSession.name || UNNAMED_CHAT
+  );
   const [renaming, setRenaming] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
@@ -137,8 +139,7 @@ function ChatButtonInner({
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const isChatUsingDefaultAssistant =
-    chatSession.persona_id === DEFAULT_PERSONA_ID;
+
   // Drag and drop setup for chat sessions
   const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -151,9 +152,36 @@ function ChatButtonInner({
       },
       disabled: !draggable || renaming,
     });
+
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Sync local name state when chatSession.name changes (e.g., after auto-naming)
+  useEffect(() => {
+    const newName = chatSession.name || UNNAMED_CHAT;
+    const oldName = displayName;
+
+    // Only animate if transitioning from UNNAMED_CHAT to a real name
+    if (oldName === UNNAMED_CHAT && newName !== UNNAMED_CHAT && mounted) {
+      // Type out the name character by character
+      let currentIndex = 0;
+      const typingInterval = setInterval(() => {
+        currentIndex++;
+        setDisplayName(newName.slice(0, currentIndex));
+
+        if (currentIndex >= newName.length) {
+          clearInterval(typingInterval);
+        }
+      }, 30); // 30ms per character
+
+      return () => clearInterval(typingInterval);
+    } else {
+      // No animation for other changes (manual rename, initial load, etc.)
+      setDisplayName(newName);
+    }
+  }, [chatSession.name, mounted]);
+
   const filteredProjects = useMemo(() => {
     if (!searchTerm) return projects;
     const term = searchTerm.toLowerCase();
@@ -161,6 +189,7 @@ function ChatButtonInner({
       project.name.toLowerCase().includes(term)
     );
   }, [projects, searchTerm]);
+
   useEffect(() => {
     if (!showMoveOptions) {
       const popoverItems = [
@@ -238,7 +267,7 @@ function ChatButtonInner({
   ]);
 
   async function handleRename(newName: string) {
-    setName(newName);
+    setDisplayName(newName);
     await renameChatSession(chatSession.id, newName);
     await refreshChatSessions();
   }
@@ -353,7 +382,7 @@ function ChatButtonInner({
               onClose={() => setRenaming(false)}
             />
           ) : (
-            name
+            displayName
           )}
         </SidebarTab>
       </PopoverAnchor>
