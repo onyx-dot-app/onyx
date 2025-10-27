@@ -5,7 +5,7 @@ from datetime import timezone
 
 import pytest
 
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.configs.constants import SessionType
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -115,7 +115,7 @@ def test_chat_history_endpoints(
 
     # Test filtering by feedback
     history_response = QueryHistoryManager.get_query_history_page(
-        feedback_type=QAFeedbackType.LIKE,
+        feedback_type=ChatSessionFeedback.LIKE,
         user_performing_action=admin_user,
     )
     assert len(history_response.items) == 0

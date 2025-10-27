@@ -963,8 +963,8 @@ def translate_db_message_to_chat_message_detail(
     current_feedback = None
     if chat_message.chat_message_feedbacks:
         latest_feedback = chat_message.chat_message_feedbacks[-1]
-        if latest_feedback.is_positive is not None:
-            current_feedback = "like" if latest_feedback.is_positive else "dislike"
+        if latest_feedback.feedback is not None:
+            current_feedback = latest_feedback.feedback.value
 
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,

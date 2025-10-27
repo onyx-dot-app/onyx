@@ -9,6 +9,7 @@ from pydantic import model_validator
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import RetrievalDocs
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
@@ -65,13 +66,13 @@ class CreateChatSessionID(BaseModel):
 
 class ChatFeedbackRequest(BaseModel):
     chat_message_id: int
-    is_positive: bool | None = None
+    feedback: ChatMessageFeedbackEnum | None = None
     feedback_text: str | None = None
     predefined_feedback: str | None = None
 
     @model_validator(mode="after")
-    def check_is_positive_or_feedback_text(self) -> "ChatFeedbackRequest":
-        if self.is_positive is None and self.feedback_text is None:
+    def check_feedback_or_text(self) -> "ChatFeedbackRequest":
+        if self.feedback is None and self.feedback_text is None:
             raise ValueError("Empty feedback received.")
         return self
 

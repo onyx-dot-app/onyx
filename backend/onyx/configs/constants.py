@@ -276,10 +276,16 @@ class SessionType(str, Enum):
     SLACK = "Slack"
 
 
-class QAFeedbackType(str, Enum):
-    LIKE = "like"  # User likes the answer, used for metrics
-    DISLIKE = "dislike"  # User dislikes the answer, used for metrics
-    MIXED = "mixed"  # User likes some answers and dislikes other, used for chat session metrics
+class ChatMessageFeedback(str, Enum):
+    LIKE = "like"
+    DISLIKE = "dislike"
+
+
+class ChatSessionFeedback(str, Enum):
+    # Inherits all values from ChatMessageFeedback plus adds session-specific feedback
+    LIKE = ChatMessageFeedback.LIKE.value  # User likes all answers in session
+    DISLIKE = ChatMessageFeedback.DISLIKE.value  # User dislikes all answers in session
+    MIXED = "mixed"  # User has mixed feedback (likes some messages, dislikes others)
 
 
 class SearchFeedbackType(str, Enum):

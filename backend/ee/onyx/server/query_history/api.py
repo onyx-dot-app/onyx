@@ -26,13 +26,13 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
 from onyx.configs.constants import SessionType
 from onyx.db.chat import get_chat_session_by_id
@@ -193,7 +193,7 @@ def admin_get_chat_sessions(
 def get_chat_session_history(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1),
-    feedback_type: QAFeedbackType | None = None,
+    feedback_type: ChatSessionFeedback | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     _: User | None = Depends(current_admin_user),

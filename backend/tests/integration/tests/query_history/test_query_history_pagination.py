@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from tests.integration.common_utils.managers.query_history import QueryHistoryManager
 from tests.integration.common_utils.test_models import DAQueryHistoryEntry
 from tests.integration.common_utils.test_models import DATestUser
@@ -15,7 +15,7 @@ from tests.integration.tests.query_history.utils import (
 def _verify_query_history_pagination(
     chat_sessions: list[DAQueryHistoryEntry],
     page_size: int = 5,
-    feedback_type: QAFeedbackType | None = None,
+    feedback_type: ChatSessionFeedback | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     user_performing_action: DATestUser | None = None,
@@ -79,26 +79,26 @@ def test_query_history_pagination(reset: None) -> None:
     )
 
     print("Verifying pagination with feedback type LIKE")
-    liked_sessions = chat_sessions_by_feedback_type[QAFeedbackType.LIKE]
+    liked_sessions = chat_sessions_by_feedback_type[ChatSessionFeedback.LIKE]
     _verify_query_history_pagination(
         chat_sessions=liked_sessions,
-        feedback_type=QAFeedbackType.LIKE,
+        feedback_type=ChatSessionFeedback.LIKE,
         user_performing_action=admin_user,
     )
 
     print("Verifying pagination with feedback type DISLIKE")
-    disliked_sessions = chat_sessions_by_feedback_type[QAFeedbackType.DISLIKE]
+    disliked_sessions = chat_sessions_by_feedback_type[ChatSessionFeedback.DISLIKE]
     _verify_query_history_pagination(
         chat_sessions=disliked_sessions,
-        feedback_type=QAFeedbackType.DISLIKE,
+        feedback_type=ChatSessionFeedback.DISLIKE,
         user_performing_action=admin_user,
     )
 
     print("Verifying pagination with feedback type MIXED")
-    mixed_sessions = chat_sessions_by_feedback_type[QAFeedbackType.MIXED]
+    mixed_sessions = chat_sessions_by_feedback_type[ChatSessionFeedback.MIXED]
     _verify_query_history_pagination(
         chat_sessions=mixed_sessions,
-        feedback_type=QAFeedbackType.MIXED,
+        feedback_type=ChatSessionFeedback.MIXED,
         user_performing_action=admin_user,
     )
 

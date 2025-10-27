@@ -304,7 +304,7 @@ export async function handleChatFeedback(
     },
     body: JSON.stringify({
       chat_message_id: messageId,
-      is_positive: feedback === "like",
+      feedback: feedback,
       feedback_text: feedbackDetails,
       predefined_feedback: predefinedFeedback,
     }),

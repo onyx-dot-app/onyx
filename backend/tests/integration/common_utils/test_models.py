@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.enums import AccessType
@@ -157,7 +157,7 @@ class DATestChatSession(BaseModel):
 
 
 class DAQueryHistoryEntry(DATestChatSession):
-    feedback_type: QAFeedbackType | None
+    feedback_type: ChatSessionFeedback | None
 
 
 class ToolName(str, Enum):
