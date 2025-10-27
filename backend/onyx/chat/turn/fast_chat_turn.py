@@ -213,8 +213,7 @@ def _process_stream(
     if ctx.ordered_fetched_documents:
         processor = CitationProcessor(
             context_docs=ctx.ordered_fetched_documents,
-            final_doc_id_to_rank_map=mapping,
-            display_doc_id_to_rank_map=mapping,
+            doc_id_to_rank_map=mapping,
             stop_stream=None,
         )
     else:
