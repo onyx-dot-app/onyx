@@ -145,7 +145,7 @@ export default function EmailPasswordForm({
               name="email"
               render={(field, helper, meta, state) => (
                 <FormField name="email" state={state} className="w-full">
-                  <FormField.Label optional>Email Address</FormField.Label>
+                  <FormField.Label>Email Address</FormField.Label>
                   <FormField.Control>
                     <InputTypeIn
                       {...field}
@@ -172,13 +172,9 @@ export default function EmailPasswordForm({
                     />
                   </FormField.Control>
                   {isSignup && (
-                    <FormField.Description>
-                      Password must be at least 8 characters
-                    </FormField.Description>
-                  )}
-                  {!isSignup && (
                     <FormField.Message
                       messages={{
+                        idle: "Password must be at least 8 characters",
                         error: meta.error,
                         success: "Password must be at least 8 characters",
                       }}

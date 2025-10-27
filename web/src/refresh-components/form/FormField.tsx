@@ -137,7 +137,7 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
   const content = messages?.[state];
   const iconMap = {
     error: null,
-    success: <SvgCheckCircle className="h-4 w-4" />,
+    success: <SvgCheckCircle className="h-3 w-3 stroke-status-success-05" />,
     idle: null,
     loading: null,
   };
