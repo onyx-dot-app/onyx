@@ -7,21 +7,31 @@ import { SvgProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 
-interface LineItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+const textClassNames = (forced?: boolean) =>
+  forced
+    ? ["text-action-link-05", "stroke-action-link-05"]
+    : ["text-text-04", "stroke-text-03"];
+export interface LineItemProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  // variants
+  forced?: boolean;
+  strikethrough?: boolean;
+
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   children?: string | React.ReactNode;
-  strikethrough?: boolean;
   rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   href?: string;
 }
 
 export default function LineItem({
+  forced,
+  strikethrough,
+
   icon: Icon,
   description,
   children,
-  strikethrough,
   rightChildren,
   onClick,
   href,
@@ -37,7 +47,7 @@ export default function LineItem({
       <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
           <div className="h-[1rem] w-[1rem]">
-            <Icon className="h-[1rem] w-[1rem] stroke-text-03" />
+            <Icon className={cn("h-[1rem] w-[1rem]", textClassNames(forced))} />
           </div>
         )}
         {typeof children === "string" ? (
@@ -46,6 +56,7 @@ export default function LineItem({
             text04
             className={cn(
               "text-left w-full",
+              textClassNames(forced),
               strikethrough && "line-through decoration-[1.5px]"
             )}
           >
