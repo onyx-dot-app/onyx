@@ -1177,6 +1177,7 @@ async def current_user(
 
 async def current_curator_or_admin_user(
     user: User | None = Depends(current_user),
+    skip_role_check: bool = False,
 ) -> User | None:
     if DISABLE_AUTH:
         return None
@@ -1186,11 +1187,12 @@ async def current_curator_or_admin_user(
             detail="Access denied. User is not authenticated or lacks role information.",
         )
 
-    allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-    if user.role not in allowed_roles:
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not a curator or admin.",
-        )
+    if not skip_role_check:
+        allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
+        if user.role not in allowed_roles:
+            raise BasicAuthenticationError(
+                detail="Access denied. User is not a curator or admin.",
+            )
 
     return user
 

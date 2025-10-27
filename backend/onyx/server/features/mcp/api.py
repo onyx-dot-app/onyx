@@ -15,6 +15,7 @@ from urllib.parse import urlunsplit
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
@@ -1472,14 +1473,20 @@ def get_mcp_server_detail(
 
 
 @admin_router.get("/servers", response_model=MCPServersResponse)
-def get_mcp_servers_for_admin(
+async def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
+    skip_role_check: bool = Query(
+        False, description="Skip curator/admin role check (for internal use only)"
+    ),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
     logger.info("Fetching all MCP servers for admin display")
 
+    user = await current_curator_or_admin_user(
+        user=user, skip_role_check=skip_role_check
+    )
     email = user.email if user else ""
     try:
         db_mcp_servers = get_all_mcp_servers(db)
