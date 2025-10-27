@@ -15,6 +15,7 @@ from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.kg.models import KGConnectorData
 from onyx.server.documents.models import ConnectorBase
@@ -23,6 +24,12 @@ from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def check_federated_connectors_exist(db_session: Session) -> bool:
+    stmt = select(exists(FederatedConnector))
+    result = db_session.execute(stmt)
+    return result.scalar() or False
 
 
 def check_connectors_exist(db_session: Session) -> bool:

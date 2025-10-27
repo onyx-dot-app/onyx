@@ -18,12 +18,16 @@ from tests.integration.common_utils.test_models import ToolName
 ART_PERSONA_ID = -3
 
 
-def test_image_generation_heartbeat_streaming(
+def test_image_generation_streaming(
     basic_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
     """
-    Test image generation to verify heartbeat packets are streamed during generation.
+    Test image generation to verify:
+    1. The image generation tool is invoked successfully
+    2. Heartbeat packets are streamed during generation
+    3. The response contains the generated image information
+
     This test uses the actual API without any mocking.
     """
     # Create a chat session with this persona
@@ -44,7 +48,7 @@ def test_image_generation_heartbeat_streaming(
     )
     total_time = time.monotonic() - start_time
 
-    # Check if image generation tool was used
+    # 1. Check if image generation tool was used
     image_gen_used = any(
         tool.tool_name == ToolName.IMAGE_GENERATION
         for tool in analyzed_response.used_tools
@@ -67,8 +71,19 @@ def test_image_generation_heartbeat_streaming(
             f"Expected heartbeat type to be 'image_generation_tool_heartbeat', "
             f"got {packet['obj'].get('type')}"
         )
+    # 4. Verify image generation tool delta packets with actual image data
+    image_tool_results = [
+        tool
+        for tool in analyzed_response.used_tools
+        if tool.tool_name == ToolName.IMAGE_GENERATION
+    ]
+    assert len(image_tool_results) > 0, "Should have image generation tool results"
+
+    image_tool = image_tool_results[0]
+    assert len(image_tool.images) > 0, "Should have generated at least one image"
 
 
 if __name__ == "__main__":
-    # Run with: python -m pytest tests/integration/tests/tools/test_image_generation_heartbeat.py -v -s
+    # Run with: python -m dotenv -f .vscode/.env run --
+    # python -m pytest tests/integration/tests/tools/test_image_generation_heartbeat.py -v -s
     pytest.main([__file__, "-v", "-s"])

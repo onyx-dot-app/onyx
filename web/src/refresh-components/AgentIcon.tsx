@@ -90,7 +90,7 @@ export interface AgentIconProps {
   size?: number;
 }
 
-export function AgentIcon({ agent, size = 24 }: AgentIconProps) {
+export default function AgentIcon({ agent, size = 24 }: AgentIconProps) {
   const settings = useSettingsContext();
 
   // Check if whitelabeling is enabled for the default assistant

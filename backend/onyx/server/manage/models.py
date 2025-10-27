@@ -14,6 +14,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import ThemePreference
 from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackBot as SlackAppModel
@@ -62,6 +63,7 @@ class UserPreferences(BaseModel):
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
+    theme_preference: ThemePreference | None = None
 
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
@@ -132,6 +134,7 @@ class UserInfo(BaseModel):
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
+                    theme_preference=user.theme_preference,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -189,6 +192,10 @@ class HiddenUpdateRequest(BaseModel):
 
 class AutoScrollRequest(BaseModel):
     auto_scroll: bool | None
+
+
+class ThemePreferenceRequest(BaseModel):
+    theme_preference: ThemePreference
 
 
 class PersonalizationUpdateRequest(BaseModel):

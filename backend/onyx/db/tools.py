@@ -7,6 +7,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.constants import UNSET
+from onyx.db.constants import UnsetType
 from onyx.db.models import Tool
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
@@ -93,7 +95,7 @@ def update_tool(
     user_id: UUID | None,
     db_session: Session,
     passthrough_auth: bool | None,
-    oauth_config_id: int | None = None,
+    oauth_config_id: int | None | UnsetType = UNSET,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -113,7 +115,7 @@ def update_tool(
         ]
     if passthrough_auth is not None:
         tool.passthrough_auth = passthrough_auth
-    if oauth_config_id is not None:
+    if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id
     db_session.commit()
 

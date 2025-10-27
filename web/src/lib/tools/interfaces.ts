@@ -33,6 +33,10 @@ export interface ToolSnapshot {
   // whether to pass through the user's OAuth token as Authorization header
   passthrough_auth: boolean;
 
+  // OAuth configuration for this tool
+  oauth_config_id?: number | null;
+  oauth_config_name?: string | null;
+
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
@@ -57,7 +61,7 @@ export interface MCPServersResponse {
 }
 
 export interface MethodSpec {
-  /* Defines a single method that is part of a custom tool. Each method maps to a single 
+  /* Defines a single method that is part of a custom tool. Each method maps to a single
   action that the LLM can choose to take. */
   name: string;
   summary: string;
@@ -65,4 +69,43 @@ export interface MethodSpec {
   method: string;
   spec: Record<string, any>;
   custom_headers: { key: string; value: string }[];
+}
+
+// OAuth Configuration Types
+export interface OAuthConfig {
+  id: number;
+  name: string;
+  authorization_url: string;
+  token_url: string;
+  scopes: string[] | null;
+  has_client_credentials: boolean;
+  tool_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OAuthConfigCreate {
+  name: string;
+  authorization_url: string;
+  token_url: string;
+  client_id: string;
+  client_secret: string;
+  scopes?: string[];
+  additional_params?: Record<string, any>;
+}
+
+export interface OAuthConfigUpdate {
+  name?: string;
+  authorization_url?: string;
+  token_url?: string;
+  client_id?: string;
+  client_secret?: string;
+  scopes?: string[];
+  additional_params?: Record<string, any>;
+}
+
+export interface OAuthTokenStatus {
+  oauth_config_id: number;
+  expires_at: number | null;
+  is_expired: boolean;
 }

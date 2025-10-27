@@ -55,6 +55,7 @@ def _remove_last_task_prompt_and_insert_new_one(
         if current_messages[i].get("role") == "user":
             current_messages.pop(i)
             break
+    # TODO: Hide low level message parsing behind an abstraction
     current_messages = current_messages + [{"role": "user", "content": new_task_prompt}]
     return current_messages
 
@@ -87,7 +88,11 @@ def _run_agent_loop(
         )
         current_messages = cast(list[dict], streamed.to_input_list())
         current_messages = _remove_last_task_prompt_and_insert_new_one(
-            messages[-1]["content"], current_messages, prompt_config, ctx
+            # TODO: Hide low level message parsing behind an abstraction
+            messages[-1]["content"][0]["text"],
+            current_messages,
+            prompt_config,
+            ctx,
         )
         # TODO: Make this configurable on OnyxAgent level
         stopping_tools = ["image_generation"]
@@ -315,8 +320,6 @@ def _process_citations_for_final_answer(
 
 def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj | None:
     if isinstance(ev, RawResponsesStreamEvent):
-        # TODO: might need some variation here for different types of models
-        # OpenAI packet translator
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
             retrieved_search_docs = convert_inference_sections_to_search_docs(
@@ -325,7 +328,7 @@ def _default_packet_translation(ev: object, ctx: ChatTurnContext) -> PacketObj |
             obj = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs
             )
-        elif ev.data.type == "response.output_text.delta":
+        elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             obj = MessageDelta(type="message_delta", content=ev.data.delta)
         elif ev.data.type == "response.content_part.done":
             obj = SectionEnd(type="section_end")

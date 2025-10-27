@@ -92,7 +92,7 @@ jobs:
           tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
           outputs: type=registry
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          no-cache: true
 
 
   build-model-server-image:
@@ -151,7 +151,7 @@ jobs:
         env:
           REGISTRY: ${{ env.PRIVATE_REGISTRY }}
           TAG: test-${{ github.run_id }}
-        run: cd backend && docker buildx bake ${{ vars.DOCKER_NO_CACHE == 'true' && ' --no-cache' || '' }} --push integration
+        run: cd backend && docker buildx bake --no-cache --push integration
 
   integration-tests-mit:
     needs:

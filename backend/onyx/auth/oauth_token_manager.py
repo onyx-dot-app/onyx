@@ -36,7 +36,7 @@ class OAuthTokenManager:
         token_data = user_token.token_data
 
         # Check if token is expired
-        if self.is_token_expired(token_data):
+        if OAuthTokenManager.is_token_expired(token_data):
             # Try to refresh if we have a refresh token
             if "refresh_token" in token_data:
                 try:
@@ -87,9 +87,19 @@ class OAuthTokenManager:
 
         return new_token_data["access_token"]
 
-    def is_token_expired(self, token_data: dict[str, Any]) -> bool:
-        """Check if token is expired (with 60 second buffer)"""
+    @classmethod
+    def token_expiration_time(cls, token_data: dict[str, Any]) -> int | None:
+        """Get the token expiration time"""
         expires_at = token_data.get("expires_at")
+        if not expires_at:
+            return None
+
+        return expires_at
+
+    @classmethod
+    def is_token_expired(cls, token_data: dict[str, Any]) -> bool:
+        """Check if token is expired (with 60 second buffer)"""
+        expires_at = cls.token_expiration_time(token_data)
         if not expires_at:
             return False  # No expiration data, assume valid
 

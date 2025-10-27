@@ -25,7 +25,13 @@ import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 
-function getUsernameFromEmail(email?: string): string {
+function getDisplayName(email?: string, personalName?: string): string {
+  // Prioritize custom personal name if set
+  if (personalName && personalName.trim()) {
+    return personalName.trim();
+  }
+
+  // Fallback to email-derived username
   if (!email) return ANONYMOUS_USER_NAME;
   const atIndex = email.indexOf("@");
   if (atIndex <= 0) return ANONYMOUS_USER_NAME;
@@ -165,7 +171,7 @@ export default function Settings({ folded }: SettingsProps) {
   const { user } = useUser();
   const { setShowUserSettingsModal } = useModalContext();
 
-  const username = getUsernameFromEmail(user?.email);
+  const displayName = getDisplayName(user?.email, user?.personalization?.name);
 
   return (
     <Popover
@@ -186,14 +192,14 @@ export default function Settings({ folded }: SettingsProps) {
                 )}
               >
                 <Text inverted secondaryBody>
-                  {username[0]?.toUpperCase()}
+                  {displayName[0]?.toUpperCase()}
                 </Text>
               </Avatar>
             )}
             active={!!popupState}
             folded={folded}
           >
-            {username}
+            {displayName}
           </SidebarTab>
         </div>
       </PopoverTrigger>

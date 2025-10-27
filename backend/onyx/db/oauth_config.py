@@ -135,6 +135,17 @@ def get_user_oauth_token(
     )
 
 
+def get_all_user_oauth_tokens(
+    user_id: UUID, db_session: Session
+) -> list[OAuthUserToken]:
+    """
+    Get all user OAuth tokens.
+    """
+    stmt = select(OAuthUserToken).where(OAuthUserToken.user_id == user_id)
+
+    return list(db_session.scalars(stmt).all())
+
+
 def upsert_user_oauth_token(
     oauth_config_id: int, user_id: UUID, token_data: dict, db_session: Session
 ) -> OAuthUserToken:
