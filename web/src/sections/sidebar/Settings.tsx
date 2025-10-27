@@ -1,5 +1,11 @@
 "use client";
 
+import { UserRole } from "@/lib/types";
+import {
+  SettingsContext,
+  useSettingsContext,
+} from "@/components/settings/SettingsProvider";
+
 import React, { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
@@ -24,6 +30,7 @@ import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { ToolIconSkeleton } from "@/components/icons/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -41,14 +48,17 @@ function getDisplayName(email?: string, personalName?: string): string {
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
-  onNotificationsClick: () => void;
+  onNotificationsClick: () => void; 
+  onActionsClick: () => void;
 }
 
 function SettingsPopover({
   onUserSettingsClick,
   onNotificationsClick,
+  onActionsClick,
 }: SettingsPopoverProps) {
   const { user } = useUser();
+  const isAdmin = user?.role === UserRole.ADMIN;
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
     errorHandlingFetcher
@@ -56,6 +66,7 @@ function SettingsPopover({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const settings = useSettingsContext();
 
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
@@ -90,6 +101,15 @@ function SettingsPopover({
           //     {item.title}
           //   </NavigationTab>
           // )),
+          (isAdmin ||
+            settings?.settings.all_users_actions_creation_enabled !==
+              false) && (
+            <div key="actions" data-testid="Settings/actions">
+              <MenuButton icon={ToolIconSkeleton} onClick={onActionsClick}>
+                Actions
+              </MenuButton>
+            </div>
+          ),
           <div key="user-settings" data-testid="Settings/user-settings">
             <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
@@ -211,6 +231,7 @@ export default function Settings({ folded }: SettingsProps) {
               setShowUserSettingsModal(true);
             }}
             onNotificationsClick={() => setPopupState("Notifications")}
+            onActionsClick={() => setPopupState("Actions")}
           />
         )}
         {popupState === "Notifications" && (
