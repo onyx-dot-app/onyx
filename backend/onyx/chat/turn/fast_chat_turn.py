@@ -28,11 +28,11 @@ from onyx.chat.turn.context_handler.citation import (
 )
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
-from onyx.chat.turn.infra.session_sink import extract_final_answer_from_packets
-from onyx.chat.turn.infra.session_sink import save_iteration
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.chat.turn.save_turn import extract_final_answer_from_packets
+from onyx.chat.turn.save_turn import save_turn
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -189,12 +189,15 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
-    save_iteration(
+    save_turn(
         db_session=dependencies.db_session,
         message_id=message_id,
         chat_session_id=chat_session_id,
         research_type=research_type,
-        ctx=ctx,
+        model_name=dependencies.llm_model.config.model_name,
+        model_provider=dependencies.llm_model.config.model_provider,
+        iteration_instructions=ctx.iteration_instructions,
+        global_iteration_responses=ctx.aggregated_context.global_iteration_responses,
         final_answer=final_answer,
         unordered_fetched_inference_sections=ctx.unordered_fetched_inference_sections,
         ordered_fetched_documents=ctx.ordered_fetched_documents,

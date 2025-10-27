@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
 )
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.models import LlmDoc
-from onyx.chat.turn.models import ChatTurnContext
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
@@ -28,15 +29,19 @@ from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
-def save_iteration(
+def save_turn(
     db_session: Session,
     message_id: int,
     chat_session_id: UUID,
     research_type: ResearchType,
-    ctx: ChatTurnContext,
     final_answer: str,
     unordered_fetched_inference_sections: list[InferenceSection],
     ordered_fetched_documents: list[LlmDoc],
+    iteration_instructions: list[IterationInstructions],
+    global_iteration_responses: list[IterationAnswer],
+    # TODO: figure out better way to pass these dependencies
+    model_name: str,
+    model_provider: str,
 ) -> None:
     # first, insert the search_docs
     search_docs = [
@@ -75,8 +80,8 @@ def save_iteration(
             and citation_to_doc_id[cited_doc_nr] in doc_id_to_search_doc_id
         }
     llm_tokenizer = get_tokenizer(
-        model_name=ctx.run_dependencies.llm.config.model_name,
-        provider_type=ctx.run_dependencies.llm.config.model_provider,
+        model_name=model_name,
+        provider_type=model_provider,
     )
     num_tokens = len(llm_tokenizer.encode(final_answer or ""))
     # Update the chat message and its parent message in database
@@ -97,7 +102,7 @@ def save_iteration(
 
     # TODO: I don't think this is the ideal schema for all use cases
     # find a better schema to store tool and reasoning calls
-    for iteration_preparation in ctx.iteration_instructions:
+    for iteration_preparation in iteration_instructions:
         research_agent_iteration_step = ResearchAgentIteration(
             primary_question_id=message_id,
             reasoning=iteration_preparation.reasoning,
@@ -106,7 +111,7 @@ def save_iteration(
         )
         db_session.add(research_agent_iteration_step)
 
-    for iteration_answer in ctx.aggregated_context.global_iteration_responses:
+    for iteration_answer in global_iteration_responses:
 
         retrieved_search_docs = convert_inference_sections_to_search_docs(
             list(iteration_answer.cited_documents.values())
