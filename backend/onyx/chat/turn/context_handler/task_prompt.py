@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import TextContent
+from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
 from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
@@ -32,14 +32,24 @@ def update_task_prompt(
         m for i, m in enumerate(agent_turn_messages) if i != last_user_idx
     ]
 
-    # Create new user message with task prompt wrapped in TextContent
-    text_content: TextContent = {"type": "text", "text": new_task_prompt_text}
+    text_content: InputTextContent = {
+        "type": "input_text",
+        "text": new_task_prompt_text,
+    }
     new_user_message: UserMessage = {"role": "user", "content": [text_content]}
 
     return filtered_messages + [new_user_message]
 
 
 def _extract_user_query(current_user_message: UserMessage) -> str:
+    pass
+
     first_content = current_user_message["content"][0]
-    # Handle both "text" and "input_text" types
-    return first_content["text"]
+    # User messages contain InputTextContent or ImageContent
+    # Only InputTextContent has "text" field, ImageContent has "image_url"
+    if first_content["type"] == "input_text":
+        # Type narrow - we know it's InputTextContent based on the type check
+        text_content: InputTextContent = first_content  # type: ignore[assignment]
+        return text_content["text"]
+    # If it's an image content, return empty string or handle appropriately
+    return ""

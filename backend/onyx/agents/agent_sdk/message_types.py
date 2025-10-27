@@ -6,9 +6,23 @@ from typing_extensions import TypedDict
 
 
 # Content types
-class TextContent(TypedDict):
-    type: Literal["text", "input_text"]
+class InputTextContent(TypedDict):
+    """Text content for user/system input messages."""
+
+    type: Literal["input_text"]
     text: str
+
+
+class OutputTextContent(TypedDict):
+    """Text content for assistant output messages."""
+
+    type: Literal["output_text"]
+    text: str
+
+
+# Union type for all text content variants
+# Note: Removed "text" type as it's not recognized by agents SDK
+TextContent = InputTextContent | OutputTextContent
 
 
 class ImageContent(TypedDict):
@@ -32,22 +46,34 @@ class ToolCall(TypedDict):
 # Message types
 class SystemMessage(TypedDict):
     role: Literal["system"]
-    content: list[TextContent]
+    content: list[InputTextContent]  # System messages use input text
 
 
 class UserMessage(TypedDict):
     role: Literal["user"]
-    content: list[TextContent | ImageContent]
+    content: list[
+        InputTextContent | ImageContent
+    ]  # User messages use input text or images
 
 
 class AssistantMessageWithContent(TypedDict):
     role: Literal["assistant"]
-    content: list[TextContent]
+    content: list[OutputTextContent]  # Assistant messages use output text
 
 
 class AssistantMessageWithToolCalls(TypedDict):
     role: Literal["assistant"]
     tool_calls: list[ToolCall]
+
+
+class AssistantMessageDuringAgentRun(TypedDict):
+    role: Literal["assistant"]
+    id: str
+    content: (
+        list[OutputTextContent] | list[ToolCall]
+    )  # Assistant runtime messages use output text
+    status: Literal["completed", "failed", "in_progress"]
+    type: Literal["message"]
 
 
 class ToolMessage(TypedDict):
@@ -80,6 +106,7 @@ AgentSDKMessage = (
     | UserMessage
     | AssistantMessageWithContent
     | AssistantMessageWithToolCalls
+    | AssistantMessageDuringAgentRun
     | ToolMessage
     | FunctionCallMessage
     | FunctionCallOutputMessage

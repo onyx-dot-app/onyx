@@ -14,8 +14,6 @@ from onyx.chat.turn.models import ChatTurnContext
 
 
 class CitationAssignmentResult(BaseModel):
-    """Result of assigning citation numbers to recent tool calls."""
-
     updated_messages: list[AgentSDKMessage]
     num_docs_cited: int
     num_tool_calls_cited: int
@@ -36,14 +34,12 @@ def assign_citation_numbers_recent_tool_calls(
 
     for message in agent_turn_messages:
         new_message: AgentSDKMessage | None = None
-
-        # Check if this is a function_call_output message
         if message.get("type") == "function_call_output":
             if curr_tool_call_idx >= tool_calls_cited_so_far:
-                # Type guard: at this point we know it's a FunctionCallOutputMessage
-                output_message = message  # type: ignore
+                # Type narrow to FunctionCallOutputMessage after checking the 'type' field
+                func_call_output_msg: FunctionCallOutputMessage = message  # type: ignore[assignment]
+                content = func_call_output_msg["output"]
                 try:
-                    content = output_message["output"]  # type: ignore
                     raw_list = json.loads(content)
                     llm_docs = [LlmDoc(**doc) for doc in raw_list]
                 except (json.JSONDecodeError, TypeError, ValidationError):
@@ -61,12 +57,11 @@ def assign_citation_numbers_recent_tool_calls(
                             doc.document_citation_number = (
                                 docs_cited_so_far + num_docs_cited
                             )
-
                     if updated_citation_number:
                         # Create updated function call output message
                         updated_output_message: FunctionCallOutputMessage = {
                             "type": "function_call_output",
-                            "call_id": output_message["call_id"],  # type: ignore
+                            "call_id": func_call_output_msg["call_id"],
                             "output": json.dumps(
                                 [doc.model_dump(mode="json") for doc in llm_docs]
                             ),
@@ -74,6 +69,7 @@ def assign_citation_numbers_recent_tool_calls(
                         new_message = updated_output_message
                         num_tool_calls_cited += 1
                         new_llm_docs.extend(llm_docs)
+            # Increment counter for ALL function_call_output messages, not just processed ones
             curr_tool_call_idx += 1
 
         updated_messages.append(new_message or message)

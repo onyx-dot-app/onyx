@@ -4,6 +4,12 @@ import json
 from collections.abc import Sequence
 from uuid import uuid4
 
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.agents.agent_sdk.message_types import FunctionCallMessage
+from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
+from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import SystemMessage
+from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -32,20 +38,23 @@ def _create_test_document(document_id: str, document_citation_number: int) -> di
     }
 
 
-def _create_dummy_function_call() -> dict:
-    return {
-        "arguments": '{"queries":["cheese"]}',
-        "name": "internal_search",
-        "call_id": "call",
-        "type": "function_call",
-        "id": "__fake_id__",
-    }
+def _create_dummy_function_call() -> FunctionCallMessage:
+    return FunctionCallMessage(
+        arguments='{"queries":["cheese"]}',
+        name="internal_search",
+        call_id="call",
+        type="function_call",
+        id="__fake_id__",
+    )
 
 
-def _parse_llm_docs_from_messages(messages: Sequence[dict]) -> list[LlmDoc]:
-    tool_message_outputs = [
-        msg["output"] for msg in messages if msg.get("type") == "function_call_output"
-    ]
+def _parse_llm_docs_from_messages(messages: Sequence[AgentSDKMessage]) -> list[LlmDoc]:
+    tool_message_outputs: list[str] = []
+    for msg in messages:
+        if msg.get("type") == "function_call_output":
+            # Type narrow to FunctionCallOutputMessage
+            func_output_msg: FunctionCallOutputMessage = msg  # type: ignore[assignment]
+            tool_message_outputs.append(func_output_msg["output"])
     return [
         LlmDoc(**doc) for output in tool_message_outputs for doc in json.loads(output)
     ]
@@ -54,26 +63,30 @@ def _parse_llm_docs_from_messages(messages: Sequence[dict]) -> list[LlmDoc]:
 def test_assign_citation_numbers_basic(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages = [
-        {
-            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
-            "role": "system",
-        },
-        {
-            "content": [{"text": "search internally for cheese", "type": "text"}],
-            "role": "user",
-        },
+    messages: list[AgentSDKMessage] = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(text="\nYou are an assistant.", type="input_text")
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(text="search internally for cheese", type="input_text")
+            ],
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps(
+        FunctionCallOutputMessage(
+            output=json.dumps(
                 [
                     _create_test_document("first", -1),
                     _create_test_document("second", -1),
                 ]
             ),
-            "call_id": "call",
-            "type": "function_call_output",
-        },
+            call_id="call",
+            type="function_call_output",
+        ),
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -103,21 +116,25 @@ def test_assign_citation_numbers_basic(
 def test_assign_citation_numbers_no_relevant_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages = [
-        {
-            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
-            "role": "system",
-        },
-        {
-            "content": [{"text": "search internally for cheese", "type": "text"}],
-            "role": "user",
-        },
+    messages: list[AgentSDKMessage] = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(text="\nYou are an assistant.", type="input_text")
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(text="search internally for cheese", type="input_text")
+            ],
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps([{"document_id": "x"}]),
-            "call_id": "call",
-            "type": "function_call_output",
-        },
+        FunctionCallOutputMessage(
+            output=json.dumps([{"document_id": "x"}]),
+            call_id="call",
+            type="function_call_output",
+        ),
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -140,36 +157,44 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
 def test_assign_citation_numbers_previous_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages = [
-        {
-            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
-            "role": "system",
-        },
-        {
-            "content": [{"text": "search internally for cheese", "type": "text"}],
-            "role": "user",
-        },
+    messages: list[AgentSDKMessage] = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(text="\nYou are an assistant.", type="input_text")
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(text="search internally for cheese", type="input_text")
+            ],
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps(
+        FunctionCallOutputMessage(
+            output=json.dumps(
                 [
                     _create_test_document("first", -1),
                     _create_test_document("second", -1),
                 ]
             ),
-            "call_id": "call_1",
-            "type": "function_call_output",
-        },
-        {
-            "content": [{"text": "search internally for cheese again", "type": "text"}],
-            "role": "user",
-        },
+            call_id="call_1",
+            type="function_call_output",
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(
+                    text="search internally for cheese again", type="input_text"
+                )
+            ],
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps([_create_test_document("third", -1)]),
-            "call_id": "call_2",
-            "type": "function_call_output",
-        },
+        FunctionCallOutputMessage(
+            output=json.dumps([_create_test_document("third", -1)]),
+            call_id="call_2",
+            type="function_call_output",
+        ),
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -209,32 +234,36 @@ def test_assign_citation_numbers_previous_tool_calls(
 def test_assign_citation_numbers_parallel_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages = [
-        {
-            "content": [{"text": "\nYou are an assistant.", "type": "text"}],
-            "role": "system",
-        },
-        {
-            "content": [{"text": "search internally for cheese", "type": "text"}],
-            "role": "user",
-        },
+    messages: list[AgentSDKMessage] = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(text="\nYou are an assistant.", type="input_text")
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(text="search internally for cheese", type="input_text")
+            ],
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps(
+        FunctionCallOutputMessage(
+            output=json.dumps(
                 [
                     _create_test_document("a", -1),
                     _create_test_document("b", -1),
                 ]
             ),
-            "call_id": "call_1",
-            "type": "function_call_output",
-        },
+            call_id="call_1",
+            type="function_call_output",
+        ),
         _create_dummy_function_call(),
-        {
-            "output": json.dumps([_create_test_document("e", -1)]),
-            "call_id": "call_2",
-            "type": "function_call_output",
-        },
+        FunctionCallOutputMessage(
+            output=json.dumps([_create_test_document("e", -1)]),
+            call_id="call_2",
+            type="function_call_output",
+        ),
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),

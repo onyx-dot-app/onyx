@@ -28,6 +28,10 @@ from openai.types.responses.response_stream_event import ResponseCompletedEvent
 from openai.types.responses.response_stream_event import ResponseCreatedEvent
 from openai.types.responses.response_stream_event import ResponseTextDeltaEvent
 
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import SystemMessage
+from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.models import ChatTurnContext
@@ -86,7 +90,7 @@ class CancellationMixin:
 
 
 def run_fast_chat_turn(
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     chat_turn_dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
@@ -354,21 +358,32 @@ def fake_tool_call_model() -> Model:
 
 
 @pytest.fixture
-def sample_messages() -> list[dict]:
+def sample_messages() -> list[AgentSDKMessage]:
     return [
-        {
-            "role": "system",
-            "content": [
-                {"type": "input_text", "text": "\nYou are a highly capable assistant"}
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="You are a highly capable assistant",
+                )
             ],
-        },
-        {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="hi",
+                )
+            ],
+        ),
     ]
 
 
 def test_fast_chat_turn_basic(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -388,7 +403,7 @@ def test_fast_chat_turn_basic(
 
 def test_fast_chat_turn_catch_exception(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     fake_failing_model: Model,
     chat_session_id: UUID,
     message_id: int,
@@ -422,7 +437,7 @@ def test_fast_chat_turn_catch_exception(
 
 def test_fast_chat_turn_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -457,7 +472,7 @@ def test_fast_chat_turn_cancellation(
 
 def test_fast_chat_turn_tool_call_cancellation(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -490,7 +505,7 @@ def test_fast_chat_turn_tool_call_cancellation(
 
 def test_fast_chat_turn_citation_processing(
     chat_turn_context: ChatTurnContext,
-    sample_messages: list[dict],
+    sample_messages: list[AgentSDKMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -541,7 +556,7 @@ def test_fast_chat_turn_citation_processing(
     # Create a decorated version of _fast_chat_turn_core for testing
     @unified_event_stream
     def test_fast_chat_turn_core(
-        messages: list[dict],
+        messages: list[AgentSDKMessage],
         dependencies: ChatTurnDependencies,
         session_id: UUID,
         msg_id: int,
