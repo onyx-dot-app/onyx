@@ -26,26 +26,37 @@ def upgrade() -> None:
             SELECT
                 CASE
                     -- Mixed: at least one like AND one dislike
-                    WHEN COUNT(*) FILTER (WHERE cmf.feedback = 'like') > 0
-                         AND COUNT(*) FILTER (WHERE cmf.feedback = 'dislike') > 0
+                    WHEN COUNT(*) FILTER (WHERE feedback = 'like') > 0
+                         AND COUNT(*) FILTER (WHERE feedback = 'dislike') > 0
                     THEN 'mixed'::chatsessionfeedback
 
                     -- All likes (must have at least one like and zero dislikes)
-                    WHEN COUNT(*) FILTER (WHERE cmf.feedback = 'like') > 0
-                         AND COUNT(*) FILTER (WHERE cmf.feedback = 'dislike') = 0
+                    WHEN COUNT(*) FILTER (WHERE feedback = 'like') > 0
+                         AND COUNT(*) FILTER (WHERE feedback = 'dislike') = 0
                     THEN 'like'::chatsessionfeedback
 
                     -- All dislikes (must have at least one dislike and zero likes)
-                    WHEN COUNT(*) FILTER (WHERE cmf.feedback = 'dislike') > 0
-                         AND COUNT(*) FILTER (WHERE cmf.feedback = 'like') = 0
+                    WHEN COUNT(*) FILTER (WHERE feedback = 'dislike') > 0
+                         AND COUNT(*) FILTER (WHERE feedback = 'like') = 0
                     THEN 'dislike'::chatsessionfeedback
 
                     -- No feedback
                     ELSE NULL
                 END
-            FROM chat_message cm
-            LEFT JOIN chat_feedback cmf ON cmf.chat_message_id = cm.id
-            WHERE cm.chat_session_id = cs.id
+            FROM (
+                -- Only count the LATEST feedback per message (users can change feedback)
+                SELECT DISTINCT ON (chat_message_id)
+                    chat_message_id,
+                    feedback
+                FROM chat_feedback
+                WHERE chat_message_id IN (
+                    SELECT id
+                    FROM chat_message
+                    WHERE chat_session_id = cs.id
+                )
+                AND feedback IS NOT NULL
+                ORDER BY chat_message_id, id DESC
+            ) latest_feedback
         )
         WHERE cs.feedback IS NULL;
     """
