@@ -9,17 +9,13 @@ from sqlalchemy import distinct
 from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import case
 from sqlalchemy.sql import func
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import literal
 from sqlalchemy.sql.expression import UnaryExpression
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
-from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import ChatSessionFeedback
 from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessageFeedback
 from onyx.db.models import ChatSession
 from onyx.db.models import TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
@@ -32,7 +28,7 @@ def _build_filter_conditions(
 ) -> list[ColumnElement]:
     """
     Helper function to build all filter conditions for chat sessions.
-    Filters by start and end time, feedback type, and any sessions without messages.
+    Filters by start and end time and feedback type.
     start_time: Date from which to filter
     end_time: Date to which to filter
     feedback_filter: Feedback type to filter by
@@ -46,40 +42,10 @@ def _build_filter_conditions(
         conditions.append(ChatSession.time_created <= end_time)
 
     if feedback_filter is not None:
-        feedback_subq = (
-            select(ChatMessage.chat_session_id)
-            .join(ChatMessageFeedback)
-            .where(ChatMessageFeedback.feedback.isnot(None))
-            .group_by(ChatMessage.chat_session_id)
-            .having(
-                case(
-                    (
-                        literal(feedback_filter == ChatSessionFeedback.LIKE),
-                        func.bool_and(
-                            ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE
-                        ),
-                    ),
-                    (
-                        literal(feedback_filter == ChatSessionFeedback.DISLIKE),
-                        func.bool_and(
-                            ChatMessageFeedback.feedback
-                            == ChatMessageFeedbackEnum.DISLIKE
-                        ),
-                    ),
-                    else_=(
-                        # MIXED: at least one LIKE and one DISLIKE
-                        func.bool_or(
-                            ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE
-                        )
-                        & func.bool_or(
-                            ChatMessageFeedback.feedback
-                            == ChatMessageFeedbackEnum.DISLIKE
-                        )
-                    ),
-                )
-            )
-        )
-        conditions.append(ChatSession.id.in_(feedback_subq))
+        # Use denormalized feedback column directly (10-50x faster than aggregating message feedbacks)
+        # Note: Between Stage 2a and 2b, old sessions with NULL will be excluded from filtered queries
+        # This is acceptable - they'll be included after Stage 2b backfill
+        conditions.append(ChatSession.feedback == feedback_filter)
 
     return conditions
 
