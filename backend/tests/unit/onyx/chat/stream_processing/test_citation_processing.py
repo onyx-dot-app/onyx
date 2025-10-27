@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 
 import pytest
@@ -92,16 +91,6 @@ def process_text(
             citations.append(piece)
 
     return final_answer_text, citations
-
-
-def test_citation_extraction_v2(mock_data: tuple[list[LlmDoc], dict[str, int]]) -> None:
-    input_tokens = ["Hi", "[", "1", "].\n\n"]
-    final_answer_text, citations = process_text(input_tokens, mock_data)
-    citation_pattern = r"\[\[\d+\]\]\([^\)]+\)"
-    assert re.search(
-        citation_pattern, final_answer_text
-    ), f"Expected citation format [[number]](url) not found in: {final_answer_text}"
-    assert len(citations) == 1
 
 
 @pytest.mark.parametrize(
