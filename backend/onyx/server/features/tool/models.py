@@ -18,6 +18,7 @@ class ToolSnapshot(BaseModel):
     user_id: str | None = None
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
+    is_public: bool | None = None
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
@@ -34,6 +35,7 @@ class ToolSnapshot(BaseModel):
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            is_public=tool.is_public,
         )
 
 
@@ -49,6 +51,7 @@ class CustomToolCreate(BaseModel):
     custom_headers: list[Header] | None = None
     passthrough_auth: bool
     oauth_config_id: int | None = None
+    is_public: bool | None = None
 
 
 class CustomToolUpdate(BaseModel):
@@ -58,3 +61,4 @@ class CustomToolUpdate(BaseModel):
     custom_headers: list[Header] | None = None
     passthrough_auth: bool | None = None
     oauth_config_id: int | None = None
+    is_public: bool | None = None

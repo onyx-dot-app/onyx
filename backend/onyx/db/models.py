@@ -2541,6 +2541,9 @@ class Tool(Base):
         "MCPServer", back_populates="current_actions"
     )
 
+    # Wether only admins can see this tool
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
 
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""
