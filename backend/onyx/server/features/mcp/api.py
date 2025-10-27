@@ -15,6 +15,7 @@ from urllib.parse import urlunsplit
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
@@ -1472,14 +1473,19 @@ def get_mcp_server_detail(
 
 
 @admin_router.get("/servers", response_model=MCPServersResponse)
-def get_mcp_servers_for_admin(
+async def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
+    skip_role_check: bool = Query(
+        False, description="Skip curator/admin role check (for internal use only)"
+    ),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
     logger.info("Fetching all MCP servers for admin display")
-
+    user = await current_curator_or_admin_user(
+        user=user, skip_role_check=skip_role_check
+    )
     email = user.email if user else ""
     try:
         db_mcp_servers = get_all_mcp_servers(db)
@@ -1495,6 +1501,32 @@ def get_mcp_servers_for_admin(
     except Exception as e:
         logger.error(f"Failed to fetch MCP servers for admin: {type(e)}:{e}")
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+
+
+# @admin_router.get("/servers", response_model=MCPServersResponse)
+# def get_mcp_servers_for_admin(
+#     db: Session = Depends(get_session),
+#     user: User | None = Depends(current_curator_or_admin_user),
+# ) -> MCPServersResponse:
+#     """Get all MCP servers for admin display"""
+
+#     logger.info("Fetching all MCP servers for admin display")
+
+#     email = user.email if user else ""
+#     try:
+#         db_mcp_servers = get_all_mcp_servers(db)
+
+#         # Convert to API model format
+#         mcp_servers = [
+#             _db_mcp_server_to_api_mcp_server(db_server, email, db)
+#             for db_server in db_mcp_servers
+#         ]
+
+#         return MCPServersResponse(mcp_servers=mcp_servers)
+
+#     except Exception as e:
+#         logger.error(f"Failed to fetch MCP servers for admin: {type(e)}:{e}")
+#         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
 
 
 @admin_router.get("/server/{server_id}/db-tools")
@@ -1543,13 +1575,18 @@ def get_mcp_server_db_tools(
 
 
 @admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
-def upsert_mcp_server_with_tools(
+async def upsert_mcp_server_with_tools(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
+    skip_role_check: bool = Query(
+        False, description="Skip curator/admin role check (for internal use only)"
+    ),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server and associated tools"""
-
+    user = await current_curator_or_admin_user(
+        user=user, skip_role_check=skip_role_check
+    )
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
         raise HTTPException(
