@@ -13,7 +13,7 @@ export default function MCPOAuthCallbackPage() {
     backButtonText: "Back to Chat",
     redirectingMessage: "Redirecting back in 2 seconds...",
     autoRedirectDelay: 2000,
-    defaultRedirectPath: "/chat6",
+    defaultRedirectPath: "/chat",
     callbackApiUrl: "/api/mcp/oauth/callback",
     errorMessageMap: {
       "server not found": "MCP server configuration not found",

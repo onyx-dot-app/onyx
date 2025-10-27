@@ -59,7 +59,7 @@ export function ChatProvider({
           (session: ChatSession) => session.id === currentChatId
         )
       ) {
-        router.replace("/chat14");
+        router.replace("/chat");
       }
     } catch (error) {
       console.error("Error refreshing chat sessions:", error);

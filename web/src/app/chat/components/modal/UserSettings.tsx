@@ -38,6 +38,7 @@ type SettingsSection =
   | "password"
   | "connectors"
   | "personalization";
+
 interface UserSettingsProps {
   onClose: () => void;
 }

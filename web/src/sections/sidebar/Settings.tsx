@@ -230,9 +230,7 @@ export default function Settings({ folded }: SettingsProps) {
               setShowUserSettingsModal(true);
             }}
             onNotificationsClick={() => setPopupState("Notifications")}
-            onActionsClick={() =>
-              (window.location.href = "http://localhost:3000/actions")
-            }
+            onActionsClick={() => (window.location.href = "/actions")}
           />
         )}
         {popupState === "Notifications" && (

@@ -8,7 +8,6 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
-from braintrust import current_span
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -40,10 +39,7 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
-from onyx.llm.utils import check_message_tokens
-from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import model_is_reasoning_model
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -522,18 +518,6 @@ class DefaultMultiLLM(LLM):
                 max_tokens=max_tokens,
             ),
         )
-        try:
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                current_span().log(
-                    metrics={
-                        "prompt_tokens": getattr(usage, "prompt_tokens", None),
-                        "completion_tokens": getattr(usage, "completion_tokens", None),
-                        "total_tokens": getattr(usage, "total_tokens", None),
-                    },
-                )
-        except Exception:
-            pass
         choice = response.choices[0]
         if hasattr(choice, "message"):
             output = _convert_litellm_message_to_langchain_message(choice.message)
@@ -629,49 +613,3 @@ class DefaultMultiLLM(LLM):
                 logger.debug(f"Raw Model Output:\n{log_msg}")
             else:
                 logger.debug(f"Raw Model Output:\n{content}")
-        # Best-effort estimated usage for streaming responses
-        try:
-            tokenizer = get_tokenizer(
-                model_name=self.config.model_name,
-                provider_type=self.config.model_provider,
-            )
-
-            # Estimate prompt tokens
-            prompt_tokens_est = 0
-            if isinstance(prompt, str):
-                prompt_tokens_est = check_number_of_tokens(
-                    prompt, encode_fn=tokenizer.encode
-                )
-            elif isinstance(prompt, (list, Sequence)):
-                for msg in prompt:
-                    if isinstance(msg, BaseMessage):
-                        prompt_tokens_est += check_message_tokens(
-                            msg, encode_fn=tokenizer.encode
-                        )
-                    elif isinstance(msg, str):
-                        prompt_tokens_est += check_number_of_tokens(
-                            msg, encode_fn=tokenizer.encode
-                        )
-
-            # Estimate completion tokens from final assembled output
-            completion_tokens_est = 0
-            if output and getattr(output, "content", None):
-                completion_tokens_est = check_number_of_tokens(
-                    str(output.content), encode_fn=tokenizer.encode
-                )
-
-            total_tokens_est = prompt_tokens_est + completion_tokens_est
-            current_span().log(
-                metrics={
-                    "prompt_tokens": prompt_tokens_est,
-                    "completion_tokens": completion_tokens_est,
-                    "total_tokens": total_tokens_est,
-                },
-                metadata={
-                    "is_estimate": True,
-                    "estimate_method": "tokenizer_estimate",
-                },
-            )
-        except Exception:
-            # Never fail request path for logging issues
-            pass

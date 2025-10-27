@@ -5,7 +5,6 @@ from typing import Literal
 from typing import Type
 from typing import TypeVar
 
-from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
@@ -21,7 +20,6 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.utils.threadpool_concurrency import run_with_timeout
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
@@ -29,11 +27,6 @@ SchemaType = TypeVar("SchemaType", bound=BaseModel)
 JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
-@traced(
-    name="stream llm",
-    type="llm",
-    metadata=lambda: {"tenant_id": CURRENT_TENANT_ID_CONTEXTVAR.get()},
-)
 def stream_llm_answer(
     llm: LLM,
     prompt: LanguageModelInput,
