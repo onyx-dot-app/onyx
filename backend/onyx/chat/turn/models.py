@@ -40,6 +40,7 @@ AgentToolType = (
 class ChatTurnDependencies:
     llm_model: Model
     model_settings: ModelSettings
+    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
     tools: Sequence[Tool]
