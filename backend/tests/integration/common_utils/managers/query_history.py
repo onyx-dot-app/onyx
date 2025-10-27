@@ -7,7 +7,7 @@ from requests.models import CaseInsensitiveDict
 
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -19,7 +19,7 @@ class QueryHistoryManager:
     def get_query_history_page(
         page_num: int = 0,
         page_size: int = 10,
-        feedback_type: QAFeedbackType | None = None,
+        feedback_type: ChatSessionFeedback | None = None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         user_performing_action: DATestUser | None = None,

@@ -16,7 +16,7 @@ from sqlalchemy.sql.expression import literal
 from sqlalchemy.sql.expression import UnaryExpression
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
 from onyx.db.models import ChatSession
@@ -27,7 +27,7 @@ from onyx.db.tasks import get_all_tasks_with_prefix
 def _build_filter_conditions(
     start_time: datetime | None,
     end_time: datetime | None,
-    feedback_filter: QAFeedbackType | None,
+    feedback_filter: ChatSessionFeedback | None,
 ) -> list[ColumnElement]:
     """
     Helper function to build all filter conditions for chat sessions.
@@ -53,14 +53,22 @@ def _build_filter_conditions(
                 case(
                     (
                         case(
-                            {literal(feedback_filter == QAFeedbackType.LIKE): True},
+                            {
+                                literal(
+                                    feedback_filter == ChatSessionFeedback.LIKE
+                                ): True
+                            },
                             else_=False,
                         ),
                         func.bool_and(ChatMessageFeedback.is_positive),
                     ),
                     (
                         case(
-                            {literal(feedback_filter == QAFeedbackType.DISLIKE): True},
+                            {
+                                literal(
+                                    feedback_filter == ChatSessionFeedback.DISLIKE
+                                ): True
+                            },
                             else_=False,
                         ),
                         func.bool_and(func.not_(ChatMessageFeedback.is_positive)),
@@ -79,7 +87,7 @@ def get_total_filtered_chat_sessions_count(
     db_session: Session,
     start_time: datetime | None,
     end_time: datetime | None,
-    feedback_filter: QAFeedbackType | None,
+    feedback_filter: ChatSessionFeedback | None,
 ) -> int:
     conditions = _build_filter_conditions(start_time, end_time, feedback_filter)
     stmt = (
@@ -96,7 +104,7 @@ def get_page_of_chat_sessions(
     db_session: Session,
     page_num: int,
     page_size: int,
-    feedback_filter: QAFeedbackType | None = None,
+    feedback_filter: ChatSessionFeedback | None = None,
 ) -> Sequence[ChatSession]:
     conditions = _build_filter_conditions(start_time, end_time, feedback_filter)
 

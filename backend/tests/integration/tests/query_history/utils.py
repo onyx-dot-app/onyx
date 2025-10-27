@@ -1,7 +1,7 @@
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import ChatSessionFeedback
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -15,8 +15,8 @@ from tests.integration.common_utils.test_models import DATestUser
 def _create_chat_session_with_feedback(
     admin_user: DATestUser,
     i: int,
-    feedback_type: QAFeedbackType | None,
-) -> tuple[QAFeedbackType | None, DAQueryHistoryEntry]:
+    feedback_type: ChatSessionFeedback | None,
+) -> tuple[ChatSessionFeedback | None, DAQueryHistoryEntry]:
     print(f"Creating chat session {i} with feedback type {feedback_type}")
     # Create chat session with timestamp spread over 30 days
     chat_session = ChatSessionManager.create(
@@ -43,7 +43,10 @@ def _create_chat_session_with_feedback(
         chat_session=chat_session,
         user_performing_action=admin_user,
     )
-    if feedback_type == QAFeedbackType.MIXED or feedback_type == QAFeedbackType.DISLIKE:
+    if (
+        feedback_type == ChatSessionFeedback.MIXED
+        or feedback_type == ChatSessionFeedback.DISLIKE
+    ):
         ChatSessionManager.create_chat_message_feedback(
             message_id=messages[-1].id,
             is_positive=False,
@@ -63,7 +66,10 @@ def _create_chat_session_with_feedback(
         chat_session=chat_session,
         user_performing_action=admin_user,
     )
-    if feedback_type == QAFeedbackType.MIXED or feedback_type == QAFeedbackType.LIKE:
+    if (
+        feedback_type == ChatSessionFeedback.MIXED
+        or feedback_type == ChatSessionFeedback.LIKE
+    ):
         ChatSessionManager.create_chat_message_feedback(
             message_id=messages[-1].id,
             is_positive=True,
@@ -74,7 +80,7 @@ def _create_chat_session_with_feedback(
 
 
 def setup_chat_sessions_with_different_feedback() -> (
-    tuple[DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]]
+    tuple[DATestUser, dict[ChatSessionFeedback | None, list[DAQueryHistoryEntry]]]
 ):
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -93,7 +99,7 @@ def setup_chat_sessions_with_different_feedback() -> (
     )
 
     chat_sessions_by_feedback_type: dict[
-        QAFeedbackType | None, list[DAQueryHistoryEntry]
+        ChatSessionFeedback | None, list[DAQueryHistoryEntry]
     ] = {}
     # Use ThreadPoolExecutor to create chat sessions in parallel
     with ThreadPoolExecutor(max_workers=5) as executor:
@@ -103,9 +109,9 @@ def setup_chat_sessions_with_different_feedback() -> (
         number_of_sessions = 10
         futures = []
         for feedback_type in [
-            QAFeedbackType.MIXED,
-            QAFeedbackType.LIKE,
-            QAFeedbackType.DISLIKE,
+            ChatSessionFeedback.MIXED,
+            ChatSessionFeedback.LIKE,
+            ChatSessionFeedback.DISLIKE,
             None,
         ]:
             futures.extend(

@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
+from onyx.configs.constants import ChatSessionFeedback
 from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatMessage
@@ -29,7 +29,7 @@ class MessageSnapshot(BaseModel):
     message: str
     message_type: MessageType
     documents: list[AbridgedSearchDoc]
-    feedback_type: QAFeedbackType | None
+    feedback_type: ChatSessionFeedback | None
     feedback_text: str | None
     time_created: datetime
 
@@ -42,9 +42,9 @@ class MessageSnapshot(BaseModel):
         )
         feedback_type = (
             (
-                QAFeedbackType.LIKE
+                ChatSessionFeedback.LIKE
                 if latest_messages_feedback_obj.is_positive
-                else QAFeedbackType.DISLIKE
+                else ChatSessionFeedback.DISLIKE
             )
             if latest_messages_feedback_obj
             else None
@@ -81,7 +81,7 @@ class ChatSessionMinimal(BaseModel):
     assistant_id: int | None
     assistant_name: str | None
     time_created: datetime
-    feedback_type: QAFeedbackType | None
+    feedback_type: ChatSessionFeedback | None
     flow_type: SessionType
     conversation_length: int
 
@@ -112,11 +112,11 @@ class ChatSessionMinimal(BaseModel):
         session_feedback_type = None
         if list_of_message_feedbacks:
             if all(list_of_message_feedbacks):
-                session_feedback_type = QAFeedbackType.LIKE
+                session_feedback_type = ChatSessionFeedback.LIKE
             elif not any(list_of_message_feedbacks):
-                session_feedback_type = QAFeedbackType.DISLIKE
+                session_feedback_type = ChatSessionFeedback.DISLIKE
             else:
-                session_feedback_type = QAFeedbackType.MIXED
+                session_feedback_type = ChatSessionFeedback.MIXED
 
         return cls(
             id=chat_session.id,
@@ -164,7 +164,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
     user_message: str
     ai_response: str
     retrieved_documents: list[AbridgedSearchDoc]
-    feedback_type: QAFeedbackType | None
+    feedback_type: ChatSessionFeedback | None
     feedback_text: str | None
     persona_name: str | None
     user_email: str
