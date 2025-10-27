@@ -5,23 +5,16 @@ from typing import Literal
 from typing_extensions import TypedDict
 
 
-# Content types
 class InputTextContent(TypedDict):
-    """Text content for user/system input messages."""
-
     type: Literal["input_text"]
     text: str
 
 
 class OutputTextContent(TypedDict):
-    """Text content for assistant output messages."""
-
     type: Literal["output_text"]
     text: str
 
 
-# Union type for all text content variants
-# Note: Removed "text" type as it's not recognized by agents SDK
 TextContent = InputTextContent | OutputTextContent
 
 
