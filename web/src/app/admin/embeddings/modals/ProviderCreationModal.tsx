@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import Text from "@/components/ui/text";
 import { Callout } from "@/components/ui/callout";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Label, TextFormField } from "@/components/Field";
@@ -296,12 +296,7 @@ export function ProviderCreationModal({
                 </Callout>
               )}
 
-              <Button
-                type="submit"
-                variant="submit"
-                className="w-full"
-                disabled={isSubmitting}
-              >
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isProcessing ? (
                   <LoadingAnimation />
                 ) : existingProvider ? (

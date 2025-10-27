@@ -13,7 +13,6 @@ const SvgLoader = (props: SVGProps<SVGSVGElement>) => (
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeOpacity={0.75}
     />
   </svg>
 );

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import useSWR from "swr";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
@@ -107,7 +107,7 @@ function GenerateReportInput({
         <Popover>
           <PopoverTrigger asChild>
             <Button
-              variant="outline"
+              secondary
               className={cn(
                 "w-[300px] justify-start text-left font-normal",
                 !dateRange && "text-muted-foreground"
@@ -147,7 +147,7 @@ function GenerateReportInput({
             />
             <div className="border-t p-3">
               <Button
-                variant="ghost"
+                tertiary
                 className="w-full justify-start"
                 onClick={() => {
                   setDateRange({
@@ -160,7 +160,7 @@ function GenerateReportInput({
                 Last 7 days
               </Button>
               <Button
-                variant="ghost"
+                tertiary
                 className="w-full justify-start"
                 onClick={() => {
                   setDateRange({
@@ -173,7 +173,7 @@ function GenerateReportInput({
                 Last 30 days
               </Button>
               <Button
-                variant="ghost"
+                tertiary
                 className="w-full justify-start"
                 onClick={() => {
                   setDateRange({
@@ -186,7 +186,7 @@ function GenerateReportInput({
                 Last year
               </Button>
               <Button
-                variant="ghost"
+                tertiary
                 className="w-full justify-start"
                 onClick={() => {
                   setDateRange({
@@ -204,8 +204,7 @@ function GenerateReportInput({
       </div>
       <Button
         color={"blue"}
-        icon={FiDownloadCloud}
-        size="sm"
+        leftIcon={FiDownloadCloud}
         disabled={isLoading || isWaitingForReport}
         onClick={() => requestReport()}
       >
