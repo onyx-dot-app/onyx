@@ -1,4 +1,3 @@
-from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -9,6 +8,8 @@ from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
 
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
 
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
-    messages: list[dict],
+    messages: list[AgentSDKMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     ctx: ChatTurnContext,
@@ -55,10 +56,18 @@ def _run_agent_loop(
     # in multi turn conversations
     chat_history = messages[:-1]
     current_user_message = messages[-1]
+    # Ensure current_user_message is a UserMessage
+    if (
+        not isinstance(current_user_message, dict)
+        or current_user_message.get("role") != "user"
+    ):
+        raise ValueError("Last message must be a user message")
+    current_user_message_typed: UserMessage = current_user_message  # type: ignore
+
     # TODO: Figure out proper typing for agent_turn_messages that
     # conforms to what is returned by SDK but still is compatible
     # with our transformations
-    agent_turn_messages: list[Any] = []
+    agent_turn_messages: list[AgentSDKMessage] = []
 
     last_call_is_final = False
     agent = Agent(
@@ -85,13 +94,17 @@ def _run_agent_loop(
         all_messages_after_stream = streamed.to_input_list()
         # The new messages are everything after chat_history + current_user_message
         previous_message_count = len(chat_history) + 1
-        # Convert to list to avoid Sequence type issues
-        agent_turn_messages = list(all_messages_after_stream[previous_message_count:])
+        # Convert to list to avoid Sequence type issues and ensure proper typing
+        # Note: streamed.to_input_list() returns dict objects, we need to cast them
+        agent_turn_messages = [
+            cast(AgentSDKMessage, msg)
+            for msg in all_messages_after_stream[previous_message_count:]
+        ]
 
         # agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
         agent_turn_messages = list(
             update_task_prompt(
-                current_user_message,
+                current_user_message_typed,
                 agent_turn_messages,
                 prompt_config,
                 ctx.should_cite_documents,
@@ -114,7 +127,7 @@ def _run_agent_loop(
 
 
 def _fast_chat_turn_core(
-    messages: list[dict],
+    messages: list[AgentSDKMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
@@ -183,7 +196,7 @@ def _fast_chat_turn_core(
 
 @unified_event_stream
 def fast_chat_turn(
-    messages: list[dict],
+    messages: list[AgentSDKMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,

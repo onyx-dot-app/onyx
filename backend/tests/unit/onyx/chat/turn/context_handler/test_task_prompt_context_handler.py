@@ -97,4 +97,7 @@ def test_task_prompt_handler_basic() -> None:
     assert result[3]["role"] == "assistant"
     assert result[4]["role"] == "tool"
     assert result[5]["role"] == "user"
-    assert task_prompt in result[5]["content"]
+    # Content is now a list of TextContent items
+    assert isinstance(result[5]["content"], list)
+    assert len(result[5]["content"]) > 0
+    assert task_prompt in result[5]["content"][0]["text"]
