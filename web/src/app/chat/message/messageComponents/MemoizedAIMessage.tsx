@@ -15,7 +15,7 @@ interface BaseMemoizedAIMessageProps {
   overriddenModel?: string;
   nodeId: number;
   messageId?: number;
-  currentFeedback?: string | null;
+  currentFeedback?: FeedbackType | null;
   otherMessagesCanSwitchTo: number[];
   onMessageSelection: (messageId: number) => void;
   llmManager: LlmManager | null;

@@ -6,6 +6,7 @@ import {
   StreamingCitation,
 } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
+import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
@@ -47,7 +48,7 @@ export interface AIMessageProps {
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
-  currentFeedback?: string | null;
+  currentFeedback?: FeedbackType | null;
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
