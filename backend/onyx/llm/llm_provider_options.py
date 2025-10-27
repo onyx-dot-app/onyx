@@ -2,8 +2,6 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -137,18 +135,8 @@ BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 OLLAMA_PROVIDER_NAME = "ollama"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 
-
-def get_bedrock_model_names() -> list[str]:
-    import litellm
-
-    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
-    # litellm has split them into two lists :(
-    return [
-        model
-        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
-        if "/" not in model and "embed" not in model
-    ][::-1]
-
+# OpenRouter
+OPENROUTER_PROVIDER_NAME = "openrouter"
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -156,17 +144,6 @@ IGNORABLE_ANTHROPIC_MODELS = [
     "anthropic/claude-3-5-sonnet-20241022",
 ]
 ANTHROPIC_PROVIDER_NAME = "anthropic"
-
-
-def get_anthropic_model_names() -> list[str]:
-    import litellm
-
-    return [
-        model
-        for model in litellm.anthropic_models
-        if model not in IGNORABLE_ANTHROPIC_MODELS
-    ][::-1]
-
 
 ANTHROPIC_VISIBLE_MODEL_NAMES = [
     "claude-sonnet-4-5-20250929",
@@ -177,6 +154,8 @@ AZURE_PROVIDER_NAME = "azure"
 
 
 VERTEXAI_PROVIDER_NAME = "vertex_ai"
+VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
+VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.0-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.0-flash-lite"
 VERTEXAI_MODEL_NAMES = [
@@ -223,7 +202,30 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
         OLLAMA_PROVIDER_NAME: [],
+        OPENROUTER_PROVIDER_NAME: [],
     }
+
+
+def get_bedrock_model_names() -> list[str]:
+    import litellm
+
+    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
+    # litellm has split them into two lists :(
+    return [
+        model
+        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
+        if "/" not in model and "embed" not in model
+    ][::-1]
+
+
+def get_anthropic_model_names() -> list[str]:
+    import litellm
+
+    return [
+        model
+        for model in litellm.anthropic_models
+        if model not in IGNORABLE_ANTHROPIC_MODELS
+    ][::-1]
 
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
@@ -232,6 +234,7 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
     OLLAMA_PROVIDER_NAME: [],
+    OPENROUTER_PROVIDER_NAME: [],
 }
 
 
@@ -371,6 +374,20 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
             default_fast_model=VERTEXAI_DEFAULT_MODEL,
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=OPENROUTER_PROVIDER_NAME,
+            display_name="OpenRouter",
+            api_key_required=True,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[],
+            model_configurations=fetch_model_configurations_for_provider(
+                OPENROUTER_PROVIDER_NAME
+            ),
+            default_model=None,
+            default_fast_model=None,
+            default_api_base="https://openrouter.ai/api/v1",
         ),
     ]
 

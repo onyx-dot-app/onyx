@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
-import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MethodSpec, ToolSnapshot, OAuthConfig } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
@@ -13,7 +13,7 @@ import {
   updateCustomTool,
   validateToolDefinition,
 } from "@/lib/tools/edit";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
@@ -35,6 +35,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { OAuthConfigSelector } from "@/components/oauth/OAuthConfigSelector";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import useSWR, { KeyedMutator } from "swr";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -59,6 +63,9 @@ function ActionForm({
   isSubmitting,
   definitionErrorState,
   methodSpecsState,
+  oauthConfigs,
+  setPopup,
+  mutateOAuthConfigs,
 }: {
   existingTool?: ToolSnapshot;
   values: ToolFormValues;
@@ -76,6 +83,9 @@ function ActionForm({
     MethodSpec[] | null,
     React.Dispatch<React.SetStateAction<MethodSpec[] | null>>,
   ];
+  oauthConfigs: OAuthConfig[];
+  setPopup: (spec: PopupSpec | null) => void;
+  mutateOAuthConfigs: KeyedMutator<OAuthConfig[]>;
 }) {
   const [definitionError, setDefinitionError] = definitionErrorState;
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
@@ -281,56 +291,75 @@ function ActionForm({
             <Text className="text-xl font-bold mb-2 text-primary-600">
               Authentication
             </Text>
+
+            {/* OAuth Configuration Selector */}
+            <div className="mb-6">
+              <OAuthConfigSelector
+                name="oauth_config_id"
+                oauthConfigs={oauthConfigs}
+                onSelect={(configId) => {
+                  setFieldValue("oauth_config_id", configId, true);
+                  // Disable passthrough_auth if OAuth config is selected
+                  if (configId) {
+                    setFieldValue("passthrough_auth", false, true);
+                  }
+                }}
+                setPopup={setPopup}
+                mutateOAuthConfigs={mutateOAuthConfigs}
+                onConfigCreated={(createdConfig) => {
+                  // Optimistically add the new config to the list
+                  mutateOAuthConfigs(
+                    [...(oauthConfigs || []), createdConfig],
+                    false
+                  );
+                  // Revalidate in the background
+                  mutateOAuthConfigs();
+                }}
+              />
+            </div>
+
+            {/* Passthrough Auth (only show if OAuth not enabled) */}
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
                 <div className="flex items-center space-x-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <div
-                          className={
-                            values.customHeaders.some(
-                              (header) =>
-                                header.key.toLowerCase() === "authorization"
-                            )
-                              ? "opacity-50"
-                              : ""
-                          }
-                        >
-                          <Checkbox
-                            id="passthrough_auth"
-                            checked={values.passthrough_auth}
-                            disabled={values.customHeaders.some(
-                              (header) =>
-                                header.key.toLowerCase() === "authorization" &&
-                                !values.passthrough_auth
-                            )}
-                            onCheckedChange={(checked) => {
-                              setFieldValue("passthrough_auth", checked, true);
-                            }}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      {values.customHeaders.some(
-                        (header) => header.key.toLowerCase() === "authorization"
-                      ) && (
-                        <TooltipContent side="top" align="center">
-                          <Text className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                            Cannot enable OAuth passthrough when an
-                            Authorization header is already set
-                          </Text>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <div className="flex flex-col">
-                    <label
-                      htmlFor="passthrough_auth"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  <SimpleTooltip
+                    tooltip={
+                      values.oauth_config_id !== null
+                        ? "Cannot enable passthrough auth when an OAuth configuration is selected"
+                        : "Cannot enable OAuth passthrough when an Authorization header is already set"
+                    }
+                    side="top"
+                  >
+                    <div
+                      className={
+                        values.customHeaders.some(
+                          (header) =>
+                            header.key.toLowerCase() === "authorization"
+                        ) || values.oauth_config_id !== null
+                          ? "opacity-50"
+                          : ""
+                      }
                     >
-                      Pass through user&apos;s OAuth token
-                    </label>
-                    <Text className="text-xs text-subtle mt-1">
+                      <Checkbox
+                        id="passthrough_auth"
+                        checked={values.passthrough_auth}
+                        disabled={
+                          values.oauth_config_id !== null ||
+                          values.customHeaders.some(
+                            (header) =>
+                              header.key.toLowerCase() === "authorization" &&
+                              !values.passthrough_auth
+                          )
+                        }
+                        onCheckedChange={(checked) => {
+                          setFieldValue("passthrough_auth", checked, true);
+                        }}
+                      />
+                    </div>
+                  </SimpleTooltip>
+                  <div className="flex flex-col">
+                    <Text mainUiBody>Pass through user&apos;s OAuth token</Text>
+                    <Text secondaryBody>
                       When enabled, the user&apos;s OAuth token will be passed
                       as the Authorization header for all API calls
                     </Text>
@@ -365,6 +394,7 @@ interface ToolFormValues {
   definition: string;
   customHeaders: { key: string; value: string }[];
   passthrough_auth: boolean;
+  oauth_config_id: number | null;
 }
 
 const ToolSchema = Yup.object().shape({
@@ -378,6 +408,7 @@ const ToolSchema = Yup.object().shape({
     )
     .default([]),
   passthrough_auth: Yup.boolean().default(false),
+  oauth_config_id: Yup.number().nullable().default(null),
 });
 
 export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
@@ -385,6 +416,11 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
+
+  // Fetch OAuth configurations
+  const { data: oauthConfigs, mutate: mutateOAuthConfigs } = useSWR<
+    OAuthConfig[]
+  >("/api/admin/oauth-config", errorHandlingFetcher, { fallbackData: [] });
 
   const prettifiedDefinition = tool?.definition
     ? prettifyDefinition(tool.definition)
@@ -402,6 +438,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
               value: header.value,
             })) ?? [],
           passthrough_auth: tool?.passthrough_auth ?? false,
+          oauth_config_id: tool?.oauth_config_id ?? null,
         }}
         validationSchema={ToolSchema}
         onSubmit={async (values: ToolFormValues) => {
@@ -438,6 +475,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             definition: definition,
             custom_headers: values.customHeaders,
             passthrough_auth: values.passthrough_auth,
+            oauth_config_id: values.oauth_config_id,
           };
           let response;
           if (tool) {
@@ -464,6 +502,9 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
               isSubmitting={isSubmitting}
               definitionErrorState={[definitionError, setDefinitionError]}
               methodSpecsState={[methodSpecs, setMethodSpecs]}
+              oauthConfigs={oauthConfigs || []}
+              setPopup={setPopup}
+              mutateOAuthConfigs={mutateOAuthConfigs}
             />
           );
         }}

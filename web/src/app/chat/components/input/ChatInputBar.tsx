@@ -20,7 +20,6 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
 import {
@@ -83,7 +82,6 @@ export function SourceChip({
 
 export interface ChatInputBarProps {
   removeDocs: () => void;
-  showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
   message: string;
   setMessage: (message: string) => void;
@@ -112,7 +110,6 @@ function ChatInputBarInner({
   removeDocs,
   toggleDocumentSidebar,
   filterManager,
-  showConfigureAPIKey,
   selectedDocuments,
   message,
   setMessage,
@@ -172,11 +169,11 @@ function ChatInputBarInner({
     [handleFileUpload]
   );
 
-  const settings = useContext(SettingsContext);
+  const combinedSettings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
-      textarea.style.height = "0px";
+      textarea.style.height = "0px"; // this is necessary in order to "reset" the scrollHeight
       textarea.style.height = `${Math.min(
         textarea.scrollHeight,
         MAX_INPUT_HEIGHT
@@ -209,13 +206,7 @@ function ChatInputBarInner({
     [setCurrentMessageFiles]
   );
 
-  const {
-    llmProviders,
-    inputPrompts,
-    ccPairs,
-    availableSources,
-    documentSets,
-  } = useChatContext();
+  const { inputPrompts, ccPairs } = useChatContext();
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
@@ -310,9 +301,18 @@ function ChatInputBarInner({
   ]);
 
   // Check if the assistant has search tools available (internal search or web search)
+  // AND if deep research is globally enabled in admin settings
   const showDeepResearch = useMemo(() => {
-    return hasSearchToolsAvailable(selectedAssistant.tools);
-  }, [selectedAssistant.tools]);
+    const deepResearchGloballyEnabled =
+      combinedSettings?.settings?.deep_research_enabled ?? true;
+    return (
+      deepResearchGloballyEnabled &&
+      hasSearchToolsAvailable(selectedAssistant.tools)
+    );
+  }, [
+    selectedAssistant.tools,
+    combinedSettings?.settings?.deep_research_enabled,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
@@ -393,22 +393,18 @@ function ChatInputBarInner({
         </div>
       )}
 
-      <UnconfiguredLlmProviderText showConfigureAPIKey={showConfigureAPIKey} />
-
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="p-spacing-inline bg-background-neutral-01 rounded-t-16">
-            <div className="flex flex-wrap gap-2">
-              {currentMessageFiles.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  removeFile={handleRemoveMessageFile}
-                  hideProcessingState={hideProcessingState}
-                  onFileClick={handleFileClick}
-                />
-              ))}
-            </div>
+          <div className="p-spacing-inline rounded-t-16 flex flex-wrap gap-spacing-interline">
+            {currentMessageFiles.map((file) => (
+              <FileCard
+                key={file.id}
+                file={file}
+                removeFile={handleRemoveMessageFile}
+                hideProcessingState={hideProcessingState}
+                onFileClick={handleFileClick}
+              />
+            ))}
           </div>
         )}
 
@@ -419,7 +415,18 @@ function ChatInputBarInner({
           ref={textAreaRef}
           id="onyx-chat-input-textarea"
           className={cn(
-            "w-full outline-none bg-transparent resize-none placeholder:text-text-03 whitespace-normal break-word overscroll-contain overflow-y-auto p-spacing-paragraph"
+            "w-full",
+            "outline-none",
+            "bg-transparent",
+            "resize-none",
+            "placeholder:text-text-03",
+            "whitespace-normal",
+            "break-word",
+            "overscroll-contain",
+            "overflow-y-auto",
+            "px-3",
+            "pb-2",
+            "pt-3"
           )}
           autoFocus
           style={{ scrollbarWidth: "thin" }}
@@ -428,7 +435,8 @@ function ChatInputBarInner({
           placeholder={
             selectedAssistant.id === 0
               ? `How can ${
-                  settings?.enterpriseSettings?.application_name || "Onyx"
+                  combinedSettings?.enterpriseSettings?.application_name ||
+                  "Onyx"
                 } help you today`
               : `How can ${selectedAssistant.name} help you today`
           }
@@ -498,8 +506,8 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div className="flex justify-between items-center w-full p-spacing-interline">
-          <div className="flex flex-row items-center gap-spacing-inline">
+        <div className="flex justify-between items-center w-full p-1">
+          <div className="flex flex-row items-center gap-1">
             <FilePicker
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
@@ -533,6 +541,7 @@ function ChatInputBarInner({
             {selectedAssistant.tools.length > 0 && (
               <ActionToggle
                 selectedAssistant={selectedAssistant}
+                filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
               />
             )}

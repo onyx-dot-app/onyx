@@ -89,17 +89,28 @@ function UserCard({
 
 ## 5. Tailwind Dark Mode
 
-**Strictly forbid using the `dark:` modifier in Tailwind classes.**
+**Strictly forbid using the `dark:` modifier in Tailwind classes, except for logo icon handling.**
 
 **Reason:** The `colors.css` file already, VERY CAREFULLY, defines what the exact opposite colour of each light-mode colour is. Overriding this behaviour is VERY bad and will lead to horrible UI breakages.
 
+**Exception:** The `createLogoIcon` helper in `web/src/components/icons/icons.tsx` uses `dark:` modifiers (`dark:invert`, `dark:hidden`, `dark:block`) to handle third-party logo icons that cannot automatically adapt through `colors.css`. This is the ONLY acceptable use of dark mode modifiers.
+
 ```typescript
-// ✅ Good
+// ✅ Good - Standard components use colors.css
 <div className="bg-white text-black">
   Content
 </div>
 
-// ❌ Bad
+// ✅ Good - Logo icons with dark mode handling via createLogoIcon
+export const GithubIcon = createLogoIcon(githubLightIcon, {
+  monochromatic: true,  // Will apply dark:invert internally
+});
+
+export const GitbookIcon = createLogoIcon(gitbookLightIcon, {
+  darkSrc: gitbookDarkIcon,  // Will use dark:hidden/dark:block internally
+});
+
+// ❌ Bad - Manual dark mode overrides
 <div className="bg-white dark:bg-black text-black dark:text-white">
   Content
 </div>

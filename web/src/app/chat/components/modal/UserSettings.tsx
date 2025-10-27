@@ -5,6 +5,7 @@ import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
+import { ThemePreference } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -50,13 +51,13 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
+    updateUserThemePreference,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -387,10 +388,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
             <div>
               <h3 className="text-lg font-medium">Theme</h3>
               <Select
-                value={selectedTheme}
+                value={theme}
                 onValueChange={(value) => {
-                  setSelectedTheme(value);
                   setTheme(value);
+                  updateUserThemePreference(value as ThemePreference);
                 }}
               >
                 <SelectTrigger className="w-full mt-2">
@@ -398,15 +399,18 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    value="system"
+                    value={ThemePreference.SYSTEM}
                     icon={<Monitor className="h-4 w-4" />}
                   >
                     System
                   </SelectItem>
-                  <SelectItem value="light" icon={<Sun className="h-4 w-4" />}>
+                  <SelectItem
+                    value={ThemePreference.LIGHT}
+                    icon={<Sun className="h-4 w-4" />}
+                  >
                     Light
                   </SelectItem>
-                  <SelectItem icon={<Moon />} value="dark">
+                  <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
                     Dark
                   </SelectItem>
                 </SelectContent>

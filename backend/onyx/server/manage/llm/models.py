@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
@@ -33,6 +34,12 @@ class TestLLMRequest(BaseModel):
 
     # if try and use the existing API key
     api_key_changed: bool
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def normalize_provider(cls, value: str) -> str:
+        """Normalize provider name by stripping whitespace and lowercasing."""
+        return value.strip().lower()
 
 
 class LLMProviderDescriptor(BaseModel):
@@ -90,6 +97,12 @@ class LLMProviderUpsertRequest(LLMProvider):
     # for default providers, the built-in model names are used
     api_key_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def normalize_provider(cls, value: str) -> str:
+        """Normalize provider name by stripping whitespace and lowercasing."""
+        return value.strip().lower()
 
 
 class LLMProviderView(LLMProvider):
@@ -224,3 +237,36 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+
+# OpenRouter dynamic models fetch
+class OpenRouterModelsRequest(BaseModel):
+    api_base: str
+    api_key: str
+
+
+class OpenRouterModelDetails(BaseModel):
+    """Response model for OpenRouter /api/v1/models endpoint"""
+
+    # This is used to ignore any extra fields that are returned from the API
+    model_config = {"extra": "ignore"}
+
+    id: str
+    context_length: int
+    architecture: dict[str, Any]  # Contains 'input_modalities' key
+
+    @property
+    def supports_image_input(self) -> bool:
+        input_modalities = self.architecture.get("input_modalities", [])
+        return isinstance(input_modalities, list) and "image" in input_modalities
+
+    @property
+    def is_embedding_model(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities", [])
+        return isinstance(output_modalities, list) and "embeddings" in output_modalities
+
+
+class OpenRouterFinalModelResponse(BaseModel):
+    name: str
+    max_input_tokens: int
+    supports_image_input: bool

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
@@ -34,6 +35,7 @@ from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.oauth_config import get_oauth_config
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -347,6 +349,27 @@ def construct_tools(
             if not custom_tool_config:
                 custom_tool_config = CustomToolConfig()
 
+            # Determine which OAuth token to use
+            oauth_token_for_tool = None
+
+            # Priority 1: OAuth config (per-tool OAuth)
+            if db_tool_model.oauth_config_id and user:
+                oauth_config = get_oauth_config(
+                    db_tool_model.oauth_config_id, db_session
+                )
+                if oauth_config:
+                    token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
+                    oauth_token_for_tool = token_manager.get_valid_access_token()
+                    if not oauth_token_for_tool:
+                        logger.warning(
+                            f"No valid OAuth token found for tool {db_tool_model.id} "
+                            f"with OAuth config {db_tool_model.oauth_config_id}"
+                        )
+
+            # Priority 2: Passthrough auth (user's login OAuth token)
+            elif db_tool_model.passthrough_auth:
+                oauth_token_for_tool = user_oauth_token
+
             tool_dict[db_tool_model.id] = cast(
                 list[Tool],
                 build_custom_tools_from_openapi_schema_and_headers(
@@ -362,9 +385,7 @@ def construct_tools(
                             custom_tool_config.additional_headers or {}
                         )
                     ),
-                    user_oauth_token=(
-                        user_oauth_token if db_tool_model.passthrough_auth else None
-                    ),
+                    user_oauth_token=oauth_token_for_tool,
                 ),
             )
 

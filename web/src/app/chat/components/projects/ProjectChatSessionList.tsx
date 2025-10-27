@@ -5,12 +5,13 @@ import Link from "next/link";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
 import SvgBubbleText from "@/icons/bubble-text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 export default function ProjectChatSessionList() {
   const {
@@ -75,11 +76,7 @@ export default function ProjectChatSessionList() {
                         if (assistant) {
                           return (
                             <div className="h-full pt-1">
-                              <AssistantIcon
-                                assistant={assistant}
-                                size={18}
-                                disableToolip
-                              />
+                              <AgentIcon agent={assistant} size={18} />
                             </div>
                           );
                         }
@@ -99,7 +96,7 @@ export default function ProjectChatSessionList() {
                           className="truncate"
                           title={chat.name}
                         >
-                          {chat.name || "Unnamed Chat"}
+                          {chat.name || UNNAMED_CHAT}
                         </Text>
                       </div>
                       <div className="flex items-center">

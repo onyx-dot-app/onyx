@@ -1,9 +1,5 @@
-import {
-  AuthTypeMetadata,
-  getAuthTypeMetadataSS,
-  getCurrentUserSS,
-} from "@/lib/userSS";
 import { fetchSS } from "@/lib/utilsSS";
+import { requireAuth } from "@/lib/auth/requireAuth";
 import {
   CCPairBasicInfo,
   DocumentSetSummary,
@@ -54,9 +50,47 @@ export async function fetchChatData(searchParams: {
   [key: string]: string;
 }): Promise<FetchChatDataResult | { redirect: string }> {
   const requestCookies = await cookies();
-  const tasks = [
-    getAuthTypeMetadataSS(),
-    getCurrentUserSS(),
+
+  // STEP 1: Check authentication FIRST (before any protected resources)
+  const authResult = await requireAuth();
+  const { user, authTypeMetadata } = authResult;
+  const authDisabled = authTypeMetadata?.authType === "disabled";
+
+  // STEP 2: Handle authentication redirects with special cases
+  if (authResult.redirect && !authDisabled) {
+    // Special handling for chrome extension mode and login loop prevention
+    const headersList = await headers();
+    const fullUrl = headersList.get("x-url") || "/chat";
+
+    // Check the referrer to prevent redirect loops
+    const referrer = headersList.get("referer") || "";
+    const isComingFromLogin = referrer.includes("/auth/login");
+
+    // Also check for the from=login query parameter
+    const isRedirectedFromLogin = searchParams["from"] === "login";
+
+    // Only redirect if we're not already coming from the login page
+    // and chrome extension mode is not enabled
+    if (
+      !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
+      !isComingFromLogin &&
+      !isRedirectedFromLogin
+    ) {
+      // Build redirect URL with search params preserved
+      const searchParamsString = new URLSearchParams(
+        searchParams as unknown as Record<string, string>
+      ).toString();
+      const redirectUrl = searchParamsString
+        ? `${fullUrl}?${searchParamsString}`
+        : fullUrl;
+      return {
+        redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
+      };
+    }
+  }
+
+  // STEP 3: ONLY NOW fetch protected resources (after auth is verified)
+  const protectedTasks = [
     fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/chat/get-user-chat-sessions"),
@@ -67,92 +101,35 @@ export async function fetchChatData(searchParams: {
     fetchSS("/user/projects/"),
   ];
 
-  let results: (
-    | User
-    | Response
-    | AuthTypeMetadata
-    | FullEmbeddingModelResponse
-    | Settings
-    | LLMProviderDescriptor[]
-    | [Persona[], string | null]
-    | null
-    | InputPrompt[]
-    | ToolSnapshot[]
-    | Project[]
-  )[] = [null, null, null, null, null, null, null, null, null, null, null];
+  let results: (Response | LLMProviderDescriptor[] | ToolSnapshot[] | null)[] =
+    [];
+
   try {
-    results = await Promise.all(tasks);
+    results = await Promise.all(protectedTasks);
   } catch (e) {
     console.log(`Some fetch failed for the main search page - ${e}`);
   }
 
-  const authTypeMetadata = results[0] as AuthTypeMetadata | null;
-  const user = results[1] as User | null;
-  const ccPairsResponse = results[2] as Response | null;
-  const documentSetsResponse = results[3] as Response | null;
-
-  const chatSessionsResponse = results[4] as Response | null;
-
-  const tagsResponse = results[5] as Response | null;
-  const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
+  const ccPairsResponse = results[0] as Response | null;
+  const documentSetsResponse = results[1] as Response | null;
+  const chatSessionsResponse = results[2] as Response | null;
+  const tagsResponse = results[3] as Response | null;
+  const llmProviders = (results[4] || []) as LLMProviderDescriptor[];
 
   let inputPrompts: InputPrompt[] = [];
-  if (results[7] instanceof Response && results[7].ok) {
-    inputPrompts = await results[7].json();
+  if (results[5] instanceof Response && results[5].ok) {
+    inputPrompts = await results[5].json();
   } else {
     console.log("Failed to fetch input prompts");
   }
 
-  const availableTools = (results[8] || []) as ToolSnapshot[];
+  const availableTools = (results[6] || []) as ToolSnapshot[];
 
   let projects: Project[] = [];
-  if (results[9] instanceof Response && results[9].ok) {
-    projects = await results[9].json();
+  if (results[7] instanceof Response && results[7].ok) {
+    projects = await results[7].json();
   } else {
     console.log("Failed to fetch projects");
-  }
-
-  const authDisabled = authTypeMetadata?.authType === "disabled";
-
-  // TODO Validate need
-  if (!authDisabled && !user) {
-    const headersList = await headers();
-    const fullUrl = headersList.get("x-url") || "/chat";
-    const searchParamsString = new URLSearchParams(
-      searchParams as unknown as Record<string, string>
-    ).toString();
-    const redirectUrl = searchParamsString
-      ? `${fullUrl}?${searchParamsString}`
-      : fullUrl;
-
-    // Check the referrer to prevent redirect loops
-    const referrer = headersList.get("referer") || "";
-    const isComingFromLogin = referrer.includes("/auth/login");
-
-    // Also check for the from=login query parameter
-    const isRedirectedFromLogin = searchParams["from"] === "login";
-
-    console.log("Auth check:");
-    console.log("  authDisabled =", authDisabled);
-    console.log("  user =", !!user);
-    console.log("  referrer =", referrer);
-    console.log("  fromLogin =", isRedirectedFromLogin);
-
-    // Only redirect if we're not already coming from the login page
-    if (
-      !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
-      !isComingFromLogin &&
-      !isRedirectedFromLogin
-    ) {
-      console.log("Redirecting to login from chat page");
-      return {
-        redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
-      };
-    }
-  }
-
-  if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
-    return { redirect: "/auth/waiting-on-verification" };
   }
 
   let ccPairs: CCPairBasicInfo[] = [];

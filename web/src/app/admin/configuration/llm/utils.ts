@@ -1,6 +1,7 @@
 import {
   AnthropicIcon,
   AmazonIcon,
+  AzureIcon,
   CPUIcon,
   MicrosoftIconSVG,
   MistralIcon,
@@ -10,6 +11,8 @@ import {
   DeepseekIcon,
   OpenAISVG,
   QwenIcon,
+  OllamaIcon,
+  ZAIIcon,
 } from "@/components/icons/icons";
 import {
   WellKnownLLMProviderDescriptor,
@@ -33,16 +36,20 @@ export const getProviderIcon = (
     mistral: MistralIcon,
     ministral: MistralIcon,
     llama: MetaIcon,
+    ollama: OllamaIcon,
     gemini: GeminiIcon,
     deepseek: DeepseekIcon,
     claude: AnthropicIcon,
     anthropic: AnthropicIcon,
     openai: OpenAISVG,
+    // Azure OpenAI should display the Azure logo
+    azure: AzureIcon,
     microsoft: MicrosoftIconSVG,
     meta: MetaIcon,
     google: GeminiIcon,
     qwen: QwenIcon,
     qwq: QwenIcon,
+    zai: ZAIIcon,
   };
 
   // First check if provider name directly matches an icon
@@ -125,6 +132,31 @@ export const dynamicProviderConfigs: Record<
       data.map((model) => model.name),
     successMessage: (count: number) =>
       `Successfully fetched ${count} models from Ollama.`,
+  },
+  openrouter: {
+    endpoint: "/api/admin/llm/openrouter/available-models",
+    isDisabled: (values) => !values.api_base || !values.api_key,
+    disabledReason:
+      "API Base and API Key are required to fetch OpenRouter models",
+    buildRequestBody: ({ values }) => ({
+      api_base: values.api_base,
+      api_key: values.api_key,
+    }),
+    processResponse: (data: OllamaModelResponse[], llmProviderDescriptor) =>
+      data.map((modelData) => {
+        const existingConfig = llmProviderDescriptor.model_configurations.find(
+          (config) => config.name === modelData.name
+        );
+        return {
+          name: modelData.name,
+          is_visible: existingConfig?.is_visible ?? true,
+          max_input_tokens: modelData.max_input_tokens,
+          supports_image_input: modelData.supports_image_input,
+        };
+      }),
+    getModelNames: (data: OllamaModelResponse[]) => data.map((m) => m.name),
+    successMessage: (count: number) =>
+      `Successfully fetched ${count} models from OpenRouter.`,
   },
 };
 
