@@ -1549,18 +1549,12 @@ def get_mcp_server_db_tools(
 
 
 @admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
-async def upsert_mcp_server_with_tools(
+def upsert_mcp_server_with_tools(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
-    skip_role_check: bool = Query(
-        False, description="Skip curator/admin role check (for internal use only)"
-    ),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server and associated tools"""
-    user = await current_curator_or_admin_user(
-        user=user, skip_role_check=skip_role_check
-    )
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
         raise HTTPException(

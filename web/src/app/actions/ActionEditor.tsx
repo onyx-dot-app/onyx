@@ -420,7 +420,9 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   // Fetch OAuth configurations
   const { data: oauthConfigs, mutate: mutateOAuthConfigs } = useSWR<
     OAuthConfig[]
-  >("/api/admin/oauth-config", errorHandlingFetcher, { fallbackData: [] });
+  >("/api/admin/oauth-config?skip_role_check=true", errorHandlingFetcher, {
+    fallbackData: [],
+  });
 
   const prettifiedDefinition = tool?.definition
     ? prettifyDefinition(tool.definition)
