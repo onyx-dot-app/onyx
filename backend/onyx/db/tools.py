@@ -81,7 +81,7 @@ def create_tool__no_commit(
         mcp_server_id=mcp_server_id,
         oauth_config_id=oauth_config_id,
         enabled=enabled,
-        is_public=is_public,
+        is_public=is_public if is_public is not None else True,
     )
     db_session.add(new_tool)
     db_session.flush()  # Don't commit yet, let caller decide when to commit
