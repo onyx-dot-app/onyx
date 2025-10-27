@@ -10,7 +10,6 @@ export async function getSidebarUser() {
   return await getCurrentUserSS();
 }
 
-// ✅ 改成普通同步组件
 export function SidebarLayout({
   user,
   children,
