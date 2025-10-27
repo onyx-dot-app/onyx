@@ -1,6 +1,10 @@
 import { SvgProps } from "@/icons";
 
-export type OnboardingStep = "name" | "llm-setup" | "complete";
+export enum OnboardingStep {
+  Name = "name",
+  LlmSetup = "llm-setup",
+  Complete = "complete",
+}
 
 export interface OnboardingData {
   userName?: string;
@@ -42,4 +46,14 @@ export type FinalStepItemProps = {
   description: string;
   icon: React.FunctionComponent<SvgProps>;
   buttonText: string;
+};
+
+export type OnboardingActions = {
+  nextStep: () => void;
+  prevStep: () => void;
+  updateName: (name: string) => void;
+  updateData: (data: Partial<OnboardingData>) => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | undefined) => void;
+  reset: () => void;
 };

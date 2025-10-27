@@ -13,6 +13,13 @@ export function useOnboardingState() {
     dispatch({ type: OnboardingActionType.PREV_STEP });
   }, []);
 
+  const updateName = useCallback((name: string) => {
+    dispatch({
+      type: OnboardingActionType.UPDATE_DATA,
+      payload: { userName: name },
+    });
+  }, []);
+
   const updateData = useCallback((data: Partial<OnboardingData>) => {
     dispatch({ type: OnboardingActionType.UPDATE_DATA, payload: data });
   }, []);
@@ -34,6 +41,7 @@ export function useOnboardingState() {
     actions: {
       nextStep,
       prevStep,
+      updateName,
       updateData,
       setLoading,
       setError,

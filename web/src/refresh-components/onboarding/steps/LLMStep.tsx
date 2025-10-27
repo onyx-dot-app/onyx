@@ -47,11 +47,7 @@ const LLMStepInner = () => {
           <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
         </div>
         <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider
-            title="chatGPT"
-            description="Connect models from other providers or your self-hosted models."
-            icon={SvgCpu}
-          />
+          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
         </div>
         <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
           <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />

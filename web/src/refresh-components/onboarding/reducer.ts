@@ -2,15 +2,16 @@ import {
   OnboardingState,
   OnboardingAction,
   OnboardingActionType,
+  OnboardingStep,
 } from "./types";
 import { STEP_NAVIGATION, STEP_CONFIG, TOTAL_STEPS } from "./constants";
 
 export const initialState: OnboardingState = {
-  currentStep: "name",
+  currentStep: OnboardingStep.Name,
   stepIndex: 1,
   totalSteps: TOTAL_STEPS,
   data: {},
-  isButtonActive: false,
+  isButtonActive: true,
   isLoading: false,
 };
 

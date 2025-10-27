@@ -2,8 +2,17 @@ import React, { memo, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import SvgUser from "@/icons/user";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { OnboardingState, OnboardingActions } from "../types";
 
-const NameStepInner = () => {
+type NameStepProps = {
+  state: OnboardingState;
+  actions: OnboardingActions;
+};
+
+const NameStepInner = ({
+  state: onboardingState,
+  actions: onboardingActions,
+}: NameStepProps) => {
   const [name, setName] = useState("");
   return (
     <div className="flex items-center justify-between w-full max-w-[800px] p-padding-button bg-background-tint-00 rounded-16 border border-border-01">
