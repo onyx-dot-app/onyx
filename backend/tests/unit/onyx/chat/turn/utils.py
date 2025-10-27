@@ -153,6 +153,16 @@ def create_fake_response(
     )
 
 
+class FakeModelConfig:
+    """Fake config object for fake models."""
+
+    def __init__(
+        self, model_name: str = "fake-model", model_provider: str = "fake-provider"
+    ) -> None:
+        self.model_name = model_name
+        self.model_provider = model_provider
+
+
 class BaseFakeModel(Model):
     """Base class for fake models with common functionality."""
 
@@ -161,6 +171,8 @@ class BaseFakeModel(Model):
     ) -> None:
         self.name = name
         self.provider = provider
+        # Add config attribute for compatibility with save_turn
+        self.config = FakeModelConfig(model_name=name, model_provider=provider)
         # Store any additional kwargs for subclasses
         self._kwargs = kwargs
 
