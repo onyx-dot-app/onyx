@@ -16,6 +16,7 @@ import { SvgProps } from "@/icons";
 import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
+import FileTypeIcon from "@/app/chat/components/files/FileTypeIcon";
 import SvgTrash from "@/icons/trash";
 import SvgCheck from "@/icons/check";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -273,15 +274,10 @@ export default function UserFilesModalContent({
                           <SvgCheck className="stroke-text-02" />
                         </div>
                       ) : (
-                        (() => {
-                          const ext = getFileExtension(f.name).toLowerCase();
-                          const isImage = isImageExtension(ext);
-                          return isImage ? (
-                            <SvgImage className="h-5 w-5 stroke-text-02" />
-                          ) : (
-                            <SvgFileText className="h-5 w-5 stroke-text-02" />
-                          );
-                        })()
+                        <FileTypeIcon
+                          fileName={f.name}
+                          className="h-5 w-5 stroke-text-02"
+                        />
                       )}
                     </>
                   )}
@@ -289,7 +285,12 @@ export default function UserFilesModalContent({
                 <div className="p-spacing-inline-mini flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="max-w-[250px] min-w-0 flex-none">
-                      <Truncated text04 secondaryAction nowrap>
+                      <Truncated
+                        text04
+                        secondaryAction
+                        nowrap
+                        className="truncate"
+                      >
                         {f.name}
                       </Truncated>
                     </div>
@@ -332,20 +333,23 @@ export default function UserFilesModalContent({
                   </Text>
                 )}
                 {!showRemove && <div className="p-spacing-inline"></div>}
-                {showRemove &&
-                  String(f.status) !== UserFileStatus.UPLOADING &&
-                  String(f.status) !== UserFileStatus.DELETING && (
-                    <IconButton
-                      internal
-                      icon={SvgTrash}
-                      tooltip="Remove from project"
-                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 p-0 bg-transparent hover:bg-transparent shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove && onRemove(f);
-                      }}
-                    />
-                  )}
+                {showRemove && (
+                  <div className="h-6 w-6">
+                    {String(f.status) !== UserFileStatus.UPLOADING &&
+                      String(f.status) !== UserFileStatus.DELETING && (
+                        <IconButton
+                          internal
+                          icon={SvgTrash}
+                          tooltip="Remove file"
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove && onRemove(f);
+                          }}
+                        />
+                      )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

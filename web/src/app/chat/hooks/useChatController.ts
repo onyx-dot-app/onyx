@@ -952,7 +952,11 @@ export function useChatController({
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
-      const uploadedMessageFiles = await beginUpload(Array.from(acceptedFiles));
+      const uploadedMessageFiles = await beginUpload(
+        Array.from(acceptedFiles),
+        null,
+        setPopup
+      );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
