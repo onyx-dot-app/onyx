@@ -2097,7 +2097,11 @@ class ChatSession(Base):
     # Trigger-maintained denormalized session feedback
     # Automatically updated via database trigger when message feedback changes
     feedback: Mapped[ChatSessionFeedbackEnum | None] = mapped_column(
-        Enum(ChatSessionFeedbackEnum), nullable=True
+        Enum(
+            ChatSessionFeedbackEnum,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
     )
 
     # the latest "overrides" specified by the user. These take precedence over
