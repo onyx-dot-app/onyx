@@ -203,7 +203,7 @@ export function PersonasTable({
                 <Button onClick={handleToggleDefault}>{buttonText}</Button>
               }
             >
-              <div className="flex flex-col gap-spacing-interline">
+              <div className="flex flex-col gap-2">
                 <Text>{text}</Text>
                 <Text text03>{additionalText}</Text>
               </div>

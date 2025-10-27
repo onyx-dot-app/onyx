@@ -58,13 +58,13 @@ export default function AttachmentButton({
     <button
       type="button"
       className={cn(
-        "flex flex-row w-full p-spacing-inline bg-background-tint-00 hover:bg-background-tint-02 rounded-12 gap-spacing-interline group/Attachment",
+        "flex flex-row w-full p-1 bg-background-tint-00 hover:bg-background-tint-02 rounded-12 gap-2 group/Attachment",
         bgClassNames[variant],
         className
       )}
       {...rest}
     >
-      <div className="flex-1 flex flex-row gap-spacing-interline">
+      <div className="flex-1 flex flex-row gap-2">
         <div className="h-full aspect-square bg-background-tint-01 rounded-08 flex flex-col items-center justify-center">
           {selected ? (
             <Checkbox checked />
@@ -75,7 +75,7 @@ export default function AttachmentButton({
           )}
         </div>
         <div className="flex flex-col items-start justify-center">
-          <div className="flex flex-row items-center gap-spacing-interline">
+          <div className="flex flex-row items-center gap-2">
             <Truncated mainUiMuted text04 nowrap>
               {children}
             </Truncated>
@@ -94,7 +94,7 @@ export default function AttachmentButton({
         </div>
       </div>
 
-      <div className="flex-1 flex flex-row self-stretch justify-end items-center gap-spacing-interline p-spacing-inline">
+      <div className="flex-1 flex flex-row self-stretch justify-end items-center gap-2 p-1">
         <Text secondaryBody text03>
           {rightText}
         </Text>

@@ -146,7 +146,7 @@ export default function UserFilesModalContent({
       )}
 
       {/* Title section */}
-      <div className="flex flex-col gap-spacing-inline px-spacing-paragraph pt-spacing-paragraph">
+      <div className="flex flex-col gap-1 px-4 pt-4">
         <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
           {onClose && <IconButton icon={SvgX} internal onClick={onClose} />}
@@ -158,7 +158,7 @@ export default function UserFilesModalContent({
       </div>
 
       {/* Search bar section */}
-      <div className="flex items-center gap-spacing-interline p-padding-button">
+      <div className="flex items-center gap-2 p-3">
         <InputTypeIn
           placeholder="Search files..."
           value={search}
@@ -184,11 +184,11 @@ export default function UserFilesModalContent({
       {/* File display section */}
       <div className="bg-background-tint-01 overflow-y-scroll">
         {filtered.length === 0 ? (
-          <div className="p-spacing-paragraph flex w-full h-full items-center justify-center">
+          <div className="p-4 flex w-full h-full items-center justify-center">
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="p-spacing-interline flex flex-col gap-spacing-interline overflow-scroll max-h-[20rem]">
+          <VerticalShadowScroller className="p-2 flex flex-col gap-2 overflow-scroll max-h-[20rem]">
             {filtered.map((projectFle) => {
               const isSelected = selectedIds.has(projectFle.id);
               return (

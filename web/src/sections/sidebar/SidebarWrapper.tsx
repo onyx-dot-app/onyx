@@ -18,7 +18,7 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0 gap-spacing-paragraph",
+        "flex flex-row items-center px-4 py-1 flex-shrink-0 gap-4",
         folded ? "justify-center" : "justify-between"
       )}
     >
@@ -67,7 +67,7 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-spacing-interline gap-spacing-paragraph group/SidebarWrapper",
+          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper",
           folded ? "w-[3.5rem]" : "w-[15rem]"
         )}
       >

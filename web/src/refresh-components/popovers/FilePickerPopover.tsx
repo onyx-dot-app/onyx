@@ -136,12 +136,8 @@ function FilePickerPopoverContents({
 
         // Title
         hasFiles && (
-          <div key="recent-files" className="pt-spacing-inline">
-            <Text
-              text02
-              secondaryBody
-              className="py-spacing-inline px-padding-button"
-            >
+          <div key="recent-files" className="pt-1">
+            <Text text02 secondaryBody className="py-1 px-3">
               Recent Files
             </Text>
           </div>

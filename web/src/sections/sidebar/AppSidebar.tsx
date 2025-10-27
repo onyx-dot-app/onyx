@@ -108,7 +108,7 @@ function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
     >
       <SidebarSection title="Recents">
         {isHistoryEmpty ? (
-          <Text text01 className="px-padding-button">
+          <Text text01 className="px-3">
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (
@@ -332,7 +332,7 @@ function AppSidebarInner() {
 
   const settingsButton = useMemo(
     () => (
-      <div className="px-spacing-interline">
+      <div className="px-2">
         {(isAdmin || isCurator) && (
           <SidebarTab
             href="/admin/indexing/status"
@@ -394,7 +394,7 @@ function AppSidebarInner() {
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         {folded ? (
           <div className="flex flex-col h-full justify-between">
-            <div className="px-spacing-interline">
+            <div className="px-2">
               {newSessionButton}
               <SidebarTab
                 leftIcon={SvgOnyxOctagon}

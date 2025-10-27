@@ -361,7 +361,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   };
 
   return (
-    <div className="flex flex-col gap-padding-content p-padding-content">
+    <div className="flex flex-col gap-6 p-6">
       {sections.length > 1 && (
         <nav>
           <ul className="flex space-x-2">

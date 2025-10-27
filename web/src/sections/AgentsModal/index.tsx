@@ -31,9 +31,9 @@ function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
   }
 
   return (
-    <div className="py-padding-content flex flex-col gap-spacing-paragraph">
+    <div className="py-6 flex flex-col gap-4">
       <Text headingH2>{title}</Text>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-spacing-paragraph">
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent, index) => (
@@ -144,8 +144,8 @@ export default function AgentsModal() {
   return (
     <div data-testid="AgentsModal/container" aria-label="Agents Modal">
       <Modal id={ModalIds.AgentsModal} icon={SvgOnyxOctagon} title="Agents" sm>
-        <div className="flex flex-col sticky top-[0rem] z-10 bg-background-tint-01 p-spacing-paragraph">
-          <div className="flex flex-row items-center gap-spacing-interline">
+        <div className="flex flex-col sticky top-[0rem] z-10 bg-background-tint-01 p-4">
+          <div className="flex flex-row items-center gap-2">
             <InputTypeIn
               placeholder="Search..."
               value={searchQuery}
@@ -159,7 +159,7 @@ export default function AgentsModal() {
             </Button>
           </div>
 
-          <div className="py-padding-content flex items-center gap-spacing-interline flex-wrap">
+          <div className="py-6 flex items-center gap-2 flex-wrap">
             <SvgFilter className="w-[1.2rem] h-[1.2rem] stroke-text-05" />
             <AgentBadgeSelector
               text="Pinned"
@@ -185,7 +185,7 @@ export default function AgentsModal() {
           </div>
         </div>
 
-        <div className="flex-1 w-full p-spacing-paragraph overflow-y-auto">
+        <div className="flex-1 w-full p-4 overflow-y-auto">
           {featuredAgents.length === 0 && allAgents.length === 0 ? (
             <Text className="w-full h-full flex flex-col items-center justify-center">
               No Agents configured yet...

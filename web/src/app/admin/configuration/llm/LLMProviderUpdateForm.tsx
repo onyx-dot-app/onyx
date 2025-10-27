@@ -712,7 +712,7 @@ export function LLMProviderUpdateForm({
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4 gap-spacing-interline">
+            <div className="flex w-full mt-4 gap-2">
               <Button disabled={isTesting}>
                 {isTesting ? (
                   <Text inverted>

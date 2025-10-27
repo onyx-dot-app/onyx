@@ -139,7 +139,7 @@ export default function IconButton({
     <button
       className={cn(
         "flex items-center justify-center h-fit w-fit group/IconButton",
-        internal ? "p-spacing-inline" : "p-spacing-interline",
+        internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
         internal ? "rounded-08" : "rounded-12",
         buttonClasses(active)[variant][state],

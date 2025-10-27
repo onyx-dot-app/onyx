@@ -18,24 +18,11 @@
     --border-radius-full: 64rem;
   }
 
-  /* SPACINGS + PADDINGS */
+  /* BACKDROP BLUR */
   :root {
-    --spacing-inline-mini: 0.12rem;
-    --spacing-inline: 0.25rem;
-    --spacing-interline-mini: 0.38rem;
-    --spacing-interline: 0.5rem;
-    --spacing-paragraph: 1rem;
-    --spacing-headline: 1.5rem;
-    --spacing-headline-large: 2rem;
-    --spacing-block: 2.5rem;
-    --spacing-section: 9rem;
-
-    --padding-button: 0.75rem;
-    --padding-content: 1.5rem;
-    --padding-block-end: 2rem;
-    --padding-body-main: 2rem;
-    --padding-section: 4.5rem;
-    --width-outer-shell: 90rem;
+    --backdrop-blur-01: 2px;
+    --backdrop-blur-02: 1px;
+    --backdrop-blur-03: 1px;
   }
 
   * {

@@ -108,7 +108,7 @@ function Main() {
   }
 
   const introSection = (
-    <div className="flex flex-col items-start gap-spacing-paragraph">
+    <div className="flex flex-col items-start gap-4">
       <Text>{API_KEY_TEXT}</Text>
       <CreateButton
         className="self-start"

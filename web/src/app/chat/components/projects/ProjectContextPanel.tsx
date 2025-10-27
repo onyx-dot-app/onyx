@@ -63,7 +63,7 @@ export function FileCard({
     <div
       className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
         isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-spacing-inline h-14 w-40 ${
+      } p-1 h-14 w-40 ${
         onFileClick && !isProcessing
           ? "cursor-pointer hover:bg-accent-background"
           : ""
@@ -85,7 +85,7 @@ export function FileCard({
         </button>
       )}
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-08 p-spacing-interline
+        className={`flex h-9 w-9 items-center justify-center rounded-08 p-2
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
         {isProcessing || file.status === UserFileStatus.UPLOADING ? (
@@ -280,7 +280,7 @@ export default function ProjectContextPanel({
             </div>
 
             {/* Desktop / larger screens: show previews with optional View All */}
-            <div className="hidden sm:flex gap-spacing-inline relative">
+            <div className="hidden sm:flex gap-1 relative">
               {(() => {
                 return allCurrentProjectFiles.slice(0, 4).map((f) => (
                   <div key={f.id} className="w-40">
@@ -331,7 +331,7 @@ export default function ProjectContextPanel({
               isDragActive
                 ? "bg-action-link-01 border-action-link-05"
                 : "border-border-01"
-            } flex items-center pl-spacing-interline`}
+            } flex items-center pl-2`}
           >
             <p
               className={`font-secondary-body ${
