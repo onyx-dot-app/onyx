@@ -1,5 +1,6 @@
 # create adapter from Tool to FunctionTool
 import json
+from collections.abc import Sequence
 from typing import Any
 from typing import Union
 
@@ -13,6 +14,7 @@ from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.built_in_tools_v2 import BUILT_IN_TOOL_MAP_V2
+from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -107,8 +109,8 @@ def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:
     )
 
 
-def tools_to_function_tools(tools: list[Tool]) -> list[FunctionTool]:
-    onyx_tools: list[list[FunctionTool]] = [
+def tools_to_function_tools(tools: Sequence[Tool]) -> Sequence[FunctionTool]:
+    onyx_tools: Sequence[Sequence[FunctionTool]] = [
         BUILT_IN_TOOL_MAP_V2[type(tool).__name__]
         for tool in tools
         if type(tool).__name__ in BUILT_IN_TOOL_MAP_V2
@@ -123,3 +125,19 @@ def tools_to_function_tools(tools: list[Tool]) -> list[FunctionTool]:
     ]
 
     return flattened_builtin_tools + custom_and_mcp_tools
+
+
+def force_use_tool_to_function_tool_names(
+    force_use_tool: ForceUseTool, tools: Sequence[Tool]
+) -> str | None:
+    if not force_use_tool.force_use:
+        return None
+
+    # Filter tools to only those matching the force_use_tool name
+    filtered_tools = [tool for tool in tools if tool.name == force_use_tool.tool_name]
+
+    # Convert to function tools
+    function_tools = tools_to_function_tools(filtered_tools)
+
+    # Return the first name if available, otherwise None
+    return function_tools[0].name if function_tools else None

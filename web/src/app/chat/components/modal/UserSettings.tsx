@@ -5,6 +5,7 @@ import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
+import { ThemePreference } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -50,13 +51,13 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
+    updateUserThemePreference,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -360,7 +361,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   };
 
   return (
-    <div className="flex flex-col gap-padding-content p-padding-content">
+    <div className="flex flex-col gap-6 p-6">
       {sections.length > 1 && (
         <nav>
           <ul className="flex space-x-2">
@@ -381,16 +382,16 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
       {popup}
 
-      <div className="w-full overflow-y-scroll">
+      <div className="w-full overflow-y-auto px-1">
         {activeSection === "settings" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-medium">Theme</h3>
               <Select
-                value={selectedTheme}
+                value={theme}
                 onValueChange={(value) => {
-                  setSelectedTheme(value);
                   setTheme(value);
+                  updateUserThemePreference(value as ThemePreference);
                 }}
               >
                 <SelectTrigger className="w-full mt-2">
@@ -398,15 +399,18 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    value="system"
+                    value={ThemePreference.SYSTEM}
                     icon={<Monitor className="h-4 w-4" />}
                   >
                     System
                   </SelectItem>
-                  <SelectItem value="light" icon={<Sun className="h-4 w-4" />}>
+                  <SelectItem
+                    value={ThemePreference.LIGHT}
+                    icon={<Sun className="h-4 w-4" />}
+                  >
                     Light
                   </SelectItem>
-                  <SelectItem icon={<Moon />} value="dark">
+                  <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
                     Dark
                   </SelectItem>
                 </SelectContent>
@@ -526,28 +530,26 @@ export function UserSettings({ onClose }: UserSettingsProps) {
         )}
         {activeSection === "personalization" && (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">
-                Name
-              </label>
+            <div>
+              <h3 className="text-lg font-medium">Name</h3>
               <Input
                 value={personalizationValues.name}
                 onChange={(event) =>
                   updatePersonalizationField("name", event.target.value)
                 }
                 placeholder="Set how Onyx should refer to you"
+                className="mt-2"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">
-                Role
-              </label>
+            <div>
+              <h3 className="text-lg font-medium">Role</h3>
               <Input
                 value={personalizationValues.role}
                 onChange={(event) =>
                   updatePersonalizationField("role", event.target.value)
                 }
                 placeholder="Share your role to tailor responses"
+                className="mt-2"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -608,7 +610,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
         {activeSection === "password" && (
           <div className="space-y-6">
             <div className="space-y-2">
-              <h3 className="text-xl font-medium">Change Password</h3>
+              <h3 className="text-lg font-medium">Change Password</h3>
               <SubLabel>
                 Enter your current password and new password to change your
                 password.
@@ -616,7 +618,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
             </div>
             <form onSubmit={handleChangePassword} className="w-full">
               <div className="w-full">
-                <label htmlFor="currentPassword" className="block mb-1">
+                <label
+                  htmlFor="currentPassword"
+                  className="text-sm font-medium"
+                >
                   Current Password
                 </label>
                 <Input
@@ -625,11 +630,11 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
               <div className="w-full">
-                <label htmlFor="newPassword" className="block mb-1">
+                <label htmlFor="newPassword" className="text-sm font-medium">
                   New Password
                 </label>
                 <Input
@@ -638,11 +643,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
               <div className="w-full">
-                <label htmlFor="confirmPassword" className="block mb-1">
+                <label
+                  htmlFor="confirmPassword"
+                  className="text-sm font-medium"
+                >
                   Confirm New Password
                 </label>
                 <Input
@@ -651,12 +659,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
-              <Button disabled={isLoading}>
-                {isLoading ? "Changing..." : "Change Password"}
-              </Button>
+              <div className="flex justify-end w-full">
+                <Button disabled={isLoading}>
+                  {isLoading ? "Changing..." : "Change Password"}
+                </Button>
+              </div>
             </form>
           </div>
         )}

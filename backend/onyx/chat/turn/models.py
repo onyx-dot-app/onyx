@@ -24,13 +24,7 @@ from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool import Tool
 
 # Type alias for all tool types accepted by the Agent
 AgentToolType = (
@@ -49,14 +43,12 @@ AgentToolType = (
 class ChatTurnDependencies:
     llm_model: Model
     model_settings: ModelSettings
+    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
-    tools: Sequence[FunctionTool]
+    tools: Sequence[Tool]
     redis_client: Redis
     emitter: Emitter
-    search_pipeline: SearchTool | None = None
-    image_generation_tool: ImageGenerationTool | None = None
-    okta_profile_tool: OktaProfileTool | None = None
 
 
 @dataclass

@@ -153,13 +153,22 @@ def image_generation(
         prompt: The text description of the image to generate
         shape: The desired image shape - 'square', 'portrait', or 'landscape'
     """
-    image_generation_tool_instance = (
-        run_context.context.run_dependencies.image_generation_tool
+    image_generation_tool_instance = next(
+        (
+            tool
+            for tool in run_context.context.run_dependencies.tools
+            if tool.name == ImageGenerationTool._NAME
+        ),
+        None,
     )
-    assert image_generation_tool_instance is not None
+    if image_generation_tool_instance is None:
+        raise ValueError("Image generation tool not found")
 
     generated_images: list[GeneratedImage] = _image_generation_core(
-        run_context, prompt, shape, image_generation_tool_instance
+        run_context,
+        prompt,
+        shape,
+        cast(ImageGenerationTool, image_generation_tool_instance),
     )
 
     # We should stop after this tool is called, so it doesn't matter what it returns

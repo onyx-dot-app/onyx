@@ -62,7 +62,6 @@ import geminiSVG from "../../../public/Gemini.svg";
 import gitbookDarkIcon from "../../../public/GitBookDark.png";
 import gitbookLightIcon from "../../../public/GitBookLight.png";
 import githubLightIcon from "../../../public/Github.png";
-import githubDarkIcon from "../../../public/GithubDarkMode.png";
 import gongIcon from "../../../public/Gong.png";
 import googleIcon from "../../../public/Google.png";
 import googleCloudStorageIcon from "../../../public/GoogleCloudStorage.png";
@@ -147,36 +146,80 @@ const createIcon = (
   return IconWrapper;
 };
 
-// Helper to create simple logo icon components
-const createLogoIcon = (src: string | StaticImageData) => {
+/**
+ * Creates a logo icon component that automatically supports dark mode adaptations.
+ *
+ * Depending on the options provided, the returned component handles:
+ * 1. Light/Dark variants: If both `src` and `darkSrc` are provided, displays the
+ *    appropriate image based on the current color theme.
+ * 2. Monochromatic inversion: If `monochromatic` is true, applies a CSS color inversion
+ *    in dark mode for a monochrome icon appearance.
+ * 3. Static icon: If only `src` is provided, renders the image without dark mode adaptation.
+ *
+ * @param src - The image or SVG source used for the icon (light/default mode).
+ * @param options - Optional settings:
+ *   - darkSrc: The image or SVG source used specifically for dark mode.
+ *   - monochromatic: If true, applies a CSS inversion in dark mode for monochrome logos.
+ *   - sizeAdjustment: Number to add to the icon size (e.g., 4 to make icon larger).
+ *   - classNameAddition: Additional CSS classes to apply (e.g., '-m-0.5' for margin).
+ * @returns A React functional component that accepts {@link IconProps} and renders
+ *          the logo with dark mode handling as needed.
+ */
+const createLogoIcon = (
+  src: string | StaticImageData,
+  options?: {
+    darkSrc?: string | StaticImageData;
+    monochromatic?: boolean;
+    sizeAdjustment?: number;
+    classNameAddition?: string;
+  }
+) => {
+  const {
+    darkSrc,
+    monochromatic,
+    sizeAdjustment = 0,
+    classNameAddition = "",
+  } = options || {};
+
   const LogoIconWrapper = ({
     size = 16,
     className = defaultTailwindCSS,
-  }: IconProps) => <LogoIcon size={size} className={className} src={src} />;
+  }: IconProps) => {
+    const adjustedSize = size + sizeAdjustment;
+
+    // Build className dynamically (only apply monochromatic if no darkSrc)
+    const monochromaticClass = !darkSrc && monochromatic ? "dark:invert" : "";
+    const finalClassName = [className, classNameAddition, monochromaticClass]
+      .filter(Boolean)
+      .join(" ");
+
+    // If darkSrc is provided, use CSS-based dark mode switching
+    // This avoids hydration issues and content flashing since next-themes
+    // sets the .dark class before React hydrates
+    if (darkSrc) {
+      return (
+        <>
+          <LogoIcon
+            size={adjustedSize}
+            className={`${finalClassName} dark:hidden`}
+            src={src}
+          />
+          <LogoIcon
+            size={adjustedSize}
+            className={`${finalClassName} hidden dark:block`}
+            src={darkSrc}
+          />
+        </>
+      );
+    }
+
+    return (
+      <LogoIcon size={adjustedSize} className={finalClassName} src={src} />
+    );
+  };
+
   LogoIconWrapper.displayName = "LogoIconWrapper";
   return LogoIconWrapper;
-};
-
-// Helper to create logo icons with dark mode variants
-const createDarkModeLogoIcon = (
-  lightSrc: StaticImageData,
-  darkSrc: StaticImageData
-) => {
-  const DarkModeLogoIcon = ({
-    size = 16,
-    className = defaultTailwindCSS,
-  }: IconProps) => (
-    <div className="flex items-center justify-center">
-      <div className="dark:hidden">
-        <LogoIcon size={size} className={className} src={lightSrc} />
-      </div>
-      <div className="hidden dark:block">
-        <LogoIcon size={size} className={className} src={darkSrc} />
-      </div>
-    </div>
-  );
-  DarkModeLogoIcon.displayName = "DarkModeLogoIcon";
-  return DarkModeLogoIcon;
 };
 
 // ============================================================================
@@ -2800,16 +2843,10 @@ export const ClickupIcon = createLogoIcon(clickupIcon);
 export const CohereIcon = createLogoIcon(cohereIcon);
 export const ColorDiscordIcon = createLogoIcon(discordIcon);
 export const ColorSlackIcon = createLogoIcon(slackIcon);
-export const ConfluenceIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon
-    size={size + 4}
-    className={`${className} -m-0.5`}
-    src={confluenceSVG}
-  />
-);
+export const ConfluenceIcon = createLogoIcon(confluenceSVG, {
+  sizeAdjustment: 4,
+  classNameAddition: "-m-0.5",
+});
 export const DeepseekIcon = createLogoIcon(deepseekSVG);
 export const DiscourseIcon = createLogoIcon(discourseIcon);
 export const Document360Icon = createLogoIcon(document360Icon);
@@ -2818,38 +2855,30 @@ export const EgnyteIcon = createLogoIcon(egnyteIcon);
 export const FirefliesIcon = createLogoIcon(firefliesIcon);
 export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
 export const GeminiIcon = createLogoIcon(geminiSVG);
-export const GitbookIcon = createDarkModeLogoIcon(
-  gitbookDarkIcon,
-  gitbookLightIcon
-);
-export const GithubIcon = createDarkModeLogoIcon(
-  githubLightIcon,
-  githubDarkIcon
-);
+export const GitbookIcon = createLogoIcon(gitbookDarkIcon, {
+  darkSrc: gitbookLightIcon,
+});
+export const GithubIcon = createLogoIcon(githubLightIcon, {
+  monochromatic: true,
+});
 export const GitlabIcon = createLogoIcon(gitlabIcon);
 export const GmailIcon = createLogoIcon(gmailIcon);
 export const GongIcon = createLogoIcon(gongIcon);
 export const GoogleDriveIcon = createLogoIcon(googleDriveIcon);
 export const GoogleIcon = createLogoIcon(googleIcon);
 export const GoogleSitesIcon = createLogoIcon(googleSitesIcon);
-export const GoogleStorageIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon
-    size={size + 4}
-    className={`${className} -m-0.5`}
-    src={googleCloudStorageIcon}
-  />
-);
-export const GuruIcon = createLogoIcon(guruIcon);
+export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
+  sizeAdjustment: 4,
+  classNameAddition: "-m-0.5",
+});
+export const GuruIcon = createLogoIcon(guruIcon, { monochromatic: true });
 export const HighspotIcon = createLogoIcon(highspotIcon);
 export const HubSpotIcon = createLogoIcon(hubSpotIcon);
 export const JiraIcon = createLogoIcon(jiraSVG);
 export const KimiIcon = createLogoIcon(kimiIcon);
-export const LinearIcon = createLogoIcon(linearIcon);
+export const LinearIcon = createLogoIcon(linearIcon, { monochromatic: true });
 export const LiteLLMIcon = createLogoIcon(litellmIcon);
-export const LoopioIcon = createLogoIcon(loopioIcon);
+export const LoopioIcon = createLogoIcon(loopioIcon, { monochromatic: true });
 export const MediaWikiIcon = createLogoIcon(mediawikiIcon);
 export const MetaIcon = createLogoIcon(metaSVG);
 export const MicrosoftIcon = createLogoIcon(microsoftIcon);
@@ -2857,7 +2886,7 @@ export const MicrosoftIconSVG = createLogoIcon(microsoftSVG);
 export const MistralIcon = createLogoIcon(mistralSVG);
 export const MixedBreadIcon = createLogoIcon(mixedBreadSVG);
 export const NomicIcon = createLogoIcon(nomicSVG);
-export const NotionIcon = createLogoIcon(notionIcon);
+export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
 export const OpenAIISVG = ({
@@ -2880,7 +2909,7 @@ export const OpenAIISVG = ({
     />
   </svg>
 );
-export const OpenAIIcon = createLogoIcon(openAISVG);
+export const OpenAIIcon = createLogoIcon(openAISVG, { monochromatic: true });
 export const OpenAISVG = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2900,16 +2929,10 @@ export const OpenAISVG = ({
   );
 };
 export const OpenSourceIcon = createLogoIcon(openSourceIcon);
-export const OutlineIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon
-    size={size + 4}
-    className={`${className} -m-0.5`}
-    src={outlinePNG}
-  />
-);
+export const OutlineIcon = createLogoIcon(outlinePNG, {
+  sizeAdjustment: 4,
+  classNameAddition: "-m-0.5",
+});
 export const ProductboardIcon = createLogoIcon(productboardIcon);
 export const QwenIcon = createLogoIcon(qwenSVG);
 export const R2Icon = createLogoIcon(r2Icon);

@@ -32,7 +32,10 @@ const variantClasses = (active?: boolean) =>
         disabled: [],
       },
       internal: {
-        enabled: [],
+        enabled: [
+          active && "bg-background-tint-00",
+          "hover:bg-background-tint-02",
+        ],
         disabled: [],
       },
     },
@@ -102,8 +105,11 @@ const textClasses = (active?: boolean) =>
         disabled: ["text-text-01"],
       },
       internal: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          active ? "text-text-05" : "text-text-03",
+          "group-hover/Button:text-text-04",
+        ],
+        disabled: ["text-text-01"],
       },
     },
     action: {
@@ -166,8 +172,11 @@ const iconClasses = (active?: boolean) =>
         disabled: ["stroke-text-01"],
       },
       internal: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          active ? "stroke-text-05" : "stroke-text-03",
+          "group-hover/Button:stroke-text-04",
+        ],
+        disabled: ["stroke-text-01"],
       },
     },
     action: {
@@ -229,6 +238,9 @@ export interface ButtonProps
   leftIcon?: React.FunctionComponent<SvgProps>;
   rightIcon?: React.FunctionComponent<SvgProps>;
 
+  includeLeftSpacer?: boolean;
+  includeRightSpacer?: boolean;
+
   href?: string;
 }
 
@@ -247,6 +259,9 @@ export default function Button({
 
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
+
+  includeLeftSpacer = true,
+  includeRightSpacer = true,
 
   href,
   children,
@@ -283,7 +298,7 @@ export default function Button({
   const content = (
     <button
       className={cn(
-        "p-spacing-interline h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-spacing-inline",
+        "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1",
         variantClasses(active)[variant][subvariant][abled],
         className
       )}
@@ -299,9 +314,9 @@ export default function Button({
             )}
           />
         </div>
-      ) : (
+      ) : includeLeftSpacer ? (
         spacer
-      )}
+      ) : null}
       {typeof children === "string" ? (
         <Text
           className={cn(
@@ -323,9 +338,9 @@ export default function Button({
             )}
           />
         </div>
-      ) : (
+      ) : includeRightSpacer ? (
         spacer
-      )}
+      ) : null}
     </button>
   );
 

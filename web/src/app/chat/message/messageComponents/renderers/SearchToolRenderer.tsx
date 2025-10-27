@@ -223,11 +223,11 @@ export const SearchToolRenderer: MessageRenderer<
     icon,
     status,
     content: (
-      <div className="flex flex-col py-padding-button gap-spacing-interline">
+      <div className="flex flex-col py-3 gap-2">
         <Text text02 secondaryBody>
           Queries
         </Text>
-        <div className="flex flex-wrap gap-spacing-interline pl-1">
+        <div className="flex flex-wrap gap-2 pl-1">
           {queries.slice(0, queriesToShow).map((query, index) => (
             <div
               key={index}

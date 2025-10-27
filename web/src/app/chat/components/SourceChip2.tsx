@@ -29,7 +29,7 @@ export function SourceChip2({
     <button
       onClick={onClick}
       className={cn(
-        "max-w-[15rem] p-spacing-inline bg-background-tint-03 hover:bg-background-tint-04 rounded-full justify-center items-center flex flex-row transition-colors duration-200",
+        "max-w-[15rem] p-1 bg-background-tint-03 hover:bg-background-tint-04 rounded-full justify-center items-center flex flex-row transition-colors duration-200",
         includeAnimation && isNew && "animate-fade-in-scale"
       )}
     >

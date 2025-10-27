@@ -45,7 +45,7 @@ export default function AddInstructionModal() {
       description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
       xs
     >
-      <div className="bg-background-tint-01 p-spacing-paragraph">
+      <div className="bg-background-tint-01 p-4">
         <Textarea
           value={instructionText}
           onChange={(e) => setInstructionText(e.target.value)}
@@ -53,7 +53,7 @@ export default function AddInstructionModal() {
           className="min-h-[140px] border-border-01 bg-background-neutral-00"
         />
       </div>
-      <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">
+      <div className="flex flex-row justify-end gap-2 p-4">
         <Button secondary onClick={onClose}>
           Cancel
         </Button>

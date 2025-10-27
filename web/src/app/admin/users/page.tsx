@@ -40,8 +40,7 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
       : value.toLocaleString();
 
   return (
-    // <div className="flex items-center gap-spacing-inline-mini">
-    <div className="flex items-center gap-spacing-inline px-spacing-inline py-spacing-interline-mini rounded-06">
+    <div className="flex items-center gap-1 px-1 py-0.5 rounded-06">
       <Text mainUiMuted text03>
         {label}
       </Text>
@@ -160,7 +159,7 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center gap-spacing-inline">
+            <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
               <Button
                 leftIcon={SvgDownloadCloud}
@@ -198,7 +197,7 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center gap-spacing-inline">
+            <div className="flex justify-between items-center gap-1">
               <CardTitle>Invited Users</CardTitle>
               <CountDisplay
                 label="Total invited"
@@ -223,7 +222,7 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center gap-spacing-inline">
+              <div className="flex justify-between items-center gap-1">
                 <CardTitle>Pending Users</CardTitle>
                 <CountDisplay
                   label="Total pending"
@@ -259,7 +258,7 @@ const SearchableTables = () => {
       {isDownloadingUsers && <Spinner />}
       {popup}
       <div className="flex flex-col gap-y-4">
-        <div className="flex flex-row items-center gap-spacing-interline">
+        <div className="flex flex-row items-center gap-2">
           <InputTypeIn
             placeholder="Search"
             value={query}
@@ -350,7 +349,7 @@ const AddUserButton = ({
           title="Bulk Add Users"
           onOutsideClick={() => setBulkAddUsersModal(false)}
         >
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Text>
               Add the email addresses to import, separated by whitespaces.
               Invited users will be able to login to this domain with their

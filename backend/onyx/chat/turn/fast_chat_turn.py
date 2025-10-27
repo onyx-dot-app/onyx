@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -10,6 +11,9 @@ from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
+from onyx.agents.agent_sdk.monkey_patches import (
+    monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
+)
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
@@ -38,6 +42,9 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
+from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+from onyx.tools.force import ForceUseTool
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
@@ -50,38 +57,41 @@ def _run_agent_loop(
     chat_session_id: UUID,
     ctx: ChatTurnContext,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
 ) -> None:
+    monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
     # Split messages into three parts for clear tracking
     # TODO: Think about terminal tool calls like image gen
     # in multi turn conversations
     chat_history = messages[:-1]
     current_user_message = messages[-1]
-    # Ensure current_user_message is a UserMessage
     if (
         not isinstance(current_user_message, dict)
         or current_user_message.get("role") != "user"
     ):
         raise ValueError("Last message must be a user message")
     current_user_message_typed: UserMessage = current_user_message  # type: ignore
-
-    # TODO: Figure out proper typing for agent_turn_messages that
-    # conforms to what is returned by SDK but still is compatible
-    # with our transformations
     agent_turn_messages: list[AgentSDKMessage] = []
-
     last_call_is_final = False
-    agent = Agent(
-        name="Assistant",
-        model=dependencies.llm_model,
-        tools=cast(list[AgentToolType], dependencies.tools),
-        model_settings=dependencies.model_settings,
-        tool_use_behavior="stop_on_first_tool",
-    )
+    first_iteration = True
 
     while not last_call_is_final:
-        # Build full context for agent
         current_messages = chat_history + [current_user_message] + agent_turn_messages
-
+        tool_choice = (
+            force_use_tool_to_function_tool_names(force_use_tool, dependencies.tools)
+            if first_iteration and force_use_tool
+            else None
+        ) or "auto"
+        model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
+        agent = Agent(
+            name="Assistant",
+            model=dependencies.llm_model,
+            tools=cast(
+                list[AgentToolType], tools_to_function_tools(dependencies.tools)
+            ),
+            model_settings=model_settings,
+            tool_use_behavior="stop_on_first_tool",
+        )
         agent_stream: SyncAgentStream = SyncAgentStream(
             agent=agent,
             input=current_messages,
@@ -94,14 +104,11 @@ def _run_agent_loop(
         all_messages_after_stream = streamed.to_input_list()
         # The new messages are everything after chat_history + current_user_message
         previous_message_count = len(chat_history) + 1
-        # Convert to list to avoid Sequence type issues and ensure proper typing
-        # Note: streamed.to_input_list() returns dict objects, we need to cast them
         agent_turn_messages = [
             cast(AgentSDKMessage, msg)
             for msg in all_messages_after_stream[previous_message_count:]
         ]
 
-        # agent_turn_messages = assign_citation_numbers(agent_turn_messages, ctx)
         agent_turn_messages = list(
             update_task_prompt(
                 current_user_message_typed,
@@ -124,6 +131,7 @@ def _run_agent_loop(
             tool.name in stopping_tools for tool in tool_call_events
         ):
             last_call_is_final = True
+        first_iteration = False
 
 
 def _fast_chat_turn_core(
@@ -133,6 +141,7 @@ def _fast_chat_turn_core(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
     # Dependency injectable argument for testing
     starter_context: ChatTurnContext | None = None,
 ) -> None:
@@ -171,6 +180,7 @@ def _fast_chat_turn_core(
             chat_session_id=chat_session_id,
             ctx=ctx,
             prompt_config=prompt_config,
+            force_use_tool=force_use_tool,
         )
     _emit_citations_for_final_answer(
         dependencies=dependencies,
@@ -202,6 +212,7 @@ def fast_chat_turn(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -211,6 +222,7 @@ def fast_chat_turn(
         message_id,
         research_type,
         prompt_config,
+        force_use_tool=force_use_tool,
     )
 
 

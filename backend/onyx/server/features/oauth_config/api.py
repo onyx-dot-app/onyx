@@ -18,7 +18,6 @@ from onyx.db.oauth_config import delete_user_oauth_token
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.oauth_config import get_oauth_configs
 from onyx.db.oauth_config import get_tools_by_oauth_config
-from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import update_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.federated_connectors.oauth_utils import generate_oauth_state
@@ -29,7 +28,6 @@ from onyx.server.features.oauth_config.models import OAuthConfigSnapshot
 from onyx.server.features.oauth_config.models import OAuthConfigUpdate
 from onyx.server.features.oauth_config.models import OAuthInitiateRequest
 from onyx.server.features.oauth_config.models import OAuthInitiateResponse
-from onyx.server.features.oauth_config.models import OAuthTokenStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -240,46 +238,6 @@ def handle_oauth_callback(
             redirect_url="/chat",
             error="An unexpected error occurred during OAuth callback",
         )
-
-
-@router.get("/status")
-def get_oauth_token_status(
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
-) -> list[OAuthTokenStatus]:
-    """
-    Get the OAuth token status for the current user across all OAuth configs.
-
-    Returns information about which OAuth configs the user has authenticated with
-    and whether their tokens are expired.
-    """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    oauth_configs = get_oauth_configs(db_session)
-    statuses = []
-
-    for oauth_config in oauth_configs:
-        user_token = get_user_oauth_token(oauth_config.id, user.id, db_session)
-
-        is_expired = False
-        expires_at = None
-        if user_token:
-            token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
-            is_expired = token_manager.is_token_expired(user_token.token_data)
-            expires_at = user_token.token_data.get("expires_at")
-
-        statuses.append(
-            OAuthTokenStatus(
-                oauth_config_id=oauth_config.id,
-                oauth_config_name=oauth_config.name,
-                has_token=True,
-                expires_at=expires_at,
-                is_expired=is_expired,
-            )
-        )
-
-    return statuses
 
 
 @router.delete("/{oauth_config_id}/token")

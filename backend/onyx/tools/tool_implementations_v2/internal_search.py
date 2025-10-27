@@ -165,13 +165,20 @@ def internal_search(
     """
     Tool for searching over the user's internal knowledge base.
     """
-    search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
+    search_pipeline_instance = next(
+        (
+            tool
+            for tool in run_context.context.run_dependencies.tools
+            if tool.name == SearchTool._NAME
+        ),
+        None,
+    )
     if search_pipeline_instance is None:
-        raise RuntimeError("Search tool not available in context")
+        raise ValueError("Search tool not found")
 
     # Call the core function
     retrieved_docs = _internal_search_core(
-        run_context, queries, search_pipeline_instance
+        run_context, queries, cast(SearchTool, search_pipeline_instance)
     )
 
     return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])

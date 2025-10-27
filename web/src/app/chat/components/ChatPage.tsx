@@ -19,7 +19,6 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
@@ -50,6 +49,7 @@ import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
+import { useFeedbackController } from "@/app/chat/hooks/useFeedbackController";
 import {
   useChatSessionStore,
   useMaxTokens,
@@ -79,6 +79,7 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
+import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -274,9 +275,8 @@ export function ChatPage({
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
-  const [currentFeedback, setCurrentFeedback] = useState<
-    [FeedbackType, number] | null
-  >(null);
+  // Feedback controller with optimistic updates and error handling
+  const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -752,7 +752,7 @@ export function ChatPage({
 
       <ChatPopup />
 
-      <FeedbackModal setPopup={setPopup} />
+      <FeedbackModal />
 
       <ChatSearchModal
         open={isChatSearchModalOpen}
@@ -831,7 +831,7 @@ export function ChatPage({
                       deepResearchEnabled={deepResearchEnabled}
                       currentMessageFiles={currentMessageFiles}
                       setPresentingDocument={setPresentingDocument}
-                      setCurrentFeedback={setCurrentFeedback}
+                      handleFeedbackChange={handleFeedbackChange}
                       onSubmit={onSubmit}
                       onMessageSelection={onMessageSelection}
                       stopGenerating={stopGenerating}
@@ -875,7 +875,7 @@ export function ChatPage({
                       className={cn(
                         "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
                         showCenteredHero
-                          ? "h-full grid grid-rows-[0.85fr_auto_1.15fr]"
+                          ? "h-full grid grid-rows-[1fr_auto_1fr]"
                           : "mb-8"
                       )}
                     >
@@ -895,6 +895,11 @@ export function ChatPage({
                             setPresentingDocument={setPresentingDocument}
                           />
                         )}
+
+                        <UnconfiguredLlmProviderText
+                          showConfigureAPIKey={handleShowApiKeyModal}
+                        />
+
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -903,7 +908,6 @@ export function ChatPage({
                           llmManager={llmManager}
                           removeDocs={() => setSelectedDocuments([])}
                           retrievalEnabled={retrievalEnabled}
-                          showConfigureAPIKey={handleShowApiKeyModal}
                           selectedDocuments={selectedDocuments}
                           message={message}
                           setMessage={setMessage}

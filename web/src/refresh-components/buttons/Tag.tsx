@@ -36,18 +36,18 @@ export default function Tag({
     <button
       type="button"
       className={cn(
-        "p-spacing-interline-mini rounded-08 group w-fit flex items-center gap-spacing-inline transition-all duration-200 ease-in-out",
+        "p-1.5 rounded-08 group w-fit flex items-center gap-1 transition-all duration-200 ease-in-out",
         getVariantClasses(active),
         className
       )}
       onClick={onClick}
     >
       {/* Icons container */}
-      <div className="flex items-center -space-x-spacing-inline">
+      <div className="flex items-center -space-x-1">
         {visibleIcons.map((Icon, index) => (
           <div
             key={index}
-            className="relative bg-background-tint-00 border border-background-tint-01 p-spacing-inline-mini rounded-04"
+            className="relative bg-background-tint-00 border border-background-tint-01 p-0.5 rounded-04"
             style={{ zIndex: visibleIcons.length - index }}
           >
             <Icon className="w-[0.6rem] h-[0.6rem] stroke-text-04" />
