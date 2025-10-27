@@ -101,8 +101,19 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
   const { user, authTypeMetadata } = authResult;
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
-  // Check if user has admin role (only if auth is not disabled)
-  if (!authDisabled && user?.role === UserRole.BASIC) {
+  // Allowlist of roles that can access admin pages (all roles except BASIC)
+  const ADMIN_ALLOWED_ROLES = [
+    UserRole.ADMIN,
+    UserRole.CURATOR,
+    UserRole.GLOBAL_CURATOR,
+  ];
+
+  // Check if user has an allowed role (only if auth is not disabled)
+  if (
+    !authDisabled &&
+    user &&
+    !ADMIN_ALLOWED_ROLES.includes(user.role as UserRole)
+  ) {
     return {
       user,
       authTypeMetadata,
