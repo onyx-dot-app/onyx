@@ -270,7 +270,7 @@ const SignedUpUserTable = ({
           <IconButton secondary icon={SvgMoreHorizontal} />
         </PopoverTrigger>
         <PopoverContent className="w-48">
-          <div className="grid gap-spacing-inline">
+          <div className="grid gap-1">
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton
                 user={user}
