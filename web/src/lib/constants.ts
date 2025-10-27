@@ -119,7 +119,7 @@ export const CREDENTIAL_JSON = "credential_json";
 export const MODAL_ROOT_ID = "modal-root";
 
 export const ANONYMOUS_USER_NAME = "Anonymous";
-export const UNNAMED_CHAT = "Unnamed Chat";
+export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_ASSISTANT_ID = 0;
 export const GENERAL_ASSISTANT_ID = -1;

@@ -1,7 +1,5 @@
 "use client";
 
-import Prism from "prismjs";
-
 import { humanReadableFormat } from "@/lib/time";
 import { BackendChatSession } from "../../interfaces";
 import { processRawChatHistory } from "../../services/lib";
@@ -18,6 +16,7 @@ import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import Link from "next/link";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 function BackToOnyxButton({
   documentSidebarVisible,
@@ -62,7 +61,6 @@ export function SharedChatDisplay({
     useState<MinimalOnyxDocument | null>(null);
 
   useEffect(() => {
-    Prism.highlightAll();
     setIsReady(true);
   }, []);
   if (!chatSession) {
@@ -176,7 +174,7 @@ export function SharedChatDisplay({
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description || `Unnamed Chat`}
+                      {chatSession.description || UNNAMED_CHAT}
                     </h1>
                     <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}

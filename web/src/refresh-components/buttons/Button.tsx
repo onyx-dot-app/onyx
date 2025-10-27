@@ -238,6 +238,9 @@ export interface ButtonProps
   leftIcon?: React.FunctionComponent<SvgProps>;
   rightIcon?: React.FunctionComponent<SvgProps>;
 
+  includeLeftSpacer?: boolean;
+  includeRightSpacer?: boolean;
+
   href?: string;
 }
 
@@ -256,6 +259,9 @@ export default function Button({
 
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
+
+  includeLeftSpacer = true,
+  includeRightSpacer = true,
 
   href,
   children,
@@ -308,9 +314,9 @@ export default function Button({
             )}
           />
         </div>
-      ) : (
+      ) : includeLeftSpacer ? (
         spacer
-      )}
+      ) : null}
       {typeof children === "string" ? (
         <Text
           className={cn(
@@ -332,9 +338,9 @@ export default function Button({
             )}
           />
         </div>
-      ) : (
+      ) : includeRightSpacer ? (
         spacer
-      )}
+      ) : null}
     </button>
   );
 

@@ -255,6 +255,7 @@
   --background-neutral-inverted-02: var(--grey-85);
   --background-neutral-inverted-01: var(--grey-90);
   --background-neutral-inverted-00: var(--grey-100);
+  --background-neutral-light-00: var(--grey-00);
   --background-neutral-light-03: var(--grey-10);
   --background-neutral-dark-03: var(--grey-80);
 
@@ -383,6 +384,7 @@
   --background-neutral-inverted-02: var(--grey-06);
   --background-neutral-inverted-01: var(--grey-02);
   --background-neutral-inverted-00: var(--grey-00);
+  --background-neutral-light-00: var(--grey-00);
   --background-neutral-light-03: var(--grey-10);
   --background-neutral-dark-03: var(--grey-80);
 

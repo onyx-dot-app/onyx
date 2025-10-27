@@ -11,6 +11,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 export default function ProjectChatSessionList() {
   const {
@@ -95,7 +96,7 @@ export default function ProjectChatSessionList() {
                           className="truncate"
                           title={chat.name}
                         >
-                          {chat.name || "Unnamed Chat"}
+                          {chat.name || UNNAMED_CHAT}
                         </Text>
                       </div>
                       <div className="flex items-center">
