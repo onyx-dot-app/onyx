@@ -6,7 +6,6 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
-from onyx.configs.constants import MessageType
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -106,18 +105,20 @@ class ChatSessionManager:
         if not chat_session:
             return streamed_response
 
-        chat_history = ChatSessionManager.get_chat_history(
-            chat_session=chat_session,
-            user_performing_action=user_performing_action,
-        )
+        # TODO: ideally we would get the research answer purpose from the chat history
+        # but atm the field needed would not be used outside of testing, so we're not adding it.
+        # chat_history = ChatSessionManager.get_chat_history(
+        #     chat_session=chat_session,
+        #     user_performing_action=user_performing_action,
+        # )
 
-        for message_obj in chat_history:
-            if message_obj.message_type == MessageType.ASSISTANT:
-                streamed_response.research_answer_purpose = (
-                    message_obj.research_answer_purpose
-                )
-                streamed_response.assistant_message_id = message_obj.id
-                break
+        # for message_obj in chat_history:
+        #     if message_obj.message_type == MessageType.ASSISTANT:
+        #         streamed_response.research_answer_purpose = (
+        #             message_obj.research_answer_purpose
+        #         )
+        #         streamed_response.assistant_message_id = message_obj.id
+        #         break
 
         return streamed_response
 

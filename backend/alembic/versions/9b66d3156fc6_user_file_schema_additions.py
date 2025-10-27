@@ -181,12 +181,21 @@ def upgrade() -> None:
             sa.Column("user_file_id", psql.UUID(as_uuid=True), nullable=False),
             sa.PrimaryKeyConstraint("project_id", "user_file_id"),
         )
+        logger.info("Created project__user_file table")
+
+    # Only create the index if it doesn't exist
+    existing_indexes = [
+        ix["name"] for ix in inspector.get_indexes("project__user_file")
+    ]
+    if "idx_project__user_file_user_file_id" not in existing_indexes:
         op.create_index(
             "idx_project__user_file_user_file_id",
             "project__user_file",
             ["user_file_id"],
         )
-        logger.info("Created project__user_file table")
+        logger.info(
+            "Created index idx_project__user_file_user_file_id on project__user_file"
+        )
 
     logger.info("Migration 1 (schema additions) completed successfully")
 
@@ -201,7 +210,7 @@ def downgrade() -> None:
 
     # Drop project__user_file table
     if "project__user_file" in inspector.get_table_names():
-        op.drop_index("idx_project__user_file_user_file_id", "project__user_file")
+        # op.drop_index("idx_project__user_file_user_file_id", "project__user_file")
         op.drop_table("project__user_file")
         logger.info("Dropped project__user_file table")
 
