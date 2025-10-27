@@ -136,7 +136,8 @@ def _get_message_body(payload: dict[str, Any]) -> str:
         if not isinstance(part, dict):
             continue
 
-        for child in part.get("parts", []):
+        children = part.get("parts", [])
+        for child in reversed(children):
             stack.append(child)
 
         mime_type = part.get("mimeType")
