@@ -2,6 +2,7 @@ import abc
 from collections.abc import Iterator
 from typing import Literal
 
+from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
@@ -86,6 +87,7 @@ class LLM(abc.ABC):
         if LOG_ONYX_MODEL_INTERACTIONS:
             log_prompt(prompt)
 
+    @traced(name="invoke llm", type="llm")
     def invoke(
         self,
         prompt: LanguageModelInput,
