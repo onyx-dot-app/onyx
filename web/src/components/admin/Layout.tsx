@@ -1,26 +1,14 @@
 import { redirect } from "next/navigation";
-import { requireAdminAuth } from "@/lib/auth/requireAuth";
-import { ClientLayout } from "./ClientLayout";
-import {
-  NEXT_PUBLIC_CLOUD_ENABLED,
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-} from "@/lib/constants";
-import { AnnouncementBanner } from "../header/AnnouncementBanner";
+
+import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "../../refresh-components/contexts/ChatContext";
+import { AuthLayout } from "@/components/admin/AuthLayout";
+import {
+  SidebarLayout,
+  getSidebarUser,
+} from "@/components/admin/SidebarLayout";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
-  // Check authentication and admin role
-  const authResult = await requireAdminAuth();
-
-  // If auth check returned a redirect, redirect immediately
-  if (authResult.redirect) {
-    return redirect(authResult.redirect);
-  }
-
-<<<<<<< HEAD
-  const { user } = authResult;
-=======
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
   const authDisabled = authTypeMetadata?.authType === "disabled";
@@ -37,10 +25,10 @@ export async function Layout({ children }: { children: React.ReactNode }) {
       return redirect("/auth/waiting-on-verification");
     }
   }
->>>>>>> 6357047ac (updates)
 
   // Fetch chat data (will verify auth again - defense in depth)
   const data = await fetchChatData({});
+  const user = await getSidebarUser();
   if ("redirect" in data) {
     redirect(data.redirect);
   }
@@ -61,31 +49,26 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     projects,
   } = data;
 
-  return (
-    <ChatProvider
-      inputPrompts={inputPrompts}
-      chatSessions={chatSessions}
-      proSearchToggled={proSearchToggled}
-      sidebarInitiallyVisible={sidebarInitiallyVisible}
-      availableSources={availableSources}
-      ccPairs={ccPairs}
-      documentSets={documentSets}
-      availableTools={availableTools}
-      tags={tags}
-      availableDocumentSets={documentSets}
-      availableTags={tags}
-      llmProviders={llmProviders}
-      shouldShowWelcomeModal={shouldShowWelcomeModal}
-      defaultAssistantId={defaultAssistantId}
-    >
-      <ClientLayout
-        enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
-        enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
-        user={user}
+  return await AuthLayout({
+    children: (
+      <ChatProvider
+        inputPrompts={inputPrompts}
+        chatSessions={chatSessions}
+        proSearchToggled={proSearchToggled}
+        sidebarInitiallyVisible={sidebarInitiallyVisible}
+        availableSources={availableSources}
+        ccPairs={ccPairs}
+        documentSets={documentSets}
+        availableTools={availableTools}
+        tags={tags}
+        availableDocumentSets={documentSets}
+        availableTags={tags}
+        llmProviders={llmProviders}
+        shouldShowWelcomeModal={shouldShowWelcomeModal}
+        defaultAssistantId={defaultAssistantId}
       >
-        <AnnouncementBanner />
-        {children}
-      </ClientLayout>
-    </ChatProvider>
-  );
+        <SidebarLayout user={user}>{children}</SidebarLayout>
+      </ChatProvider>
+    ),
+  });
 }
