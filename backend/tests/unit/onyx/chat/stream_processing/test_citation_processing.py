@@ -97,7 +97,6 @@ def process_text(
 def test_citation_extraction_v2(mock_data: tuple[list[LlmDoc], dict[str, int]]) -> None:
     input_tokens = ["Hi", "[", "1", "].\n\n"]
     final_answer_text, citations = process_text(input_tokens, mock_data)
-    # Check that the text contains a citation in the format [[number]](url)
     citation_pattern = r"\[\[\d+\]\]\([^\)]+\)"
     assert re.search(
         citation_pattern, final_answer_text
