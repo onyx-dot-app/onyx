@@ -37,14 +37,14 @@ export default function ProjectChatSessionList() {
 
   return (
     <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-6">
-      <div className="flex items-center pl-spacing-interline">
+      <div className="flex items-center pl-2">
         <Text text02 secondaryBody>
           Recent Chats
         </Text>
       </div>
 
       {projectChats.length === 0 ? (
-        <Text text02 secondaryBody className="p-spacing-interline">
+        <Text text02 secondaryBody className="p-2">
           No chats yet.
         </Text>
       ) : (
@@ -59,7 +59,7 @@ export default function ProjectChatSessionList() {
             >
               <div
                 className={cn(
-                  "w-full rounded-08 py-2 transition-colors p-spacing-interline-mini",
+                  "w-full rounded-08 py-2 transition-colors p-1.5",
                   hoveredChatId === chat.id && "bg-background-tint-02"
                 )}
               >

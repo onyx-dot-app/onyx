@@ -2,7 +2,7 @@ import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useState } from "react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
@@ -55,8 +55,7 @@ const DeleteUserButton = ({
         className={className}
         onClick={() => setShowDeleteModal(true)}
         disabled={isMutating}
-        size="sm"
-        variant="destructive"
+        danger
       >
         {children}
       </Button>

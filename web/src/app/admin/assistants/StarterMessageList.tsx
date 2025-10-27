@@ -55,7 +55,7 @@ export default function StarterMessagesList({
   }, [values]);
 
   return (
-    <div className="flex flex-col gap-spacing-interline">
+    <div className="flex flex-col gap-2">
       {values.map((starterMessage, index) => (
         <div key={index} className="flex items-center gap-2">
           <TextFormField

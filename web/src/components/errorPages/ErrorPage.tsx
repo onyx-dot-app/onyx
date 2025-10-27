@@ -5,7 +5,7 @@ import SvgAlertCircle from "@/icons/alert-circle";
 export default function Error() {
   return (
     <ErrorPageLayout>
-      <div className="flex flex-row items-center gap-spacing-interline">
+      <div className="flex flex-row items-center gap-2">
         <Text headingH2>We encountered an issue</Text>
         <SvgAlertCircle className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
       </div>

@@ -168,9 +168,9 @@ export function Explorer({
   ]);
 
   return (
-    <div className="flex flex-col gap-padding-content">
+    <div className="flex flex-col gap-6">
       {popup}
-      <div className="flex flex-col justify-center gap-spacing-interline">
+      <div className="flex flex-col justify-center gap-2">
         <InputTypeIn
           placeholder="Find documents based on title / content..."
           value={query}
