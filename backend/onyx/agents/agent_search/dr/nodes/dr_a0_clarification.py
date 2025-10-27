@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 from typing import cast
 
+from braintrust import traced
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import merge_content
 from langchain_core.runnables import RunnableConfig
@@ -684,6 +685,7 @@ def clarifier(
                 system_prompt_to_use = assistant_system_prompt
                 user_prompt_to_use = decision_prompt + assistant_task_prompt
 
+            @traced(name="clarifier stream and process", type="llm")
             def stream_and_process() -> BasicSearchProcessedStreamResults:
                 stream = graph_config.tooling.primary_llm.stream(
                     prompt=create_question_prompt(

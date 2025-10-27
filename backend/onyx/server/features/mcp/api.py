@@ -1503,32 +1503,6 @@ async def get_mcp_servers_for_admin(
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
 
 
-# @admin_router.get("/servers", response_model=MCPServersResponse)
-# def get_mcp_servers_for_admin(
-#     db: Session = Depends(get_session),
-#     user: User | None = Depends(current_curator_or_admin_user),
-# ) -> MCPServersResponse:
-#     """Get all MCP servers for admin display"""
-
-#     logger.info("Fetching all MCP servers for admin display")
-
-#     email = user.email if user else ""
-#     try:
-#         db_mcp_servers = get_all_mcp_servers(db)
-
-#         # Convert to API model format
-#         mcp_servers = [
-#             _db_mcp_server_to_api_mcp_server(db_server, email, db)
-#             for db_server in db_mcp_servers
-#         ]
-
-#         return MCPServersResponse(mcp_servers=mcp_servers)
-
-#     except Exception as e:
-#         logger.error(f"Failed to fetch MCP servers for admin: {type(e)}:{e}")
-#         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
-
-
 @admin_router.get("/server/{server_id}/db-tools")
 def get_mcp_server_db_tools(
     server_id: int,
