@@ -12,17 +12,19 @@ const MAX_DESCRIPTION_LENGTH = 300;
 const MemoizedToolCheckbox = memo(function MemoizedToolCheckbox({
   toolId,
   displayName,
-  description,  
+  description,
   isOwner,
   isAdmin,
+  isPublic,
 }: {
   toolId: number;
   displayName: string;
   description: string;
   isOwner: boolean;
   isAdmin: boolean;
+  isPublic: boolean;
 }) {
-  const isDisabled = !isOwner && !isAdmin;
+  const isDisabled = !isOwner && !isAdmin && !isPublic;
 
   return (
     <FastField name={`enabled_tools_map.${toolId}`}>
@@ -72,6 +74,7 @@ export const MemoizedToolList = memo(function MemoizedToolList({
             }
             isOwner={tool.user_id === user?.id}
             isAdmin={user?.role === UserRole.ADMIN}
+            isPublic={tool.is_public === true}
           />
         ))}
     </>
@@ -86,7 +89,7 @@ export const MemoizedMCPServerTools = memo(function MemoizedMCPServerTools({
 }: {
   serverId: number;
   serverTools: ToolSnapshot[];
-  user: User | null;
+  user?: User | null;
 }) {
   return (
     <div className="ml-7 space-y-2">
