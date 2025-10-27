@@ -102,10 +102,6 @@ def create_test_run_context(
 
     # Create test dependencies
     emitter = MockEmitter()
-    aggregated_context = MockAggregatedContext()
-    if global_iteration_responses:
-        aggregated_context.global_iteration_responses = global_iteration_responses
-
     run_dependencies = MockRunDependencies()
     run_dependencies.emitter = emitter
 
@@ -116,7 +112,7 @@ def create_test_run_context(
         research_type=ResearchType.THOUGHTFUL,
         current_run_step=current_run_step,
         iteration_instructions=iteration_instructions or [],
-        aggregated_context=aggregated_context,  # type: ignore[arg-type]
+        global_iteration_responses=global_iteration_responses or [],
         run_dependencies=run_dependencies,  # type: ignore[arg-type]
     )
 
@@ -174,9 +170,7 @@ def test_web_search_core_basic_functionality() -> None:
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction
     instruction = test_run_context.context.iteration_instructions[0]
@@ -188,7 +182,7 @@ def test_web_search_core_basic_functionality() -> None:
     )
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1
@@ -245,9 +239,7 @@ def test_web_fetch_core_basic_functionality() -> None:
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction
     instruction = test_run_context.context.iteration_instructions[0]
@@ -260,7 +252,7 @@ def test_web_fetch_core_basic_functionality() -> None:
     )
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1
@@ -269,10 +261,6 @@ def test_web_fetch_core_basic_functionality() -> None:
         == "Fetch content from URLs: https://example.com/1, https://example.com/2"
     )
     assert len(answer.cited_documents) == 2
-
-    # Verify cited_documents were added to the answer but NOT to aggregated_context.cited_documents
-    # (web fetch adds documents to the answer but not to the global cited_documents list)
-    assert len(test_run_context.context.aggregated_context.cited_documents) == 0
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
@@ -381,9 +369,7 @@ def test_web_search_core_multiple_queries() -> None:
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction contains both queries
     instruction = test_run_context.context.iteration_instructions[0]
@@ -394,7 +380,7 @@ def test_web_search_core_multiple_queries() -> None:
     assert "second query" in instruction.reasoning
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1

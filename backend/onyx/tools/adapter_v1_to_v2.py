@@ -67,7 +67,7 @@ async def _tool_run_wrapper(
             file_ids = custom_summary.tool_result.file_ids
         else:
             data = custom_summary.tool_result
-        run_context.context.aggregated_context.global_iteration_responses.append(
+        run_context.context.global_iteration_responses.append(
             IterationAnswer(
                 tool=tool.name,
                 tool_id=tool.id,

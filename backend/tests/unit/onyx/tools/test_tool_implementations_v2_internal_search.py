@@ -309,9 +309,7 @@ def test_internal_search_core_basic_functionality(
     # Verify context was updated (decorator increments current_run_step)
     assert fake_run_context.context.current_run_step == 2
     assert len(fake_run_context.context.iteration_instructions) == 1
-    assert (
-        len(fake_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(fake_run_context.context.global_iteration_responses) == 1
     # Verify inference sections were added to context
     assert len(fake_run_context.context.unordered_fetched_inference_sections) == 2
     assert (
@@ -339,7 +337,7 @@ def test_internal_search_core_basic_functionality(
     )
 
     # Check iteration answer
-    answer = fake_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = fake_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == SearchTool.__name__
     assert answer.tool_id == 1

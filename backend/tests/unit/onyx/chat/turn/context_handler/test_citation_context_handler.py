@@ -11,7 +11,6 @@ from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.context_handler.citation import (
@@ -93,12 +92,6 @@ def test_assign_citation_numbers_basic(
         message_id=1,
         research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
-        aggregated_context=AggregatedDRContext(
-            context="",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.num_docs_cited == 2
@@ -141,12 +134,6 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
         message_id=1,
         research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
-        aggregated_context=AggregatedDRContext(
-            context="",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.num_docs_cited == 0
@@ -201,14 +188,8 @@ def test_assign_citation_numbers_previous_tool_calls(
         message_id=1,
         research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
-        aggregated_context=AggregatedDRContext(
-            context="",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=2,
-        tool_calls_cited_count=1,
+        documents_processed_by_citation_context_handler=2,
+        tool_calls_processed_by_citation_context_handler=1,
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert len(result.new_llm_docs) == 1  # only one new document was cited
@@ -270,14 +251,8 @@ def test_assign_citation_numbers_parallel_tool_calls(
         message_id=1,
         research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
-        aggregated_context=AggregatedDRContext(
-            context="",
-            cited_documents=[],
-            is_internet_marker_dict={},
-            global_iteration_responses=[],
-        ),
-        documents_cited_count=0,
-        tool_calls_cited_count=0,
+        documents_processed_by_citation_context_handler=0,
+        tool_calls_processed_by_citation_context_handler=0,
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.num_docs_cited == 3

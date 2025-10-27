@@ -356,8 +356,7 @@ def test_custom_tool_iteration_instructions_and_answers(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Mock the HTTP response to return realistic data
     mock_response = MagicMock()
@@ -396,10 +395,8 @@ def test_custom_tool_iteration_instructions_and_answers(
     assert iteration_instruction.reasoning == f"Running {v1_tool.name}"
 
     # Verify IterationAnswer was added with realistic data from the tool response
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == v1_tool.name
     assert iteration_answer.tool_id == v1_tool.id
@@ -453,8 +450,7 @@ def test_custom_tool_csv_response_with_file_ids(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Mock the HTTP response to return CSV data
     mock_response = MagicMock()
@@ -502,10 +498,8 @@ def test_custom_tool_csv_response_with_file_ids(
     assert iteration_instruction.reasoning == f"Running {v1_tool.name}"
 
     # Verify IterationAnswer was added with CSV file_ids data
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == v1_tool.name
     assert iteration_answer.tool_id == v1_tool.id
@@ -552,8 +546,7 @@ def test_mcp_tool_iteration_instructions_and_answers(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Test the on_invoke_tool method
     test_args = '{"query": "test mcp search"}'
@@ -578,10 +571,8 @@ def test_mcp_tool_iteration_instructions_and_answers(
     assert iteration_instruction.reasoning == f"Running {mcp_tool.name}"
 
     # Verify IterationAnswer was added
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == mcp_tool.name
     assert iteration_answer.tool_id == mcp_tool.id

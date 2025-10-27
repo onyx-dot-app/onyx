@@ -107,7 +107,7 @@ def _web_search_core(
         dummy_inference_section_from_internet_search_result(r) for r in all_hits
     ]
 
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             tool=WebSearchTool.__name__,
             tool_id=get_tool_by_name(
@@ -198,7 +198,7 @@ def _open_url_core(
     run_context.context.unordered_fetched_inference_sections.extend(
         [dummy_inference_section_from_internet_content(d) for d in docs]
     )
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             # TODO: For now, we're using the web_search_tool_name since the web_fetch_tool_name is not a built-in tool
             tool=WebSearchTool.__name__,

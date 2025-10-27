@@ -765,21 +765,11 @@ def chat_turn_context(
     research_type: ResearchType,
 ) -> ChatTurnContext:
     """Fixture providing a ChatTurnContext with filler arguments for testing."""
-    from onyx.agents.agent_search.dr.models import AggregatedDRContext
     from onyx.chat.turn.models import ChatTurnContext
-
-    aggregated_context = AggregatedDRContext(
-        context="",
-        cited_documents=[],
-        is_internet_marker_dict={},
-        global_iteration_responses=[],
-    )
 
     return ChatTurnContext(
         chat_session_id=chat_session_id,
         message_id=message_id,
         research_type=research_type,
         run_dependencies=chat_turn_dependencies,
-        aggregated_context=aggregated_context,
-        iteration_instructions=[],
     )

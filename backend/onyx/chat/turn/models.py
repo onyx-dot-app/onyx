@@ -17,7 +17,7 @@ from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.models import AggregatedDRContext
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
@@ -59,17 +59,18 @@ class ChatTurnContext:
     message_id: int
     research_type: ResearchType
     run_dependencies: ChatTurnDependencies
-    aggregated_context: AggregatedDRContext
     current_run_step: int = 0
     iteration_instructions: list[IterationInstructions] = dataclasses.field(
         default_factory=list
     )
-    web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
+    global_iteration_responses: list[IterationAnswer] = dataclasses.field(
+        default_factory=list
+    )
     should_cite_documents: bool = False
-    documents_cited_count: int = 0
-    tool_calls_cited_count: int = 0
+    documents_processed_by_citation_context_handler: int = 0
+    tool_calls_processed_by_citation_context_handler: int = 0
     unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
         default_factory=list
     )
     ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
-    collected_citations: list[CitationInfo] = dataclasses.field(default_factory=list)
+    citations: list[CitationInfo] = dataclasses.field(default_factory=list)

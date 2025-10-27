@@ -25,8 +25,8 @@ def assign_citation_numbers_recent_tool_calls(
     ctx: ChatTurnContext,
 ) -> CitationAssignmentResult:
     updated_messages: list[AgentSDKMessage] = []
-    docs_cited_so_far = ctx.documents_cited_count
-    tool_calls_cited_so_far = ctx.tool_calls_cited_count
+    docs_fetched_so_far = ctx.documents_processed_by_citation_context_handler
+    tool_calls_cited_so_far = ctx.tool_calls_processed_by_citation_context_handler
     num_tool_calls_cited = 0
     num_docs_cited = 0
     curr_tool_call_idx = 0
@@ -55,7 +55,7 @@ def assign_citation_numbers_recent_tool_calls(
                             num_docs_cited += 1  # add 1 first so it's 1-indexed
                             updated_citation_number = True
                             doc.document_citation_number = (
-                                docs_cited_so_far + num_docs_cited
+                                docs_fetched_so_far + num_docs_cited
                             )
                     if updated_citation_number:
                         # Create updated function call output message

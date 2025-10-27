@@ -111,7 +111,7 @@ def _internal_search_core(
                             ),
                         )
                     )
-                    run_context.context.aggregated_context.global_iteration_responses.append(
+                    run_context.context.global_iteration_responses.append(
                         IterationAnswer(
                             tool=SearchTool.__name__,
                             tool_id=get_tool_by_name(

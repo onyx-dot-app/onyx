@@ -109,7 +109,7 @@ def _image_generation_core(
             reasoning="Generating images",
         )
     )
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             tool=image_generation_tool_instance.name,
             tool_id=image_generation_tool_instance.id,

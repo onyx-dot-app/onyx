@@ -538,15 +538,13 @@ def test_fast_chat_turn_citation_processing(
     )
 
     # Set up the chat turn context with citation-related data
-    chat_turn_context.aggregated_context.global_iteration_responses = [
-        fake_iteration_answer
-    ]
-    chat_turn_context.tool_calls_cited_count = 1
+    chat_turn_context.global_iteration_responses = [fake_iteration_answer]
+    chat_turn_context.tool_calls_processed_by_citation_context_handler = 1
     chat_turn_context.unordered_fetched_inference_sections = [fake_inference_section]
     chat_turn_context.ordered_fetched_documents = [
         create_test_llm_doc(document_citation_number=1)
     ]
-    chat_turn_context.collected_citations = [
+    chat_turn_context.citations = [
         CitationInfo(
             citation_num=1,
             document_id="test-doc-1",
