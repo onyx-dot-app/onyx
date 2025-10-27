@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
