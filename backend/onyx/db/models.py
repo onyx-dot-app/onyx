@@ -53,6 +53,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
 )
 from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
+from onyx.configs.constants import ChatSessionFeedback as ChatSessionFeedbackEnum
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -2091,6 +2092,12 @@ class ChatSession(Base):
 
     project: Mapped["UserProject"] = relationship(
         "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
+    )
+
+    # Trigger-maintained denormalized session feedback
+    # Automatically updated via database trigger when message feedback changes
+    feedback: Mapped[ChatSessionFeedbackEnum | None] = mapped_column(
+        Enum(ChatSessionFeedbackEnum, native_enum=False), nullable=True
     )
 
     # the latest "overrides" specified by the user. These take precedence over

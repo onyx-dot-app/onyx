@@ -105,21 +105,26 @@ class ChatSessionMinimal(BaseModel):
             "",
         )
 
-        list_of_message_feedbacks = [
-            feedback.feedback
-            for message in chat_session.messages
-            for feedback in message.chat_message_feedbacks
-            if feedback.feedback is not None
-        ]
-        session_feedback_type = None
-        if list_of_message_feedbacks:
-            if all(
-                fb == ChatMessageFeedbackEnum.LIKE for fb in list_of_message_feedbacks
+        # Use cached feedback if available (Stage 2a+)
+        if chat_session.feedback is not None:
+            session_feedback_type = chat_session.feedback
+        else:
+            # Fallback: compute from message feedbacks (for old sessions before Stage 2b)
+            list_of_message_feedbacks = [
+                message_feedback.feedback
+                for message in chat_session.messages
+                for message_feedback in message.chat_message_feedbacks
+                if message_feedback.feedback is not None
+            ]
+
+            if not list_of_message_feedbacks:
+                session_feedback_type = None
+            elif all(
+                f == ChatMessageFeedbackEnum.LIKE for f in list_of_message_feedbacks
             ):
                 session_feedback_type = ChatSessionFeedback.LIKE
             elif all(
-                fb == ChatMessageFeedbackEnum.DISLIKE
-                for fb in list_of_message_feedbacks
+                f == ChatMessageFeedbackEnum.DISLIKE for f in list_of_message_feedbacks
             ):
                 session_feedback_type = ChatSessionFeedback.DISLIKE
             else:
