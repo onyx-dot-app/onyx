@@ -56,7 +56,7 @@ export default function ToggleList({
   }, [items, searchTerm]);
 
   return (
-    <PopoverMenu medium>
+    <PopoverMenu medium footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
           <IconButton
@@ -126,9 +126,6 @@ export default function ToggleList({
             </SimpleTooltip>
           );
         }),
-
-        null,
-        footer,
       ]}
     </PopoverMenu>
   );
