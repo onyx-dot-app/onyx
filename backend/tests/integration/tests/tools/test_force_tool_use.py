@@ -38,7 +38,8 @@ def test_force_tool_use(
 
     # Send a simple message that wouldn't normally trigger web search
     # but force the web_search tool to be used
-    message = "hi"
+    # message = "hi"
+    message = "Search the web for cheese"
 
     analyzed_response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
