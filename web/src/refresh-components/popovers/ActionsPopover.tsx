@@ -49,6 +49,8 @@ import {
 import LineItem from "../buttons/LineItem";
 import SimpleTooltip from "../SimpleTooltip";
 import SvgSlash from "@/icons/slash";
+import SimpleLoader from "../loaders/SimpleLoader";
+import { SvgProps } from "@/icons";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -242,24 +244,25 @@ function MCPServerItem({
   const showReauthButton =
     showAuthTrigger && isAuthenticated && !showInlineReauth;
 
-  const getServerIcon = () => {
-    if (isLoading) {
-      return <FiLoader className="animate-spin" />;
-    }
+  function getServerIcon(): React.FunctionComponent<SvgProps> {
+    if (isLoading) return SimpleLoader;
     if (isAuthenticated) {
-      return <SvgCheck width={14} height={14} className="stroke-green-500" />;
+      return ({ className }) => (
+        <SvgCheck className={cn(className, "stroke-status-success-05")} />
+      );
     }
-    if (server.auth_type === MCPAuthenticationType.NONE) {
-      return <SvgServer width={14} height={14} className="stroke-text-02" />;
-    }
+    if (server.auth_type === MCPAuthenticationType.NONE) return SvgServer;
     if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
-      return <FiKey width={14} height={14} className="stroke-yellow-500" />;
+      return ({ className }) => (
+        <SvgKey className={cn(className, "stroke-status-warning-05")} />
+      );
     }
-    return <SvgLock width={14} height={14} className="stroke-red-500" />;
-  };
+    return ({ className }) => (
+      <SvgLock className={cn(className, "stroke-status-error-05")} />
+    );
+  }
 
-  const handleClick = (event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleClick = noProp(() => {
     if (isAuthenticated && tools.length > 0) {
       onSelect();
       return;
@@ -267,66 +270,52 @@ function MCPServerItem({
     if (showAuthTrigger) {
       onAuthenticate();
     }
-  };
+  });
 
   const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
 
   return (
-    <div
-      className={cn(
-        "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
-        isActive ? "bg-accent-100 hover:bg-accent-200" : "",
-        allToolsDisabled ? "opacity-60" : ""
-      )}
-      onClick={handleClick}
+    <LineItem
       data-mcp-server-id={server.id}
       data-mcp-server-name={server.name}
-    >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {getServerIcon()}
-        <Text
-          className={cn(
-            "text-sm font-medium select-none truncate max-w-[120px] inline-block align-middle",
-            allToolsDisabled ? "line-through" : ""
-          )}
-          title={server.name}
-        >
-          {server.name}
-        </Text>
-        {isAuthenticated &&
-          tools.length > 0 &&
-          enabledTools.length > 0 &&
-          tools.length !== enabledTools.length && (
-            <Text className="text-xs whitespace-nowrap ml-1 flex-shrink-0 text-text-04">
-              <Text className="inline text-action-link-05">
-                {enabledTools.length}
+      icon={getServerIcon()}
+      onClick={handleClick}
+      strikethrough={allToolsDisabled}
+      rightChildren={
+        <div className="flex flex-row items-center gap-1">
+          {isAuthenticated &&
+            tools.length > 0 &&
+            enabledTools.length > 0 &&
+            tools.length !== enabledTools.length && (
+              <Text secondaryBody nowrap>
+                <Text
+                  secondaryBody
+                  nowrap
+                  className="inline text-action-link-05"
+                >
+                  {enabledTools.length}
+                </Text>
+                {` of ${tools.length}`}
               </Text>
-              {` of ${tools.length}`}
-            </Text>
+            )}
+          {showReauthButton && (
+            <IconButton
+              icon={SvgKey}
+              internal
+              aria-label="Re-authenticate MCP server"
+              title="Re-authenticate"
+              tooltip="Re-authenticate"
+              onClick={noProp(onAuthenticate)}
+            />
           )}
-      </div>
-      <div className="flex items-center gap-1">
-        {showReauthButton && (
-          <IconButton
-            icon={SvgKey}
-            tertiary
-            aria-label="Re-authenticate MCP server"
-            title="Re-authenticate"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAuthenticate();
-            }}
-          />
-        )}
-        {isAuthenticated && tools.length > 0 && (
-          <SvgChevronRight
-            width={14}
-            height={14}
-            className="transition-transform stroke-text-02"
-          />
-        )}
-      </div>
-    </div>
+          {isAuthenticated && tools.length > 0 && (
+            <IconButton icon={SvgChevronRight} internal tooltip="More" />
+          )}
+        </div>
+      }
+    >
+      {server.name}
+    </LineItem>
   );
 }
 
@@ -844,62 +833,69 @@ export default function ActionsPopover({
                 />
               ),
 
-              // Actions
-              ...filteredTools.map((tool) => (
-                <ActionItem
-                  key={tool.id}
-                  tool={tool}
-                  disabled={disabledToolIds.includes(tool.id)}
-                  isForced={forcedToolIds.includes(tool.id)}
-                  onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-                  onForceToggle={() => {
-                    toggleForcedTool(tool.id);
-                    setOpen(false);
-                  }}
-                  onSourceManagementOpen={() =>
-                    setSecondaryView({ type: "sources" })
-                  }
-                  hasNoConnectors={hasNoConnectors}
-                  toolAuthStatus={getToolAuthStatus(tool)}
-                  onOAuthAuthenticate={() => authenticateTool(tool)}
-                />
-              )),
+              // Actions (primary view)
+              ...(secondaryView
+                ? []
+                : filteredTools.map((tool) => (
+                    <ActionItem
+                      key={tool.id}
+                      tool={tool}
+                      disabled={disabledToolIds.includes(tool.id)}
+                      isForced={forcedToolIds.includes(tool.id)}
+                      onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                      onForceToggle={() => {
+                        toggleForcedTool(tool.id);
+                        setOpen(false);
+                      }}
+                      onSourceManagementOpen={() =>
+                        setSecondaryView({ type: "sources" })
+                      }
+                      hasNoConnectors={hasNoConnectors}
+                      toolAuthStatus={getToolAuthStatus(tool)}
+                      onOAuthAuthenticate={() => authenticateTool(tool)}
+                    />
+                  ))),
 
-              // MCP Servers
-              ...filteredMCPServers.map((server) => {
-                const serverData = mcpServerData[server.id] || {
-                  isAuthenticated:
-                    !!server.user_authenticated || !!server.is_authenticated,
-                  isLoading: false,
-                };
+              // MCP Servers (primary view)
+              ...(secondaryView
+                ? []
+                : filteredMCPServers.map((server) => {
+                    const serverData = mcpServerData[server.id] || {
+                      isAuthenticated:
+                        !!server.user_authenticated ||
+                        !!server.is_authenticated,
+                      isLoading: false,
+                    };
 
-                // Tools for this server come from assistant.tools
-                const serverTools = selectedAssistant.tools.filter(
-                  (t) => t.mcp_server_id === Number(server.id)
-                );
-                const enabledTools = serverTools.filter(
-                  (t) => !disabledToolIds.includes(t.id)
-                );
+                    // Tools for this server come from assistant.tools
+                    const serverTools = selectedAssistant.tools.filter(
+                      (t) => t.mcp_server_id === Number(server.id)
+                    );
+                    const enabledTools = serverTools.filter(
+                      (t) => !disabledToolIds.includes(t.id)
+                    );
 
-                return (
-                  <MCPServerItem
-                    key={server.id}
-                    server={server}
-                    isActive={selectedMcpServerId === server.id}
-                    tools={serverTools}
-                    enabledTools={enabledTools}
-                    isAuthenticated={serverData.isAuthenticated}
-                    isLoading={serverData.isLoading}
-                    onSelect={() =>
-                      setSecondaryView({
-                        type: "mcp",
-                        serverId: server.id,
-                      })
-                    }
-                    onAuthenticate={() => handleServerAuthentication(server)}
-                  />
-                );
-              }),
+                    return (
+                      <MCPServerItem
+                        key={server.id}
+                        server={server}
+                        isActive={selectedMcpServerId === server.id}
+                        tools={serverTools}
+                        enabledTools={enabledTools}
+                        isAuthenticated={serverData.isAuthenticated}
+                        isLoading={serverData.isLoading}
+                        onSelect={() =>
+                          setSecondaryView({
+                            type: "mcp",
+                            serverId: server.id,
+                          })
+                        }
+                        onAuthenticate={() =>
+                          handleServerAuthentication(server)
+                        }
+                      />
+                    );
+                  })),
 
               null,
               (isAdmin || isCurator) && (
