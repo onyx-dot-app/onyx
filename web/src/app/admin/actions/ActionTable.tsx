@@ -56,7 +56,7 @@ export function ActionsTable({
         </TableHeader>
         <TableBody>
           {/* Render MCP Servers first */}
-          {sortedMcpServers.map((server) => (
+          {isAdmin && sortedMcpServers.map((server) => (
             <TableRow key={`mcp-${server.id}`}>
               <TableCell>
                 <div className="flex items-center gap-2">
