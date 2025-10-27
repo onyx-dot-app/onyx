@@ -5,7 +5,7 @@ from onyx.llm.interfaces import LLM
 from onyx.server.features.guardrails.validators import (
     mask_pii,
     unmask_pii,
-    mask_banned_words,
+    validate_banned_words,
     detect_sensitive_topic,
     validate_text_style,
 )
@@ -146,7 +146,7 @@ class ValidatorManager:
 
             # Фильтрация запрещенных слов
             elif validator.validator_type == ValidatorType.BAN_LIST:
-                masked_message = mask_banned_words(
+                masked_message = validate_banned_words(
                     text=message, config=config
                 )
 

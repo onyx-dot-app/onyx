@@ -15,6 +15,7 @@ fastapi==0.115.12
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
 filelock==3.15.4
+fuzzysearch==0.8.0
 google-api-python-client==2.86.0
 google-cloud-aiplatform==1.58.0
 google-auth-httplib2==0.1.0
