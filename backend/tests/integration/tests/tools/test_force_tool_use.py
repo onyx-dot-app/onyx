@@ -36,7 +36,7 @@ def test_force_tool_use(
     # Create a chat session
     chat_session = ChatSessionManager.create(user_performing_action=basic_user)
 
-    # Send a simple message that wouldn't normally trigger web search
+    # Send a simple message that wouldn't normally trigger internal search
     # but force the web_search tool to be used
     # message = "hi"
     message = "Search the web for cheese"
