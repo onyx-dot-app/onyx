@@ -694,8 +694,7 @@ def clarifier(
                     should_stream_answer=True,
                     writer=writer,
                     ind=0,
-                    final_search_results=context_llm_docs,
-                    displayed_search_results=context_llm_docs,
+                    search_results=context_llm_docs,
                     generate_final_answer=True,
                     chat_message_id=str(graph_config.persistence.chat_session_id),
                 )

@@ -46,24 +46,15 @@ class CitationResponseHandler(AnswerResponseHandler):
     def __init__(
         self,
         context_docs: list[LlmDoc],
-        # TODO: Right now these are always the same at runtime in prod
-        # one of them should be removed
-        final_doc_id_to_rank_map: DocumentIdOrderMapping,
-        display_doc_id_to_rank_map: DocumentIdOrderMapping,
+        doc_id_to_rank_map: DocumentIdOrderMapping,
     ):
         self.context_docs = context_docs
-        self.final_doc_id_to_rank_map = final_doc_id_to_rank_map
-        self.display_doc_id_to_rank_map = display_doc_id_to_rank_map
         self.citation_processor = CitationProcessor(
             context_docs=self.context_docs,
-            final_doc_id_to_rank_map=self.final_doc_id_to_rank_map,
-            display_doc_id_to_rank_map=self.display_doc_id_to_rank_map,
+            doc_id_to_rank_map=doc_id_to_rank_map,
         )
         self.processed_text = ""
         self.citations: list[CitationInfo] = []
-
-        # TODO remove this after citation issue is resolved
-        logger.debug(f"Document to ranking map {self.final_doc_id_to_rank_map}")
 
     def handle_response_part(
         self,
