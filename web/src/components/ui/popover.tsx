@@ -35,13 +35,18 @@ const sizeClasses = {
   medium: ["w-[15.5rem]"],
 };
 
+function SeparatorLine() {
+  return <div className="border-b mx-3" />;
+}
+
 export interface PopoverMenuProps {
-  // size values
+  // size variants
   small?: boolean;
   medium?: boolean;
 
   className?: string;
   children?: React.ReactNode[];
+  footer?: React.ReactNode;
 }
 
 // This component converts a list of `React.ReactNode`s into a vertical menu.
@@ -53,10 +58,12 @@ export interface PopoverMenuProps {
 // `undefined`s will be filtered out.
 // `null`s that are at the beginning / end will also be filtered out (separator lines don't make sense as the first / last element; they're supposed to *separate* options).
 export function PopoverMenu({
-  className,
-  children,
   small,
   medium,
+
+  className,
+  children,
+  footer,
 }: PopoverMenuProps) {
   if (!children) return null;
 
@@ -70,25 +77,33 @@ export function PopoverMenu({
   const size = small ? "small" : medium ? "medium" : "small";
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-1 max-h-[20rem] overflow-y-scroll",
-        sizeClasses[size],
-        className
+    <div className="flex flex-col gap-1 max-h-[20rem]">
+      <div
+        className={cn(
+          "flex flex-col gap-1 h-full overflow-y-scroll",
+          sizeClasses[size],
+          className
+        )}
+      >
+        {filteredChildren.map((child, index) => (
+          <div key={index}>
+            {child === undefined ? (
+              <></>
+            ) : child === null ? (
+              // Render `null`s as separator lines
+              <SeparatorLine />
+            ) : (
+              child
+            )}
+          </div>
+        ))}
+      </div>
+      {footer && (
+        <>
+          <SeparatorLine />
+          {footer}
+        </>
       )}
-    >
-      {filteredChildren.map((child, index) => (
-        <div key={index}>
-          {child === undefined ? (
-            <></>
-          ) : child === null ? (
-            // Render `null`s as separator lines
-            <div className="border-b mx-3" />
-          ) : (
-            child
-          )}
-        </div>
-      ))}
     </div>
   );
 }
