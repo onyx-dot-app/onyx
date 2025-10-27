@@ -1188,6 +1188,7 @@ def update_db_session_with_messages(
     final_documents: list[SearchDoc] | None = None,
     update_parent_message: bool = True,
     research_answer_purpose: ResearchAnswerPurpose | None = None,
+    files: list[FileDescriptor] | None = None,
     commit: bool = False,
 ) -> ChatMessage:
     chat_message = (
@@ -1229,6 +1230,9 @@ def update_db_session_with_messages(
 
     if research_answer_purpose:
         chat_message.research_answer_purpose = research_answer_purpose
+
+    if files is not None:
+        chat_message.files = files
 
     if update_parent_message:
         parent_chat_message = (

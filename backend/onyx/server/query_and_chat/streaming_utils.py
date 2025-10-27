@@ -415,14 +415,12 @@ def translate_db_message_to_packets_simple(
                         step_nr += 1
 
                     elif tool_name == ImageGenerationTool.__name__:
-                        if sub_step.generated_images is None:
-                            raise ValueError("No generated images found")
-
-                        packet_list.extend(
-                            create_image_generation_packets(
-                                sub_step.generated_images.images, step_nr
+                        if sub_step.generated_images:
+                            packet_list.extend(
+                                create_image_generation_packets(
+                                    sub_step.generated_images.images, step_nr
+                                )
                             )
-                        )
                         step_nr += 1
 
                     elif tool_name == OktaProfileTool.__name__:

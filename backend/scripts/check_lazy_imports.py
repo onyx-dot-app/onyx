@@ -130,6 +130,10 @@ def find_python_files(backend_dir: Path) -> List[Path]:
     # Always ignore virtual environment directories
     ignore_directories = {".venv", "venv", ".env", "env", "__pycache__"}
 
+    # Always ignore virtual environment directories
+    venv_dirs = {".venv", "venv", ".env", "env", "__pycache__"}
+    ignore_directories = ignore_directories.union(venv_dirs)
+
     python_files = []
     for file_path in backend_dir.glob("**/*.py"):
         # Skip test files (they can contain test imports)

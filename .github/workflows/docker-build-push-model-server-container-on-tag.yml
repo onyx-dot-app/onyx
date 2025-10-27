@@ -88,7 +88,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64
           build-args: |
-            DANSWER_VERSION=${{ github.ref_name }}
+            ONYX_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
           cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -134,7 +134,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
           build-args: |
-            DANSWER_VERSION=${{ github.ref_name }}
+            ONYX_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
           cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}

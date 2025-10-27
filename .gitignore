@@ -31,6 +31,9 @@ settings.json
 /backend/tests/regression/answer_quality/search_test_config.yaml
 *.egg-info
 
+# Claude
+plans/*
+
 # Local .terraform directories
 **/.terraform/*
 

@@ -306,8 +306,12 @@ class DefaultMultiLLM(LLM):
                         model_kwargs[k] = v
                         continue
 
-                # for all values, set them as env variables
-                os.environ[k] = v
+                # If there are any empty or null values,
+                # they MUST NOT be set in the env
+                if v is not None and v.strip():
+                    os.environ[k] = v
+                else:
+                    os.environ.pop(k, None)
 
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})

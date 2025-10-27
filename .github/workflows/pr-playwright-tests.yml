@@ -57,7 +57,7 @@ jobs:
           sbom: false
           push: true
           outputs: type=registry
-          # no-cache: true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
@@ -90,7 +90,7 @@ jobs:
           sbom: false
           push: true
           outputs: type=registry
-          # no-cache: true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
@@ -123,7 +123,7 @@ jobs:
           sbom: false
           push: true
           outputs: type=registry
-          # no-cache: true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]

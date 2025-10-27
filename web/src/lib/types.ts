@@ -12,6 +12,12 @@ export type UserSpecificAssistantPreferences = Record<
   UserSpecificAssistantPreference
 >;
 
+export enum ThemePreference {
+  LIGHT = "light",
+  DARK = "dark",
+  SYSTEM = "system",
+}
+
 interface UserPreferences {
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -22,6 +28,7 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  theme_preference: ThemePreference | null;
 }
 
 export interface UserPersonalization {

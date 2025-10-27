@@ -5,7 +5,6 @@ from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 
-from ee.onyx.server.tenants.product_gating import get_gated_tenants
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
@@ -52,10 +51,18 @@ def cloud_beat_task_generator(
 
     try:
         tenant_ids = get_all_tenant_ids()
-        gated_tenants = get_gated_tenants()
+
+        # NOTE: for now, we are running tasks for gated tenants, since we want to allow
+        # connector deletion to run successfully. The new plan is to continously prune
+        # the gated tenants set, so we won't have a build up of old, unused gated tenants.
+        # Keeping this around in case we want to revert to the previous behavior.
+        # gated_tenants = get_gated_tenants()
+
         for tenant_id in tenant_ids:
-            if tenant_id in gated_tenants:
-                continue
+
+            # Same comment here as the above NOTE
+            # if tenant_id in gated_tenants:
+            #     continue
 
             current_time = time.monotonic()
             if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
