@@ -10,7 +10,6 @@ from braintrust_langchain.callbacks import BraintrustCallbackHandler
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -55,17 +54,6 @@ def _mask(data: Any) -> Any:
     return _truncate_str(str(data))
 
 
-class TenantContextTracingProcessor(BraintrustTracingProcessor):
-    def on_trace_start(self, trace: Any) -> None:
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-        if hasattr(trace, "metadata"):
-            if trace.metadata is None:
-                trace.metadata = {}
-            trace.metadata["tenant_id"] = tenant_id
-
-        super().on_trace_start(trace)
-
-
 def setup_braintrust_if_creds_available() -> None:
     """Initialize Braintrust logger and set up global callback handler."""
     # Check if Braintrust API key is available
@@ -80,5 +68,5 @@ def setup_braintrust_if_creds_available() -> None:
     braintrust.set_masking_function(_mask)
     handler = BraintrustCallbackHandler()
     set_global_handler(handler)
-    set_trace_processors([TenantContextTracingProcessor(braintrust_logger)])
+    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
     logger.notice("Braintrust tracing initialized")
