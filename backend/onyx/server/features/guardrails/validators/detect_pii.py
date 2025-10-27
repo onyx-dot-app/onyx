@@ -6,6 +6,7 @@ from onyx.server.features.guardrails.services import generate_fake_data
 
 ENTITY_GENERATORS = {
     "RUS_PHONE_NUMBER": generate_fake_data.generate_fake_rus_phone_number,
+    "RUS_BANK_CARD": generate_fake_data.generate_fake_rus_bank_card,
     "EMAIL_ADDRESS": generate_fake_data.generate_fake_email_address,
     "CREDIT_CARD": generate_fake_data.generate_fake_credit_card,
     "IP_ADDRESS": generate_fake_data.generate_fake_ip_address,
@@ -79,10 +80,10 @@ if __name__=="__main__":
         "pii_entities": [
             "EMAIL_ADDRESS",
             "RUS_PHONE_NUMBER",
+            "RUS_BANK_CARD",
             "DOMAIN_NAME",
             "IP_ADDRESS",
             "URL",
-            "CREDIT_CARD",
             "CRYPTO",
         ]
 
@@ -96,6 +97,7 @@ if __name__=="__main__":
     IP-адрес: 192.168.1.1
     Веб-сайт: https://example.com
     Банковская карта: 4276-5500-3444-6289
+    Банковская карта мир: 2200 5500 3444 6289
     Crypto wallet: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
     """
 

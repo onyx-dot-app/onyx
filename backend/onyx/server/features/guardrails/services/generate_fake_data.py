@@ -47,3 +47,8 @@ def generate_fake_crypto(original: str, mapping: Dict[str, str]) -> str:
     fake_crypto = "1" + ''.join(random.choice(crypto_chars) for _ in range(33))
     mapping[fake_crypto] = original
     return fake_crypto
+
+def generate_fake_rus_bank_card(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_bank_card = faker.credit_card_number()
+    mapping[fake_rus_bank_card] = original
+    return fake_rus_bank_card

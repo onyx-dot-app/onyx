@@ -30,6 +30,29 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
         supported_language="en"
     )
 
+    russian_bank_card_recognizer = PatternRecognizer(
+        supported_entity="RUS_BANK_CARD",
+        patterns=[
+            Pattern(
+                name="bank_card_mir",
+                regex=r"(220[0-4][- ]?\d{4}[- ]?\d{4}[- ]?\d{4})",
+                score=0.85
+            ),
+            Pattern(
+                name="bank_card_visa",
+                regex=r"(4\d{3}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4})",
+                score=0.85
+            ),
+            Pattern(
+                name="bank_card_mastercard",
+                regex=r"(5[1-5]\d{2}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4})",
+                score=0.85
+            )
+        ],
+        supported_language="en"
+    )
+
     return [
         russian_phone_recognizer,
+        russian_bank_card_recognizer,
     ]
