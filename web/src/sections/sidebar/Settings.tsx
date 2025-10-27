@@ -101,7 +101,7 @@ function SettingsPopover({
           //     {item.title}
           //   </NavigationTab>
           // )),
-          (isAdmin ||
+          (!isAdmin &&
             settings?.settings.all_users_actions_creation_enabled !==
               false) && (
             <div key="actions" data-testid="Settings/actions">
