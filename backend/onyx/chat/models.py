@@ -40,6 +40,9 @@ DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
 class LlmDoc(BaseModel):
     """This contains the minimal set information for the LLM portion including citations"""
 
+    # This is kind of cooked. We're overloading this field as both a "catch all" for identifying
+    # an LLM doc as well as a way to connect the LlmDoc to the DB. For internal search, it will
+    # be an id for the db but not for web search.
     document_id: str
     content: str
     blurb: str
