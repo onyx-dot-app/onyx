@@ -4,7 +4,6 @@ import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import SvgBubbleText from "@/icons/bubble-text";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
@@ -105,14 +104,12 @@ interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
-  showSearchWorkflowIcon?: boolean;
 }
 
 function ChatButtonInner({
   chatSession,
   project,
   draggable = false,
-  showSearchWorkflowIcon = false,
 }: ChatButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
@@ -342,9 +339,6 @@ function ChatButtonInner({
     >
       <PopoverAnchor>
         <SidebarTab
-          leftIcon={
-            showSearchWorkflowIcon && !project ? SvgBubbleText : undefined
-          }
           onClick={() => route({ chatSessionId: chatSession.id })}
           active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
           rightChildren={rightMenu}
